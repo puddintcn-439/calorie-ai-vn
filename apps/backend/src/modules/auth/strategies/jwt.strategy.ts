@@ -22,9 +22,13 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       .from('users')
       .select('id, email, full_name')
       .eq('id', payload.sub)
-      .single();
+      .maybeSingle();
 
-    if (!user) throw new UnauthorizedException();
-    return user;
+    if (user) return user;
+
+    // Allow authenticated users that exist in Supabase Auth but do not yet have
+    // a profile row in public.users. The profile row will be created on save.
+    if (!payload?.sub || !payload?.email) throw new UnauthorizedException();
+    return { id: payload.sub, email: payload.email, full_name: null };
   }
 }

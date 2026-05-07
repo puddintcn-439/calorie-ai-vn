@@ -11,8 +11,10 @@ export class AuthService {
   ) {}
 
   async register(dto: RegisterDto) {
+    const authClient = this.supabase.createAuthClient();
+
     // Use admin API to create user without email confirmation
-    const { data, error } = await this.supabase.db.auth.admin.createUser({
+    const { data, error } = await authClient.auth.admin.createUser({
       email: dto.email,
       password: dto.password,
       email_confirm: true,
@@ -31,7 +33,8 @@ export class AuthService {
   }
 
   async login(dto: LoginDto) {
-    const { data, error } = await this.supabase.db.auth.signInWithPassword({
+    const authClient = this.supabase.createAuthClient();
+    const { data, error } = await authClient.auth.signInWithPassword({
       email: dto.email,
       password: dto.password,
     });

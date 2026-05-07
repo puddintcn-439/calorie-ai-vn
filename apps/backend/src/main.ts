@@ -16,10 +16,27 @@ async function bootstrap() {
   );
 
   // CORS
+  const configuredOrigins = process.env.ALLOWED_ORIGINS
+    ?.split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+
   app.enableCors({
-    origin: process.env.ALLOWED_ORIGINS?.split(',') ?? ['http://localhost:8081'],
+    origin: (origin, callback) => {
+      // Allow non-browser requests (Postman/mobile native) without Origin header.
+      if (!origin) return callback(null, true);
+
+      // In development, allow all origins to simplify Expo web/native testing.
+      if (process.env.NODE_ENV !== 'production') return callback(null, true);
+
+      if (configuredOrigins?.includes(origin)) return callback(null, true);
+
+      return callback(new Error('Not allowed by CORS'), false);
+    },
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: true,
+    optionsSuccessStatus: 204,
   });
 
   // Swagger (dev only)

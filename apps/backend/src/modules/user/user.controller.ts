@@ -14,6 +14,10 @@ class UpdateProfileDto {
   @IsEnum(['sedentary','light','moderate','active','very_active']) @IsOptional() activity_level?: ActivityLevel;
   @IsEnum(['lose_weight','maintain','gain_muscle']) @IsOptional() goal?: UserGoal;
   @IsNumber() @Min(500) @IsOptional() daily_calorie_target?: number;
+  @IsNumber() @Min(0) @IsOptional() target_breakfast_cal?: number;
+  @IsNumber() @Min(0) @IsOptional() target_lunch_cal?: number;
+  @IsNumber() @Min(0) @IsOptional() target_dinner_cal?: number;
+  @IsNumber() @Min(0) @IsOptional() target_snack_cal?: number;
 }
 
 @ApiTags('User')
@@ -25,11 +29,11 @@ export class UserController {
 
   @Get('profile')
   getProfile(@Request() req: any) {
-    return this.userService.getProfile(req.user.id);
+    return this.userService.getProfile(req.user.id, req.user.email);
   }
 
   @Patch('profile')
   updateProfile(@Body() dto: UpdateProfileDto, @Request() req: any) {
-    return this.userService.updateProfile(req.user.id, dto);
+    return this.userService.updateProfile(req.user.id, dto, req.user.email);
   }
 }
