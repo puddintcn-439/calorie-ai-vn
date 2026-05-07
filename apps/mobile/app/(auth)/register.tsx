@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator,
+  View, Text, StyleSheet, Alert,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { useAuthStore } from '../../store/auth.store';
+import { BodyText, Eyebrow, HeroTitle, ScreenShell, SurfaceCard } from '../../components/ui-shell';
+import { UiButton } from '../../components/ui-button';
+import { UiInput } from '../../components/ui-input';
 
 export default function RegisterScreen() {
   const [email, setEmail] = useState('');
@@ -26,50 +28,51 @@ export default function RegisterScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <Text style={styles.logo}>🥗 Tạo tài khoản</Text>
+    <ScreenShell scroll={false} contentStyle={styles.centeredContent}>
+      <View style={styles.heroBlock}>
+        <Eyebrow>Build Your Nutrition Loop</Eyebrow>
+        <HeroTitle>Tạo tài khoản và bắt đầu log ăn uống theo kiểu hiện đại.</HeroTitle>
+        <BodyText>
+          Giao diện tập trung vào tốc độ: scan nhanh, lưu nhanh, xem tiến độ rõ ràng và dễ quay lại mỗi ngày.
+        </BodyText>
+      </View>
 
-      <TextInput
-        style={styles.input}
-        value={fullName}
-        onChangeText={setFullName}
-        placeholder="Họ và tên (tuỳ chọn)"
-        placeholderTextColor="#6b7280"
-      />
-      <TextInput
-        style={styles.input}
-        value={email}
-        onChangeText={setEmail}
-        placeholder="Email"
-        placeholderTextColor="#6b7280"
-        keyboardType="email-address"
-        autoCapitalize="none"
-      />
-      <TextInput
-        style={styles.input}
-        value={password}
-        onChangeText={setPassword}
-        placeholder="Mật khẩu (tối thiểu 6 ký tự)"
-        placeholderTextColor="#6b7280"
-        secureTextEntry
-      />
+      <SurfaceCard style={styles.formCard}>
+        <Text style={styles.sectionTitle}>Tạo tài khoản</Text>
+        <Text style={styles.subtitle}>Chỉ vài giây để bắt đầu theo dõi calo và macro.</Text>
 
-      <TouchableOpacity style={styles.button} onPress={handleRegister} disabled={loading}>
-        {loading ? <ActivityIndicator color="#0f0f1a" /> : <Text style={styles.buttonText}>Đăng ký</Text>}
-      </TouchableOpacity>
+        <UiInput
+          value={fullName}
+          onChangeText={setFullName}
+          placeholder="Họ và tên (tuỳ chọn)"
+        />
+        <UiInput
+          value={email}
+          onChangeText={setEmail}
+          placeholder="Email"
+          keyboardType="email-address"
+          autoCapitalize="none"
+        />
+        <UiInput
+          value={password}
+          onChangeText={setPassword}
+          placeholder="Mật khẩu (tối thiểu 6 ký tự)"
+          secureTextEntry
+        />
 
-      <TouchableOpacity onPress={() => router.back()}>
-        <Text style={styles.link}>Đã có tài khoản? Đăng nhập</Text>
-      </TouchableOpacity>
-    </SafeAreaView>
+        <UiButton label="Tạo tài khoản" onPress={handleRegister} loading={loading} style={styles.submitBtn} />
+
+        <UiButton label="Đã có tài khoản? Quay về đăng nhập" onPress={() => router.back()} variant="ghost" />
+      </SurfaceCard>
+    </ScreenShell>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0f0f1a', padding: 24, justifyContent: 'center' },
-  logo: { fontSize: 28, fontWeight: 'bold', color: '#fff', textAlign: 'center', marginBottom: 32 },
-  input: { backgroundColor: '#1a1a2e', borderRadius: 12, padding: 14, color: '#fff', marginBottom: 12 },
-  button: { backgroundColor: '#4ade80', borderRadius: 12, padding: 16, alignItems: 'center', marginBottom: 16 },
-  buttonText: { color: '#0f0f1a', fontWeight: 'bold', fontSize: 16 },
-  link: { color: '#4ade80', textAlign: 'center', fontSize: 14 },
+  centeredContent: { flex: 1, justifyContent: 'center', maxWidth: 560, alignSelf: 'center', width: '100%' },
+  heroBlock: { marginBottom: 18, paddingHorizontal: 4 },
+  formCard: { width: '100%', padding: 20 },
+  sectionTitle: { color: '#eff6ff', fontSize: 24, fontWeight: '800', marginBottom: 6 },
+  subtitle: { color: '#94a3b8', marginBottom: 20, fontSize: 14, lineHeight: 21 },
+  submitBtn: { marginBottom: 8, marginTop: 4 },
 });

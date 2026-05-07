@@ -2,10 +2,11 @@ import React, { useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useLogStore } from '../../store/log.store';
 import { FoodLog, MealType, SavedMeal, ActivityLog, ActivityType, ACTIVITY_LABELS } from '@calorie-ai/types';
+import { BodyText, Eyebrow, HeroTitle, ScreenShell, SurfaceCard } from '../../components/ui-shell';
+import { EmptyState } from '../../components/empty-state';
 
 const MEAL_LABELS: Record<MealType, string> = {
   breakfast: '🌅 Bữa sáng',
@@ -38,7 +39,8 @@ export default function LogScreen() {
     });
   }, []);
 
-  const logsByMeal = (dailyLog?.logs ?? []).reduce<Record<MealType, FoodLog[]>>(
+  const logsSource: FoodLog[] = dailyLog?.logs ?? [];
+  const logsByMeal = logsSource.reduce<Record<MealType, FoodLog[]>>(
     (acc, log) => {
       if (!acc[log.meal_type]) acc[log.meal_type] = [];
       acc[log.meal_type].push(log);
@@ -90,12 +92,13 @@ export default function LogScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <Text style={styles.title}>Nhật ký hôm nay</Text>
+    <ScreenShell>
+      <Eyebrow>Timeline</Eyebrow>
+      <HeroTitle>Nhật ký ăn uống và vận động trong ngày.</HeroTitle>
+      <BodyText style={styles.heroBody}>Mỗi bữa được nhóm rõ ràng, có target theo từng meal và log nhanh từ bộ sưu tập.</BodyText>
 
       {isLoading && <ActivityIndicator color="#4ade80" style={{ marginTop: 40 }} />}
 
-      <ScrollView>
         {/* ---- Saved Meals Quick Log ---- */}
         {savedMeals.length > 0 && (
           <View style={styles.savedSection}>
@@ -120,7 +123,7 @@ export default function LogScreen() {
           const logs = logsByMeal[meal] ?? [];
           const total = logs.reduce((s, l) => s + l.calories, 0);
           return (
-            <View key={meal} style={styles.mealSection}>
+            <SurfaceCard key={meal} style={styles.mealSection}>
               <View style={styles.mealHeader}>
                 <Text style={styles.mealLabel}>{MEAL_LABELS[meal]}</Text>
                 <View style={styles.mealHeaderRight}>
@@ -153,14 +156,19 @@ export default function LogScreen() {
                 </View>
               ))}
               {logs.length === 0 && (
-                <Text style={styles.emptyMeal}>Chưa có gì</Text>
+                <EmptyState
+                  icon="🥢"
+                  title="Chưa có món nào"
+                  description="Bạn có thể scan đồ ăn mới hoặc log nhanh từ bộ sưu tập ở phía trên."
+                  style={styles.emptyStateCard}
+                />
               )}
-            </View>
+            </SurfaceCard>
           );
         })}
 
         {/* ---- Activity Section ---- */}
-        <View style={styles.activitySection}>
+        <SurfaceCard style={styles.activitySection}>
           <View style={styles.activityHeader}>
             <Text style={styles.activityTitle}>🏃 Hoạt động</Text>
             <TouchableOpacity style={styles.addActivityBtn} onPress={handleAddActivity}>
@@ -168,7 +176,12 @@ export default function LogScreen() {
             </TouchableOpacity>
           </View>
           {activityLogs.length === 0 ? (
-            <Text style={styles.emptyMeal}>Chưa có hoạt động nào</Text>
+            <EmptyState
+              icon="🏃"
+              title="Chưa có hoạt động"
+              description="Thêm vận động để app tính calories burned và net calories chính xác hơn."
+              style={styles.emptyStateCard}
+            />
           ) : (
             activityLogs.map((act) => (
               <View key={act.id} style={styles.activityRow}>
@@ -187,44 +200,42 @@ export default function LogScreen() {
               Đã đốt: {activityLogs.reduce((s, a) => s + a.calories_burned, 0)} kcal
             </Text>
           )}
-        </View>
-      </ScrollView>
-    </SafeAreaView>
+        </SurfaceCard>
+    </ScreenShell>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0f0f1a', padding: 16 },
-  title: { fontSize: 24, fontWeight: 'bold', color: '#fff', marginBottom: 16 },
+  heroBody: { marginBottom: 18, maxWidth: 700 },
   savedSection: { marginBottom: 16 },
-  savedTitle: { color: '#fff', fontWeight: '600', fontSize: 15, marginBottom: 10 },
+  savedTitle: { color: '#eff6ff', fontWeight: '700', fontSize: 15, marginBottom: 10 },
   savedList: { gap: 10, paddingRight: 16 },
-  savedCard: { backgroundColor: '#1a1a2e', borderRadius: 12, padding: 12, width: 140, position: 'relative' },
-  savedName: { color: '#fff', fontWeight: '600', fontSize: 13, marginBottom: 4, paddingRight: 16 },
-  savedCalorie: { color: '#4ade80', fontWeight: 'bold', fontSize: 15, marginBottom: 2 },
-  savedMacro: { color: '#6b7280', fontSize: 11 },
+  savedCard: { backgroundColor: '#0f1b3b', borderRadius: 18, padding: 14, width: 160, position: 'relative', borderWidth: 1, borderColor: '#21376b' },
+  savedName: { color: '#fff', fontWeight: '700', fontSize: 13, marginBottom: 6, paddingRight: 16 },
+  savedCalorie: { color: '#6ee7b7', fontWeight: '800', fontSize: 18, marginBottom: 4 },
+  savedMacro: { color: '#8ca0c3', fontSize: 11 },
   savedDelete: { position: 'absolute', top: 8, right: 8 },
-  mealSection: { backgroundColor: '#1a1a2e', borderRadius: 14, padding: 14, marginBottom: 12 },
+  mealSection: { marginBottom: 12 },
   mealHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8, alignItems: 'center' },
   mealHeaderRight: { flexDirection: 'row', alignItems: 'baseline', gap: 2 },
-  mealLabel: { color: '#fff', fontWeight: '600', fontSize: 15 },
-  mealTotal: { color: '#4ade80', fontWeight: 'bold' },
-  mealTarget: { color: '#6b7280', fontSize: 12 },
-  mealProgressBar: { height: 4, backgroundColor: '#374151', borderRadius: 2, marginBottom: 10, overflow: 'hidden' },
+  mealLabel: { color: '#eff6ff', fontWeight: '700', fontSize: 15 },
+  mealTotal: { color: '#6ee7b7', fontWeight: '800' },
+  mealTarget: { color: '#7f91b5', fontSize: 12 },
+  mealProgressBar: { height: 6, backgroundColor: '#213055', borderRadius: 999, marginBottom: 10, overflow: 'hidden' },
   mealProgressFill: { height: '100%', borderRadius: 2 },
-  logRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8, borderTopWidth: 1, borderTopColor: '#374151' },
+  logRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10, borderTopWidth: 1, borderTopColor: '#213055' },
   logInfo: { flex: 1 },
-  logName: { color: '#fff', fontSize: 14 },
-  logDetail: { color: '#6b7280', fontSize: 12, marginTop: 2 },
+  logName: { color: '#fff', fontSize: 14, fontWeight: '600' },
+  logDetail: { color: '#8ca0c3', fontSize: 12, marginTop: 2 },
   logRight: { alignItems: 'flex-end', gap: 4 },
-  logCalorie: { color: '#4ade80', fontWeight: '600' },
-  emptyMeal: { color: '#6b7280', fontSize: 13, fontStyle: 'italic' },
-  activitySection: { backgroundColor: '#1a1a2e', borderRadius: 14, padding: 14, marginBottom: 20, marginTop: 4 },
+  logCalorie: { color: '#6ee7b7', fontWeight: '700' },
+  emptyStateCard: { marginTop: 8 },
+  activitySection: { marginBottom: 20, marginTop: 4 },
   activityHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
-  activityTitle: { color: '#fff', fontWeight: '600', fontSize: 15 },
-  addActivityBtn: { backgroundColor: '#4ade80', borderRadius: 16, width: 28, height: 28, justifyContent: 'center', alignItems: 'center' },
-  activityRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, borderTopWidth: 1, borderTopColor: '#374151' },
-  activityName: { color: '#fff', fontWeight: '500', fontSize: 14 },
-  activityDetail: { color: '#9ca3af', fontSize: 12, marginTop: 2 },
-  activityBurned: { color: '#fb923c', fontWeight: '600', fontSize: 13, marginTop: 8, textAlign: 'right' },
+  activityTitle: { color: '#eff6ff', fontWeight: '700', fontSize: 15 },
+  addActivityBtn: { backgroundColor: '#6ee7b7', borderRadius: 16, width: 30, height: 30, justifyContent: 'center', alignItems: 'center' },
+  activityRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderTopWidth: 1, borderTopColor: '#213055' },
+  activityName: { color: '#fff', fontWeight: '600', fontSize: 14 },
+  activityDetail: { color: '#9fb1d1', fontSize: 12, marginTop: 2 },
+  activityBurned: { color: '#fbbf24', fontWeight: '700', fontSize: 13, marginTop: 8, textAlign: 'right' },
 });

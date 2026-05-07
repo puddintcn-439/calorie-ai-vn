@@ -1,13 +1,8 @@
 import { AIScanResponse, AICoachResponse } from '@calorie-ai/types';
 import { apiClient } from './api';
-import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
 
 export async function scanImageFromUri(uri: string): Promise<AIScanResponse> {
-  const base64 = await FileSystem.readAsStringAsync(uri, {
-    encoding: FileSystem.EncodingType.Base64,
-  });
-
   const formData = new FormData();
   formData.append('image', {
     uri,

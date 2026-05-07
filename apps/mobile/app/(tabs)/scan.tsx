@@ -3,7 +3,6 @@ import {
   View, Text, StyleSheet, TouchableOpacity, TextInput,
   ScrollView, ActivityIndicator, Alert, Image,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import * as ImagePicker from 'expo-image-picker';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { Ionicons } from '@expo/vector-icons';
@@ -12,6 +11,8 @@ import { scanImageFromUri, scanText, refineScan } from '../../services/ai.servic
 import { useLogStore } from '../../store/log.store';
 import { apiClient } from '../../services/api';
 import { router } from 'expo-router';
+import { BodyText, Eyebrow, HeroTitle, ScreenShell, SurfaceCard } from '../../components/ui-shell';
+import { EmptyState } from '../../components/empty-state';
 
 type InputMode = 'camera' | 'gallery' | 'text' | 'barcode';
 
@@ -81,9 +82,9 @@ export default function ScanScreen() {
     if (!scanResult?.items.length) return;
     try {
       for (const item of scanResult.items) {
-        await addLog({ name: item.name_vi ?? item.name, meal_type: selectedMeal, calories: item.calories, protein_g: item.protein_g, carbs_g: item.carbs_g, fat_g: item.fat_g, estimated_grams: item.estimated_grams, scan_id: scanResult.scan_id, image_url: scannedImage ?? undefined });
+        await addLog({ name: item.name_vi ?? item.name, meal_type: selectedMeal, calories: item.calories, protein_g: item.protein_g, carbs_g: item.carbs_g, fat_g: item.fat_g, estimated_grams: item.estimated_grams, image_url: scannedImage ?? undefined });
       }
-      Alert.alert('✅ Đã lưu!', `${scanResult.items.length} món`, [{ text: 'OK', onPress: () => router.replace('/(tabs)/') }]);
+      Alert.alert('✅ Đã lưu!', `${scanResult.items.length} món`, [{ text: 'OK', onPress: () => router.replace('/') }]);
     } catch { Alert.alert('Lỗi', 'Không thể lưu log'); }
   };
 
@@ -112,23 +113,24 @@ export default function ScanScreen() {
     if (!barcodeResult) return;
     try {
       await addLog({ name: barcodeResult.name_vi ?? barcodeResult.name, meal_type: selectedMeal, calories: barcodeResult.calories_per_100g ?? 0, protein_g: barcodeResult.protein_g ?? 0, carbs_g: barcodeResult.carbs_g ?? 0, fat_g: barcodeResult.fat_g ?? 0, estimated_grams: barcodeResult.serving_size_g ?? 100 });
-      Alert.alert('✅ Đã lưu!', undefined, [{ text: 'OK', onPress: () => router.replace('/(tabs)/') }]);
+      Alert.alert('✅ Đã lưu!', undefined, [{ text: 'OK', onPress: () => router.replace('/') }]);
     } catch { Alert.alert('Lỗi', 'Không thể lưu log'); }
   };
 
   // ─────────────────────── Render ───────────────────────
 
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView showsVerticalScrollIndicator={false}>
-        <Text style={styles.title}>Scan đồ ăn</Text>
+    <ScreenShell>
+        <Eyebrow>AI Scanner</Eyebrow>
+        <HeroTitle>Chụp, mô tả hoặc quét mã vạch rồi log bữa ăn ngay.</HeroTitle>
+        <BodyText style={styles.heroBody}>Flow được tối ưu cho mobile nhưng vẫn đủ gọn và đẹp khi mở trên desktop/web.</BodyText>
 
         {/* Mode Tabs */}
         <View style={styles.modeTabs}>
           {(Object.keys(MODE_ICONS) as InputMode[]).map((m) => (
             <TouchableOpacity key={m} style={[styles.modeTab, mode === m && styles.modeTabActive]}
               onPress={() => { setMode(m); setBarcodeScanned(false); setBarcodeResult(null); setScanResult(null); }}>
-              <Text style={[styles.modeTabText, mode === m && styles.modeTabTextActive]}>{MODE_ICONS[m]}</Text>
+              <Text style={[styles.modeTabText, mode === m && styles.modeTabTextActive]}>{MODE_ICONS[m]} {m}</Text>
             </TouchableOpacity>
           ))}
         </View>
@@ -163,11 +165,11 @@ export default function ScanScreen() {
             {barcodeResult.image_url && <Image source={{ uri: barcodeResult.image_url }} style={styles.barcodeImage} resizeMode="contain" />}
             <Text style={styles.barcodeProductName}>{barcodeResult.name_vi ?? barcodeResult.name}</Text>
             <Text style={styles.barcodeServing}>{barcodeResult.serving_description ?? `${barcodeResult.serving_size_g ?? 100}g`} / khẩu phần</Text>
-            <View style={styles.totalCard}>
+            <SurfaceCard style={styles.totalCard}>
               <Text style={styles.totalLabel}>Dinh dưỡng / 100g</Text>
               <Text style={styles.totalCalorie}>{barcodeResult.calories_per_100g ?? 0} kcal</Text>
               <Text style={styles.totalMacros}>P: {barcodeResult.protein_g ?? 0}g  C: {barcodeResult.carbs_g ?? 0}g  F: {barcodeResult.fat_g ?? 0}g</Text>
-            </View>
+            </SurfaceCard>
             <MealPicker selected={selectedMeal} onSelect={setSelectedMeal} />
             <TouchableOpacity style={styles.saveButton} onPress={handleLogBarcode}>
               <Text style={styles.saveButtonText}>✅ Lưu vào nhật ký</Text>
@@ -225,11 +227,11 @@ export default function ScanScreen() {
             </Text>
             <MealPicker selected={selectedMeal} onSelect={setSelectedMeal} />
             {scanResult.items.map((item, i) => <ScanResultItem key={i} item={item} />)}
-            <View style={styles.totalCard}>
+            <SurfaceCard style={styles.totalCard}>
               <Text style={styles.totalLabel}>Tổng cộng</Text>
               <Text style={styles.totalCalorie}>{scanResult.total_calories} kcal</Text>
               <Text style={styles.totalMacros}>P: {Math.round(scanResult.total_protein_g)}g  C: {Math.round(scanResult.total_carbs_g)}g  F: {Math.round(scanResult.total_fat_g)}g</Text>
-            </View>
+            </SurfaceCard>
             <TouchableOpacity style={styles.saveButton} onPress={handleSaveLog}>
               <Text style={styles.saveButtonText}>✅ Lưu vào nhật ký</Text>
             </TouchableOpacity>
@@ -237,7 +239,7 @@ export default function ScanScreen() {
               <Text style={styles.secondaryButtonText}>💾 Lưu vào bộ sưu tập</Text>
             </TouchableOpacity>
             {/* Refine */}
-            <View style={styles.refineContainer}>
+            <SurfaceCard style={styles.refineContainer}>
               <Text style={styles.refineTitle}>🔄 Điều chỉnh kết quả</Text>
               <Text style={styles.refineHint}>AI ước lượng sai? Nhập thêm thông tin:</Text>
               <TextInput style={styles.refineInput} value={refineContext} onChangeText={setRefineContext}
@@ -246,15 +248,18 @@ export default function ScanScreen() {
                 onPress={handleRefineScan} disabled={!refineContext.trim() || isRefining}>
                 {isRefining ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.refineButtonText}>Phân tích lại</Text>}
               </TouchableOpacity>
-            </View>
+            </SurfaceCard>
           </View>
         )}
 
         {scanResult?.items.length === 0 && !isScanning && (
-          <Text style={styles.emptyText}>Không nhận ra đồ ăn. Thử lại nhé!</Text>
+          <EmptyState
+            icon="🤖"
+            title="AI chưa nhận ra món ăn"
+            description="Thử chụp rõ hơn, thêm mô tả bằng chữ hoặc dùng phần điều chỉnh để AI hiểu đúng hơn."
+          />
         )}
-      </ScrollView>
-    </SafeAreaView>
+    </ScreenShell>
   );
 }
 
@@ -273,68 +278,66 @@ function MealPicker({ selected, onSelect }: { selected: MealType; onSelect: (m: 
 
 function ScanResultItem({ item }: { item: AIDetectedItem }) {
   return (
-    <View style={styles.resultItem}>
+    <SurfaceCard style={styles.resultItem}>
       <View style={styles.resultHeader}>
         <Text style={styles.resultName}>{item.name_vi}</Text>
         <Text style={styles.resultCalorie}>{item.calories} kcal</Text>
       </View>
       <Text style={styles.resultDetail}>{item.quantity} {item.unit} (~{item.estimated_grams}g)</Text>
       <Text style={styles.resultMacros}>P: {Math.round(item.protein_g)}g  C: {Math.round(item.carbs_g)}g  F: {Math.round(item.fat_g)}g</Text>
-    </View>
+    </SurfaceCard>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0f0f1a', padding: 16 },
-  title: { fontSize: 24, fontWeight: 'bold', color: '#fff', marginBottom: 16 },
-  modeTabs: { flexDirection: 'row', gap: 8, marginBottom: 16 },
-  modeTab: { flex: 1, padding: 10, borderRadius: 10, backgroundColor: '#1a1a2e', alignItems: 'center' },
-  modeTabActive: { backgroundColor: '#4ade80' },
-  modeTabText: { color: '#9ca3af', fontWeight: '600', fontSize: 18 },
-  modeTabTextActive: { color: '#0f0f1a' },
-  captureButton: { backgroundColor: '#1a1a2e', borderRadius: 16, padding: 40, alignItems: 'center', gap: 12, marginBottom: 16 },
-  captureText: { color: '#9ca3af', fontSize: 15 },
+  heroBody: { marginBottom: 16, maxWidth: 700 },
+  modeTabs: { flexDirection: 'row', gap: 8, marginBottom: 18, flexWrap: 'wrap' },
+  modeTab: { paddingVertical: 12, paddingHorizontal: 14, borderRadius: 14, backgroundColor: '#0f1b3b', alignItems: 'center', borderWidth: 1, borderColor: '#23386b' },
+  modeTabActive: { backgroundColor: '#6ee7b7', borderColor: '#6ee7b7' },
+  modeTabText: { color: '#c5d3eb', fontWeight: '700', fontSize: 14, textTransform: 'capitalize' },
+  modeTabTextActive: { color: '#07111f' },
+  captureButton: { backgroundColor: '#0f1a37ee', borderRadius: 24, padding: 40, alignItems: 'center', gap: 12, marginBottom: 16, borderWidth: 1, borderColor: '#203463' },
+  captureText: { color: '#9fb1d1', fontSize: 15, fontWeight: '600' },
   textInputContainer: { gap: 10, marginBottom: 16 },
-  textInput: { backgroundColor: '#1a1a2e', borderRadius: 12, padding: 14, color: '#fff', minHeight: 80 },
-  analyzeButton: { backgroundColor: '#4ade80', borderRadius: 12, padding: 14, alignItems: 'center' },
-  analyzeButtonText: { color: '#0f0f1a', fontWeight: 'bold', fontSize: 16 },
-  previewImage: { width: '100%', height: 200, borderRadius: 12, marginBottom: 16 },
+  textInput: { backgroundColor: '#121d3f', borderRadius: 16, padding: 14, color: '#fff', minHeight: 80, borderWidth: 1, borderColor: '#23386b' },
+  analyzeButton: { backgroundColor: '#7dd3fc', borderRadius: 14, padding: 14, alignItems: 'center' },
+  analyzeButtonText: { color: '#07111f', fontWeight: '800', fontSize: 16 },
+  previewImage: { width: '100%', height: 220, borderRadius: 18, marginBottom: 16 },
   scanningContainer: { alignItems: 'center', padding: 30, gap: 12 },
-  scanningText: { color: '#9ca3af', fontSize: 15, marginTop: 8 },
-  sectionTitle: { fontSize: 18, fontWeight: '600', color: '#fff', marginBottom: 12 },
+  scanningText: { color: '#9fb1d1', fontSize: 15, marginTop: 8 },
+  sectionTitle: { fontSize: 18, fontWeight: '700', color: '#eff6ff', marginBottom: 12 },
   mealPicker: { flexDirection: 'row', gap: 8, marginBottom: 12 },
-  mealChip: { flex: 1, padding: 8, borderRadius: 8, backgroundColor: '#1a1a2e', alignItems: 'center' },
-  mealChipActive: { backgroundColor: '#4ade8033', borderWidth: 1, borderColor: '#4ade80' },
-  mealChipText: { color: '#9ca3af', fontSize: 13, fontWeight: '500' },
-  mealChipTextActive: { color: '#4ade80', fontWeight: '700' },
-  resultItem: { backgroundColor: '#1a1a2e', borderRadius: 12, padding: 14, marginBottom: 10 },
+  mealChip: { flex: 1, padding: 10, borderRadius: 12, backgroundColor: '#122041', alignItems: 'center', borderWidth: 1, borderColor: '#23386b' },
+  mealChipActive: { backgroundColor: '#6ee7b720', borderWidth: 1, borderColor: '#6ee7b7' },
+  mealChipText: { color: '#b6c7e3', fontSize: 13, fontWeight: '600' },
+  mealChipTextActive: { color: '#6ee7b7', fontWeight: '800' },
+  resultItem: { marginBottom: 10 },
   resultHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 },
-  resultName: { color: '#fff', fontWeight: '600', flex: 1 },
-  resultCalorie: { color: '#4ade80', fontWeight: 'bold' },
-  resultDetail: { color: '#9ca3af', fontSize: 13, marginBottom: 2 },
-  resultMacros: { color: '#6b7280', fontSize: 12 },
-  totalCard: { backgroundColor: '#1a1a2e', borderRadius: 14, padding: 16, marginVertical: 12, alignItems: 'center' },
-  totalLabel: { color: '#9ca3af', fontSize: 13, marginBottom: 4 },
-  totalCalorie: { color: '#4ade80', fontSize: 28, fontWeight: 'bold' },
-  totalMacros: { color: '#9ca3af', fontSize: 13, marginTop: 4 },
-  saveButton: { backgroundColor: '#4ade80', borderRadius: 14, padding: 16, alignItems: 'center', marginBottom: 10 },
-  saveButtonText: { color: '#0f0f1a', fontWeight: 'bold', fontSize: 16 },
-  secondaryButton: { borderRadius: 14, padding: 14, alignItems: 'center', marginBottom: 10, borderWidth: 1, borderColor: '#4ade80', backgroundColor: '#4ade8011' },
-  secondaryButtonText: { color: '#4ade80', fontWeight: '600', fontSize: 15 },
+  resultName: { color: '#fff', fontWeight: '700', flex: 1 },
+  resultCalorie: { color: '#6ee7b7', fontWeight: '800' },
+  resultDetail: { color: '#9fb1d1', fontSize: 13, marginBottom: 2 },
+  resultMacros: { color: '#8194ba', fontSize: 12 },
+  totalCard: { marginVertical: 12, alignItems: 'center' },
+  totalLabel: { color: '#9fb1d1', fontSize: 13, marginBottom: 4 },
+  totalCalorie: { color: '#6ee7b7', fontSize: 30, fontWeight: '800' },
+  totalMacros: { color: '#9fb1d1', fontSize: 13, marginTop: 4 },
+  saveButton: { backgroundColor: '#6ee7b7', borderRadius: 16, padding: 16, alignItems: 'center', marginBottom: 10 },
+  saveButtonText: { color: '#07111f', fontWeight: '800', fontSize: 16 },
+  secondaryButton: { borderRadius: 16, padding: 14, alignItems: 'center', marginBottom: 10, borderWidth: 1, borderColor: '#7dd3fc', backgroundColor: '#0d2440' },
+  secondaryButtonText: { color: '#7dd3fc', fontWeight: '700', fontSize: 15 },
   buttonDisabled: { opacity: 0.4 },
-  refineContainer: { backgroundColor: '#1a1a2e', borderRadius: 14, padding: 16, marginBottom: 20 },
-  refineTitle: { color: '#fff', fontWeight: '600', fontSize: 16, marginBottom: 4 },
-  refineHint: { color: '#9ca3af', fontSize: 13, marginBottom: 10 },
-  refineInput: { backgroundColor: '#0f0f1a', borderRadius: 10, padding: 12, color: '#fff', minHeight: 60, marginBottom: 10 },
-  refineButton: { backgroundColor: '#6366f1', borderRadius: 10, padding: 12, alignItems: 'center' },
+  refineContainer: { marginBottom: 20 },
+  refineTitle: { color: '#fff', fontWeight: '700', fontSize: 16, marginBottom: 4 },
+  refineHint: { color: '#9fb1d1', fontSize: 13, marginBottom: 10 },
+  refineInput: { backgroundColor: '#0b1330', borderRadius: 14, padding: 12, color: '#fff', minHeight: 60, marginBottom: 10, borderWidth: 1, borderColor: '#203463' },
+  refineButton: { backgroundColor: '#8b5cf6', borderRadius: 12, padding: 12, alignItems: 'center' },
   refineButtonText: { color: '#fff', fontWeight: '600', fontSize: 14 },
-  emptyText: { color: '#9ca3af', textAlign: 'center', marginTop: 30, fontSize: 15 },
   // Barcode
   barcodeContainer: { marginBottom: 16 },
   barcodeCamera: { width: '100%', height: 280, borderRadius: 16, overflow: 'hidden' },
   barcodeScanningOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0008' },
-  barcodeHint: { color: '#9ca3af', textAlign: 'center', marginTop: 10, fontSize: 13 },
-  barcodeImage: { width: '100%', height: 160, borderRadius: 12, marginBottom: 12 },
-  barcodeProductName: { color: '#fff', fontSize: 18, fontWeight: 'bold', marginBottom: 4 },
-  barcodeServing: { color: '#9ca3af', fontSize: 13, marginBottom: 12 },
+  barcodeHint: { color: '#9fb1d1', textAlign: 'center', marginTop: 10, fontSize: 13 },
+  barcodeImage: { width: '100%', height: 160, borderRadius: 16, marginBottom: 12 },
+  barcodeProductName: { color: '#fff', fontSize: 18, fontWeight: '800', marginBottom: 4 },
+  barcodeServing: { color: '#9fb1d1', fontSize: 13, marginBottom: 12 },
 });

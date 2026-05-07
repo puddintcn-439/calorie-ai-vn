@@ -1,6 +1,7 @@
-import { create } from 'zustand';
-import * as SecureStore from 'expo-secure-store';
 import { apiClient } from '../services/api';
+import { authStorage } from '../services/auth-storage';
+
+const create = require('zustand').create as typeof import('zustand').create;
 
 interface AuthState {
   token: string | null;
@@ -18,8 +19,8 @@ export const useAuthStore = create<AuthState>((set) => ({
   isLoading: true,
 
   loadToken: async () => {
-    const token = await SecureStore.getItemAsync('auth_token');
-    const userId = await SecureStore.getItemAsync('user_id');
+    const token = await authStorage.getItemAsync('auth_token');
+    const userId = await authStorage.getItemAsync('user_id');
     if (!token) {
       set({ token: null, userId: null, isLoading: false });
       return;
@@ -30,8 +31,8 @@ export const useAuthStore = create<AuthState>((set) => ({
       await apiClient.get('/user/profile');
       set({ token, userId, isLoading: false });
     } catch {
-      await SecureStore.deleteItemAsync('auth_token');
-      await SecureStore.deleteItemAsync('user_id');
+      await authStorage.deleteItemAsync('auth_token');
+      await authStorage.deleteItemAsync('user_id');
       set({ token: null, userId: null, isLoading: false });
     }
   },
@@ -39,22 +40,22 @@ export const useAuthStore = create<AuthState>((set) => ({
   login: async (email, password) => {
     const res = await apiClient.post('/auth/login', { email, password });
     const { access_token, user_id } = res.data;
-    await SecureStore.setItemAsync('auth_token', access_token);
-    await SecureStore.setItemAsync('user_id', user_id);
+    await authStorage.setItemAsync('auth_token', access_token);
+    await authStorage.setItemAsync('user_id', user_id);
     set({ token: access_token, userId: user_id });
   },
 
   register: async (email, password, fullName) => {
     const res = await apiClient.post('/auth/register', { email, password, full_name: fullName });
     const { access_token, user_id } = res.data;
-    await SecureStore.setItemAsync('auth_token', access_token);
-    await SecureStore.setItemAsync('user_id', user_id);
+    await authStorage.setItemAsync('auth_token', access_token);
+    await authStorage.setItemAsync('user_id', user_id);
     set({ token: access_token, userId: user_id });
   },
 
   logout: async () => {
-    await SecureStore.deleteItemAsync('auth_token');
-    await SecureStore.deleteItemAsync('user_id');
+    await authStorage.deleteItemAsync('auth_token');
+    await authStorage.deleteItemAsync('user_id');
     set({ token: null, userId: null });
   },
 }));

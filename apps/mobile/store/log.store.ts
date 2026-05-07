@@ -1,6 +1,7 @@
-import { create } from 'zustand';
 import { DailyLog, FoodLog, MealType, SavedMeal, ActivityLog, CreateActivityLogDto } from '@calorie-ai/types';
 import { apiClient } from '../services/api';
+
+const create = require('zustand').create as typeof import('zustand').create;
 
 interface LogState {
   dailyLog: DailyLog | null;
