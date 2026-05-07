@@ -21,9 +21,9 @@ export default function LogScreen() {
   });
 
   useEffect(() => {
-    fetchDailyLog();
-    fetchSavedMeals();
-    fetchActivityLogs();
+    fetchDailyLog().catch(() => {});
+    fetchSavedMeals().catch(() => {});
+    fetchActivityLogs().catch(() => {});
     // Load per-meal targets from profile
     import('../../services/api').then(({ apiClient }) => {
       apiClient.get('/user/profile').then((res) => {

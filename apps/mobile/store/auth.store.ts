@@ -20,7 +20,20 @@ export const useAuthStore = create<AuthState>((set) => ({
   loadToken: async () => {
     const token = await SecureStore.getItemAsync('auth_token');
     const userId = await SecureStore.getItemAsync('user_id');
-    set({ token, userId, isLoading: false });
+    if (!token) {
+      set({ token: null, userId: null, isLoading: false });
+      return;
+    }
+
+    try {
+      // Validate cached token before routing to protected tabs.
+      await apiClient.get('/user/profile');
+      set({ token, userId, isLoading: false });
+    } catch {
+      await SecureStore.deleteItemAsync('auth_token');
+      await SecureStore.deleteItemAsync('user_id');
+      set({ token: null, userId: null, isLoading: false });
+    }
   },
 
   login: async (email, password) => {

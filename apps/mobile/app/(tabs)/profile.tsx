@@ -31,6 +31,8 @@ export default function ProfileScreen() {
   useEffect(() => {
     apiClient.get('/user/profile').then((res) => {
       setProfile(res.data);
+    }).catch(() => {
+      setProfile({});
     }).finally(() => setIsLoading(false));
   }, []);
 

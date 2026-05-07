@@ -10,8 +10,8 @@ export default function DashboardScreen() {
   const { dailyLog, activityLogs, isLoading, fetchDailyLog, fetchActivityLogs } = useLogStore();
 
   useEffect(() => {
-    fetchDailyLog();
-    fetchActivityLogs();
+    fetchDailyLog().catch(() => {});
+    fetchActivityLogs().catch(() => {});
   }, []);
 
   const consumed = dailyLog?.total_calories ?? 0;
