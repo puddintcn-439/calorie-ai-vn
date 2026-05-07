@@ -1,0 +1,58 @@
+{
+  "expo": {
+    "name": "Calorie AI VN",
+    "slug": "calorie-ai-vn",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "calorieai",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "image": "./assets/images/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#1a1a2e"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.calorieaivn.app",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Dùng camera để chụp ảnh đồ ăn phân tích calo",
+        "NSPhotoLibraryUsageDescription": "Chọn ảnh đồ ăn từ thư viện để phân tích calo"
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "backgroundColor": "#1a1a2e"
+      },
+      "package": "com.calorieaivn.app",
+      "permissions": [
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE"
+      ]
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Dùng camera để chụp ảnh đồ ăn phân tích calo"
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Chọn ảnh đồ ăn từ thư viện để phân tích calo"
+        }
+      ],
+      "expo-asset"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

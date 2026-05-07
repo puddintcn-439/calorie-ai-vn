@@ -1,0 +1,197 @@
+import { Injectable } from '@nestjs/common';
+import { SupabaseService } from '../../common/supabase/supabase.service';
+import { FoodLog, DailyLog, MealType, SavedMeal, SavedMealItem, ActivityLog, CreateActivityLogDto, ACTIVITY_MET } from '@calorie-ai/types';
+
+@Injectable()
+export class LogService {
+  constructor(private supabase: SupabaseService) {}
+
+  async createLog(data: Partial<FoodLog>): Promise<FoodLog> {
+    const { data: log, error } = await this.supabase.db
+      .from('food_logs')
+      .insert(data)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return log as FoodLog;
+  }
+
+  async getDailyLog(userId: string, date: string): Promise<DailyLog> {
+    const { data: logs, error } = await this.supabase.db
+      .from('food_logs')
+      .select('*')
+      .eq('user_id', userId)
+      .gte('logged_at', `${date}T00:00:00`)
+      .lte('logged_at', `${date}T23:59:59`)
+      .order('logged_at', { ascending: true });
+
+    if (error) throw error;
+
+    const foodLogs = (logs ?? []) as FoodLog[];
+    const total_calories = foodLogs.reduce((s, l) => s + l.calories, 0);
+    const total_protein_g = foodLogs.reduce((s, l) => s + l.protein_g, 0);
+    const total_carbs_g = foodLogs.reduce((s, l) => s + l.carbs_g, 0);
+    const total_fat_g = foodLogs.reduce((s, l) => s + l.fat_g, 0);
+
+    const { data: userRow } = await this.supabase.db
+      .from('users')
+      .select('daily_calorie_target')
+      .eq('id', userId)
+      .single();
+
+    const target_calories = userRow?.daily_calorie_target ?? 1800;
+
+    return {
+      date,
+      logs: foodLogs,
+      total_calories,
+      total_protein_g,
+      total_carbs_g,
+      total_fat_g,
+      target_calories,
+      remaining_calories: target_calories - total_calories,
+    };
+  }
+
+  async deleteLog(id: string, userId: string) {
+    const { error } = await this.supabase.db
+      .from('food_logs')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', userId);
+
+    if (error) throw error;
+    return { success: true };
+  }
+
+  // ---- Saved Meals ----
+
+  async getSavedMeals(userId: string): Promise<SavedMeal[]> {
+    const { data, error } = await this.supabase.db
+      .from('saved_meals')
+      .select('*')
+      .eq('user_id', userId)
+      .order('use_count', { ascending: false })
+      .limit(20);
+
+    if (error) throw error;
+    return data as SavedMeal[];
+  }
+
+  async createSavedMeal(userId: string, name: string, items: SavedMealItem[]): Promise<SavedMeal> {
+    const total_calories = items.reduce((s, i) => s + i.calories, 0);
+    const total_protein_g = items.reduce((s, i) => s + i.protein_g, 0);
+    const total_carbs_g = items.reduce((s, i) => s + i.carbs_g, 0);
+    const total_fat_g = items.reduce((s, i) => s + i.fat_g, 0);
+
+    const { data, error } = await this.supabase.db
+      .from('saved_meals')
+      .insert({ user_id: userId, name, items, total_calories, total_protein_g, total_carbs_g, total_fat_g })
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data as SavedMeal;
+  }
+
+  async logSavedMeal(userId: string, savedMealId: string, mealType: MealType): Promise<FoodLog[]> {
+    const { data: saved, error } = await this.supabase.db
+      .from('saved_meals')
+      .select('*')
+      .eq('id', savedMealId)
+      .eq('user_id', userId)
+      .single();
+
+    if (error || !saved) throw new Error('Saved meal not found');
+
+    const meal = saved as SavedMeal;
+    const logs: FoodLog[] = [];
+
+    for (const item of meal.items) {
+      const log = await this.createLog({
+        user_id: userId,
+        meal_type: mealType,
+        name: item.name,
+        name_vi: item.name_vi,
+        calories: item.calories,
+        protein_g: item.protein_g,
+        carbs_g: item.carbs_g,
+        fat_g: item.fat_g,
+        estimated_grams: item.estimated_grams,
+        unit: 'gram',
+        source: 'quick_add',
+        logged_at: new Date().toISOString(),
+      });
+      logs.push(log);
+    }
+
+    // bump use_count
+    await this.supabase.db
+      .from('saved_meals')
+      .update({ use_count: (meal.use_count ?? 0) + 1, last_used_at: new Date().toISOString() })
+      .eq('id', savedMealId);
+
+    return logs;
+  }
+
+  async deleteSavedMeal(id: string, userId: string) {
+    const { error } = await this.supabase.db
+      .from('saved_meals')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', userId);
+
+    if (error) throw error;
+    return { success: true };
+  }
+
+  // ─────────────────────── Activity Logs ───────────────────────
+
+  async createActivityLog(userId: string, dto: CreateActivityLogDto): Promise<ActivityLog> {
+    // Estimate calories if not provided (MET × weight × hours)
+    let caloriesBurned = dto.calories_burned;
+    if (!caloriesBurned) {
+      const { data: user } = await this.supabase.db
+        .from('users').select('weight_kg').eq('id', userId).single();
+      const weight = (user as any)?.weight_kg ?? 65;
+      const met = ACTIVITY_MET[dto.activity_type] ?? 5;
+      caloriesBurned = Math.round(met * weight * (dto.duration_min / 60));
+    }
+
+    const { data, error } = await this.supabase.db
+      .from('activity_logs')
+      .insert({ user_id: userId, ...dto, calories_burned: caloriesBurned })
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data as ActivityLog;
+  }
+
+  async getActivityLogs(userId: string, date: string): Promise<ActivityLog[]> {
+    const start = `${date}T00:00:00`;
+    const end = `${date}T23:59:59`;
+    const { data, error } = await this.supabase.db
+      .from('activity_logs')
+      .select('*')
+      .eq('user_id', userId)
+      .gte('logged_at', start)
+      .lte('logged_at', end)
+      .order('logged_at', { ascending: false });
+
+    if (error) throw error;
+    return data as ActivityLog[];
+  }
+
+  async deleteActivityLog(id: string, userId: string) {
+    const { error } = await this.supabase.db
+      .from('activity_logs')
+      .delete()
+      .eq('id', id)
+      .eq('user_id', userId);
+
+    if (error) throw error;
+    return { success: true };
+  }
+}

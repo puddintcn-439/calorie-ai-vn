@@ -1,0 +1,31 @@
+{
+  "name": "calorie-ai-vn",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "test": "turbo test",
+    "backend": "turbo dev --filter=backend",
+    "mobile": "turbo dev --filter=mobile"
+  },
+  "devDependencies": {
+    "prettier": "^3.3.2",
+    "turbo": "^2.3.0",
+    "typescript": "^5.4.5"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  },
+  "dependencies": {
+    "expo-linking": "^8.0.12",
+    "react-native-reanimated": "~4.1.1",
+    "react-native-worklets": "^0.8.3",
+    "react-native-worklets-core": "^1.6.3"
+  }
+}
