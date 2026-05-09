@@ -12,11 +12,13 @@ import { ReminderModule } from './modules/reminder/reminder.module';
 import { SubscriptionModule } from './modules/subscription/subscription.module';
 import { GamificationModule } from './modules/gamification/gamification.module';
 import { CalorieTargetModule } from './modules/calorie-target/calorie-target.module';
+import { HealthModule } from './health/health.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     ThrottlerModule.forRoot([{ ttl: 60000, limit: 60 }]),
+    HealthModule,
     AuthModule,
     AiModule,
     FoodModule,
