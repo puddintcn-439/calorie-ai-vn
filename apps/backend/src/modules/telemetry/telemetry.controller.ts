@@ -22,7 +22,7 @@ import {
 import { ApiProperty } from '@nestjs/swagger';
 import { TelemetryService } from './telemetry.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { CorrectionEventType, LoggingEventType, LoggingInputMode } from '@calorie-ai/types';
+import { CorrectionEventType, LoggingEventType, LoggingInputMode, ContextMode } from '@calorie-ai/types';
 
 class CreateCorrectionEventDto {
   @ApiProperty({ enum: ['item_mismatch', 'portion_adjusted', 'confidence_low', 'ai_result_corrected'] })
@@ -125,6 +125,21 @@ class CreateLoggingEventDto {
   metadata?: Record<string, unknown>;
 }
 
+class CreateContextEventDto {
+  @ApiProperty({ enum: Object.values(ContextMode) })
+  @IsEnum(ContextMode)
+  context_mode: ContextMode;
+
+  @ApiProperty({ enum: ['activated', 'deactivated'] })
+  @IsEnum(['activated', 'deactivated'])
+  action: 'activated' | 'deactivated';
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  timestamp?: string;
+}
+
 @ApiTags('Telemetry')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
@@ -144,6 +159,13 @@ export class TelemetryController {
   @ApiOperation({ summary: 'Record logging funnel telemetry event (attempted/parsed/failed)' })
   async createLoggingEvent(@Request() req: any, @Body() dto: CreateLoggingEventDto) {
     return this.telemetry.createLoggingEvent(req.user.id ?? req.user.sub, dto);
+  }
+
+  @Post('context-events')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Record life context activation/deactivation (stress, period, travel, etc)' })
+  async createContextEvent(@Request() req: any, @Body() dto: CreateContextEventDto) {
+    return this.telemetry.createContextEvent(req.user.id ?? req.user.sub, dto);
   }
 
   @Get('corrections')

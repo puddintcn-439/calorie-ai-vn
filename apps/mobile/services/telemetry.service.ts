@@ -1,5 +1,5 @@
 import { apiClient } from './api';
-import { CorrectionEventDto, LoggingEventDto, LoggingInputMode } from '@calorie-ai/types';
+import { CorrectionEventDto, LoggingEventDto, LoggingInputMode, ContextMode } from '@calorie-ai/types';
 
 class TelemetryService {
   async emitLoggingEvent(event: LoggingEventDto): Promise<void> {
@@ -111,6 +111,21 @@ class TelemetryService {
       ai_confidence: confidence,
       notes: `Low confidence scan: ${(confidence * 100).toFixed(1)}%`,
     });
+  }
+
+  /**
+   * Emit when user activates or deactivates a life context (stress, period, travel, etc)
+   */
+  async emitContextToggled(context: ContextMode, isActive: boolean): Promise<void> {
+    try {
+      await apiClient.post('/telemetry/context-events', {
+        context_mode: context,
+        action: isActive ? 'activated' : 'deactivated',
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      console.warn('[Telemetry] Failed to emit context event:', error);
+    }
   }
 }
 

@@ -346,4 +346,86 @@ export class ReminderService {
 
     return dueReminders;
   }
+
+  /**
+   * Get user's currently active life contexts (stress, period, travel, etc)
+   * Returns the most recent activation/deactivation events for each context mode
+   */
+  async getActiveUserContexts(userId: string): Promise<string[]> {
+    try {
+      // Get the most recent context event for each context mode
+      const { data, error } = await this.supabase.db
+        .from('user_context_events')
+        .select('context_mode, action, created_at')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.warn('[Reminder] Failed to fetch user contexts:', error);
+        return [];
+      }
+
+      // Track which contexts are currently active
+      const activeContexts = new Set<string>();
+      const seenContexts = new Set<string>();
+
+      for (const event of data || []) {
+        if (!seenContexts.has(event.context_mode)) {
+          seenContexts.add(event.context_mode);
+          if (event.action === 'activated') {
+            activeContexts.add(event.context_mode);
+          }
+        }
+      }
+
+      return Array.from(activeContexts);
+    } catch (error) {
+      console.warn('[Reminder] Error getting active contexts:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Apply context-aware adjustments to calorie target based on user's life situation
+   * E.g., stress day gets +15% calorie buffer, lenient judgment
+   */
+  applyContextAdjustment(baseTarget: number, activeContexts: string[]): { adjustedTarget: number; feedbackTone: string } {
+    if (!activeContexts || activeContexts.length === 0) {
+      return { adjustedTarget: baseTarget, feedbackTone: 'balanced' };
+    }
+
+    // Priority order: stress > period > poor sleep > travel > busy_work > event > recovery
+    const contextPriority: Record<string, number> = {
+      stress: 0,
+      period: 1,
+      poor_sleep: 2,
+      travel: 3,
+      busy_work: 4,
+      event: 5,
+      recovery: 6,
+    };
+
+    const mostImportantContext = activeContexts.sort(
+      (a, b) => (contextPriority[a] ?? 99) - (contextPriority[b] ?? 99),
+    )[0];
+
+    // Apply adjustment based on most important active context
+    const adjustments: Record<string, { buffer: number; tone: string }> = {
+      stress: { buffer: 0.15, tone: 'grounding' },
+      period: { buffer: 0.1, tone: 'nurturing' },
+      poor_sleep: { buffer: 0.08, tone: 'supportive' },
+      travel: { buffer: 0.12, tone: 'adventurous' },
+      busy_work: { buffer: 0.08, tone: 'energizing' },
+      event: { buffer: 0.1, tone: 'celebratory' },
+      recovery: { buffer: 0.05, tone: 'motivating' },
+    };
+
+    const adjustment = adjustments[mostImportantContext];
+    if (!adjustment) {
+      return { adjustedTarget: baseTarget, feedbackTone: 'balanced' };
+    }
+
+    const adjustedTarget = Math.round(baseTarget * (1 + adjustment.buffer));
+    return { adjustedTarget, feedbackTone: adjustment.tone };
+  }
 }

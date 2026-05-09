@@ -8,3 +8,4 @@ export * from './insights.types';
 export * from './reminder.types';
 export * from './subscription.types';
 export * from './gamification.types';
+export * from './context.types';

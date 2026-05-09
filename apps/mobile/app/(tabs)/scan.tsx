@@ -6,7 +6,7 @@ import {
 import * as ImagePicker from 'expo-image-picker';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { Ionicons } from '@expo/vector-icons';
-import { AIScanResponse, AIDetectedItem, Food, MealType } from '@calorie-ai/types';
+import { AIScanResponse, AIDetectedItem, Food, MealType, ContextMode, CONTEXT_ADAPTERS } from '@calorie-ai/types';
 import {
   scanImageFromUri,
   scanText,
@@ -15,6 +15,7 @@ import {
   scanReceipt,
 } from '../../services/ai.service';
 import { useLogStore } from '../../store/log.store';
+import { useContextStore } from '../../store/context.store';
 import { apiClient } from '../../services/api';
 import { telemetryService } from '../../services/telemetry.service';
 import { router } from 'expo-router';
@@ -47,6 +48,9 @@ export default function ScanScreen() {
   const [searchResults, setSearchResults] = useState<Food[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [isReceiptScanning, setIsReceiptScanning] = useState(false);
+
+  // Context state
+  const { activeContexts, toggleContext } = useContextStore();
   const [lastReceiptUri, setLastReceiptUri] = useState<string | null>(null);
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
 
@@ -117,6 +121,12 @@ export default function ScanScreen() {
   }, []);
 
   // ─────────────────────── Handlers ───────────────────────
+
+  const handleContextToggle = (context: ContextMode) => {
+    toggleContext(context);
+    const isActive = !activeContexts.includes(context);
+    void telemetryService.emitContextToggled(context, isActive);
+  };
 
   const handleCameraCapture = async () => {
     const perm = await ImagePicker.requestCameraPermissionsAsync();
@@ -351,6 +361,9 @@ export default function ScanScreen() {
             </TouchableOpacity>
           ))}
         </View>
+
+        {/* ── Life Context Selector ── */}
+        <ContextPicker activeContexts={activeContexts} onToggle={handleContextToggle} />
 
         {/* ── Manual Search Mode ── */}
         {mode === 'search' && (
@@ -603,6 +616,59 @@ function MealPicker({ selected, onSelect }: { selected: MealType; onSelect: (m: 
   );
 }
 
+function ContextPicker({ activeContexts, onToggle }: { activeContexts: ContextMode[]; onToggle: (mode: ContextMode) => void }) {
+  const contextIcons: Record<ContextMode, string> = {
+    [ContextMode.STRESS]: '😰',
+    [ContextMode.PERIOD]: '🩸',
+    [ContextMode.BUSY_WORK]: '🏃',
+    [ContextMode.TRAVEL]: '✈️',
+    [ContextMode.POOR_SLEEP]: '😴',
+    [ContextMode.EVENT]: '🎉',
+    [ContextMode.RECOVERY]: '🔥',
+    [ContextMode.NORMAL]: '✨',
+  };
+
+  const contextLabels: Record<ContextMode, string> = {
+    [ContextMode.STRESS]: 'Áp lực',
+    [ContextMode.PERIOD]: 'Kỳ kinh',
+    [ContextMode.BUSY_WORK]: 'Bận',
+    [ContextMode.TRAVEL]: 'Du lịch',
+    [ContextMode.POOR_SLEEP]: 'Ngủ kém',
+    [ContextMode.EVENT]: 'Tiệc',
+    [ContextMode.RECOVERY]: 'Phục hồi',
+    [ContextMode.NORMAL]: 'Bình thường',
+  };
+
+  const displayContexts = [
+    ContextMode.STRESS,
+    ContextMode.PERIOD,
+    ContextMode.BUSY_WORK,
+    ContextMode.TRAVEL,
+    ContextMode.POOR_SLEEP,
+    ContextMode.EVENT,
+  ];
+
+  return (
+    <View style={styles.contextPickerContainer}>
+      <Text style={styles.contextPickerLabel}>Hôm nay bạn đang:</Text>
+      <View style={styles.contextPicker}>
+        {displayContexts.map((mode) => (
+          <TouchableOpacity
+            key={mode}
+            style={[styles.contextChip, activeContexts.includes(mode) && styles.contextChipActive]}
+            onPress={() => onToggle(mode)}
+          >
+            <Text style={styles.contextChipIcon}>{contextIcons[mode]}</Text>
+            <Text style={[styles.contextChipText, activeContexts.includes(mode) && styles.contextChipTextActive]}>
+              {contextLabels[mode]}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+    </View>
+  );
+}
+
 function ScanResultItem({
   item,
   onDecrease,
@@ -706,6 +772,15 @@ const styles = StyleSheet.create({
   mealChipActive: { backgroundColor: '#6ee7b720', borderWidth: 1, borderColor: '#6ee7b7' },
   mealChipText: { color: '#b6c7e3', fontSize: 13, fontWeight: '600' },
   mealChipTextActive: { color: '#6ee7b7', fontWeight: '800' },
+  // Context picker
+  contextPickerContainer: { marginBottom: 16 },
+  contextPickerLabel: { color: '#9fb1d1', fontSize: 12, fontWeight: '600', marginBottom: 8 },
+  contextPicker: { flexDirection: 'row', gap: 6, flexWrap: 'wrap' },
+  contextChip: { paddingVertical: 8, paddingHorizontal: 10, borderRadius: 10, backgroundColor: '#122041', borderWidth: 1, borderColor: '#23386b', alignItems: 'center', flexDirection: 'row', gap: 4 },
+  contextChipActive: { backgroundColor: '#6ee7b720', borderColor: '#6ee7b7' },
+  contextChipIcon: { fontSize: 16 },
+  contextChipText: { color: '#b6c7e3', fontSize: 12, fontWeight: '600' },
+  contextChipTextActive: { color: '#6ee7b7', fontWeight: '800' },
   resultItem: { marginBottom: 10 },
   resultItemLowConf: { borderColor: '#7f1d1d', borderWidth: 1 },
   confidenceRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },

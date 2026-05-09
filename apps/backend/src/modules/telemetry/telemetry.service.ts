@@ -127,4 +127,36 @@ export class TelemetryService {
       avg_ai_confidence: Math.round(avg_ai_confidence * 100) / 100,
     };
   }
+
+  /**
+   * Create a context event (stress, period, travel, etc activation/deactivation)
+   */
+  async createContextEvent(
+    userId: string,
+    event: { context_mode: string; action: 'activated' | 'deactivated'; timestamp?: string },
+  ): Promise<any> {
+    if (!event.context_mode) {
+      throw new BadRequestException('context_mode is required');
+    }
+
+    if (!event.action) {
+      throw new BadRequestException('action is required');
+    }
+
+    const timestamp = event.timestamp || new Date().toISOString();
+
+    const { data, error } = await this.supabase.db
+      .from('user_context_events')
+      .insert({ user_id: userId, context_mode: event.context_mode, action: event.action, created_at: timestamp })
+      .select()
+      .single();
+
+    if (error) {
+      // Log but don't throw - this is optional telemetry
+      console.warn('[Telemetry] Failed to record context event:', error);
+      return { success: false };
+    }
+
+    return data;
+  }
 }
