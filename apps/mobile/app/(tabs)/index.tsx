@@ -1,15 +1,16 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, ScrollView, StyleSheet, TouchableOpacity, ActivityIndicator, Alert,
 } from 'react-native';
 import { router } from 'expo-router';
 import { useLogStore } from '../../store/log.store';
 import { useSubscriptionStore } from '../../store/subscription.store';
-import { ActivitySyncResult } from '@calorie-ai/types';
+import { ActivitySyncResult, CoachingInsight } from '@calorie-ai/types';
 import { useGamificationStore } from '../../store/gamification.store';
 import { useCalorieTargetStore } from '../../store/calorie-target.store';
 import { BodyText, Eyebrow, HeroTitle, ScreenShell, SurfaceCard } from '../../components/ui-shell';
 import { EmptyState } from '../../components/empty-state';
+import { apiClient } from '../../services/api';
 
 function buildDailyReassurance(remaining: number, progress: number) {
   if (remaining >= 350) {
@@ -61,6 +62,19 @@ export default function DashboardScreen() {
   } = useCalorieTargetStore();
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncResult, setLastSyncResult] = useState<ActivitySyncResult | null>(null);
+  const [topInsight, setTopInsight] = useState<CoachingInsight | null>(null);
+
+  const fetchTopInsight = useCallback(async () => {
+    try {
+      const res = await apiClient.get('/coaching/insights');
+      const insights: CoachingInsight[] = res.data ?? [];
+      // Pick highest impact unacknowledged insight
+      const sorted = insights.sort((a, b) => b.impact_score - a.impact_score);
+      setTopInsight(sorted[0] ?? null);
+    } catch {
+      // Non-critical, ignore
+    }
+  }, []);
 
   useEffect(() => {
     fetchDailyLog().catch(() => {});
@@ -68,6 +82,7 @@ export default function DashboardScreen() {
     fetchSubscription().catch(() => {});
     fetchSummary().catch(() => {});
     fetchRecommendations().catch(() => {});
+    fetchTopInsight().catch(() => {});
   }, []);
 
   const consumed = dailyLog?.total_calories ?? 0;
@@ -115,6 +130,23 @@ export default function DashboardScreen() {
           <Text style={[styles.reassuranceTitle, { color: reassurance.toneColor }]}>{reassurance.title}</Text>
           <Text style={styles.reassuranceBody}>{reassurance.body}</Text>
         </SurfaceCard>
+
+        {/* ─── Coach Insight Widget ─── */}
+        {topInsight && (
+          <TouchableOpacity onPress={() => router.push('/(tabs)/coach')} activeOpacity={0.85}>
+            <SurfaceCard style={styles.insightWidget}>
+              <View style={styles.insightWidgetHeader}>
+                <Text style={styles.insightWidgetEmoji}>{topInsight.emoji ?? '💡'}</Text>
+                <View style={styles.insightWidgetContent}>
+                  <Text style={styles.insightWidgetLabel}>Coach insight</Text>
+                  <Text style={styles.insightWidgetTitle}>{topInsight.title}</Text>
+                </View>
+                <Text style={styles.insightWidgetArrow}>›</Text>
+              </View>
+              <Text style={styles.insightWidgetDesc} numberOfLines={2}>{topInsight.description}</Text>
+            </SurfaceCard>
+          </TouchableOpacity>
+        )}
 
         <SurfaceCard style={styles.heroCard}>
           <View style={styles.heroGlow} />
@@ -312,6 +344,14 @@ const styles = StyleSheet.create({
   reassuranceCard: { marginBottom: 14, borderWidth: 1, borderColor: '#223a70', backgroundColor: '#101d3a' },
   reassuranceTitle: { fontSize: 16, fontWeight: '800', marginBottom: 6 },
   reassuranceBody: { color: '#cbd5e1', fontSize: 13, lineHeight: 20 },
+  insightWidget: { marginBottom: 14, borderColor: '#6ee7b7', backgroundColor: '#0f2d2a' },
+  insightWidgetHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
+  insightWidgetEmoji: { fontSize: 22, marginRight: 10 },
+  insightWidgetContent: { flex: 1 },
+  insightWidgetLabel: { color: '#6ee7b7', fontSize: 10, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.8 },
+  insightWidgetTitle: { color: '#eff6ff', fontSize: 14, fontWeight: '700' },
+  insightWidgetArrow: { color: '#6ee7b7', fontSize: 22, fontWeight: '300' },
+  insightWidgetDesc: { color: '#b8c8e8', fontSize: 13, lineHeight: 19 },
   heroCard: { marginBottom: 16, alignItems: 'center', overflow: 'hidden' },
   heroGlow: { position: 'absolute', top: -40, right: -20, width: 160, height: 160, borderRadius: 80, backgroundColor: '#6ee7b730' },
   calorieNumber: { fontSize: 56, fontWeight: '800', color: '#6ee7b7' },

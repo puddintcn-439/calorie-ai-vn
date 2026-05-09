@@ -13,6 +13,7 @@ import { SubscriptionModule } from './modules/subscription/subscription.module';
 import { GamificationModule } from './modules/gamification/gamification.module';
 import { CalorieTargetModule } from './modules/calorie-target/calorie-target.module';
 import { CoachingModule } from './modules/coaching/coaching.module';
+import { BodyProgressModule } from './modules/body-progress/body-progress.module';
 import { HealthModule } from './health/health.module';
 
 @Module({
@@ -32,6 +33,7 @@ import { HealthModule } from './health/health.module';
     GamificationModule,
     CalorieTargetModule,
     CoachingModule,
+    BodyProgressModule,
   ],
 })
 export class AppModule {}
