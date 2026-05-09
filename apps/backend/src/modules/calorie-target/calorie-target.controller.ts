@@ -131,4 +131,16 @@ export class CalorieTargetController {
 
     return this.recommendationService.getWeeklyRecommendations(req.user.id, profile as any);
   }
+
+  @Get('meal-plan/me')
+  @UseGuards(JwtAuthGuard)
+  async getMyWeeklyMealPlan(@Request() req: any) {
+    const profile = await this.userService.getProfile(req.user.id, req.user.email);
+
+    if (!profile) {
+      throw new BadRequestException('User profile not found');
+    }
+
+    return this.recommendationService.getWeeklyMealPlan(req.user.id, profile as any);
+  }
 }

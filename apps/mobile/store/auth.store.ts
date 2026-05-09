@@ -1,5 +1,6 @@
 import { apiClient } from '../services/api';
 import { authStorage } from '../services/auth-storage';
+import { pushNotificationService } from '../services/push-notification.service';
 
 const create = require('zustand').create as typeof import('zustand').create;
 
@@ -30,6 +31,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       // Validate cached token before routing to protected tabs.
       await apiClient.get('/user/profile');
       set({ token, userId, isLoading: false });
+      pushNotificationService.initializePushNotifications();
     } catch {
       await authStorage.deleteItemAsync('auth_token');
       await authStorage.deleteItemAsync('user_id');
@@ -43,6 +45,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     await authStorage.setItemAsync('auth_token', access_token);
     await authStorage.setItemAsync('user_id', user_id);
     set({ token: access_token, userId: user_id });
+    pushNotificationService.initializePushNotifications();
   },
 
   register: async (email, password, fullName) => {
@@ -51,6 +54,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     await authStorage.setItemAsync('auth_token', access_token);
     await authStorage.setItemAsync('user_id', user_id);
     set({ token: access_token, userId: user_id });
+    pushNotificationService.initializePushNotifications();
   },
 
   logout: async () => {

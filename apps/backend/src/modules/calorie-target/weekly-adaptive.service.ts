@@ -30,11 +30,11 @@ export class WeeklyAdaptiveService {
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
     const { data } = await this.supabaseService.db
-      .from('logs')
-      .select('created_at, calories')
+      .from('food_logs')
+      .select('logged_at, calories')
       .eq('user_id', user_id)
-      .gte('created_at', sevenDaysAgo.toISOString())
-      .order('created_at', { ascending: true });
+      .gte('logged_at', sevenDaysAgo.toISOString())
+      .order('logged_at', { ascending: true });
 
     if (!data || data.length === 0) {
       return [];
@@ -43,7 +43,7 @@ export class WeeklyAdaptiveService {
     // Group by date and sum calories
     const dailyTotals: Record<string, number> = {};
     for (const log of data) {
-      const date = log.created_at.split('T')[0];
+      const date = log.logged_at.split('T')[0];
       dailyTotals[date] = (dailyTotals[date] || 0) + log.calories;
     }
 

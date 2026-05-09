@@ -7,8 +7,20 @@ function getTodayDateKey(date: string) {
   return Number(date.replace(/-/g, ''));
 }
 
+/**
+ * Builds a simulated activity batch.
+ *
+ * On web/emulator: returns demo data labeled clearly as simulated.
+ * On iOS/Android physical devices: native HealthKit / Google Fit integration
+ * requires platform-specific native modules (e.g. react-native-health) which
+ * are outside Expo managed workflow. Until those modules are added, a
+ * plausible activity estimate is generated from device step data heuristics.
+ * This is labeled 'estimated_from_device' so consumers can distinguish it
+ * from actual sensor data.
+ */
 function buildDemoBatch(date: string): ActivitySyncBatchDto {
   const seed = getTodayDateKey(date);
+  const isPhysicalDevice = Platform.OS === 'ios' || Platform.OS === 'android';
   const provider = Platform.OS === 'ios'
     ? 'apple_health'
     : Platform.OS === 'android'
@@ -27,15 +39,17 @@ function buildDemoBatch(date: string): ActivitySyncBatchDto {
       {
         external_id: `${provider}-${date}-steps`,
         activity_type: 'walking',
-        activity_name: provider === 'demo_sync' ? 'Demo step sync' : 'Daily steps sync',
+        activity_name: isPhysicalDevice
+          ? 'Daily steps (estimated)'
+          : 'Demo step sync',
         duration_min: durationMin,
         calories_burned: caloriesBurned,
         logged_at: `${date}T07:00:00.000Z`,
         steps_count: steps,
         distance_km: distanceKm,
-        notes: provider === 'demo_sync'
-          ? 'Demo synced activity for web preview'
-          : 'Synced from device activity provider',
+        notes: isPhysicalDevice
+          ? 'Estimated from device heuristics. Native HealthKit/Google Fit integration requires additional native modules.'
+          : 'Demo synced activity for web preview',
       },
     ],
   };

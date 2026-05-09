@@ -1,5 +1,6 @@
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
+import { apiClient } from './api';
 
 // Configure notification behavior
 Notifications.setNotificationHandler({
@@ -28,6 +29,17 @@ class PushNotificationService {
       // Get push token (on physical device or simulator with proper setup)
       const token = (await Notifications.getExpoPushTokenAsync()).data;
       console.log('[Push] Expo push token:', token);
+
+      // Register token with backend so server-side cron can send pushes
+      try {
+        await apiClient.post('/reminders/push-token', {
+          token,
+          platform: Platform.OS === 'ios' ? 'ios' : Platform.OS === 'android' ? 'android' : 'web',
+        });
+        console.log('[Push] Token registered with backend');
+      } catch (err) {
+        console.warn('[Push] Failed to register token with backend:', err);
+      }
 
       // Set up notification channels for Android
       if (Platform.OS === 'android') {

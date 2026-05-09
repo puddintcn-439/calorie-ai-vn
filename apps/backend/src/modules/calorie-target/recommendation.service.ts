@@ -73,10 +73,10 @@ export class RecommendationService {
     // Get today's logs
     const today = new Date().toISOString().split('T')[0];
     const { data: todayLogs } = await this.supabaseService.db
-      .from('logs')
+      .from('food_logs')
       .select('calories')
       .eq('user_id', user_id)
-      .gte('created_at', `${today}T00:00:00Z`);
+      .gte('logged_at', `${today}T00:00:00Z`);
 
     const consumedToday = (todayLogs || []).reduce(
       (sum, log) => sum + log.calories,
@@ -104,10 +104,10 @@ export class RecommendationService {
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
     const { data: weekLogs } = await this.supabaseService.db
-      .from('logs')
-      .select('created_at, calories')
+      .from('food_logs')
+      .select('logged_at, calories')
       .eq('user_id', user_id)
-      .gte('created_at', sevenDaysAgo.toISOString());
+      .gte('logged_at', sevenDaysAgo.toISOString());
 
     const weeklyAdherence = this.calculateWeeklyAdherence(
       weekLogs || [],
@@ -158,7 +158,7 @@ export class RecommendationService {
    * Calculate average adherence for the week
    */
   private calculateWeeklyAdherence(
-    logs: { created_at: string; calories: number }[],
+    logs: { logged_at: string; calories: number }[],
     dailyTarget: number,
   ): number {
     if (logs.length === 0) {
@@ -168,7 +168,7 @@ export class RecommendationService {
     // Group logs by date
     const dailyTotals: Record<string, number> = {};
     for (const log of logs) {
-      const date = log.created_at.split('T')[0];
+      const date = log.logged_at.split('T')[0];
       dailyTotals[date] = (dailyTotals[date] || 0) + log.calories;
     }
 
@@ -218,7 +218,7 @@ export class RecommendationService {
   }
 
   /**
-   * Get personalized meal plan for the week
+   * Get personalized meal plan for the week (next 7 days)
    */
   async getWeeklyMealPlan(
     user_id: string,
@@ -228,14 +228,130 @@ export class RecommendationService {
     week_end: string;
     daily_plans: WeeklyRecommendations[];
   }> {
-    const recommendations = await this.getWeeklyRecommendations(user_id, profile);
+    const dailyTarget = profile.daily_calorie_target || 2000;
+
+    // Fetch foods pool once to reuse across all 7 days
+    const { data: foodPool } = await this.supabaseService.db
+      .from('foods')
+      .select('name, calories, protein_g, carbs_g, fat_g')
+      .gte('calories', 50)
+      .lte('calories', 800)
+      .order('nutrient_confidence', { ascending: false })
+      .limit(50);
+
+    const foods = foodPool || [];
+
+    // Meal distribution ratios vary slightly per day for dietary variety
+    const dayVariations = [
+      { breakfast: 0.25, lunch: 0.35, dinner: 0.30, snack: 0.10 },
+      { breakfast: 0.20, lunch: 0.35, dinner: 0.35, snack: 0.10 },
+      { breakfast: 0.25, lunch: 0.30, dinner: 0.35, snack: 0.10 },
+      { breakfast: 0.30, lunch: 0.35, dinner: 0.25, snack: 0.10 },
+      { breakfast: 0.25, lunch: 0.35, dinner: 0.30, snack: 0.10 },
+      { breakfast: 0.20, lunch: 0.40, dinner: 0.30, snack: 0.10 },
+      { breakfast: 0.25, lunch: 0.30, dinner: 0.35, snack: 0.10 },
+    ];
+
+    const mealTips: Record<string, string[]> = {
+      breakfast: [
+        'Start your day with protein and complex carbs for sustained energy.',
+        'A high-protein breakfast reduces cravings throughout the day.',
+        'Include fiber-rich foods to keep you full until lunch.',
+      ],
+      lunch: [
+        'Include vegetables for micronutrients and fiber.',
+        'A balanced lunch maintains energy for the afternoon.',
+        'Lean proteins at lunch support muscle maintenance.',
+      ],
+      dinner: [
+        'Balance protein with healthy fats and vegetables.',
+        'Keep dinner lighter to support better sleep quality.',
+        'Include colorful vegetables for a broad range of micronutrients.',
+      ],
+      snack: [
+        'Choose protein-rich snacks to stay satisfied between meals.',
+        'Fruit with nut butter makes a well-balanced snack.',
+        'Snacks under 200 kcal help stay on target.',
+      ],
+    };
+
+    // Get weekly adherence insight from past 7 days logs
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const { data: weekLogs } = await this.supabaseService.db
+      .from('food_logs')
+      .select('logged_at, calories')
+      .eq('user_id', user_id)
+      .gte('logged_at', sevenDaysAgo.toISOString());
+
+    const weeklyAdherence = this.calculateWeeklyAdherence(weekLogs || [], dailyTarget);
+    const today = new Date().toISOString().split('T')[0];
+
+    const daily_plans: WeeklyRecommendations[] = dayVariations.map((ratios, i) => {
+      const date = new Date();
+      date.setDate(date.getDate() + i);
+      const dateStr = date.toISOString().split('T')[0];
+
+      const breakfastTarget = profile.target_breakfast_cal || Math.round(dailyTarget * ratios.breakfast);
+      const lunchTarget = profile.target_lunch_cal || Math.round(dailyTarget * ratios.lunch);
+      const dinnerTarget = profile.target_dinner_cal || Math.round(dailyTarget * ratios.dinner);
+      const snackTarget = profile.target_snack_cal || Math.round(dailyTarget * ratios.snack);
+
+      // Distribute food pool into meal buckets (offset by day index for variety)
+      const offset = i * 5;
+      const slice = (start: number, count: number) =>
+        foods.slice((start + offset) % Math.max(foods.length, 1), ((start + offset) % Math.max(foods.length, 1)) + count)
+          .concat(foods.slice(0, Math.max(0, count - (foods.length - ((start + offset) % Math.max(foods.length, 1))))))
+          .slice(0, count);
+
+      const trend = this.calculateTrend(dailyTarget * 0.95, dailyTarget);
+
+      return {
+        user_id,
+        date: dateStr,
+        daily_target: dailyTarget,
+        remaining_calories: dateStr === today ? Math.max(0, dailyTarget) : dailyTarget,
+        meals: [
+          {
+            meal_type: 'breakfast' as const,
+            recommended_calories: breakfastTarget,
+            suggested_foods: slice(0, 5).map((f) => ({ name: f.name, calories: f.calories, protein_g: f.protein_g, carbs_g: f.carbs_g, fat_g: f.fat_g })),
+            tips: mealTips.breakfast[i % mealTips.breakfast.length],
+          },
+          {
+            meal_type: 'lunch' as const,
+            recommended_calories: lunchTarget,
+            suggested_foods: slice(5, 5).map((f) => ({ name: f.name, calories: f.calories, protein_g: f.protein_g, carbs_g: f.carbs_g, fat_g: f.fat_g })),
+            tips: mealTips.lunch[i % mealTips.lunch.length],
+          },
+          {
+            meal_type: 'dinner' as const,
+            recommended_calories: dinnerTarget,
+            suggested_foods: slice(10, 5).map((f) => ({ name: f.name, calories: f.calories, protein_g: f.protein_g, carbs_g: f.carbs_g, fat_g: f.fat_g })),
+            tips: mealTips.dinner[i % mealTips.dinner.length],
+          },
+          {
+            meal_type: 'snack' as const,
+            recommended_calories: snackTarget,
+            suggested_foods: slice(15, 3).map((f) => ({ name: f.name, calories: f.calories, protein_g: f.protein_g, carbs_g: f.carbs_g, fat_g: f.fat_g })),
+            tips: mealTips.snack[i % mealTips.snack.length],
+          },
+        ],
+        weekly_insights: {
+          average_adherence: weeklyAdherence,
+          trend,
+          suggestion: this.getSuggestion(weeklyAdherence, trend),
+        },
+      };
+    });
+
+    const weekEnd = new Date();
+    weekEnd.setDate(weekEnd.getDate() + 6);
 
     return {
-      week_start: new Date(Date.now() - 6 * 24 * 60 * 60 * 1000)
-        .toISOString()
-        .split('T')[0],
-      week_end: new Date().toISOString().split('T')[0],
-      daily_plans: [recommendations],
+      week_start: today,
+      week_end: weekEnd.toISOString().split('T')[0],
+      daily_plans,
     };
   }
 }

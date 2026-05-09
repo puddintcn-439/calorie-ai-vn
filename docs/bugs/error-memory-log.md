@@ -28,6 +28,18 @@ Use this file to store compact lessons from real failures after they are fixed.
 - Root Cause: Test doubles for Supabase returned a generic chain object that did not match the exact async chain shape used by production code (`logs: select -> eq -> gte`, `foods: select -> gte -> lte -> order -> limit`).
 - Fix: Reworked mocks to return query objects by call sequence so each table/query path exposes the exact chained methods and resolves at the right step.
 - Validation: `cd apps/backend ; npx jest src/modules/calorie-target --forceExit` => 3 passed suites, 30 passed tests.
+
+## 2026-05-09 - RequestLoggingMiddleware crashes backend on every request
+
+- Scope: backend
+- Error Signature: `TypeError: this.get is not a function at RequestLoggingMiddleware.send (response.js:148:17)`
+- Trigger: Any HTTP request to the backend (first seen on GET /api/docs at startup)
+- Root Cause: `res.send = function(...) { this.logStream... }.bind(this)` — `.bind(this)` forced `this` inside the override to be the middleware instance. Express internally calls `this.get('Content-Type')` inside `res.send`, which only works when `this` is the Response object.
+- Fix: Captured `this.logStream` in a closure variable (`const logStream = this.logStream`) before the override, removed `.bind(this)`, and wrapped the log write in try/catch. `this` inside `res.send` now correctly refers to the Response object.
+- Validation: `GET /health` returns `{"status":"healthy"}` and backend stays up through all requests.
+- Prevention Rule: Never use `.bind(middlewareInstance)` on Express `req`/`res` method overrides. Always capture needed state in closure variables and leave `this` free to refer to the req/res object.
+- Files: `apps/backend/src/common/middleware/request-logging.middleware.ts`
+- Reuse Signal: Apply this pattern any time you override `res.send`, `res.json`, or `res.end` in Express middleware.
 - Prevention Rule: For fluent DB clients, mock the real chain contract per query path and per awaited step instead of using one shared generic chain for all tables.
 - Files: `apps/backend/src/modules/calorie-target/__tests__/recommendation.service.spec.ts`
 - Reuse Signal: Apply this pattern whenever a service mixes multiple Supabase table queries inside one method.
