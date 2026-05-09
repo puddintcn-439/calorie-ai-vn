@@ -1,7 +1,51 @@
 import { apiClient } from './api';
-import { CorrectionEventDto } from '@calorie-ai/types';
+import { CorrectionEventDto, LoggingEventDto, LoggingInputMode } from '@calorie-ai/types';
 
 class TelemetryService {
+  async emitLoggingEvent(event: LoggingEventDto): Promise<void> {
+    try {
+      await apiClient.post('/telemetry/logging-events', event);
+    } catch (error) {
+      console.warn('[Telemetry] Failed to emit logging event:', error);
+    }
+  }
+
+  async emitLogAttempted(inputMode: LoggingInputMode): Promise<void> {
+    return this.emitLoggingEvent({
+      event_type: 'log_attempted',
+      input_mode: inputMode,
+    });
+  }
+
+  async emitLogParsed(
+    inputMode: LoggingInputMode,
+    payload: {
+      elapsed_ms: number;
+      item_count: number;
+      ai_confidence?: number;
+      correction_count?: number;
+    },
+  ): Promise<void> {
+    return this.emitLoggingEvent({
+      event_type: 'log_parsed',
+      input_mode: inputMode,
+      ...payload,
+    });
+  }
+
+  async emitLogFailed(
+    inputMode: LoggingInputMode,
+    reasonCode: string,
+    elapsedMs?: number,
+  ): Promise<void> {
+    return this.emitLoggingEvent({
+      event_type: 'log_failed',
+      input_mode: inputMode,
+      reason_code: reasonCode,
+      elapsed_ms: elapsedMs,
+    });
+  }
+
   /**
    * Emit a correction event when user corrects AI prediction
    * Used for quality tracking and AI model improvement

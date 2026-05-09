@@ -1,10 +1,35 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { SupabaseService } from '../../common/supabase/supabase.service';
-import { CorrectionEvent, CorrectionEventDto, CorrectionStats } from '@calorie-ai/types';
+import {
+  CorrectionEvent,
+  CorrectionEventDto,
+  CorrectionStats,
+  LoggingEvent,
+  LoggingEventDto,
+} from '@calorie-ai/types';
 
 @Injectable()
 export class TelemetryService {
   constructor(private supabase: SupabaseService) {}
+
+  async createLoggingEvent(userId: string, event: LoggingEventDto): Promise<LoggingEvent> {
+    if (!event.event_type) {
+      throw new BadRequestException('event_type is required');
+    }
+
+    if (!event.input_mode) {
+      throw new BadRequestException('input_mode is required');
+    }
+
+    const { data, error } = await this.supabase.db
+      .from('logging_events')
+      .insert({ user_id: userId, ...event })
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data as LoggingEvent;
+  }
 
   /**
    * Create a correction event in the database

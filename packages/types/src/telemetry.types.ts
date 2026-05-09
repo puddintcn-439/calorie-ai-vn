@@ -2,6 +2,16 @@
 
 export type CorrectionEventType = 'item_mismatch' | 'portion_adjusted' | 'confidence_low' | 'ai_result_corrected';
 
+export type LoggingEventType = 'log_attempted' | 'log_parsed' | 'log_failed';
+
+export type LoggingInputMode =
+  | 'image'
+  | 'text'
+  | 'voice'
+  | 'receipt'
+  | 'barcode'
+  | 'search';
+
 export interface CorrectionEvent {
   id?: string;
   user_id: string;
@@ -38,4 +48,29 @@ export interface CorrectionStats {
   corrected_items_percentage: number;
   most_common_correction_type: CorrectionEventType;
   avg_ai_confidence: number;
+}
+
+export interface LoggingEvent {
+  id?: string;
+  user_id: string;
+  event_type: LoggingEventType;
+  input_mode: LoggingInputMode;
+  elapsed_ms?: number;
+  correction_count?: number;
+  item_count?: number;
+  ai_confidence?: number;
+  reason_code?: string;
+  metadata?: Record<string, unknown>;
+  created_at?: string;
+}
+
+export interface LoggingEventDto {
+  event_type: LoggingEventType;
+  input_mode: LoggingInputMode;
+  elapsed_ms?: number;
+  correction_count?: number;
+  item_count?: number;
+  ai_confidence?: number;
+  reason_code?: string;
+  metadata?: Record<string, unknown>;
 }

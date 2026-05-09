@@ -10,11 +10,19 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
-import { IsEnum, IsNumber, IsOptional, IsString, Min } from 'class-validator';
+import {
+  IsEnum,
+  IsNumber,
+  IsOptional,
+  IsString,
+  Min,
+  Max,
+  IsObject,
+} from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { TelemetryService } from './telemetry.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { CorrectionEventType } from '@calorie-ai/types';
+import { CorrectionEventType, LoggingEventType, LoggingInputMode } from '@calorie-ai/types';
 
 class CreateCorrectionEventDto {
   @ApiProperty({ enum: ['item_mismatch', 'portion_adjusted', 'confidence_low', 'ai_result_corrected'] })
@@ -72,6 +80,51 @@ class CreateCorrectionEventDto {
   notes?: string;
 }
 
+class CreateLoggingEventDto {
+  @ApiProperty({ enum: ['log_attempted', 'log_parsed', 'log_failed'] })
+  @IsEnum(['log_attempted', 'log_parsed', 'log_failed'])
+  event_type: LoggingEventType;
+
+  @ApiProperty({ enum: ['image', 'text', 'voice', 'receipt', 'barcode', 'search'] })
+  @IsEnum(['image', 'text', 'voice', 'receipt', 'barcode', 'search'])
+  input_mode: LoggingInputMode;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  elapsed_ms?: number;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  correction_count?: number;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  item_count?: number;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(1)
+  ai_confidence?: number;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  reason_code?: string;
+
+  @ApiProperty({ required: false, type: Object })
+  @IsOptional()
+  @IsObject()
+  metadata?: Record<string, unknown>;
+}
+
 @ApiTags('Telemetry')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
@@ -84,6 +137,13 @@ export class TelemetryController {
   @ApiOperation({ summary: 'Record a user correction event for AI prediction quality tracking' })
   async createCorrectionEvent(@Request() req: any, @Body() dto: CreateCorrectionEventDto) {
     return this.telemetry.createCorrectionEvent(req.user.id ?? req.user.sub, dto);
+  }
+
+  @Post('logging-events')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Record logging funnel telemetry event (attempted/parsed/failed)' })
+  async createLoggingEvent(@Request() req: any, @Body() dto: CreateLoggingEventDto) {
+    return this.telemetry.createLoggingEvent(req.user.id ?? req.user.sub, dto);
   }
 
   @Get('corrections')

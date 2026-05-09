@@ -132,16 +132,44 @@ export default function ScanScreen() {
 
   const runImageScan = async (uri: string) => {
     setScannedImage(uri); setScanResult(null); setEditableItems([]); setRefineContext(''); setIsScanning(true);
-    try { applyScanResult(await scanImageFromUri(uri)); }
-    catch { Alert.alert('Lỗi', 'Không thể phân tích ảnh.'); }
+    const startedAt = Date.now();
+    void telemetryService.emitLogAttempted('image');
+    try {
+      const result = await scanImageFromUri(uri);
+      applyScanResult(result);
+      void telemetryService.emitLogParsed('image', {
+        elapsed_ms: Date.now() - startedAt,
+        item_count: result.items.length,
+        ai_confidence: result.ai_confidence,
+        correction_count: 0,
+      });
+    }
+    catch {
+      void telemetryService.emitLogFailed('image', 'scan_api_error', Date.now() - startedAt);
+      Alert.alert('Lỗi', 'Không thể phân tích ảnh.');
+    }
     finally { setIsScanning(false); }
   };
 
   const handleTextScan = async () => {
     if (!textInput.trim()) return;
     setScanResult(null); setEditableItems([]); setRefineContext(''); setIsScanning(true);
-    try { applyScanResult(await scanText(textInput.trim())); }
-    catch { Alert.alert('Lỗi', 'Không thể phân tích.'); }
+    const startedAt = Date.now();
+    void telemetryService.emitLogAttempted('text');
+    try {
+      const result = await scanText(textInput.trim());
+      applyScanResult(result);
+      void telemetryService.emitLogParsed('text', {
+        elapsed_ms: Date.now() - startedAt,
+        item_count: result.items.length,
+        ai_confidence: result.ai_confidence,
+        correction_count: 0,
+      });
+    }
+    catch {
+      void telemetryService.emitLogFailed('text', 'scan_api_error', Date.now() - startedAt);
+      Alert.alert('Lỗi', 'Không thể phân tích.');
+    }
     finally { setIsScanning(false); }
   };
 
@@ -150,29 +178,53 @@ export default function ScanScreen() {
     if (!transcript) return;
 
     setScanResult(null); setEditableItems([]); setRefineContext(''); setIsScanning(true);
+    const startedAt = Date.now();
+    void telemetryService.emitLogAttempted('voice');
     try {
-      applyScanResult(await scanVoice({
+      const result = await scanVoice({
         transcript,
         meal_hint: selectedMeal,
         locale: 'vi-VN',
         context: { source: 'mobile_voice', device_language: 'vi' },
-      }));
+      });
+      applyScanResult(result);
+      void telemetryService.emitLogParsed('voice', {
+        elapsed_ms: Date.now() - startedAt,
+        item_count: result.items.length,
+        ai_confidence: result.ai_confidence,
+        correction_count: 0,
+      });
     }
-    catch { Alert.alert('Lỗi', 'Không thể phân tích giọng nói.'); }
+    catch {
+      void telemetryService.emitLogFailed('voice', 'scan_api_error', Date.now() - startedAt);
+      Alert.alert('Lỗi', 'Không thể phân tích giọng nói.');
+    }
     finally { setIsScanning(false); }
   };
 
   const runReceiptScan = async (uri: string) => {
     setLastReceiptUri(uri);
     setScannedImage(uri); setScanResult(null); setEditableItems([]); setRefineContext(''); setIsReceiptScanning(true);
+    const startedAt = Date.now();
+    void telemetryService.emitLogAttempted('receipt');
     try {
-      applyScanResult(await scanReceipt({
+      const result = await scanReceipt({
         uri,
         locale: 'vi-VN',
         meal_hint: selectedMeal,
-      }));
+      });
+      applyScanResult(result);
+      void telemetryService.emitLogParsed('receipt', {
+        elapsed_ms: Date.now() - startedAt,
+        item_count: result.items.length,
+        ai_confidence: result.ai_confidence,
+        correction_count: 0,
+      });
     }
-    catch { Alert.alert('Lỗi', 'Không thể phân tích hóa đơn.'); }
+    catch {
+      void telemetryService.emitLogFailed('receipt', 'scan_api_error', Date.now() - startedAt);
+      Alert.alert('Lỗi', 'Không thể phân tích hóa đơn.');
+    }
     finally { setIsReceiptScanning(false); }
   };
 
