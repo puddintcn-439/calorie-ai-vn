@@ -83,7 +83,7 @@ export class TelemetryController {
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Record a user correction event for AI prediction quality tracking' })
   async createCorrectionEvent(@Request() req: any, @Body() dto: CreateCorrectionEventDto) {
-    return this.telemetry.createCorrectionEvent(req.user.sub, dto);
+    return this.telemetry.createCorrectionEvent(req.user.id ?? req.user.sub, dto);
   }
 
   @Get('corrections')
@@ -93,7 +93,7 @@ export class TelemetryController {
     @Query('limit') limit?: number,
     @Query('offset') offset?: number,
   ) {
-    return this.telemetry.getUserCorrectionEvents(req.user.sub, limit, offset);
+    return this.telemetry.getUserCorrectionEvents(req.user.id ?? req.user.sub, limit, offset);
   }
 
   @Get('corrections/stats')
@@ -102,6 +102,6 @@ export class TelemetryController {
     @Request() req: any,
     @Query('days') days: number = 30,
   ) {
-    return this.telemetry.getUserCorrectionStats(req.user.sub, days);
+    return this.telemetry.getUserCorrectionStats(req.user.id ?? req.user.sub, days);
   }
 }

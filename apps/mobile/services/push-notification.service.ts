@@ -19,6 +19,11 @@ class PushNotificationService {
    */
   async initializePushNotifications(): Promise<string | null> {
     try {
+      // Web push needs VAPID setup; skip token registration on web to avoid noisy runtime errors.
+      if (Platform.OS === 'web') {
+        return null;
+      }
+
       // Request user permission for notifications
       const { status } = await Notifications.requestPermissionsAsync();
       if (status !== 'granted') {

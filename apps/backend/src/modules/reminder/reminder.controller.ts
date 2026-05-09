@@ -105,13 +105,13 @@ export class ReminderController {
   @Get('preferences')
   @ApiOperation({ summary: 'Get current reminder preferences' })
   async getPreferences(@Request() req: any) {
-    return this.reminder.getReminderPreferences(req.user.sub);
+    return this.reminder.getReminderPreferences(req.user.id ?? req.user.sub);
   }
 
   @Put('preferences')
   @ApiOperation({ summary: 'Update reminder preferences' })
   async updatePreferences(@Request() req: any, @Body() dto: UpdateReminderPreferencesDto) {
-    return this.reminder.updateReminderPreferences(req.user.sub, dto);
+    return this.reminder.updateReminderPreferences(req.user.id ?? req.user.sub, dto);
   }
 
   @Post('nudge-test')
@@ -120,7 +120,7 @@ export class ReminderController {
     @Request() req: any,
     @Body() body: TestNudgeDto,
   ) {
-    return this.reminder.generatePreviewNudge(req.user.sub, body.meal_type, body.calories_logged);
+    return this.reminder.generatePreviewNudge(req.user.id ?? req.user.sub, body.meal_type, body.calories_logged);
   }
 
   @Post('push-token')
@@ -133,11 +133,17 @@ export class ReminderController {
     const { error } = await this.supabase.db
       .from('push_notification_tokens')
       .upsert(
-        { user_id: req.user.sub, token: body.token, platform: body.platform, updated_at: new Date().toISOString() },
+        { user_id: req.user.id ?? req.user.sub, token: body.token, platform: body.platform, updated_at: new Date().toISOString() },
         { onConflict: 'user_id,token' },
       );
 
-    if (error) throw error;
+    if (error) {
+      const message = String(error?.message ?? error?.details ?? '');
+      if (message.includes('public.push_notification_tokens') && message.includes('schema cache')) {
+        return { registered: false, reason: 'push_token_table_missing' };
+      }
+      throw error;
+    }
     return { registered: true };
   }
 }

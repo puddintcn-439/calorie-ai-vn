@@ -10,6 +10,31 @@ export class ReminderService {
     private gamificationService: GamificationService,
   ) {}
 
+  private isMissingTableError(error: any, tableName: string): boolean {
+    const message = String(error?.message ?? error?.details ?? '');
+    return message.includes(`public.${tableName}`) && message.includes('schema cache');
+  }
+
+  private buildDefaultPreferences(userId: string): ReminderPreferences {
+    const now = new Date().toISOString();
+    return {
+      id: `fallback-${userId}`,
+      user_id: userId,
+      breakfast_reminder_enabled: true,
+      breakfast_reminder_time: '07:00',
+      lunch_reminder_enabled: true,
+      lunch_reminder_time: '12:00',
+      dinner_reminder_enabled: true,
+      dinner_reminder_time: '19:00',
+      snack_reminder_enabled: false,
+      snack_reminder_time: '15:00',
+      allow_push_notifications: true,
+      nudge_motivation_style: 'encouraging',
+      created_at: now,
+      updated_at: now,
+    } as ReminderPreferences;
+  }
+
   /**
    * Get reminder preferences for a user (or create defaults if not exists)
    */
@@ -19,6 +44,12 @@ export class ReminderService {
       .select('*')
       .eq('user_id', userId)
       .single();
+
+    if (error && this.isMissingTableError(error, 'reminder_preferences')) {
+      // Local/dev environments may not have this migration yet.
+      // Return defaults so the app can continue working.
+      return this.buildDefaultPreferences(userId);
+    }
 
     if (error && error.code === 'PGRST116') {
       // No preferences found, create defaults
@@ -60,6 +91,10 @@ export class ReminderService {
       .eq('user_id', userId)
       .select()
       .single();
+
+    if (error && this.isMissingTableError(error, 'reminder_preferences')) {
+      return { ...this.buildDefaultPreferences(userId), ...dto } as ReminderPreferences;
+    }
 
     if (error) throw error;
     return data as ReminderPreferences;

@@ -67,3 +67,15 @@ Use this file to store compact lessons from real failures after they are fixed.
 - Prevention Rule: Any `*:ready` script must be non-blocking with explicit readiness timeout; in PowerShell, clean only LISTEN sockets, avoid swallowing stop-process errors, and do not redirect stdout/stderr to the same file when using `Start-Process`.
 - Files: `scripts/kill-dev-ports.ps1`, `scripts/start-backend-dev.ps1`, `scripts/start-mobile-web.ps1`
 - Reuse Signal: Recheck this pattern whenever dev startup is reported as "treo" or when logs contain `EADDRINUSE` on known app ports.
+
+## 2026-05-09 - Authenticated APIs returned 500 because controllers read wrong JWT user field
+
+- Scope: backend
+- Error Signature: `Could not find the table 'public.user_subscriptions' in the schema cache` and `Could not find the table 'public.reminder_preferences' in the schema cache` surfaced as 500 for `GET /subscriptions/current`, `GET /subscriptions/features`, `GET /reminders/preferences`; controllers also used `req.user.sub` while `JwtStrategy` returns `{ id, email, full_name }`.
+- Trigger: Opening mobile web home after login, then calling protected APIs (`/subscriptions/*`, `/insights/weekly`, `/reminders/*`).
+- Root Cause: Two issues overlapped: (1) authenticated controllers expected `req.user.sub` although validated JWT user object uses `id`, causing undefined user ids; (2) environment missing subscription/reminder migrations caused uncaught Supabase table-missing errors that bubbled to 500.
+- Fix: Standardized controllers to use `req.user.id ?? req.user.sub` and added graceful fallback in subscription/reminder services when tables are missing in local dev (return free/default state instead of throwing).
+- Validation: `cd apps/backend ; npm run build` passed, then authenticated smoke tests returned `200` for `/subscriptions/current`, `/subscriptions/features`, `/insights/weekly`, `/reminders/preferences`.
+- Prevention Rule: In Nest auth flows, keep JWT payload field mapping consistent end-to-end (`id` vs `sub`) and add defensive handling for optional/dev-only tables so bootstrap endpoints degrade gracefully instead of returning 500.
+- Files: `apps/backend/src/modules/subscription/subscription.controller.ts`, `apps/backend/src/modules/insights/insights.controller.ts`, `apps/backend/src/modules/reminder/reminder.controller.ts`, `apps/backend/src/modules/telemetry/telemetry.controller.ts`, `apps/backend/src/modules/subscription/subscription.service.ts`, `apps/backend/src/modules/reminder/reminder.service.ts`
+- Reuse Signal: Recheck this whenever multiple authenticated endpoints fail together right after login or when Supabase reports `schema cache` missing-table errors.

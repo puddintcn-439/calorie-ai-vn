@@ -6,6 +6,28 @@ import { UserSubscription, SubscriptionTier, SubscriptionDto, SUBSCRIPTION_TIERS
 export class SubscriptionService {
   constructor(private supabase: SupabaseService) {}
 
+  private isMissingTableError(error: any, tableName: string): boolean {
+    const message = String(error?.message ?? error?.details ?? '');
+    return message.includes(`public.${tableName}`) && message.includes('schema cache');
+  }
+
+  private buildFallbackFreeSubscription(userId: string): UserSubscription {
+    const startedAt = new Date().toISOString();
+    return {
+      id: `fallback-${userId}`,
+      user_id: userId,
+      tier: 'free',
+      started_at: startedAt,
+      renews_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+      cancelled_at: undefined,
+      is_active: true,
+      payment_provider: 'trial',
+      payment_id: undefined,
+      created_at: startedAt,
+      updated_at: startedAt,
+    } as UserSubscription;
+  }
+
   /**
    * Get user's current subscription (or create free trial if not exists)
    */
@@ -15,6 +37,12 @@ export class SubscriptionService {
       .select('*')
       .eq('user_id', userId)
       .single();
+
+    if (error && this.isMissingTableError(error, 'user_subscriptions')) {
+      // Local/dev environments may not have this migration yet.
+      // Fall back to free tier so app bootstrap does not fail.
+      return this.buildFallbackFreeSubscription(userId);
+    }
 
     if (error && error.code === 'PGRST116') {
       // No subscription found, create free tier
@@ -77,6 +105,10 @@ export class SubscriptionService {
       .select()
       .single();
 
+    if (error && this.isMissingTableError(error, 'user_subscriptions')) {
+      return this.buildFallbackFreeSubscription(userId);
+    }
+
     if (error) throw error;
 
     // Update users table subscription_tier
@@ -104,6 +136,10 @@ export class SubscriptionService {
       .eq('user_id', userId)
       .select()
       .single();
+
+    if (error && this.isMissingTableError(error, 'user_subscriptions')) {
+      return this.buildFallbackFreeSubscription(userId);
+    }
 
     if (error) throw error;
 

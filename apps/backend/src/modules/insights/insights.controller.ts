@@ -26,6 +26,6 @@ export class InsightsController {
     @Request() req: any,
     @Query() query: GetWeeklyInsightsQueryDto,
   ) {
-    return this.insights.getWeeklyInsights(req.user.sub, query.week_start_date);
+    return this.insights.getWeeklyInsights(req.user.id ?? req.user.sub, query.week_start_date);
   }
 }

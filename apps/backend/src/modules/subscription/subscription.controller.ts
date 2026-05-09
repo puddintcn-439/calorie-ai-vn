@@ -41,13 +41,13 @@ export class SubscriptionController {
   @Get('current')
   @ApiOperation({ summary: 'Get current user subscription' })
   async getCurrentSubscription(@Request() req: any) {
-    return this.subscription.getUserSubscription(req.user.sub);
+    return this.subscription.getUserSubscription(req.user.id ?? req.user.sub);
   }
 
   @Get('features')
   @ApiOperation({ summary: 'Get available features for current tier' })
   async getAvailableFeatures(@Request() req: any) {
-    return this.subscription.getUserFeatures(req.user.sub);
+    return this.subscription.getUserFeatures(req.user.id ?? req.user.sub);
   }
 
   @Get('tiers')
@@ -80,13 +80,13 @@ export class SubscriptionController {
     if (dto.tier === 'free') {
       throw new ForbiddenException('Cannot upgrade to free tier directly');
     }
-    return this.subscription.upgradeSubscription(req.user.sub, dto);
+    return this.subscription.upgradeSubscription(req.user.id ?? req.user.sub, dto);
   }
 
   @Delete('cancel')
   @ApiOperation({ summary: 'Cancel subscription (downgrade to free)' })
   async cancelSubscription(@Request() req: any) {
-    return this.subscription.cancelSubscription(req.user.sub);
+    return this.subscription.cancelSubscription(req.user.id ?? req.user.sub);
   }
 
   @Post('verify-feature/:feature')
@@ -110,7 +110,7 @@ export class SubscriptionController {
     }
 
     const hasAccess = await this.subscription.hasFeatureAccess(
-      req.user.sub,
+      req.user.id ?? req.user.sub,
       feature as any,
     );
     return { feature, has_access: hasAccess };
