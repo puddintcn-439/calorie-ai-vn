@@ -31,15 +31,15 @@ export default function RegisterScreen() {
     <ScreenShell scroll={false} contentStyle={styles.centeredContent}>
       <View style={styles.heroBlock}>
         <Eyebrow>Build Your Nutrition Loop</Eyebrow>
-        <HeroTitle>Tạo tài khoản và bắt đầu log ăn uống theo kiểu hiện đại.</HeroTitle>
+        <HeroTitle>Tạo tài khoản để bắt đầu hành trình đẹp dáng bền vững.</HeroTitle>
         <BodyText>
-          Giao diện tập trung vào tốc độ: scan nhanh, lưu nhanh, xem tiến độ rõ ràng và dễ quay lại mỗi ngày.
+          Bạn không cần siết cực đoan. App giúp bạn theo dõi nhẹ nhàng, điều chỉnh thực tế và giữ động lực đều đặn.
         </BodyText>
       </View>
 
       <SurfaceCard style={styles.formCard}>
         <Text style={styles.sectionTitle}>Tạo tài khoản</Text>
-        <Text style={styles.subtitle}>Chỉ vài giây để bắt đầu theo dõi calo và macro.</Text>
+        <Text style={styles.subtitle}>Chỉ vài giây để bắt đầu cảm thấy kiểm soát tốt hơn mỗi ngày.</Text>
 
         <UiInput
           value={fullName}

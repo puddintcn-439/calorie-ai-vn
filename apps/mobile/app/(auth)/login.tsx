@@ -30,9 +30,9 @@ export default function LoginScreen() {
     <ScreenShell scroll={false} contentStyle={styles.centeredContent}>
       <View style={styles.heroBlock}>
         <Eyebrow>Vietnamese AI Nutrition</Eyebrow>
-        <HeroTitle>Calorie tracking mượt, đủ đẹp để dùng mỗi ngày.</HeroTitle>
+        <HeroTitle>Đẹp dáng và tự tin hơn, theo cách nhẹ nhàng mỗi ngày.</HeroTitle>
         <BodyText>
-          Scan món ăn, tính calo, theo dõi macro và lưu nhật ký trong một flow nhanh, thân thiện, ít thao tác.
+          Không cần hoàn hảo. Chỉ cần bắt đầu lại hôm nay với vài thao tác nhanh, app sẽ đồng hành và nhắc bạn đi đúng hướng.
         </BodyText>
         <View style={styles.badgeRow}>
           <View style={styles.badge}><Text style={styles.badgeText}>Scan ảnh</Text></View>
@@ -43,7 +43,7 @@ export default function LoginScreen() {
 
       <SurfaceCard style={styles.formCard}>
         <Text style={styles.sectionTitle}>Đăng nhập</Text>
-        <Text style={styles.subtitle}>Tiếp tục hành trình ăn uống thông minh của bạn.</Text>
+        <Text style={styles.subtitle}>Quay lại hành trình tự tin hơn mỗi ngày.</Text>
 
         <UiInput
           value={email}

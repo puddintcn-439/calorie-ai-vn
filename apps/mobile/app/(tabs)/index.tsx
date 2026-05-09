@@ -11,6 +11,42 @@ import { useCalorieTargetStore } from '../../store/calorie-target.store';
 import { BodyText, Eyebrow, HeroTitle, ScreenShell, SurfaceCard } from '../../components/ui-shell';
 import { EmptyState } from '../../components/empty-state';
 
+function buildDailyReassurance(remaining: number, progress: number) {
+  if (remaining >= 350) {
+    return {
+      title: 'Bạn đang đi đúng hướng',
+      body: 'Hôm nay còn khá nhiều khoảng trống để ăn thoải mái. Cứ giữ nhịp như hiện tại.',
+      deltaText: `Bạn vẫn còn khoảng ${remaining} kcal trong vùng an toàn hôm nay.`,
+      toneColor: '#6ee7b7',
+    };
+  }
+
+  if (remaining >= 0) {
+    return {
+      title: 'Tiến độ hôm nay ổn rồi',
+      body: 'Chỉ cần ưu tiên món nhẹ ở bữa tới là bạn vẫn bám mục tiêu rất tốt.',
+      deltaText: `Còn khoảng ${remaining} kcal, bạn vẫn đang kiểm soát tốt.`,
+      toneColor: '#7dd3fc',
+    };
+  }
+
+  if (progress <= 1.15) {
+    return {
+      title: 'Hơi dư một chút, vẫn cứu được',
+      body: 'Không sao cả. Chỉ cần điều chỉnh nhẹ ở bữa tiếp theo hoặc tăng vận động chút là ổn.',
+      deltaText: `Hôm nay dư khoảng ${Math.abs(remaining)} kcal, nhưng tuần này bạn vẫn có thể đi đúng hướng.`,
+      toneColor: '#fbbf24',
+    };
+  }
+
+  return {
+    title: 'Một ngày chưa như ý, nhưng chưa hề thất bại',
+    body: 'Bỏ qua cảm giác tội lỗi. Mục tiêu là quay lại nhịp đều từ bữa kế tiếp.',
+    deltaText: `Hôm nay dư khoảng ${Math.abs(remaining)} kcal. Tập trung vào 1 điều chỉnh nhỏ ngay bây giờ.`,
+    toneColor: '#fda4af',
+  };
+}
+
 export default function DashboardScreen() {
   const { dailyLog, activityLogs, isLoading, fetchDailyLog, fetchActivityLogs, syncActivity } = useLogStore();
   const { features, fetchSubscription } = useSubscriptionStore();
@@ -41,6 +77,7 @@ export default function DashboardScreen() {
   const remaining = target - net;
   const progress = Math.min(net / target, 1);
   const hasHealthSync = features?.healthkit_sync ?? false;
+  const reassurance = buildDailyReassurance(target - net, net / target);
 
   const handleSyncActivity = async () => {
     setIsSyncing(true);
@@ -71,8 +108,13 @@ export default function DashboardScreen() {
   return (
     <ScreenShell>
       <Eyebrow>Daily Overview</Eyebrow>
-      <HeroTitle>Hôm nay của bạn đang đi đúng nhịp chưa?</HeroTitle>
-      <BodyText style={styles.heroBody}>Theo dõi năng lượng nạp vào, tiêu hao và macro trong một dashboard rõ ràng, dễ nhìn.</BodyText>
+      <HeroTitle>Bạn đang tiến bộ từng ngày, theo cách thực tế.</HeroTitle>
+      <BodyText style={styles.heroBody}>Không cần hoàn hảo. Chỉ cần biết hôm nay nên giữ gì và chỉnh gì, vậy là đủ để đẹp dáng bền vững.</BodyText>
+
+        <SurfaceCard style={styles.reassuranceCard}>
+          <Text style={[styles.reassuranceTitle, { color: reassurance.toneColor }]}>{reassurance.title}</Text>
+          <Text style={styles.reassuranceBody}>{reassurance.body}</Text>
+        </SurfaceCard>
 
         <SurfaceCard style={styles.heroCard}>
           <View style={styles.heroGlow} />
@@ -84,9 +126,7 @@ export default function DashboardScreen() {
           <View style={styles.progressBar}>
             <View style={[styles.progressFill, { width: `${progress * 100}%` }]} />
           </View>
-          <Text style={styles.remaining}>
-            {remaining > 0 ? `Còn ${remaining} kcal` : `Đã vượt ${Math.abs(remaining)} kcal`}
-          </Text>
+          <Text style={styles.remaining}>{reassurance.deltaText}</Text>
           <View style={styles.miniStats}>
             <View style={styles.statChip}><Text style={styles.statValue}>{target}</Text><Text style={styles.statLabel}>Target</Text></View>
             <View style={styles.statChip}><Text style={styles.statValue}>{consumed}</Text><Text style={styles.statLabel}>Nạp</Text></View>
@@ -190,8 +230,8 @@ export default function DashboardScreen() {
               <Text style={styles.recommendationTitle}>Gợi ý tuần này</Text>
               <Text style={styles.recommendationSubtitle}>
                 {recommendations
-                  ? `Còn ${recommendations.remaining_calories} kcal hôm nay · xu hướng ${recommendations.weekly_insights.trend}`
-                  : 'Lấy gợi ý bữa ăn theo target cá nhân hóa'}
+                  ? `Hôm nay còn ${recommendations.remaining_calories} kcal · xu hướng tuần: ${recommendations.weekly_insights.trend}`
+                  : 'Nhận gợi ý thực tế để giữ nhịp mà không quá áp lực'}
               </Text>
             </View>
             {isLoadingRecommendations ? <ActivityIndicator color="#6ee7b7" /> : null}
@@ -269,7 +309,10 @@ function MacroCard({ label, value, unit, color }: any) {
 
 const styles = StyleSheet.create({
   heroBody: { marginBottom: 16, maxWidth: 640 },
-  heroCard: { marginBottom: 16, alignItems: 'center', overflow: 'hidden' },
+  reassuranceCard: { marginBottom: 14, borderWidth: 1, borderColor: '#223a70', backgroundColor: '#101d3a' },
+  reassuranceTitle: { fontSize: 16, fontWeight: '800', marginBottom: 6 },
+  reassuranceBody: { color: '#cbd5e1', fontSize: 13, lineHeight: 20 },
+  heroCard: { marginBottom: 16, alignItems: 'center', overflow: 'hidden' }
   heroGlow: { position: 'absolute', top: -40, right: -20, width: 160, height: 160, borderRadius: 80, backgroundColor: '#6ee7b730' },
   calorieNumber: { fontSize: 56, fontWeight: '800', color: '#6ee7b7' },
   calorieLabel: { color: '#b4c5e4', marginBottom: 4, fontSize: 15 },
