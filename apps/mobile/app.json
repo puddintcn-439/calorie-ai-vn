@@ -21,7 +21,9 @@
       "infoPlist": {
         "NSMicrophoneUsageDescription": "Dùng micro để ghi giọng nói và phân tích bữa ăn",
         "NSCameraUsageDescription": "Dùng camera để chụp ảnh đồ ăn phân tích calo",
-        "NSPhotoLibraryUsageDescription": "Chọn ảnh đồ ăn từ thư viện để phân tích calo"
+        "NSPhotoLibraryUsageDescription": "Chọn ảnh đồ ăn từ thư viện để phân tích calo",
+        "NSHealthShareUsageDescription": "Cho phép đọc dữ liệu bước đi và calories từ Health để đồng bộ vận động",
+        "NSHealthUpdateUsageDescription": "Cho phép ghi dữ liệu vận động từ ứng dụng vào Health"
       }
     },
     "android": {
@@ -34,12 +36,25 @@
         "CAMERA",
         "READ_EXTERNAL_STORAGE",
         "RECORD_AUDIO",
-        "POST_NOTIFICATIONS"
+        "POST_NOTIFICATIONS",
+        "android.permission.health.READ_STEPS",
+        "android.permission.health.READ_DISTANCE",
+        "android.permission.health.READ_ACTIVE_CALORIES_BURNED",
+        "android.permission.health.READ_TOTAL_CALORIES_BURNED"
       ]
     },
     "plugins": [
+      "expo-dev-client",
       "expo-router",
       "expo-secure-store",
+      "expo-health-connect",
+      [
+        "react-native-health",
+        {
+          "healthSharePermission": "Cho phép đọc dữ liệu bước đi và calories từ Health để đồng bộ vận động",
+          "healthUpdatePermission": "Cho phép ghi dữ liệu vận động từ ứng dụng vào Health"
+        }
+      ],
       [
         "expo-av",
         {

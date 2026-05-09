@@ -20,6 +20,18 @@ Use this file to store compact lessons from real failures after they are fixed.
 - Files: `apps/mobile/app/(tabs)/profile.tsx`
 - Reuse Signal: Recheck this whenever adding a new `UiChip` row or converting a selection control into an action launcher.
 
+## 2026-05-09 - Duplicate coach screen block caused TypeScript parse failure
+
+- Scope: mobile
+- Error Signature: `TS1128: Declaration or statement expected` at `app/(tabs)/coach.tsx:432` and `app/(tabs)/coach.tsx:478`
+- Trigger: `cd apps/mobile ; npm run lint`
+- Root Cause: A duplicated tail block (second partial component + second style object) was appended after the valid `StyleSheet.create(...)` close, leaving orphan statements at file scope.
+- Fix: Removed the duplicated trailing block and kept only one valid `CoachScreen` component and one `styles` object.
+- Validation: `cd apps/mobile ; npm run lint`
+- Prevention Rule: After large merges or manual conflict cleanup in long RN screen files, quickly scan for repeated `return (...)` and repeated `const styles = StyleSheet.create(...)` blocks before running typecheck.
+- Files: `apps/mobile/app/(tabs)/coach.tsx`
+- Reuse Signal: Recheck this pattern first whenever TypeScript reports `TS1128` in a UI screen near the end of file.
+
 ## 2026-05-09 - Supabase chained query mock mismatch in recommendation tests
 
 - Scope: backend
