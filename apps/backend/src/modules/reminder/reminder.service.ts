@@ -10,6 +10,10 @@ export class ReminderService {
     private gamificationService: GamificationService,
   ) {}
 
+  private allowMissingTableFallback(): boolean {
+    return (process.env.NODE_ENV ?? 'development') === 'development';
+  }
+
   private isMissingTableError(error: any, tableName: string): boolean {
     const message = String(error?.message ?? error?.details ?? '');
     return message.includes(`public.${tableName}`) && message.includes('schema cache');
@@ -45,7 +49,7 @@ export class ReminderService {
       .eq('user_id', userId)
       .single();
 
-    if (error && this.isMissingTableError(error, 'reminder_preferences')) {
+    if (error && this.isMissingTableError(error, 'reminder_preferences') && this.allowMissingTableFallback()) {
       // Local/dev environments may not have this migration yet.
       // Return defaults so the app can continue working.
       return this.buildDefaultPreferences(userId);
@@ -92,7 +96,7 @@ export class ReminderService {
       .select()
       .single();
 
-    if (error && this.isMissingTableError(error, 'reminder_preferences')) {
+    if (error && this.isMissingTableError(error, 'reminder_preferences') && this.allowMissingTableFallback()) {
       return { ...this.buildDefaultPreferences(userId), ...dto } as ReminderPreferences;
     }
 

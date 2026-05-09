@@ -6,6 +6,10 @@ import { UserSubscription, SubscriptionTier, SubscriptionDto, SUBSCRIPTION_TIERS
 export class SubscriptionService {
   constructor(private supabase: SupabaseService) {}
 
+  private allowMissingTableFallback(): boolean {
+    return (process.env.NODE_ENV ?? 'development') === 'development';
+  }
+
   private isMissingTableError(error: any, tableName: string): boolean {
     const message = String(error?.message ?? error?.details ?? '');
     return message.includes(`public.${tableName}`) && message.includes('schema cache');
@@ -38,7 +42,7 @@ export class SubscriptionService {
       .eq('user_id', userId)
       .single();
 
-    if (error && this.isMissingTableError(error, 'user_subscriptions')) {
+    if (error && this.isMissingTableError(error, 'user_subscriptions') && this.allowMissingTableFallback()) {
       // Local/dev environments may not have this migration yet.
       // Fall back to free tier so app bootstrap does not fail.
       return this.buildFallbackFreeSubscription(userId);
@@ -105,7 +109,7 @@ export class SubscriptionService {
       .select()
       .single();
 
-    if (error && this.isMissingTableError(error, 'user_subscriptions')) {
+    if (error && this.isMissingTableError(error, 'user_subscriptions') && this.allowMissingTableFallback()) {
       return this.buildFallbackFreeSubscription(userId);
     }
 
@@ -137,7 +141,7 @@ export class SubscriptionService {
       .select()
       .single();
 
-    if (error && this.isMissingTableError(error, 'user_subscriptions')) {
+    if (error && this.isMissingTableError(error, 'user_subscriptions') && this.allowMissingTableFallback()) {
       return this.buildFallbackFreeSubscription(userId);
     }
 
