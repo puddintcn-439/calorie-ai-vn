@@ -4,6 +4,7 @@ import {
   ScrollView, ActivityIndicator, Alert, Image,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import { Audio } from 'expo-av';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { Ionicons } from '@expo/vector-icons';
 import { AIScanResponse, AIDetectedItem, Food, MealType, ContextMode, CONTEXT_ADAPTERS } from '@calorie-ai/types';
@@ -53,6 +54,12 @@ export default function ScanScreen() {
   const { activeContexts, toggleContext } = useContextStore();
   const [lastReceiptUri, setLastReceiptUri] = useState<string | null>(null);
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
+
+  // Voice recording state
+  const [recording, setRecording] = useState<Audio.Recording | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingDuration, setRecordingDuration] = useState(0);
+  const [voicePermissionGranted, setVoicePermissionGranted] = useState(false);
 
   const { addLog, saveMeal } = useLogStore();
   const currentItems = editableItems.length > 0 ? editableItems : (scanResult?.items ?? []);
@@ -126,6 +133,82 @@ export default function ScanScreen() {
     toggleContext(context);
     const isActive = !activeContexts.includes(context);
     void telemetryService.emitContextToggled(context, isActive);
+  };
+
+  const requestMicPermission = async () => {
+    try {
+      const permission = await Audio.requestPermissionsAsync();
+      setVoicePermissionGranted(permission.granted);
+      return permission.granted;
+    } catch (error) {
+      console.error('Lỗi yêu cầu quyền microphone:', error);
+      return false;
+    }
+  };
+
+  const startVoiceRecording = async () => {
+    try {
+      if (!voicePermissionGranted) {
+        const granted = await requestMicPermission();
+        if (!granted) {
+          Alert.alert('Lỗi', 'Cần quyền truy cập microphone để ghi âm');
+          return;
+        }
+      }
+
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+      });
+
+      const rec = new Audio.Recording();
+      await rec.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
+      await rec.startAsync();
+      
+      setRecording(rec);
+      setIsRecording(true);
+      setRecordingDuration(0);
+      setVoiceTranscript('');
+
+      // Animate duration counter
+      const durationInterval = setInterval(() => {
+        setRecordingDuration((d) => d + 1);
+      }, 1000);
+
+      // Store interval ID in ref for cleanup
+      (window as any).__voiceRecordingInterval = durationInterval;
+    } catch (error) {
+      console.error('Lỗi bắt đầu ghi âm:', error);
+      Alert.alert('Lỗi', 'Không thể bắt đầu ghi âm');
+    }
+  };
+
+  const stopVoiceRecording = async () => {
+    try {
+      if (!recording) return;
+
+      // Clear duration interval
+      if ((window as any).__voiceRecordingInterval) {
+        clearInterval((window as any).__voiceRecordingInterval);
+      }
+
+      await recording.stopAndUnloadAsync();
+      const uri = recording.getURI();
+      
+      setRecording(null);
+      setIsRecording(false);
+
+      if (uri) {
+        // For demo purposes, use placeholder transcript
+        // In production, integrate with speech-to-text API
+        setVoiceTranscript(`[Ghi âm ${recordingDuration}s - sử dụng nút "Phân tích từ giọng nói" để xử lý]`);
+        Alert.alert('✅ Ghi âm thành công', `Thời gian: ${recordingDuration}s\n\nNhấp "Phân tích từ giọng nói" để phân tích.`);
+      }
+    } catch (error) {
+      console.error('Lỗi dừng ghi âm:', error);
+      Alert.alert('Lỗi', 'Không thể dừng ghi âm');
+      setIsRecording(false);
+    }
   };
 
   const handleCameraCapture = async () => {
@@ -487,17 +570,60 @@ export default function ScanScreen() {
         {/* ── Voice Mode ── */}
         {mode === 'voice' && (
           <View style={styles.textInputContainer}>
-            <TextInput
-              style={styles.textInput}
-              value={voiceTranscript}
-              onChangeText={setVoiceTranscript}
-              placeholder="VD: sáng nay mình ăn 1 tô bún bò và uống 1 ly sữa đậu nành"
-              placeholderTextColor="#6b7280"
-              multiline
-            />
+            {/* Recording controls */}
+            {!isRecording ? (
+              <TouchableOpacity 
+                style={[styles.captureButton, voiceTranscript && styles.captureButtonSecondary]} 
+                onPress={startVoiceRecording}
+              >
+                <Ionicons name="mic" size={40} color={voiceTranscript ? '#7dd3fc' : '#4ade80'} />
+                <Text style={[styles.captureText, voiceTranscript && { color: '#7dd3fc' }]}>
+                  {voiceTranscript ? '🎙️ Ghi âm thêm' : '🎙️ Bắt đầu ghi âm'}
+                </Text>
+              </TouchableOpacity>
+            ) : (
+              <View style={styles.recordingActiveContainer}>
+                <View style={styles.recordingPulse}>
+                  <Text style={styles.recordingDuration}>{recordingDuration}s</Text>
+                </View>
+                <TouchableOpacity 
+                  style={styles.stopRecordingButton}
+                  onPress={stopVoiceRecording}
+                >
+                  <Ionicons name="stop" size={32} color="#fff" />
+                  <Text style={styles.stopRecordingText}>Dừng ghi âm</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* Transcript input and editing */}
+            {voiceTranscript ? (
+              <View style={styles.transcriptContainer}>
+                <Text style={styles.transcriptLabel}>📝 Bản ghi: (có thể chỉnh sửa)</Text>
+                <TextInput
+                  style={styles.textInput}
+                  value={voiceTranscript}
+                  onChangeText={setVoiceTranscript}
+                  placeholderTextColor="#6b7280"
+                  multiline
+                  editable={!isScanning}
+                />
+              </View>
+            ) : (
+              <Text style={styles.voiceHintText}>
+                💡 Hãy ghi âm mô tả những gì bạn ăn. Ví dụ: "sáng nay mình ăn 1 tô bún bò và uống 1 ly sữa đậu nành"
+              </Text>
+            )}
+
             <MealPicker selected={selectedMeal} onSelect={setSelectedMeal} />
-            <TouchableOpacity style={styles.analyzeButton} onPress={handleVoiceScan}>
-              <Text style={styles.analyzeButtonText}>Phân tích từ giọng nói</Text>
+            <TouchableOpacity 
+              style={[styles.analyzeButton, (!voiceTranscript || isScanning) && styles.buttonDisabled]} 
+              onPress={handleVoiceScan}
+              disabled={!voiceTranscript || isScanning}
+            >
+              <Text style={styles.analyzeButtonText}>
+                {isScanning ? 'Đang phân tích...' : 'Phân tích từ giọng nói'}
+              </Text>
             </TouchableOpacity>
           </View>
         )}
@@ -824,4 +950,28 @@ const styles = StyleSheet.create({
   barcodeImage: { width: '100%', height: 160, borderRadius: 16, marginBottom: 12 },
   barcodeProductName: { color: '#fff', fontSize: 18, fontWeight: '800', marginBottom: 4 },
   barcodeServing: { color: '#9fb1d1', fontSize: 13, marginBottom: 12 },
+  // Voice recording styles
+  recordingActiveContainer: { alignItems: 'center', paddingVertical: 20, gap: 20 },
+  recordingPulse: { 
+    width: 120, 
+    height: 120, 
+    borderRadius: 60, 
+    backgroundColor: '#f87171', 
+    justifyContent: 'center', 
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#fee2e2',
+    shadowColor: '#f87171',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.5,
+    shadowRadius: 10,
+    elevation: 8,
+  },
+  recordingDuration: { color: '#fff', fontSize: 32, fontWeight: '800' },
+  stopRecordingButton: { backgroundColor: '#f87171', borderRadius: 20, paddingHorizontal: 24, paddingVertical: 16, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  stopRecordingText: { color: '#fff', fontWeight: '800', fontSize: 16 },
+  captureButtonSecondary: { opacity: 0.7 },
+  transcriptContainer: { marginVertical: 12 },
+  transcriptLabel: { color: '#9fb1d1', fontSize: 12, fontWeight: '600', marginBottom: 8 },
+  voiceHintText: { color: '#9fb1d1', fontSize: 13, fontStyle: 'italic', textAlign: 'center', marginVertical: 16, lineHeight: 20 },
 });
