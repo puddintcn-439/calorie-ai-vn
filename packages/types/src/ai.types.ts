@@ -15,11 +15,13 @@ export interface AIScanResponse {
   success: boolean;
   scan_id: string;
   items: AIDetectedItem[];
+  unresolved_items?: AIUnresolvedItem[];
   total_calories: number;
   total_protein_g: number;
   total_carbs_g: number;
   total_fat_g: number;
   ai_confidence: number;     // 0–1
+  metadata?: Record<string, unknown>;
   raw_ai_response?: string;  // Debug
   processing_ms: number;
 }
@@ -37,6 +39,12 @@ export interface AIDetectedItem {
   fat_g: number;
   confidence: number;        // 0–1
   matched_food_id?: string;  // Nếu match được trong DB
+}
+
+export interface AIUnresolvedItem {
+  raw_text: string;
+  reason: string;
+  confidence: number;
 }
 
 // ---- AI Coach Types ----

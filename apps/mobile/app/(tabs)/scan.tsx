@@ -7,7 +7,13 @@ import * as ImagePicker from 'expo-image-picker';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { Ionicons } from '@expo/vector-icons';
 import { AIScanResponse, AIDetectedItem, Food, MealType } from '@calorie-ai/types';
-import { scanImageFromUri, scanText, refineScan } from '../../services/ai.service';
+import {
+  scanImageFromUri,
+  scanText,
+  refineScan,
+  scanVoice,
+  scanReceipt,
+} from '../../services/ai.service';
 import { useLogStore } from '../../store/log.store';
 import { apiClient } from '../../services/api';
 import { telemetryService } from '../../services/telemetry.service';
@@ -15,15 +21,16 @@ import { router } from 'expo-router';
 import { BodyText, Eyebrow, HeroTitle, ScreenShell, SurfaceCard } from '../../components/ui-shell';
 import { EmptyState } from '../../components/empty-state';
 
-type InputMode = 'camera' | 'gallery' | 'text' | 'barcode' | 'search';
+type InputMode = 'camera' | 'gallery' | 'text' | 'voice' | 'receipt' | 'barcode' | 'search';
 
 const MODE_ICONS: Record<InputMode, string> = {
-  camera: '📸', gallery: '🖼', text: '✏️', barcode: '🔍', search: '🍜',
+  camera: '📸', gallery: '🖼', text: '✏️', voice: '🎙️', receipt: '🧾', barcode: '🔍', search: '🍜',
 };
 
 export default function ScanScreen() {
   const [mode, setMode] = useState<InputMode>('camera');
   const [textInput, setTextInput] = useState('');
+  const [voiceTranscript, setVoiceTranscript] = useState('');
   const [scannedImage, setScannedImage] = useState<string | null>(null);
   const [scanResult, setScanResult] = useState<AIScanResponse | null>(null);
   const [editableItems, setEditableItems] = useState<AIDetectedItem[]>([]);
@@ -39,6 +46,8 @@ export default function ScanScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<Food[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [isReceiptScanning, setIsReceiptScanning] = useState(false);
+  const [lastReceiptUri, setLastReceiptUri] = useState<string | null>(null);
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
 
   const { addLog, saveMeal } = useLogStore();
@@ -134,6 +143,49 @@ export default function ScanScreen() {
     try { applyScanResult(await scanText(textInput.trim())); }
     catch { Alert.alert('Lỗi', 'Không thể phân tích.'); }
     finally { setIsScanning(false); }
+  };
+
+  const handleVoiceScan = async () => {
+    const transcript = voiceTranscript.trim();
+    if (!transcript) return;
+
+    setScanResult(null); setEditableItems([]); setRefineContext(''); setIsScanning(true);
+    try {
+      applyScanResult(await scanVoice({
+        transcript,
+        meal_hint: selectedMeal,
+        locale: 'vi-VN',
+        context: { source: 'mobile_voice', device_language: 'vi' },
+      }));
+    }
+    catch { Alert.alert('Lỗi', 'Không thể phân tích giọng nói.'); }
+    finally { setIsScanning(false); }
+  };
+
+  const runReceiptScan = async (uri: string) => {
+    setLastReceiptUri(uri);
+    setScannedImage(uri); setScanResult(null); setEditableItems([]); setRefineContext(''); setIsReceiptScanning(true);
+    try {
+      applyScanResult(await scanReceipt({
+        uri,
+        locale: 'vi-VN',
+        meal_hint: selectedMeal,
+      }));
+    }
+    catch { Alert.alert('Lỗi', 'Không thể phân tích hóa đơn.'); }
+    finally { setIsReceiptScanning(false); }
+  };
+
+  const handleReceiptCapture = async () => {
+    const perm = await ImagePicker.requestCameraPermissionsAsync();
+    if (!perm.granted) { Alert.alert('Cần quyền truy cập camera'); return; }
+    const result = await ImagePicker.launchCameraAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.8 });
+    if (!result.canceled) await runReceiptScan(result.assets[0].uri);
+  };
+
+  const handleReceiptPick = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.8 });
+    if (!result.canceled) await runReceiptScan(result.assets[0].uri);
   };
 
   const handleRefineScan = async () => {
@@ -239,6 +291,9 @@ export default function ScanScreen() {
                 setScanResult(null);
                 setEditableItems([]);
                 setSearchResults([]);
+                setScannedImage(null);
+                setVoiceTranscript('');
+                setLastReceiptUri(null);
               }}>
               <Text style={[styles.modeTabText, mode === m && styles.modeTabTextActive]}>{MODE_ICONS[m]} {m}</Text>
             </TouchableOpacity>
@@ -364,16 +419,53 @@ export default function ScanScreen() {
           </View>
         )}
 
+        {/* ── Voice Mode ── */}
+        {mode === 'voice' && (
+          <View style={styles.textInputContainer}>
+            <TextInput
+              style={styles.textInput}
+              value={voiceTranscript}
+              onChangeText={setVoiceTranscript}
+              placeholder="VD: sáng nay mình ăn 1 tô bún bò và uống 1 ly sữa đậu nành"
+              placeholderTextColor="#6b7280"
+              multiline
+            />
+            <MealPicker selected={selectedMeal} onSelect={setSelectedMeal} />
+            <TouchableOpacity style={styles.analyzeButton} onPress={handleVoiceScan}>
+              <Text style={styles.analyzeButtonText}>Phân tích từ giọng nói</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* ── Receipt Mode ── */}
+        {mode === 'receipt' && (
+          <View style={styles.textInputContainer}>
+            <MealPicker selected={selectedMeal} onSelect={setSelectedMeal} />
+            <TouchableOpacity style={styles.captureButton} onPress={handleReceiptCapture}>
+              <Ionicons name="camera" size={40} color="#4ade80" />
+              <Text style={styles.captureText}>Chụp hóa đơn</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.secondaryButton} onPress={handleReceiptPick}>
+              <Text style={styles.secondaryButtonText}>🖼 Chọn hóa đơn từ thư viện</Text>
+            </TouchableOpacity>
+            {lastReceiptUri ? (
+              <TouchableOpacity style={styles.secondaryButton} onPress={() => runReceiptScan(lastReceiptUri)}>
+                <Text style={styles.secondaryButtonText}>🔁 Phân tích lại hóa đơn gần nhất</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        )}
+
         {/* Preview Image (camera/gallery) */}
         {scannedImage && mode !== 'barcode' && (
           <Image source={{ uri: scannedImage }} style={styles.previewImage} resizeMode="cover" />
         )}
 
         {/* Loading spinner for AI scan */}
-        {isScanning && mode !== 'barcode' && (
+        {(isScanning || isReceiptScanning) && mode !== 'barcode' && (
           <View style={styles.scanningContainer}>
             <ActivityIndicator size="large" color="#4ade80" />
-            <Text style={styles.scanningText}>AI đang phân tích...</Text>
+            <Text style={styles.scanningText}>{mode === 'receipt' ? 'AI đang đọc hóa đơn...' : 'AI đang phân tích...'}</Text>
           </View>
         )}
 
@@ -402,6 +494,14 @@ export default function ScanScreen() {
                 onRemove={() => removeItem(i)}
               />
             ))}
+            {scanResult.unresolved_items?.length ? (
+              <SurfaceCard style={styles.lowConfidenceBanner}>
+                <Text style={styles.lowConfidenceTitle}>🧾 Mục chưa rõ từ hóa đơn</Text>
+                <Text style={styles.lowConfidenceBody}>
+                  {scanResult.unresolved_items.slice(0, 5).map((item) => item.raw_text).join(', ')}
+                </Text>
+              </SurfaceCard>
+            ) : null}
             <SurfaceCard style={styles.totalCard}>
               <Text style={styles.totalLabel}>Tổng cộng</Text>
               <Text style={styles.totalCalorie}>{Math.round(totalCalories)} kcal</Text>

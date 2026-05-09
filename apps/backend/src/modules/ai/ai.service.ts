@@ -1,7 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { GoogleGenerativeAI, Part } from '@google/generative-ai';
-import { AIScanResponse, AIDetectedItem, AICoachResponse } from '@calorie-ai/types';
+import {
+  AIScanResponse,
+  AIDetectedItem,
+  AICoachResponse,
+  AIUnresolvedItem,
+} from '@calorie-ai/types';
 import { randomUUID } from 'crypto';
 
 @Injectable()
@@ -45,6 +50,82 @@ export class AiService {
       return this.parseAIResponse(text, Date.now() - start);
     } catch (error) {
       this.logger.error('Gemini text scan failed', error);
+      throw error;
+    }
+  }
+
+  async scanVoice(
+    transcript: string,
+    options?: {
+      locale?: string;
+      timezone?: string;
+      meal_hint?: string;
+      context?: { source?: string; device_language?: string };
+    },
+  ): Promise<AIScanResponse> {
+    const start = Date.now();
+    const model = this.genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+    const sanitizedTranscript = transcript.replace(/[\x00-\x1F\x7F]/g, ' ').trim();
+
+    const prompt = `${FOOD_VOICE_PROMPT}
+
+Context:
+- locale: ${options?.locale ?? 'unknown'}
+- timezone: ${options?.timezone ?? 'unknown'}
+- meal_hint: ${options?.meal_hint ?? 'unknown'}
+- source: ${options?.context?.source ?? 'unknown'}
+
+User transcript: "${sanitizedTranscript}"`;
+
+    try {
+      const result = await model.generateContent(prompt);
+      const text = result.response.text();
+      return this.parseAIResponse(text, Date.now() - start, {
+        parse_mode: 'voice_transcript',
+        locale_used: options?.locale,
+      });
+    } catch (error) {
+      this.logger.error('Gemini voice scan failed', error);
+      throw error;
+    }
+  }
+
+  async scanReceipt(
+    imageBase64: string,
+    mimeType = 'image/jpeg',
+    options?: {
+      locale?: string;
+      currency?: string;
+      merchant_hint?: string;
+      meal_hint?: string;
+    },
+  ): Promise<AIScanResponse> {
+    const start = Date.now();
+    const model = this.genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+
+    const imagePart: Part = {
+      inlineData: { data: imageBase64, mimeType },
+    };
+
+    const prompt = `${FOOD_RECEIPT_PROMPT}
+
+Context:
+- locale: ${options?.locale ?? 'unknown'}
+- currency: ${options?.currency ?? 'unknown'}
+- merchant_hint: ${options?.merchant_hint ?? 'unknown'}
+- meal_hint: ${options?.meal_hint ?? 'unknown'}`;
+
+    try {
+      const result = await model.generateContent([prompt, imagePart]);
+      const text = result.response.text();
+      return this.parseAIResponse(text, Date.now() - start, {
+        parse_mode: 'receipt_ocr',
+        locale_used: options?.locale,
+        currency: options?.currency,
+        merchant: options?.merchant_hint,
+      });
+    } catch (error) {
+      this.logger.error('Gemini receipt scan failed', error);
       throw error;
     }
   }
@@ -98,7 +179,11 @@ Trả lời ngắn gọn, thân thiện bằng tiếng Việt. Không quá 3 câ
     };
   }
 
-  private parseAIResponse(rawText: string, processingMs: number): AIScanResponse {
+  private parseAIResponse(
+    rawText: string,
+    processingMs: number,
+    metadata?: Record<string, unknown>,
+  ): AIScanResponse {
     try {
       // Extract JSON block from markdown code fences if present
       const jsonMatch = rawText.match(/```(?:json)?\s*([\s\S]*?)```/);
@@ -119,15 +204,25 @@ Trả lời ngắn gọn, thân thiện bằng tiếng Việt. Không quá 3 câ
         confidence: Number(item.confidence) || 0.7,
       }));
 
+      const unresolvedItems: AIUnresolvedItem[] = (parsed.unresolved_items ?? []).map(
+        (item: any) => ({
+          raw_text: String(item.raw_text ?? ''),
+          reason: String(item.reason ?? 'unknown_item'),
+          confidence: Number(item.confidence) || 0,
+        }),
+      );
+
       return {
         success: true,
         scan_id: randomUUID(),
         items,
+        unresolved_items: unresolvedItems.length ? unresolvedItems : undefined,
         total_calories: items.reduce((s, i) => s + i.calories, 0),
         total_protein_g: items.reduce((s, i) => s + i.protein_g, 0),
         total_carbs_g: items.reduce((s, i) => s + i.carbs_g, 0),
         total_fat_g: items.reduce((s, i) => s + i.fat_g, 0),
         ai_confidence: items.reduce((s, i) => s + i.confidence, 0) / (items.length || 1),
+        metadata,
         raw_ai_response: process.env.NODE_ENV !== 'production' ? rawText : undefined,
         processing_ms: processingMs,
       };
@@ -142,6 +237,7 @@ Trả lời ngắn gọn, thân thiện bằng tiếng Việt. Không quá 3 câ
         total_carbs_g: 0,
         total_fat_g: 0,
         ai_confidence: 0,
+        metadata,
         raw_ai_response: rawText,
         processing_ms: processingMs,
       };
@@ -228,6 +324,70 @@ Quy tắc:
 - Nếu người dùng nói "thêm trứng" thì add trứng vào items
 - Nếu người dùng nói "2 phần" thì nhân đôi calories
 - category phải là 1 trong: rice_dish, noodle, meat, seafood, vegetable, fruit, drink, snack, dessert, fast_food, other`;
+
+const FOOD_VOICE_PROMPT = `You are a nutrition AI. Parse the user's spoken meal transcript into structured food items.
+
+Return strict JSON only:
+{
+  "items": [
+    {
+      "name": "Chicken salad",
+      "name_vi": "Chicken salad",
+      "category": "other",
+      "quantity": 1,
+      "unit": "serving",
+      "estimated_grams": 280,
+      "calories": 420,
+      "protein_g": 34,
+      "carbs_g": 18,
+      "fat_g": 24,
+      "confidence": 0.82
+    }
+  ]
+}
+
+Rules:
+- Keep locale awareness from provided context.
+- Split multiple foods into separate items.
+- Estimate realistic portion size.
+- category must be one of: rice_dish, noodle, meat, seafood, vegetable, fruit, drink, snack, dessert, fast_food, other.
+- confidence must be between 0 and 1.
+- If no food is detected, return items: []`;
+
+const FOOD_RECEIPT_PROMPT = `You are a nutrition AI. Parse receipt text/lines in the image into structured food items.
+
+Return strict JSON only:
+{
+  "items": [
+    {
+      "name": "Greek Yogurt",
+      "name_vi": "Greek Yogurt",
+      "category": "other",
+      "quantity": 1,
+      "unit": "cup",
+      "estimated_grams": 170,
+      "calories": 130,
+      "protein_g": 12,
+      "carbs_g": 8,
+      "fat_g": 4,
+      "confidence": 0.88
+    }
+  ],
+  "unresolved_items": [
+    {
+      "raw_text": "PROMO ITEM X",
+      "reason": "unknown_product",
+      "confidence": 0.31
+    }
+  ]
+}
+
+Rules:
+- Extract only food/drink line items relevant for nutrition estimation.
+- Put uncertain lines into unresolved_items.
+- category must be one of: rice_dish, noodle, meat, seafood, vegetable, fruit, drink, snack, dessert, fast_food, other.
+- confidence must be between 0 and 1.
+- If nothing useful can be detected, return items: [] and unresolved_items when possible.`;
 
 const COACH_SYSTEM_PROMPT = `Bạn là AI coach dinh dưỡng thân thiện, chuyên về ẩm thực Việt Nam. 
 Mục tiêu: giúp người dùng ăn uống lành mạnh, đạt mục tiêu cân nặng.

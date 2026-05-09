@@ -1,5 +1,23 @@
-import { IsString, IsNotEmpty, IsNumber, IsOptional, Min } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  Min,
+  MinLength,
+  MaxLength,
+  IsEnum,
+  ValidateNested,
+} from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
+
+export enum MealHint {
+  BREAKFAST = 'breakfast',
+  LUNCH = 'lunch',
+  DINNER = 'dinner',
+  SNACK = 'snack',
+}
 
 export class ScanTextDto {
   @ApiProperty({ example: '1 tô phở bò đặc biệt' })
@@ -8,9 +26,83 @@ export class ScanTextDto {
   text: string;
 }
 
+class ScanVoiceContextDto {
+  @ApiProperty({ required: false, example: 'mobile_voice' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  source?: string;
+
+  @ApiProperty({ required: false, example: 'en' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(16)
+  device_language?: string;
+}
+
+export class ScanVoiceDto {
+  @ApiProperty({ example: 'I had one chicken salad and a latte this morning' })
+  @IsString()
+  @IsNotEmpty()
+  @MinLength(2)
+  @MaxLength(1500)
+  transcript: string;
+
+  @ApiProperty({ required: false, example: 'en-US' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(16)
+  locale?: string;
+
+  @ApiProperty({ required: false, example: 'America/Los_Angeles' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  timezone?: string;
+
+  @ApiProperty({ required: false, enum: MealHint })
+  @IsOptional()
+  @IsEnum(MealHint)
+  meal_hint?: MealHint;
+
+  @ApiProperty({ required: false, type: ScanVoiceContextDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ScanVoiceContextDto)
+  context?: ScanVoiceContextDto;
+}
+
 export class ScanImageDto {
   @ApiProperty({ type: 'string', format: 'binary' })
   image: Express.Multer.File;
+}
+
+export class ScanReceiptDto {
+  @ApiProperty({ type: 'string', format: 'binary' })
+  receipt_image: Express.Multer.File;
+
+  @ApiProperty({ required: false, example: 'en-US' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(16)
+  locale?: string;
+
+  @ApiProperty({ required: false, example: 'USD' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(8)
+  currency?: string;
+
+  @ApiProperty({ required: false, example: 'Target' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  merchant_hint?: string;
+
+  @ApiProperty({ required: false, enum: MealHint })
+  @IsOptional()
+  @IsEnum(MealHint)
+  meal_hint?: MealHint;
 }
 
 export class RefineScanDto {

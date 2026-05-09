@@ -79,3 +79,15 @@ Use this file to store compact lessons from real failures after they are fixed.
 - Prevention Rule: In Nest auth flows, keep JWT payload field mapping consistent end-to-end (`id` vs `sub`) and add defensive handling for optional/dev-only tables so bootstrap endpoints degrade gracefully instead of returning 500.
 - Files: `apps/backend/src/modules/subscription/subscription.controller.ts`, `apps/backend/src/modules/insights/insights.controller.ts`, `apps/backend/src/modules/reminder/reminder.controller.ts`, `apps/backend/src/modules/telemetry/telemetry.controller.ts`, `apps/backend/src/modules/subscription/subscription.service.ts`, `apps/backend/src/modules/reminder/reminder.service.ts`
 - Reuse Signal: Recheck this whenever multiple authenticated endpoints fail together right after login or when Supabase reports `schema cache` missing-table errors.
+
+## 2026-05-09 - Backend build failed because npm was not available in shell PATH
+
+- Scope: tooling
+- Error Signature: `CommandNotFoundException: npm : The term 'npm' is not recognized as the name of a cmdlet, function, script file, or operable program.`
+- Trigger: `cd apps/backend ; npm run build`
+- Root Cause: The active VS Code terminal session did not inherit machine/user PATH entries, so Node/npm binaries were not resolvable.
+- Fix: Rebuilt PATH inside the command before running build: `$env:PATH = [System.Environment]::GetEnvironmentVariable('PATH','Machine') + ';' + [System.Environment]::GetEnvironmentVariable('PATH','User')`.
+- Validation: `cd apps/backend ; npm run build` completed successfully after PATH reload.
+- Prevention Rule: For Windows PowerShell sessions in this repo, prefix critical npm commands with explicit machine+user PATH reload when terminal state is uncertain.
+- Files: `docs/bugs/error-memory-log.md`
+- Reuse Signal: Recheck this when `npm`/`node` suddenly become unavailable despite being installed.
