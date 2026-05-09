@@ -15,7 +15,7 @@ export class BodyProgressController {
   constructor(private bodyProgress: BodyProgressService) {}
 
   @Post()
-  @ApiOperation({ summary: 'Log or update today's body progress (weight, measurements)' })
+  @ApiOperation({ summary: "Log or update today's body progress (weight, measurements)" })
   async upsert(
     @Request() req: any,
     @Body() dto: CreateBodyProgressDto,

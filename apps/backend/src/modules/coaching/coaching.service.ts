@@ -27,7 +27,7 @@ export class CoachingService {
 
       const { data: logs, error: logsError } = await this.supabase.db
         .from('food_logs')
-        .select('id, logged_at, meal_type, total_calories')
+        .select('id, logged_at, meal_type, calories')
         .eq('user_id', userId)
         .gte('logged_at', sevenDaysAgo.toISOString())
         .order('logged_at', { ascending: true });
@@ -41,14 +41,14 @@ export class CoachingService {
         return [];
       }
 
-      // Get user's calorie target
-      const { data: target } = await this.supabase.db
-        .from('calorie_targets')
-        .select('daily_goal')
-        .eq('user_id', userId)
+      // Get user's calorie target from users table
+      const { data: userProfile } = await this.supabase.db
+        .from('users')
+        .select('daily_calorie_target')
+        .eq('id', userId)
         .single();
 
-      const dailyGoal = target?.daily_goal ?? 2000;
+      const dailyGoal = userProfile?.daily_calorie_target ?? 2000;
 
       // Organize logs by day
       const dailyData = this.organizeDailyData(logs, dailyGoal);
@@ -113,7 +113,7 @@ export class CoachingService {
       // Get this week's logs
       const { data: logs, error } = await this.supabase.db
         .from('food_logs')
-        .select('logged_at, total_calories, meal_type')
+        .select('logged_at, calories, meal_type')
         .eq('user_id', userId)
         .gte('logged_at', weekStart.toISOString())
         .order('logged_at', { ascending: true });
@@ -122,19 +122,20 @@ export class CoachingService {
         return null;
       }
 
-      // Get target
-      const { data: target } = await this.supabase.db
-        .from('calorie_targets')
-        .select('daily_goal')
-        .eq('user_id', userId)
+      // Get target from users table
+      const { data: userProfile } = await this.supabase.db
+        .from('users')
+        .select('daily_calorie_target')
+        .eq('id', userId)
         .single();
 
-      const dailyGoal = target?.daily_goal ?? 2000;
+      const dailyGoal = userProfile?.daily_calorie_target ?? 2000;
 
       // Calculate metrics
       const dailyData = this.organizeDailyData(logs, dailyGoal);
-      const totalCalories = logs.reduce((sum, log) => sum + log.total_calories, 0);
-      const averageDailyCalories = totalCalories / dailyData.length;
+      const totalCalories = logs.reduce((sum, log) => sum + log.calories, 0);
+      const dailyCount = Math.max(Object.keys(dailyData).length, 1);
+      const averageDailyCalories = totalCalories / dailyCount;
 
       // Count adherence days
       let daysAbove = 0,
@@ -153,7 +154,7 @@ export class CoachingService {
 
       // Calculate adherence
       const adherencePercentage = Math.round(
-        (daysOn / Math.max(dailyData.length, 1)) * 100,
+        (daysOn / Math.max(Object.keys(dailyData).length, 1)) * 100,
       );
 
       // Determine priority
@@ -204,8 +205,9 @@ export class CoachingService {
           meals_logged: 0,
         };
       }
-      dailyData[date].total_calories += log.total_calories;
-      dailyData[date].meal_type_breakdown[log.meal_type] = (dailyData[date].meal_type_breakdown[log.meal_type] || 0) + log.total_calories;
+      dailyData[date].total_calories += log.calories;
+      const mealKey = log.meal_type as keyof typeof dailyData[typeof date]['meal_type_breakdown'];
+      dailyData[date].meal_type_breakdown[mealKey] = (dailyData[date].meal_type_breakdown[mealKey] || 0) + log.calories;
       dailyData[date].meals_logged++;
     }
 

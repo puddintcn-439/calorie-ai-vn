@@ -1,6 +1,7 @@
 import { ReminderService } from '../reminder.service';
 import { SupabaseService } from '../../../common/supabase/supabase.service';
 import { GamificationService } from '../../gamification/gamification.service';
+import { FirebaseService } from '../../../common/firebase/firebase.service';
 import { NudgeContext } from '@calorie-ai/types';
 
 function makeSupabase(fromImpl?: (table: string) => unknown): SupabaseService {
@@ -20,8 +21,16 @@ function makeGamification(summary = {}): GamificationService {
   } as unknown as GamificationService;
 }
 
+function makeFirebase(): FirebaseService {
+  return {
+    isAvailable: jest.fn().mockReturnValue(false),
+    sendToDevice: jest.fn().mockResolvedValue(true),
+    sendToMultiple: jest.fn().mockResolvedValue({ successCount: 0, failureCount: 0 }),
+  } as unknown as FirebaseService;
+}
+
 function makeService(fromImpl?: (table: string) => unknown, gamificationSummary?: Record<string, unknown>) {
-  return new ReminderService(makeSupabase(fromImpl), makeGamification(gamificationSummary));
+  return new ReminderService(makeSupabase(fromImpl), makeGamification(gamificationSummary), makeFirebase());
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -255,7 +264,7 @@ describe('ReminderService.generatePreviewNudge', () => {
         single: jest.fn().mockResolvedValue({ data: {}, error: null }),
       };
     });
-    const service = new ReminderService(supabase, gamif);
+    const service = new ReminderService(supabase, gamif, makeFirebase());
     const msg = await service.generatePreviewNudge('u1', 'lunch', 300);
     expect(msg).toBeDefined();
     expect(msg.mealType).toBe('lunch');
@@ -273,7 +282,7 @@ describe('ReminderService.generateDueReminders', () => {
       eq: jest.fn().mockReturnThis(),
       single: jest.fn().mockResolvedValue({ data: { allow_push_notifications: false }, error: null }),
     }));
-    const service = new ReminderService(supabase, gamif);
+    const service = new ReminderService(supabase, gamif, makeFirebase());
     const msgs = await service.generateDueReminders('u1');
     expect(msgs).toEqual([]);
   });
@@ -323,7 +332,7 @@ describe('ReminderService.generateDueReminders', () => {
       };
     });
 
-    const service = new ReminderService(supabase, gamif);
+    const service = new ReminderService(supabase, gamif, makeFirebase());
     const msgs = await service.generateDueReminders('u1');
     expect(msgs).toHaveLength(1);
     expect(msgs[0].mealType).toBe('breakfast');

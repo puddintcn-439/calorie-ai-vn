@@ -6,7 +6,7 @@ import { CoachingSchedulerService } from './coaching.scheduler';
 import { SupabaseModule } from '../../common/supabase/supabase.module';
 
 @Module({
-  imports: [ScheduleModule.forRoot(), SupabaseModule],
+  imports: [ScheduleModule, SupabaseModule],
   controllers: [CoachingController],
   providers: [CoachingService, CoachingSchedulerService],
   exports: [CoachingService],
