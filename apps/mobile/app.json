@@ -19,6 +19,7 @@
       "supportsTablet": false,
       "bundleIdentifier": "com.calorieaivn.app",
       "infoPlist": {
+        "NSMicrophoneUsageDescription": "Dùng micro để ghi giọng nói và phân tích bữa ăn",
         "NSCameraUsageDescription": "Dùng camera để chụp ảnh đồ ăn phân tích calo",
         "NSPhotoLibraryUsageDescription": "Chọn ảnh đồ ăn từ thư viện để phân tích calo"
       }
@@ -31,12 +32,21 @@
       "package": "com.calorieaivn.app",
       "permissions": [
         "CAMERA",
-        "READ_EXTERNAL_STORAGE"
+        "READ_EXTERNAL_STORAGE",
+        "RECORD_AUDIO",
+        "POST_NOTIFICATIONS"
       ]
     },
     "plugins": [
       "expo-router",
       "expo-secure-store",
+      [
+        "expo-av",
+        {
+          "microphonePermission": "Dùng micro để ghi giọng nói và phân tích bữa ăn"
+        }
+      ],
+      "expo-notifications",
       [
         "expo-camera",
         {

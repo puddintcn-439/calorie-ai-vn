@@ -312,7 +312,7 @@ const styles = StyleSheet.create({
   reassuranceCard: { marginBottom: 14, borderWidth: 1, borderColor: '#223a70', backgroundColor: '#101d3a' },
   reassuranceTitle: { fontSize: 16, fontWeight: '800', marginBottom: 6 },
   reassuranceBody: { color: '#cbd5e1', fontSize: 13, lineHeight: 20 },
-  heroCard: { marginBottom: 16, alignItems: 'center', overflow: 'hidden' }
+  heroCard: { marginBottom: 16, alignItems: 'center', overflow: 'hidden' },
   heroGlow: { position: 'absolute', top: -40, right: -20, width: 160, height: 160, borderRadius: 80, backgroundColor: '#6ee7b730' },
   calorieNumber: { fontSize: 56, fontWeight: '800', color: '#6ee7b7' },
   calorieLabel: { color: '#b4c5e4', marginBottom: 4, fontSize: 15 },

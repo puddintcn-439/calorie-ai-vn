@@ -91,3 +91,15 @@ Use this file to store compact lessons from real failures after they are fixed.
 - Prevention Rule: For Windows PowerShell sessions in this repo, prefix critical npm commands with explicit machine+user PATH reload when terminal state is uncertain.
 - Files: `docs/bugs/error-memory-log.md`
 - Reuse Signal: Recheck this when `npm`/`node` suddenly become unavailable despite being installed.
+
+## 2026-05-09 - Mobile lint failed after voice/context wiring due to syntax, dependency, and stale shared build gaps
+
+- Scope: mobile
+- Error Signature: `TS1005: ',' expected` at `app/(tabs)/index.tsx:316`, then `TS2307: Cannot find module 'expo-av'` and `TS2305: Module '@calorie-ai/types' has no exported member 'ContextMode'/'CONTEXT_ADAPTERS'` during `cd apps/mobile ; npm run lint`
+- Trigger: `cd apps/mobile ; npm run lint`
+- Root Cause: The mobile slice combined three integration gaps: a missing comma in the dashboard `StyleSheet`, a new Expo native module used in code without installing the package, and new shared context types added in source without rebuilding the `@calorie-ai/types` dist consumed by the mobile app.
+- Fix: Added the missing comma in the dashboard style object, installed `expo-av` in the mobile workspace, rebuilt `packages/types`, and updated Expo app config with microphone + notification native permissions/plugins required by the new voice/push flows.
+- Validation: `cd packages/types ; npm run build`, `cd apps/mobile ; npm run lint`, `cd apps/mobile ; npx expo config --json`
+- Prevention Rule: After adding a new Expo module or new shared types, complete the full integration loop before calling the feature done: install the package, rebuild any dist-based shared workspace package, and verify required native permissions/plugins in Expo config.
+- Files: `apps/mobile/app/(tabs)/index.tsx`, `apps/mobile/package.json`, `apps/mobile/app.json`, `packages/types/dist/*`
+- Reuse Signal: Recheck this whenever mobile code imports a new Expo package or newly added exports from `@calorie-ai/types` are not seen by another workspace.
