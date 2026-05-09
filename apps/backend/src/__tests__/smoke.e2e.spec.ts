@@ -60,27 +60,24 @@ describe('Smoke Tests - Sprint 2 Feature Flow', () => {
   });
 
   describe('2. User Registration & Authentication', () => {
+    const testEmail = `smoke-${Date.now()}@example.com`;
+    const testPassword = 'Test123!@#';
+
     it('POST /auth/register should create new user', async () => {
       const res = await request(app.getHttpServer())
         .post('/auth/register')
-        .send({
-          email: `smoke-test-${Date.now()}@example.com`,
-          password: 'Test123!@#',
-        })
+        .send({ email: testEmail, password: testPassword })
         .expect(201);
 
       expect(res.body.access_token).toBeDefined();
       testAuthToken = res.body.access_token;
-      testUserId = res.body.user.id;
+      testUserId = res.body.user_id;
     });
 
-    it('POST /auth/login should authenticate user', async () => {
+    it('POST /auth/login should authenticate the registered user', async () => {
       const res = await request(app.getHttpServer())
         .post('/auth/login')
-        .send({
-          email: `smoke-test-${Date.now()}@example.com`,
-          password: 'Test123!@#',
-        })
+        .send({ email: testEmail, password: testPassword })
         .expect(200);
 
       expect(res.body.access_token).toBeDefined();
@@ -90,7 +87,7 @@ describe('Smoke Tests - Sprint 2 Feature Flow', () => {
   describe('3. Profile & Calorie Target Calculation', () => {
     it('PUT /user/profile should update user profile', async () => {
       const res = await request(app.getHttpServer())
-        .put('/user/profile')
+        .patch('/user/profile')
         .set('Authorization', `Bearer ${testAuthToken}`)
         .send({
           weight_kg: 70,
@@ -145,12 +142,13 @@ describe('Smoke Tests - Sprint 2 Feature Flow', () => {
         .post('/log')
         .set('Authorization', `Bearer ${testAuthToken}`)
         .send({
-          food_name: 'Chicken breast',
+          name: 'Chicken breast',
           calories: 150,
           protein_g: 25,
           carbs_g: 0,
           fat_g: 3,
           meal_type: 'breakfast',
+                  estimated_grams: 100,
         })
         .expect(201);
 
@@ -164,7 +162,7 @@ describe('Smoke Tests - Sprint 2 Feature Flow', () => {
       const res = await request(app.getHttpServer())
         .post('/calorie-target/weekly-adjustment')
         .set('Authorization', `Bearer ${testAuthToken}`)
-        .expect(200);
+        .expect(201);
 
       expect(res.body.adjusted_daily_target).toBeDefined();
       expect(res.body.adherence_last_week).toBeDefined();
@@ -175,13 +173,13 @@ describe('Smoke Tests - Sprint 2 Feature Flow', () => {
   describe('7. Weekly Insights', () => {
     it('GET /insights/week should return weekly summary', async () => {
       const res = await request(app.getHttpServer())
-        .get('/insights/week')
+        .get('/insights/weekly')
         .set('Authorization', `Bearer ${testAuthToken}`)
         .expect(200);
 
-      expect(res.body.average_daily_calories).toBeDefined();
-      expect(res.body.adherence_percentage).toBeDefined();
-      expect(res.body.daily_breakdown).toBeDefined();
+      expect(res.body.average_calories_per_day).toBeDefined();
+      expect(res.body.weekly_adherence_percentage).toBeDefined();
+      expect(res.body.daily_insights).toBeDefined();
     });
   });
 
@@ -197,12 +195,12 @@ describe('Smoke Tests - Sprint 2 Feature Flow', () => {
 
       // Fetch insights
       const insightsRes = await request(app.getHttpServer())
-        .get('/insights/week')
+        .get('/insights/weekly')
         .set('Authorization', `Bearer ${testAuthToken}`)
         .expect(200);
 
       // Verify insights use profile's daily target
-      expect(insightsRes.body.target_daily_calories).toBe(dailyTarget);
+      expect(insightsRes.body.weekly_calorie_target).toBe(dailyTarget * 7);
     });
   });
 });

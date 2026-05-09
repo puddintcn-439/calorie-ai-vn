@@ -64,9 +64,7 @@ describe('WeeklyAdaptiveService', () => {
       const mockData = Array(7)
         .fill(null)
         .map((_, i) => ({
-          created_at: new Date(Date.now() - i * 24 * 60 * 60 * 1000)
-            .toISOString()
-            .split('T')[0],
+          logged_at: new Date(Date.now() - i * 24 * 60 * 60 * 1000).toISOString(),
           calories: 2000,
         }));
 
@@ -107,9 +105,7 @@ describe('WeeklyAdaptiveService', () => {
       const mockData = Array(7)
         .fill(null)
         .map((_, i) => ({
-          created_at: new Date(Date.now() - i * 24 * 60 * 60 * 1000)
-            .toISOString()
-            .split('T')[0],
+          logged_at: new Date(Date.now() - i * 24 * 60 * 60 * 1000).toISOString(),
           calories: 1000,
         }));
 
@@ -151,9 +147,7 @@ describe('WeeklyAdaptiveService', () => {
       const mockData = Array(7)
         .fill(null)
         .map((_, i) => ({
-          created_at: new Date(Date.now() - i * 24 * 60 * 60 * 1000)
-            .toISOString()
-            .split('T')[0],
+          logged_at: new Date(Date.now() - i * 24 * 60 * 60 * 1000).toISOString(),
           calories: 3200,
         }));
 
@@ -195,9 +189,7 @@ describe('WeeklyAdaptiveService', () => {
       const mockData = Array(7)
         .fill(null)
         .map((_, i) => ({
-          created_at: new Date(Date.now() - i * 24 * 60 * 60 * 1000)
-            .toISOString()
-            .split('T')[0],
+          logged_at: new Date(Date.now() - i * 24 * 60 * 60 * 1000).toISOString(),
           calories: 5000,
         }));
 
@@ -271,9 +263,7 @@ describe('WeeklyAdaptiveService', () => {
       const mockData = Array(7)
         .fill(null)
         .map((_, i) => ({
-          created_at: new Date(Date.now() - i * 24 * 60 * 60 * 1000)
-            .toISOString()
-            .split('T')[0],
+          logged_at: new Date(Date.now() - i * 24 * 60 * 60 * 1000).toISOString(),
           calories: 1900,
         }));
 
@@ -314,9 +304,7 @@ describe('WeeklyAdaptiveService', () => {
       const mockData = Array(7)
         .fill(null)
         .map((_, i) => ({
-          created_at: new Date(Date.now() - i * 24 * 60 * 60 * 1000)
-            .toISOString()
-            .split('T')[0],
+          logged_at: new Date(Date.now() - i * 24 * 60 * 60 * 1000).toISOString(),
           calories: 2400,
         }));
 
@@ -359,9 +347,7 @@ describe('WeeklyAdaptiveService', () => {
       const mockData = Array(7)
         .fill(null)
         .map((_, i) => ({
-          created_at: new Date(Date.now() - i * 24 * 60 * 60 * 1000)
-            .toISOString()
-            .split('T')[0],
+          logged_at: new Date(Date.now() - i * 24 * 60 * 60 * 1000).toISOString(),
           calories: 2000,
         }));
 
@@ -382,3 +368,4 @@ describe('WeeklyAdaptiveService', () => {
     });
   });
 });
+

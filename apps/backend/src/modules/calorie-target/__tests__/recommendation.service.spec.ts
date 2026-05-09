@@ -242,7 +242,7 @@ describe('RecommendationService', () => {
 
       expect(result.week_start).toBeDefined();
       expect(result.week_end).toBeDefined();
-      expect(result.daily_plans).toHaveLength(1);
+      expect(result.daily_plans).toHaveLength(7);
       expect(result.daily_plans[0].user_id).toBe('user123');
     });
   });
