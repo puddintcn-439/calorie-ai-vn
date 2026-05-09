@@ -34,6 +34,7 @@ export class RequestLoggingMiddleware implements NestMiddleware {
 
   use(req: Request, res: Response, next: NextFunction) {
     const startTime = Date.now();
+    const logStream = this.logStream;
 
     // Capture original send
     const originalSend = res.send;
@@ -51,7 +52,11 @@ export class RequestLoggingMiddleware implements NestMiddleware {
       };
 
       // Write to file as JSON lines format
-      this.logStream.write(JSON.stringify(log) + '\n');
+      try {
+        logStream.write(JSON.stringify(log) + '\n');
+      } catch (err) {
+        console.error('Failed to write request log:', err);
+      }
 
       // Only log errors and slow requests to console
       if (res.statusCode >= 400 || duration > 1000) {
@@ -60,9 +65,9 @@ export class RequestLoggingMiddleware implements NestMiddleware {
         );
       }
 
-      // Call original send
+      // Call original send with correct context
       return originalSend.call(this, data);
-    }.bind(this);
+    };
 
     next();
   }
