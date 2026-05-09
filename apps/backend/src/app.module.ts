@@ -6,6 +6,12 @@ import { AiModule } from './modules/ai/ai.module';
 import { FoodModule } from './modules/food/food.module';
 import { LogModule } from './modules/log/log.module';
 import { UserModule } from './modules/user/user.module';
+import { TelemetryModule } from './modules/telemetry/telemetry.module';
+import { InsightsModule } from './modules/insights/insights.module';
+import { ReminderModule } from './modules/reminder/reminder.module';
+import { SubscriptionModule } from './modules/subscription/subscription.module';
+import { GamificationModule } from './modules/gamification/gamification.module';
+import { CalorieTargetModule } from './modules/calorie-target/calorie-target.module';
 
 @Module({
   imports: [
@@ -16,6 +22,12 @@ import { UserModule } from './modules/user/user.module';
     FoodModule,
     LogModule,
     UserModule,
+    TelemetryModule,
+    InsightsModule,
+    ReminderModule,
+    SubscriptionModule,
+    GamificationModule,
+    CalorieTargetModule,
   ],
 })
 export class AppModule {}

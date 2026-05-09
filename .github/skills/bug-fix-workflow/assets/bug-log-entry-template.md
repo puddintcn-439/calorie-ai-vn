@@ -1,0 +1,12 @@
+## Bug Entry
+- Timestamp:
+- Bug ID:
+- Title:
+- Severity:
+- Scope:
+- Root Cause:
+- Fix Summary:
+- Verification:
+- Status:
+- Owner:
+- Notes:

@@ -1,0 +1,171 @@
+import * as Notifications from 'expo-notifications';
+import { Platform } from 'react-native';
+
+// Configure notification behavior
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
+  }),
+});
+
+class PushNotificationService {
+  /**
+   * Initialize push notifications for the app
+   */
+  async initializePushNotifications(): Promise<string | null> {
+    try {
+      // Request user permission for notifications
+      const { status } = await Notifications.requestPermissionsAsync();
+      if (status !== 'granted') {
+        console.warn('[Push] User declined notification permissions');
+        return null;
+      }
+
+      // Get push token (on physical device or simulator with proper setup)
+      const token = (await Notifications.getExpoPushTokenAsync()).data;
+      console.log('[Push] Expo push token:', token);
+
+      // Set up notification channels for Android
+      if (Platform.OS === 'android') {
+        await Notifications.setNotificationChannelAsync('reminders', {
+          name: 'Reminders',
+          importance: Notifications.AndroidImportance.HIGH,
+          vibrationPattern: [0, 250, 250, 250],
+          lightColor: '#6ee7b7',
+          sound: 'default',
+        });
+      }
+
+      return token;
+    } catch (error) {
+      console.error('[Push] Failed to initialize:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Send local notification immediately
+   */
+  async sendLocalNotification(options: {
+    title: string;
+    body: string;
+    data?: Record<string, any>;
+  }) {
+    try {
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: options.title,
+          body: options.body,
+          data: options.data ?? {},
+          sound: 'default',
+          badge: 1,
+        },
+        trigger: null, // Send immediately
+      });
+    } catch (error) {
+      console.error('[Push] Failed to send notification:', error);
+    }
+  }
+
+  /**
+   * Schedule notification for specific time
+   */
+  async scheduleNotificationAtTime(options: {
+    title: string;
+    body: string;
+    time: string; // HH:MM format
+    data?: Record<string, any>;
+  }) {
+    try {
+      const [hours, minutes] = options.time.split(':').map(Number);
+      const trigger = new Date();
+      trigger.setHours(hours, minutes, 0);
+
+      // If time is in the past today, schedule for tomorrow
+      if (trigger < new Date()) {
+        trigger.setDate(trigger.getDate() + 1);
+      }
+
+      const seconds = Math.floor((trigger.getTime() - Date.now()) / 1000);
+
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: options.title,
+          body: options.body,
+          data: options.data ?? {},
+          sound: 'default',
+          badge: 1,
+        },
+        trigger: {
+          type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+          seconds: Math.max(1, seconds),
+        },
+      });
+
+      console.log(`[Push] Scheduled notification for ${options.time}`);
+    } catch (error) {
+      console.error('[Push] Failed to schedule notification:', error);
+    }
+  }
+
+  /**
+   * Schedule recurring daily notification
+   */
+  async scheduleRecurringNotification(options: {
+    title: string;
+    body: string;
+    time: string; // HH:MM format
+    data?: Record<string, any>;
+  }) {
+    try {
+      const [hours, minutes] = options.time.split(':').map(Number);
+
+      // Schedule daily notification
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: options.title,
+          body: options.body,
+          data: options.data ?? {},
+          sound: 'default',
+          badge: 1,
+        },
+        trigger: {
+          type: Notifications.SchedulableTriggerInputTypes.CALENDAR,
+          hour: hours,
+          minute: minutes,
+          repeats: true,
+        },
+      });
+
+      console.log(`[Push] Scheduled recurring notification daily at ${options.time}`);
+    } catch (error) {
+      console.error('[Push] Failed to schedule recurring notification:', error);
+    }
+  }
+
+  /**
+   * Cancel all notifications
+   */
+  async cancelAllNotifications() {
+    try {
+      await Notifications.cancelAllScheduledNotificationsAsync();
+      console.log('[Push] Cancelled all notifications');
+    } catch (error) {
+      console.error('[Push] Failed to cancel notifications:', error);
+    }
+  }
+
+  /**
+   * Add notification response listener (when user taps notification)
+   */
+  onNotificationResponse(callback: (response: Notifications.NotificationResponse) => void) {
+    const subscription = Notifications.addNotificationResponseReceivedListener(callback);
+    return subscription;
+  }
+}
+
+export const pushNotificationService = new PushNotificationService();

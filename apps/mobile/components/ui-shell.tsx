@@ -1,5 +1,5 @@
 import React, { ReactNode, useEffect, useRef } from 'react';
-import { Animated, Easing, ScrollView, StyleProp, StyleSheet, Text, TextStyle, useWindowDimensions, View, ViewStyle } from 'react-native';
+import { Animated, Easing, Platform, ScrollView, StyleProp, StyleSheet, Text, TextStyle, useWindowDimensions, View, ViewStyle } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { theme } from './theme';
@@ -17,6 +17,7 @@ export function ScreenShell({
   const isDesktop = width >= 900;
   const fade = useRef(new Animated.Value(0)).current;
   const translate = useRef(new Animated.Value(18)).current;
+  const useNativeDriver = Platform.OS !== 'web';
 
   useEffect(() => {
     Animated.parallel([
@@ -24,13 +25,13 @@ export function ScreenShell({
         toValue: 1,
         duration: 360,
         easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
+        useNativeDriver,
       }),
       Animated.timing(translate, {
         toValue: 0,
         duration: 420,
         easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
+        useNativeDriver,
       }),
     ]).start();
   }, [fade, translate]);
@@ -61,6 +62,7 @@ export function ScreenShell({
 export function SurfaceCard({ children, style }: { children: ReactNode; style?: StyleProp<ViewStyle> }) {
   const fade = useRef(new Animated.Value(0)).current;
   const scale = useRef(new Animated.Value(0.98)).current;
+  const useNativeDriver = Platform.OS !== 'web';
 
   useEffect(() => {
     Animated.parallel([
@@ -68,13 +70,13 @@ export function SurfaceCard({ children, style }: { children: ReactNode; style?: 
         toValue: 1,
         duration: 280,
         easing: Easing.out(Easing.quad),
-        useNativeDriver: true,
+        useNativeDriver,
       }),
       Animated.timing(scale, {
         toValue: 1,
         duration: 320,
         easing: Easing.out(Easing.quad),
-        useNativeDriver: true,
+        useNativeDriver,
       }),
     ]).start();
   }, [fade, scale]);
@@ -131,10 +133,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: theme.colors.border,
     padding: 16,
-    shadowColor: '#020617',
-    shadowOpacity: 0.28,
-    shadowRadius: 20,
-    shadowOffset: { width: 0, height: 16 },
+    ...(Platform.OS === 'web'
+      ? { boxShadow: '0px 16px 20px rgba(2, 6, 23, 0.28)' }
+      : {
+          shadowColor: '#020617',
+          shadowOpacity: 0.28,
+          shadowRadius: 20,
+          shadowOffset: { width: 0, height: 16 },
+        }),
     elevation: 10,
   },
   eyebrow: {

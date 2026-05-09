@@ -1,5 +1,6 @@
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { Platform } from 'react-native';
 import { theme } from '../../components/theme';
 
 export default function TabsLayout() {
@@ -18,10 +19,14 @@ export default function TabsLayout() {
           borderTopColor: theme.colors.border,
           borderTopWidth: 1,
           borderRadius: 22,
-          shadowColor: '#020617',
-          shadowOpacity: 0.24,
-          shadowRadius: 16,
-          shadowOffset: { width: 0, height: 10 },
+          ...(Platform.OS === 'web'
+            ? { boxShadow: '0px 10px 16px rgba(2, 6, 23, 0.24)' }
+            : {
+                shadowColor: '#020617',
+                shadowOpacity: 0.24,
+                shadowRadius: 16,
+                shadowOffset: { width: 0, height: 10 },
+              }),
           elevation: 10,
         },
         tabBarLabelStyle: {
@@ -48,6 +53,24 @@ export default function TabsLayout() {
           title: 'Scan',
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="camera" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="coach"
+        options={{
+          title: 'Coach',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="chatbubbles" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="insights"
+        options={{
+          title: 'Thống kê',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="stats-chart" size={size} color={color} />
           ),
         }}
       />

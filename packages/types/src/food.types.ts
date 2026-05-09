@@ -1,9 +1,9 @@
 export interface Food {
   id: string;
   name: string;
-  name_vi?: string;           // Tên tiếng Việt
+  name_vi?: string;
   category: FoodCategory;
-  is_vietnamese: boolean;     // Flag món Việt Nam
+  is_vietnamese: boolean;
   calories_per_100g: number;
   protein_g: number;
   carbs_g: number;
@@ -11,10 +11,22 @@ export interface Food {
   fiber_g?: number;
   sugar_g?: number;
   sodium_mg?: number;
-  serving_size_g?: number;    // Khẩu phần mặc định (gram)
-  serving_description?: string; // vd: "1 tô", "1 bát"
+  serving_size_g?: number;
+  serving_description?: string;
   image_url?: string;
+  barcode?: string;
   source: FoodSource;
+  /** External ID in the source system (OFF product code, USDA fdc_id) */
+  source_id?: string;
+  /** Canonical URL of the source record */
+  source_url?: string;
+  /** SHA-256 of raw nutrient payload — used for delta sync dedup */
+  source_data_hash?: string;
+  /** 0–1 completeness score based on filled nutrient fields */
+  nutrient_confidence?: number;
+  is_validated: boolean;
+  has_impossible_values: boolean;
+  last_synced_at?: string;
   created_at: string;
 }
 

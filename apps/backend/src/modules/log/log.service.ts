@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { SupabaseService } from '../../common/supabase/supabase.service';
-import { FoodLog, DailyLog, MealType, SavedMeal, SavedMealItem, ActivityLog, CreateActivityLogDto, ACTIVITY_MET } from '@calorie-ai/types';
+import { FoodLog, DailyLog, MealType, SavedMeal, SavedMealItem, ActivityLog, CreateActivityLogDto, ACTIVITY_MET, ActivitySyncBatchDto, ActivitySyncResult } from '@calorie-ai/types';
 
 @Injectable()
 export class LogService {
@@ -161,12 +161,59 @@ export class LogService {
 
     const { data, error } = await this.supabase.db
       .from('activity_logs')
-      .insert({ user_id: userId, ...dto, calories_burned: caloriesBurned })
+      .insert({ user_id: userId, source: dto.source ?? 'manual', ...dto, calories_burned: caloriesBurned })
       .select()
       .single();
 
     if (error) throw error;
     return data as ActivityLog;
+  }
+
+  async syncActivityBatch(userId: string, dto: ActivitySyncBatchDto): Promise<ActivitySyncResult> {
+    const externalIds = dto.entries.map((entry) => entry.external_id);
+
+    const { data: existingRows, error: existingError } = await this.supabase.db
+      .from('activity_logs')
+      .select('external_id')
+      .eq('user_id', userId)
+      .eq('source', dto.source)
+      .in('external_id', externalIds);
+
+    if (existingError) throw existingError;
+
+    const existingIds = new Set((existingRows ?? []).map((row: any) => row.external_id));
+    const newEntries = dto.entries.filter((entry) => !existingIds.has(entry.external_id));
+
+    if (newEntries.length > 0) {
+      const rows = newEntries.map((entry) => ({
+        user_id: userId,
+        source: dto.source,
+        external_id: entry.external_id,
+        synced_at: dto.synced_at,
+        activity_type: entry.activity_type,
+        activity_name: entry.activity_name,
+        duration_min: entry.duration_min,
+        calories_burned: entry.calories_burned,
+        logged_at: entry.logged_at,
+        steps_count: entry.steps_count,
+        distance_km: entry.distance_km,
+        notes: entry.notes,
+      }));
+
+      const { error: insertError } = await this.supabase.db
+        .from('activity_logs')
+        .insert(rows);
+
+      if (insertError) throw insertError;
+    }
+
+    return {
+      source: dto.source,
+      synced_at: dto.synced_at,
+      imported_count: newEntries.length,
+      skipped_count: dto.entries.length - newEntries.length,
+      total_calories_burned: newEntries.reduce((sum, entry) => sum + entry.calories_burned, 0),
+    };
   }
 
   async getActivityLogs(userId: string, date: string): Promise<ActivityLog[]> {

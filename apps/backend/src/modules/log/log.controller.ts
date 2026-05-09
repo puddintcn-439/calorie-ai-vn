@@ -8,7 +8,7 @@ import { Type } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
 import { LogService } from './log.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { MealType, LogSource, SavedMealItem, ActivityType, CreateActivityLogDto } from '@calorie-ai/types';
+import { MealType, LogSource, SavedMealItem, ActivityType, CreateActivityLogDto, ActivitySyncBatchDto, ActivitySource, SyncedActivityEntry } from '@calorie-ai/types';
 
 class CreateLogDto {
   @ApiProperty() @IsString() name: string;
@@ -49,10 +49,37 @@ class LogSavedMealDto {
 class ActivityLogDto {
   @ApiProperty() @IsEnum(['running','walking','cycling','swimming','gym','yoga','football','basketball','other']) activity_type: ActivityType;
   @ApiProperty({ required: false }) @IsOptional() @IsString() activity_name?: string;
+  @ApiProperty({ required: false, enum: ['manual', 'apple_health', 'google_fit', 'demo_sync'] }) @IsOptional() @IsEnum(['manual', 'apple_health', 'google_fit', 'demo_sync']) source?: ActivitySource;
+  @ApiProperty({ required: false }) @IsOptional() @IsString() external_id?: string;
+  @ApiProperty({ required: false }) @IsOptional() @IsString() synced_at?: string;
+  @ApiProperty({ required: false }) @IsOptional() @IsInt() @Min(0) steps_count?: number;
+  @ApiProperty({ required: false }) @IsOptional() @IsNumber() @Min(0) distance_km?: number;
   @ApiProperty() @IsInt() @Min(1) duration_min: number;
   @ApiProperty({ required: false }) @IsOptional() @IsInt() calories_burned?: number;
   @ApiProperty({ required: false }) @IsOptional() @IsString() logged_at?: string;
   @ApiProperty({ required: false }) @IsOptional() @IsString() notes?: string;
+}
+
+class SyncedActivityEntryDto implements SyncedActivityEntry {
+  @ApiProperty() @IsString() external_id: string;
+  @ApiProperty({ enum: ['running','walking','cycling','swimming','gym','yoga','football','basketball','other'] }) @IsEnum(['running','walking','cycling','swimming','gym','yoga','football','basketball','other']) activity_type: ActivityType;
+  @ApiProperty({ required: false }) @IsOptional() @IsString() activity_name?: string;
+  @ApiProperty() @IsInt() @Min(1) duration_min: number;
+  @ApiProperty() @IsInt() @Min(0) calories_burned: number;
+  @ApiProperty() @IsString() logged_at: string;
+  @ApiProperty({ required: false }) @IsOptional() @IsInt() @Min(0) steps_count?: number;
+  @ApiProperty({ required: false }) @IsOptional() @IsNumber() @Min(0) distance_km?: number;
+  @ApiProperty({ required: false }) @IsOptional() @IsString() notes?: string;
+}
+
+class SyncActivityBatchRequestDto implements ActivitySyncBatchDto {
+  @ApiProperty({ enum: ['apple_health', 'google_fit', 'demo_sync'] }) @IsEnum(['apple_health', 'google_fit', 'demo_sync']) source: Exclude<ActivitySource, 'manual'>;
+  @ApiProperty() @IsString() synced_at: string;
+  @ApiProperty({ type: [SyncedActivityEntryDto] })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => SyncedActivityEntryDto)
+  entries: SyncedActivityEntryDto[];
 }
 
 @ApiTags('Log')
@@ -120,6 +147,11 @@ export class LogController {
   getActivities(@Query('date') date: string, @Request() req: any) {
     const d = date ?? new Date().toISOString().slice(0, 10);
     return this.logService.getActivityLogs(req.user.id, d);
+  }
+
+  @Post('activity/sync')
+  syncActivities(@Body() dto: SyncActivityBatchRequestDto, @Request() req: any) {
+    return this.logService.syncActivityBatch(req.user.id, dto);
   }
 
   @Delete('activity/:id')

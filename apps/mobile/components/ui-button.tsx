@@ -2,6 +2,7 @@ import React, { useRef } from 'react';
 import {
   Animated,
   ActivityIndicator,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -30,11 +31,12 @@ export function UiButton({
   style,
 }: UiButtonProps) {
   const scale = useRef(new Animated.Value(1)).current;
+  const useNativeDriver = Platform.OS !== 'web';
 
   const handlePressIn = () => {
     Animated.spring(scale, {
       toValue: 0.96,
-      useNativeDriver: true,
+      useNativeDriver,
       speed: 50,
       bounciness: 4,
     }).start();
@@ -43,7 +45,7 @@ export function UiButton({
   const handlePressOut = () => {
     Animated.spring(scale, {
       toValue: 1,
-      useNativeDriver: true,
+      useNativeDriver,
       speed: 50,
       bounciness: 4,
     }).start();

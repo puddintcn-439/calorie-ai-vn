@@ -72,6 +72,27 @@ npm run mobile
 # → Quét QR bằng Expo Go app
 ```
 
+### 6. Stable Dev Startup (Windows)
+
+If you hit random startup failures due to occupied ports, use the preflight and ready scripts:
+
+```bash
+# Check env files and required ports
+npm run preflight
+
+# Check whether backend and Expo web are actually healthy
+npm run health
+
+# Clean dev ports (3000, 19006, 19007)
+npm run dev:ports:clean
+
+# Start backend in watch mode (recommended for active development)
+npm run dev:backend:ready
+
+# Start Expo web in non-interactive mode on 19006
+npm run dev:mobile:web:ready
+```
+
 ## API Endpoints
 
 | Method | Endpoint | Description |

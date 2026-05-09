@@ -3,3 +3,8 @@ export * from './food.types';
 export * from './ai.types';
 export * from './log.types';
 export * from './activity.types';
+export * from './telemetry.types';
+export * from './insights.types';
+export * from './reminder.types';
+export * from './subscription.types';
+export * from './gamification.types';

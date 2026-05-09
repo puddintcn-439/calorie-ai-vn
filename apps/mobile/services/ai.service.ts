@@ -1,5 +1,6 @@
 import { AIScanResponse, AICoachResponse } from '@calorie-ai/types';
 import { apiClient } from './api';
+import { featureGatingService } from './feature-gating.service';
 import * as FileSystem from 'expo-file-system';
 
 export async function scanImageFromUri(uri: string): Promise<AIScanResponse> {
@@ -40,6 +41,9 @@ export async function askCoach(
   message: string,
   context: { today_calories: number; target_calories: number },
 ): Promise<AICoachResponse> {
+  // Check subscription access to AI Coach
+  await featureGatingService.requireFeature('ai_coach', 'AI Coach');
+
   const res = await apiClient.post<AICoachResponse>('/ai/coach', {
     message,
     ...context,

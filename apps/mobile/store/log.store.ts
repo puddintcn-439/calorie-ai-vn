@@ -1,5 +1,6 @@
-import { DailyLog, FoodLog, MealType, SavedMeal, ActivityLog, CreateActivityLogDto } from '@calorie-ai/types';
+import { DailyLog, FoodLog, MealType, SavedMeal, ActivityLog, CreateActivityLogDto, ActivitySyncResult } from '@calorie-ai/types';
 import { apiClient } from '../services/api';
+import { activitySyncService } from '../services/activity-sync.service';
 
 const create = require('zustand').create as typeof import('zustand').create;
 
@@ -18,6 +19,7 @@ interface LogState {
   deleteSavedMeal: (id: string) => Promise<void>;
   addActivity: (dto: CreateActivityLogDto) => Promise<void>;
   deleteActivity: (id: string) => Promise<void>;
+  syncActivity: (date?: string) => Promise<ActivitySyncResult>;
 }
 
 export const useLogStore = create<LogState>((set, get) => ({
@@ -81,5 +83,11 @@ export const useLogStore = create<LogState>((set, get) => ({
   deleteActivity: async (id) => {
     await apiClient.delete(`/log/activity/${id}`);
     await get().fetchActivityLogs();
+  },
+
+  syncActivity: async (date) => {
+    const result = await activitySyncService.syncToday(date);
+    await get().fetchActivityLogs(date);
+    return result;
   },
 }));

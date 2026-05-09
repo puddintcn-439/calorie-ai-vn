@@ -1,6 +1,7 @@
 import React, { useRef } from 'react';
 import {
   Animated,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -18,11 +19,12 @@ interface UiChipProps {
 
 export function UiChip({ label, selected, onPress, style }: UiChipProps) {
   const scale = useRef(new Animated.Value(1)).current;
+  const useNativeDriver = Platform.OS !== 'web';
 
   const handlePressIn = () => {
     Animated.spring(scale, {
       toValue: 0.94,
-      useNativeDriver: true,
+      useNativeDriver,
       speed: 60,
       bounciness: 6,
     }).start();
@@ -31,7 +33,7 @@ export function UiChip({ label, selected, onPress, style }: UiChipProps) {
   const handlePressOut = () => {
     Animated.spring(scale, {
       toValue: 1,
-      useNativeDriver: true,
+      useNativeDriver,
       speed: 60,
       bounciness: 6,
     }).start();

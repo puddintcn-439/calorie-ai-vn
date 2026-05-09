@@ -1,0 +1,310 @@
+import { Injectable } from '@nestjs/common';
+import { SupabaseService } from '../../common/supabase/supabase.service';
+import { ReminderPreferences, ReminderPreferencesDto, NudgeMessage, NudgeContext } from '@calorie-ai/types';
+import { GamificationService } from '../gamification/gamification.service';
+
+@Injectable()
+export class ReminderService {
+  constructor(
+    private supabase: SupabaseService,
+    private gamificationService: GamificationService,
+  ) {}
+
+  /**
+   * Get reminder preferences for a user (or create defaults if not exists)
+   */
+  async getReminderPreferences(userId: string): Promise<ReminderPreferences> {
+    let { data, error } = await this.supabase.db
+      .from('reminder_preferences')
+      .select('*')
+      .eq('user_id', userId)
+      .single();
+
+    if (error && error.code === 'PGRST116') {
+      // No preferences found, create defaults
+      const defaults = {
+        user_id: userId,
+        breakfast_reminder_enabled: true,
+        breakfast_reminder_time: '07:00',
+        lunch_reminder_enabled: true,
+        lunch_reminder_time: '12:00',
+        dinner_reminder_enabled: true,
+        dinner_reminder_time: '19:00',
+        snack_reminder_enabled: false,
+        snack_reminder_time: '15:00',
+        allow_push_notifications: true,
+        nudge_motivation_style: 'encouraging',
+      };
+
+      const { data: created, error: createError } = await this.supabase.db
+        .from('reminder_preferences')
+        .insert(defaults)
+        .select()
+        .single();
+
+      if (createError) throw createError;
+      return created as ReminderPreferences;
+    }
+
+    if (error) throw error;
+    return data as ReminderPreferences;
+  }
+
+  /**
+   * Update reminder preferences for a user
+   */
+  async updateReminderPreferences(userId: string, dto: ReminderPreferencesDto): Promise<ReminderPreferences> {
+    const { data, error } = await this.supabase.db
+      .from('reminder_preferences')
+      .update({ ...dto, updated_at: new Date().toISOString() })
+      .eq('user_id', userId)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data as ReminderPreferences;
+  }
+
+  /**
+   * Generate nudge message based on user context
+   */
+  generateNudgeMessage(context: NudgeContext): NudgeMessage {
+    const {
+      mealType,
+      caloriesLogged,
+      calorieTarget,
+      adherencePercentage,
+      mealsLogged,
+      motivationStyle,
+      currentStreak = 0,
+      longestStreak = 0,
+      nextStreakMilestone = null,
+    } = context;
+
+    const streakContext = {
+      currentStreak,
+      longestStreak,
+      nextMilestone: nextStreakMilestone,
+    };
+
+    const mealLabels = {
+      breakfast: '🌅 Bữa sáng',
+      lunch: '🌤️ Bữa trưa',
+      dinner: '🌙 Bữa tối',
+      snack: '🍿 Ăn vặt',
+    };
+
+    const streakLine =
+      currentStreak > 0
+        ? `Streak hiện tại của bạn là ${currentStreak} ngày${nextStreakMilestone ? `, còn ${Math.max(0, nextStreakMilestone - currentStreak)} ngày để chạm mốc ${nextStreakMilestone}.` : '.'}`
+        : mealsLogged === 0
+          ? 'Log bữa này để bắt đầu lại streak hôm nay.'
+          : 'Giữ nhịp hôm nay để tạo lại streak mới.';
+
+    // Generate message based on adherence and motivation style
+    if (adherencePercentage < 20) {
+      if (currentStreak >= 3) {
+        return {
+          title: `${mealLabels[mealType]} - Giữ streak nhé!`,
+          body: `${streakLine} Đừng bỏ trống bữa này nếu bạn muốn giữ nhịp đều đặn.`,
+          type: 'streak',
+          mealType,
+          emoji: '🔥',
+          streakContext,
+        };
+      }
+
+      if (motivationStyle === 'encouraging') {
+        return {
+          title: `${mealLabels[mealType]} - Bắt đầu nào!`,
+          body: `Bạn vừa mới bắt đầu bữa ăn này. Hãy log những thứ bạn ăn để theo dõi calo. ${streakLine}`,
+          type: 'reminder',
+          mealType,
+          emoji: '🎯',
+          streakContext,
+        };
+      } else if (motivationStyle === 'warning') {
+        return {
+          title: `${mealLabels[mealType]} - Quên log chưa?`,
+          body: `Bạn chưa log gì cho bữa này. Nhanh lên để không bỏ sót! ${streakLine}`,
+          type: 'reminder',
+          mealType,
+          emoji: '⏰',
+          streakContext,
+        };
+      }
+    } else if (adherencePercentage < 50) {
+      if (motivationStyle === 'encouraging') {
+        return {
+          title: `${mealLabels[mealType]} - Tốt lắm!`,
+          body: `Bạn đã log ${caloriesLogged}kcal. Tiếp tục nếu còn ăn nữa nhé! ${streakLine}`,
+          type: 'encouragement',
+          mealType,
+          emoji: '👍',
+          streakContext,
+        };
+      } else if (motivationStyle === 'warning') {
+        return {
+          title: `${mealLabels[mealType]} - Chưa đủ`,
+          body: `Mới ${caloriesLogged}kcal, còn cách mục tiêu ${calorieTarget - caloriesLogged}kcal. ${streakLine}`,
+          type: 'warning',
+          mealType,
+          emoji: '📊',
+          streakContext,
+        };
+      }
+    } else if (adherencePercentage < 90) {
+      if (motivationStyle === 'encouraging') {
+        return {
+          title: `${mealLabels[mealType]} - Sắp xong!`,
+          body: `${caloriesLogged}kcal rồi, tiếp tục thêm chút nữa để đạt mục tiêu! ${streakLine}`,
+          type: 'encouragement',
+          mealType,
+          emoji: '💪',
+          streakContext,
+        };
+      } else if (motivationStyle === 'warning') {
+        return {
+          title: `${mealLabels[mealType]} - Gần đủ rồi`,
+          body: `${caloriesLogged}kcal, chỉ còn ${calorieTarget - caloriesLogged}kcal nữa thôi. ${streakLine}`,
+          type: 'warning',
+          mealType,
+          emoji: '⚠️',
+          streakContext,
+        };
+      }
+    } else if (adherencePercentage < 110) {
+      return {
+        title: `${mealLabels[mealType]} - Hoàn hảo! ✨`,
+        body: `Bạn đã đạt mục tiêu ${calorieTarget}kcal cho bữa này. Tuyệt vời! Streak tốt nhất của bạn đang là ${longestStreak} ngày.`,
+        type: currentStreak >= 3 ? 'streak' : 'encouragement',
+        mealType,
+        emoji: '🎉',
+        streakContext,
+      };
+    } else {
+      if (motivationStyle === 'warning') {
+        return {
+          title: `${mealLabels[mealType]} - Vượt mục tiêu`,
+          body: `Bạn đã ăn ${caloriesLogged}kcal, vượt ${caloriesLogged - calorieTarget}kcal. Cân nhắc lại nếu còn ăn. ${streakLine}`,
+          type: 'warning',
+          mealType,
+          emoji: '⚠️',
+          streakContext,
+        };
+      } else {
+        return {
+          title: `${mealLabels[mealType]} - Ăn thêm thôi`,
+          body: `Bạn đã ăn ${caloriesLogged}kcal. Tùy bạn có muốn ăn thêm không. ${streakLine}`,
+          type: 'encouragement',
+          mealType,
+          emoji: '😋',
+          streakContext,
+        };
+      }
+    }
+
+    // Default neutral message
+    return {
+      title: mealLabels[mealType],
+      body: `Bạn đã log ${caloriesLogged}kcal cho bữa này. Mục tiêu là ${calorieTarget}kcal. ${streakLine}`,
+      type: 'reminder',
+      mealType,
+      emoji: '📝',
+      streakContext,
+    };
+  }
+
+  async generatePreviewNudge(
+    userId: string,
+    mealType: 'breakfast' | 'lunch' | 'dinner' | 'snack',
+    caloriesLogged?: number,
+  ): Promise<NudgeMessage> {
+    const prefs = await this.getReminderPreferences(userId);
+    const [summary, userTargetRes] = await Promise.all([
+      this.gamificationService.getSummary(userId),
+      this.supabase.db
+        .from('users')
+        .select('daily_calorie_target')
+        .eq('id', userId)
+        .single(),
+    ]);
+
+    const dailyTarget = userTargetRes.data?.daily_calorie_target ?? 1800;
+    const mealTarget = dailyTarget / 4;
+    const resolvedCalories = caloriesLogged ?? Math.random() * (mealTarget * 1.5);
+
+    return this.generateNudgeMessage({
+      mealType,
+      caloriesLogged: Math.round(resolvedCalories),
+      calorieTarget: Math.round(mealTarget),
+      adherencePercentage: Math.round((resolvedCalories / mealTarget) * 100),
+      mealsLogged: caloriesLogged ? 1 : 0,
+      motivationStyle: prefs.nudge_motivation_style,
+      currentStreak: summary.current_streak,
+      longestStreak: summary.longest_streak,
+      nextStreakMilestone: summary.next_streak_milestone,
+    });
+  }
+
+  /**
+   * Generate nudge for all reminders enabled at current time
+   */
+  async generateDueReminders(userId: string): Promise<NudgeMessage[]> {
+    const prefs = await this.getReminderPreferences(userId);
+    if (!prefs.allow_push_notifications) return [];
+
+    const summary = await this.gamificationService.getSummary(userId);
+    const now = new Date();
+    const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+    const dueReminders: NudgeMessage[] = [];
+
+    // Check each meal type
+    const mealTypes = ['breakfast', 'lunch', 'dinner', 'snack'] as const;
+    for (const meal of mealTypes) {
+      const enabled = prefs[`${meal}_reminder_enabled`];
+      const time = prefs[`${meal}_reminder_time`];
+
+      if (enabled && time === currentTime) {
+        // Get today's calories for this meal type
+        const { data: logs, error } = await this.supabase.db
+          .from('food_logs')
+          .select('calories')
+          .eq('user_id', userId)
+          .eq('meal_type', meal)
+          .gte('logged_at', new Date().toISOString().split('T')[0] + 'T00:00:00');
+
+        if (error) continue;
+
+        const caloriesLogged = (logs ?? []).reduce((s, l) => s + l.calories, 0);
+
+        // Get user's daily target
+        const { data: userData } = await this.supabase.db
+          .from('users')
+          .select('daily_calorie_target')
+          .eq('id', userId)
+          .single();
+
+        const dailyTarget = userData?.daily_calorie_target ?? 1800;
+        const mealTarget = dailyTarget / 4; // Simple division by 4 meals
+
+        const nudge = this.generateNudgeMessage({
+          mealType: meal,
+          caloriesLogged,
+          calorieTarget: Math.round(mealTarget),
+          adherencePercentage: Math.round((caloriesLogged / mealTarget) * 100),
+          mealsLogged: logs?.length ?? 0,
+          motivationStyle: prefs.nudge_motivation_style,
+          currentStreak: summary.current_streak,
+          longestStreak: summary.longest_streak,
+          nextStreakMilestone: summary.next_streak_milestone,
+        });
+
+        dueReminders.push(nudge);
+      }
+    }
+
+    return dueReminders;
+  }
+}

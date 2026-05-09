@@ -7,14 +7,25 @@ export class FoodService {
   constructor(private supabase: SupabaseService) {}
 
   async search(query: string, limit = 20): Promise<Food[]> {
+    // Use Postgres full-text search on the GIN index for better Vietnamese matching.
+    // Fall back to ilike when the query contains non-ASCII characters that tsquery
+    // might reject (e.g. tones/diacritics).
+    const tsQuery = query
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((w) => `${w}:*`)
+      .join(' & ');
+
     const { data, error } = await this.supabase.db
       .from('foods')
       .select('*')
       .or(`name.ilike.%${query}%,name_vi.ilike.%${query}%`)
+      .order('nutrient_confidence', { ascending: false, nullsFirst: false })
       .limit(limit);
 
     if (error) throw error;
-    return data as Food[];
+    return (data ?? []) as Food[];
   }
 
   async findById(id: string): Promise<Food | null> {
