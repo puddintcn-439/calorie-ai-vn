@@ -19,6 +19,7 @@ apps/mobile/.expo/
 # Logs
 *.log
 npm-debug.log*
+apps/backend/logs/*.jsonl
 
 # OS
 .DS_Store
