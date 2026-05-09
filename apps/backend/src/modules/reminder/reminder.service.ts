@@ -2,12 +2,14 @@ import { Injectable } from '@nestjs/common';
 import { SupabaseService } from '../../common/supabase/supabase.service';
 import { ReminderPreferences, ReminderPreferencesDto, NudgeMessage, NudgeContext } from '@calorie-ai/types';
 import { GamificationService } from '../gamification/gamification.service';
+import { FirebaseService } from '../../common/firebase/firebase.service';
 
 @Injectable()
 export class ReminderService {
   constructor(
     private supabase: SupabaseService,
     private gamificationService: GamificationService,
+    private firebase: FirebaseService,
   ) {}
 
   private allowMissingTableFallback(): boolean {
@@ -428,4 +430,71 @@ export class ReminderService {
     const adjustedTarget = Math.round(baseTarget * (1 + adjustment.buffer));
     return { adjustedTarget, feedbackTone: adjustment.tone };
   }
+
+  /**
+   * Send push notification to user's device(s) via Firebase
+   */
+  async sendPushNotification(userId: string, title: string, body: string, data?: Record<string, string>): Promise<boolean> {
+    try {
+      if (!this.firebase.isAvailable()) {
+        console.debug('[Reminder] Firebase not available, skipping push');
+        return false;
+      }
+
+      // Get user's push tokens
+      const { data: tokens, error } = await this.supabase.db
+        .from('push_notification_tokens')
+        .select('token')
+        .eq('user_id', userId)
+        .eq('active', true);
+
+      if (error) {
+        console.warn('[Reminder] Failed to fetch push tokens:', error);
+        return false;
+      }
+
+      if (!tokens || tokens.length === 0) {
+        console.debug(`[Reminder] No active push tokens for user ${userId}`);
+        return false;
+      }
+
+      // Send to all tokens
+      const tokenList = tokens.map((t) => t.token);
+      const results = await this.firebase.sendToMultiple(tokenList, {
+        title,
+        body,
+        data,
+      });
+
+      // Mark failed/invalid tokens as inactive
+      const failedTokens = Object.entries(results)
+        .filter(([_, messageId]) => messageId === null)
+        .map(([token]) => token);
+
+      if (failedTokens.length > 0) {
+        await this.supabase.db
+          .from('push_notification_tokens')
+          .update({ active: false })
+          .in('token', failedTokens);
+      }
+
+      const successCount = Object.values(results).filter((m) => m !== null).length;
+      console.log(`[Reminder] Sent push to ${successCount}/${tokenList.length} devices for user ${userId}`);
+      return successCount > 0;
+    } catch (error) {
+      console.error('[Reminder] Error sending push notification:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Send nudge message as push notification
+   */
+  async sendNudgePush(userId: string, nudgeMessage: NudgeMessage): Promise<boolean> {
+    return this.sendPushNotification(userId, nudgeMessage.title, nudgeMessage.body, {
+      type: nudgeMessage.type,
+      mealType: nudgeMessage.mealType,
+    });
+  }
 }
+

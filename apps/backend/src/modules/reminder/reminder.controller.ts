@@ -146,4 +146,13 @@ export class ReminderController {
     }
     return { registered: true };
   }
+
+  @Post('push-test')
+  @ApiOperation({ summary: 'Send test push notification' })
+  async sendTestPush(@Request() req: any, @Body() body: TestNudgeDto) {
+    const userId = req.user.id ?? req.user.sub;
+    const nudge = this.reminder.generatePreviewNudge(userId, body.meal_type, body.calories_logged ?? 0);
+    const sent = await this.reminder.sendNudgePush(userId, nudge);
+    return { sent, nudge };
+  }
 }
