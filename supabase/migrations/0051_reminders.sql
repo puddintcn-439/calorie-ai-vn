@@ -19,15 +19,17 @@ create table if not exists public.reminder_preferences (
   updated_at        timestamptz not null default now()
 );
 
-create index reminder_preferences_user_idx on public.reminder_preferences(user_id);
+create index if not exists reminder_preferences_user_idx on public.reminder_preferences(user_id);
 
 -- RLS: users see only their own preferences
 alter table public.reminder_preferences enable row level security;
 
+drop policy if exists "Users manage own preferences" on public.reminder_preferences;
 create policy "Users manage own preferences"
   on public.reminder_preferences for all
   using (auth.uid() = user_id);
 
+drop policy if exists "Service role full access on preferences" on public.reminder_preferences;
 create policy "Service role full access on preferences"
   on public.reminder_preferences for all
   using (auth.role() = 'service_role');

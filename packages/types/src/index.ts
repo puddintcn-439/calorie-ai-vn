@@ -11,3 +11,4 @@ export * from './gamification.types';
 export * from './context.types';
 export * from './coach.types';
 export * from './body-progress.types';
+export * from './roadmap.types';

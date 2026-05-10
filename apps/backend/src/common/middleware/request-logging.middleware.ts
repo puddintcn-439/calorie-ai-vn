@@ -2,6 +2,7 @@ import { Injectable, NestMiddleware } from '@nestjs/common';
 import { Request, Response, NextFunction } from 'express';
 import * as fs from 'fs';
 import * as path from 'path';
+import { MetricsService } from '../metrics/metrics.service';
 
 export interface RequestLog {
   timestamp: string;
@@ -18,7 +19,7 @@ export class RequestLoggingMiddleware implements NestMiddleware {
   private logStream: fs.WriteStream;
   private readonly logsDir = process.env.LOGS_DIR || './logs';
 
-  constructor() {
+  constructor(private readonly metricsService: MetricsService) {
     // Ensure logs directory exists
     if (!fs.existsSync(this.logsDir)) {
       fs.mkdirSync(this.logsDir, { recursive: true });
@@ -35,6 +36,7 @@ export class RequestLoggingMiddleware implements NestMiddleware {
   use(req: Request, res: Response, next: NextFunction) {
     const startTime = Date.now();
     const logStream = this.logStream;
+    const metricsService = this.metricsService;
 
     // Capture original send
     const originalSend = res.send;
@@ -57,6 +59,9 @@ export class RequestLoggingMiddleware implements NestMiddleware {
       } catch (err) {
         console.error('Failed to write request log:', err);
       }
+
+      // Record HTTP metric
+      metricsService.recordHttpRequest(res.statusCode);
 
       // Only log errors and slow requests to console
       if (res.statusCode >= 400 || duration > 1000) {

@@ -8,13 +8,17 @@ import {
   AIUnresolvedItem,
 } from '@calorie-ai/types';
 import { randomUUID } from 'crypto';
+import { MetricsService } from '../../common/metrics/metrics.service';
 
 @Injectable()
 export class AiService {
   private readonly logger = new Logger(AiService.name);
   private genAI: GoogleGenerativeAI;
 
-  constructor(private config: ConfigService) {
+  constructor(
+    private config: ConfigService,
+    private metrics: MetricsService,
+  ) {
     this.genAI = new GoogleGenerativeAI(this.config.getOrThrow('GEMINI_API_KEY'));
   }
 
@@ -31,9 +35,12 @@ export class AiService {
     try {
       const result = await model.generateContent([prompt, imagePart]);
       const text = result.response.text();
-      return this.parseAIResponse(text, Date.now() - start);
+      const response = this.parseAIResponse(text, Date.now() - start);
+      this.metrics.recordAiScan(true);
+      return response;
     } catch (error) {
       this.logger.error('Gemini scan failed', error);
+      this.metrics.recordAiScan(false);
       throw error;
     }
   }
@@ -47,9 +54,12 @@ export class AiService {
     try {
       const result = await model.generateContent(prompt);
       const text = result.response.text();
-      return this.parseAIResponse(text, Date.now() - start);
+      const response = this.parseAIResponse(text, Date.now() - start);
+      this.metrics.recordAiScan(true);
+      return response;
     } catch (error) {
       this.logger.error('Gemini text scan failed', error);
+      this.metrics.recordAiScan(false);
       throw error;
     }
   }

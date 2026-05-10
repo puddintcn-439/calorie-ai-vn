@@ -19,18 +19,20 @@ create table if not exists public.correction_events (
   created_at        timestamptz not null default now()
 );
 
-create index correction_events_user_idx on public.correction_events(user_id);
-create index correction_events_type_idx on public.correction_events(event_type);
-create index correction_events_date_idx on public.correction_events(created_at);
-create index correction_events_user_date_idx on public.correction_events(user_id, created_at desc);
+create index if not exists correction_events_user_idx on public.correction_events(user_id);
+create index if not exists correction_events_type_idx on public.correction_events(event_type);
+create index if not exists correction_events_date_idx on public.correction_events(created_at);
+create index if not exists correction_events_user_date_idx on public.correction_events(user_id, created_at desc);
 
 -- RLS: users see only their own corrections
 alter table public.correction_events enable row level security;
 
+drop policy if exists "Users manage own corrections" on public.correction_events;
 create policy "Users manage own corrections"
   on public.correction_events for all
   using (auth.uid() = user_id);
 
+drop policy if exists "Service role full access on corrections" on public.correction_events;
 create policy "Service role full access on corrections"
   on public.correction_events for all
   using (auth.role() = 'service_role');

@@ -137,6 +137,37 @@ describe('LogService.getDailyLog', () => {
     const service = new LogService(supabase);
     await expect(service.getDailyLog('u1', '2026-05-09')).rejects.toThrow('query error');
   });
+
+  it('applies local-day UTC range using tz_offset_minutes', async () => {
+    const gte = jest.fn().mockReturnThis();
+    const lte = jest.fn().mockReturnThis();
+
+    const supabase = makeSupabase((table: string) => {
+      if (table === 'food_logs') {
+        return {
+          select: jest.fn().mockReturnThis(),
+          eq: jest.fn().mockReturnThis(),
+          gte,
+          lte,
+          order: jest.fn().mockResolvedValue({ data: [], error: null }),
+        };
+      }
+      if (table === 'users') {
+        return {
+          select: jest.fn().mockReturnThis(),
+          eq: jest.fn().mockReturnThis(),
+          single: jest.fn().mockResolvedValue({ data: { daily_calorie_target: 1800 }, error: null }),
+        };
+      }
+      return makeChain({ data: null, error: null });
+    });
+
+    const service = new LogService(supabase);
+    await service.getDailyLog('u1', '2026-05-10', -420);
+
+    expect(gte).toHaveBeenCalledWith('logged_at', '2026-05-09T17:00:00.000Z');
+    expect(lte).toHaveBeenCalledWith('logged_at', '2026-05-10T16:59:59.999Z');
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -611,6 +642,30 @@ describe('LogService.getActivityLogs', () => {
     });
     const service = new LogService(supabase);
     await expect(service.getActivityLogs('u1', '2026-05-09')).rejects.toThrow('activity query failed');
+  });
+
+  it('applies timezone-aware range for activity query boundaries', async () => {
+    const gte = jest.fn().mockReturnThis();
+    const lte = jest.fn().mockReturnThis();
+
+    const supabase = makeSupabase((table: string) => {
+      if (table === 'activity_logs') {
+        return {
+          select: jest.fn().mockReturnThis(),
+          eq: jest.fn().mockReturnThis(),
+          gte,
+          lte,
+          order: jest.fn().mockResolvedValue({ data: [], error: null }),
+        };
+      }
+      return makeChain({ data: null, error: null });
+    });
+
+    const service = new LogService(supabase);
+    await service.getActivityLogs('u1', '2026-05-10', 300);
+
+    expect(gte).toHaveBeenCalledWith('logged_at', '2026-05-10T05:00:00.000Z');
+    expect(lte).toHaveBeenCalledWith('logged_at', '2026-05-11T04:59:59.999Z');
   });
 });
 

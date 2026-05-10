@@ -1,6 +1,9 @@
 import { IsNumber, IsPositive, IsEnum } from 'class-validator';
 import { UserGoal, ActivityLevel } from '@calorie-ai/types';
 
+export type BodyStatus = 'underweight' | 'normal' | 'overweight' | 'obese';
+export type WeightRecommendation = 'increase' | 'maintain' | 'decrease';
+
 export class CalculateTargetDto {
   @IsNumber()
   @IsPositive()
@@ -28,6 +31,11 @@ export interface CalorieTargetResponse {
   daily_calorie_target: number;
   bmr: number;
   tdee: number;
+  bmi: number;
+  body_status: BodyStatus;
+  weight_recommendation: WeightRecommendation;
+  recommended_goal: UserGoal;
+  recommendation_note: string;
   target_breakfast_cal: number;
   target_lunch_cal: number;
   target_dinner_cal: number;

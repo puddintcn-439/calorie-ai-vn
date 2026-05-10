@@ -4,7 +4,7 @@ import { CalorieTargetService } from '../calorie-target.service';
 import { UserService } from '../../user/user.service';
 import { WeeklyAdaptiveService } from '../weekly-adaptive.service';
 import { RecommendationService } from '../recommendation.service';
-import { CalculateTargetDto } from '../dto/calorie-target.dto';
+import { CalculateTargetDto, CalorieTargetResponse } from '../dto/calorie-target.dto';
 
 function makeProfile(overrides: Record<string, unknown> = {}) {
   return {
@@ -68,10 +68,15 @@ describe('CalorieTargetController', () => {
         goal: 'maintain',
       };
 
-      const expected = {
+      const expected: CalorieTargetResponse = {
         daily_calorie_target: 2200,
         bmr: 1600,
         tdee: 2200,
+        bmi: 24.2,
+        body_status: 'overweight',
+        weight_recommendation: 'decrease',
+        recommended_goal: 'lose_weight',
+        recommendation_note: 'Body status indicates overweight. A moderate calorie deficit can help reduce weight safely.',
         target_breakfast_cal: 550,
         target_lunch_cal: 770,
         target_dinner_cal: 660,
@@ -100,10 +105,15 @@ describe('CalorieTargetController', () => {
     it('loads profile from req.user and returns target', async () => {
       const req = { user: { id: 'user-1', email: 'user@example.com' } };
       const profile = makeProfile();
-      const expected = {
+      const expected: CalorieTargetResponse = {
         daily_calorie_target: 2000,
         bmr: 1600,
         tdee: 2000,
+        bmi: 24.2,
+        body_status: 'overweight',
+        weight_recommendation: 'decrease',
+        recommended_goal: 'lose_weight',
+        recommendation_note: 'Body status indicates overweight. A moderate calorie deficit can help reduce weight safely.',
         target_breakfast_cal: 500,
         target_lunch_cal: 700,
         target_dinner_cal: 600,
@@ -138,10 +148,15 @@ describe('CalorieTargetController', () => {
   describe('getTargetForUser', () => {
     it('returns target for target user id', async () => {
       const profile = makeProfile({ id: 'user-2' });
-      const expected = {
+      const expected: CalorieTargetResponse = {
         daily_calorie_target: 2100,
         bmr: 1600,
         tdee: 2100,
+        bmi: 24.2,
+        body_status: 'overweight',
+        weight_recommendation: 'decrease',
+        recommended_goal: 'lose_weight',
+        recommendation_note: 'Body status indicates overweight. A moderate calorie deficit can help reduce weight safely.',
         target_breakfast_cal: 525,
         target_lunch_cal: 735,
         target_dinner_cal: 630,

@@ -103,7 +103,7 @@ export class InsightsService {
       const dayProtein = dayLogs.reduce((s, l) => s + l.protein_g, 0);
       const dayCarbs = dayLogs.reduce((s, l) => s + l.carbs_g, 0);
       const dayFat = dayLogs.reduce((s, l) => s + l.fat_g, 0);
-      const adherence = Math.min(100, (dayCalories / dailyTarget) * 100);
+      const adherence = (dayCalories / dailyTarget) * 100;
 
       dailyInsights.push({
         date: dateStr,

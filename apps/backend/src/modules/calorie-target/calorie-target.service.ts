@@ -1,9 +1,67 @@
 import { Injectable } from '@nestjs/common';
 import { UserProfile, ActivityLevel, UserGoal } from '@calorie-ai/types';
-import { CalculateTargetDto, CalorieTargetResponse } from './dto/calorie-target.dto';
+import {
+  CalculateTargetDto,
+  CalorieTargetResponse,
+  BodyStatus,
+  WeightRecommendation,
+} from './dto/calorie-target.dto';
 
 @Injectable()
 export class CalorieTargetService {
+  private calculateBMI(weight_kg: number, height_cm: number): number {
+    const height_m = height_cm / 100;
+    return weight_kg / (height_m * height_m);
+  }
+
+  private classifyBodyStatus(
+    bmi: number,
+  ): {
+    body_status: BodyStatus;
+    weight_recommendation: WeightRecommendation;
+    recommended_goal: UserGoal;
+    recommendation_note: string;
+  } {
+    // Asia-Pacific cutoffs are used to fit Vietnamese population context.
+    if (bmi < 18.5) {
+      return {
+        body_status: 'underweight',
+        weight_recommendation: 'increase',
+        recommended_goal: 'gain_muscle',
+        recommendation_note:
+          'Body status indicates underweight. Consider increasing calories gradually with protein-rich meals and resistance training.',
+      };
+    }
+
+    if (bmi < 23) {
+      return {
+        body_status: 'normal',
+        weight_recommendation: 'maintain',
+        recommended_goal: 'maintain',
+        recommendation_note:
+          'Body status is in a healthy range. Maintain current weight with consistent calorie intake and activity.',
+      };
+    }
+
+    if (bmi < 25) {
+      return {
+        body_status: 'overweight',
+        weight_recommendation: 'decrease',
+        recommended_goal: 'lose_weight',
+        recommendation_note:
+          'Body status indicates overweight. A moderate calorie deficit can help reduce weight safely.',
+      };
+    }
+
+    return {
+      body_status: 'obese',
+      weight_recommendation: 'decrease',
+      recommended_goal: 'lose_weight',
+      recommendation_note:
+        'Body status indicates obesity. Prioritize gradual weight loss with a sustainable calorie deficit and regular activity.',
+    };
+  }
+
   /**
    * Mifflin-St Jeor formula for BMR (Basal Metabolic Rate)
    * Most accurate for general population
@@ -87,6 +145,11 @@ export class CalorieTargetService {
     const goal_adjustment = this.getGoalAdjustment(goal);
     const daily_calorie_target = Math.round(tdee * goal_adjustment);
 
+    // Step 3.5: Calculate BMI and recommendation based on body status
+    const bmiValue = this.calculateBMI(weight_kg, height_cm);
+    const bmi = Math.round(bmiValue * 10) / 10;
+    const bodyGuidance = this.classifyBodyStatus(bmi);
+
     // Step 4: Calculate meal targets
     const meal_breakdown = this.getMealBreakdown(daily_calorie_target);
 
@@ -94,6 +157,11 @@ export class CalorieTargetService {
       daily_calorie_target,
       bmr: Math.round(bmr),
       tdee: Math.round(tdee),
+      bmi,
+      body_status: bodyGuidance.body_status,
+      weight_recommendation: bodyGuidance.weight_recommendation,
+      recommended_goal: bodyGuidance.recommended_goal,
+      recommendation_note: bodyGuidance.recommendation_note,
       target_breakfast_cal: meal_breakdown.breakfast,
       target_lunch_cal: meal_breakdown.lunch,
       target_dinner_cal: meal_breakdown.dinner,

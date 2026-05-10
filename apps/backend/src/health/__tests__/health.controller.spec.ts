@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { HealthController } from '../health.controller';
 import { HealthService } from '../health.service';
+import { MetricsService } from '../../common/metrics/metrics.service';
 
 describe('HealthController', () => {
   let controller: HealthController;
@@ -26,6 +27,10 @@ describe('HealthController', () => {
               uptime: 100,
             }),
           },
+        },
+        {
+          provide: MetricsService,
+          useValue: { getSnapshot: jest.fn().mockReturnValue({ counters: {}, alerts: [] }) },
         },
       ],
     }).compile();

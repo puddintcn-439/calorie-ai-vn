@@ -2,6 +2,14 @@ import { AuthService } from '../auth.service';
 import { JwtService } from '@nestjs/jwt';
 import { SupabaseService } from '../../../common/supabase/supabase.service';
 import { ConflictException, UnauthorizedException } from '@nestjs/common';
+import { MetricsService } from '../../../common/metrics/metrics.service';
+
+function makeMetrics(): MetricsService {
+  return {
+    recordAuthSuccess: jest.fn(),
+    recordAuthFailure: jest.fn(),
+  } as unknown as MetricsService;
+}
 
 function makeJwt(token = 'signed-jwt'): JwtService {
   return { sign: jest.fn().mockReturnValue(token) } as unknown as JwtService;
@@ -41,7 +49,7 @@ describe('AuthService.register', () => {
     }, { data: null, error: null });
 
     const jwt = makeJwt('my-token');
-    const service = new AuthService(supabase, jwt);
+    const service = new AuthService(supabase, jwt, makeMetrics());
 
     const result = await service.register({
       email: 'test@example.com',
@@ -64,7 +72,7 @@ describe('AuthService.register', () => {
       { data: null, error: { message: 'Email already exists' } },
     );
 
-    const service = new AuthService(supabase, makeJwt());
+    const service = new AuthService(supabase, makeJwt(), makeMetrics());
     await expect(service.register({
       email: 'dup@example.com',
       password: 'pass',
@@ -94,7 +102,7 @@ describe('AuthService.login', () => {
     } as unknown as SupabaseService;
 
     const jwt = makeJwt('login-token');
-    const service = new AuthService(supabase, jwt);
+    const service = new AuthService(supabase, jwt, makeMetrics());
 
     const result = await service.login({ email: 'u@example.com', password: 'secret' });
     expect(result.access_token).toBe('login-token');
@@ -116,7 +124,7 @@ describe('AuthService.login', () => {
       createAuthClient: jest.fn().mockReturnValue(authClient),
     } as unknown as SupabaseService;
 
-    const service = new AuthService(supabase, makeJwt());
+    const service = new AuthService(supabase, makeJwt(), makeMetrics());
     await expect(service.login({ email: 'x@x.com', password: 'wrong' }))
       .rejects.toThrow(UnauthorizedException);
   });

@@ -24,6 +24,7 @@ export default function RootLayout() {
       <Stack.Screen name="(auth)" />
       <Stack.Screen name="(tabs)" />
       <Stack.Screen name="achievements" />
+      <Stack.Screen name="health-sync" />
     </Stack>
   );
 }

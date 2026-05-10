@@ -23,16 +23,18 @@ create table if not exists public.food_logs (
   created_at        timestamptz not null default now()
 );
 
-create index food_logs_user_date_idx on public.food_logs(user_id, logged_at desc);
-create index food_logs_meal_type_idx on public.food_logs(meal_type);
+create index if not exists food_logs_user_date_idx on public.food_logs(user_id, logged_at desc);
+create index if not exists food_logs_meal_type_idx on public.food_logs(meal_type);
 
 -- RLS: users see only their own logs
 alter table public.food_logs enable row level security;
 
+drop policy if exists "Users manage own logs" on public.food_logs;
 create policy "Users manage own logs"
   on public.food_logs for all
   using (auth.uid() = user_id);
 
+drop policy if exists "Service role full access on logs" on public.food_logs;
 create policy "Service role full access on logs"
   on public.food_logs for all
   using (auth.role() = 'service_role');

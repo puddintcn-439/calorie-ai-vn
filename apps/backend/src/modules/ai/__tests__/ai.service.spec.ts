@@ -1,5 +1,6 @@
 import { AiService } from '../ai.service';
 import { ConfigService } from '@nestjs/config';
+import { MetricsService } from '../../../common/metrics/metrics.service';
 
 // Mock GoogleGenerativeAI so tests never make real HTTP calls
 jest.mock('@google/generative-ai', () => ({
@@ -16,8 +17,12 @@ function makeConfig(apiKey = 'test-key'): ConfigService {
   } as unknown as ConfigService;
 }
 
+function makeMetrics(): MetricsService {
+  return { recordAiScan: jest.fn() } as unknown as MetricsService;
+}
+
 function makeService(): AiService {
-  return new AiService(makeConfig());
+  return new AiService(makeConfig(), makeMetrics());
 }
 
 // Helper to access private parseAIResponse (synchronous)

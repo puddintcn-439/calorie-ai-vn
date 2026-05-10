@@ -1,6 +1,7 @@
-import { DailyLog, FoodLog, MealType, SavedMeal, ActivityLog, CreateActivityLogDto, ActivitySyncResult } from '@calorie-ai/types';
+import { DailyLog, FoodLog, MealType, SavedMeal, ActivityLog, CreateActivityLogDto, ActivitySyncResult, DailyRoadmapItem, CreateDailyRoadmapItemDto, UpdateDailyRoadmapItemDto, DailyRoadmapSyncDto } from '@calorie-ai/types';
 import { apiClient } from '../services/api';
 import { activitySyncService } from '../services/activity-sync.service';
+import { getLocalDateYmd, getLocalTimezoneOffsetMinutes } from '../services/date';
 
 const create = require('zustand').create as typeof import('zustand').create;
 
@@ -8,10 +9,12 @@ interface LogState {
   dailyLog: DailyLog | null;
   savedMeals: SavedMeal[];
   activityLogs: ActivityLog[];
+  dailyRoadmap: DailyRoadmapItem[];
   isLoading: boolean;
   fetchDailyLog: (date?: string) => Promise<void>;
   fetchSavedMeals: () => Promise<void>;
   fetchActivityLogs: (date?: string) => Promise<void>;
+  fetchDailyRoadmap: (date?: string) => Promise<void>;
   addLog: (data: Omit<Partial<FoodLog>, 'user_id'>) => Promise<void>;
   removeLog: (id: string) => Promise<void>;
   saveMeal: (name: string, items: SavedMeal['items']) => Promise<void>;
@@ -20,19 +23,25 @@ interface LogState {
   addActivity: (dto: CreateActivityLogDto) => Promise<void>;
   deleteActivity: (id: string) => Promise<void>;
   syncActivity: (date?: string) => Promise<ActivitySyncResult>;
+  addRoadmapItem: (dto: CreateDailyRoadmapItemDto) => Promise<DailyRoadmapItem>;
+  updateRoadmapItem: (itemId: string, dto: UpdateDailyRoadmapItemDto) => Promise<void>;
+  deleteRoadmapItem: (itemId: string) => Promise<void>;
+  syncRoadmapBatch: (dto: DailyRoadmapSyncDto) => Promise<void>;
 }
 
 export const useLogStore = create<LogState>((set, get) => ({
   dailyLog: null,
   savedMeals: [],
   activityLogs: [],
+  dailyRoadmap: [],
   isLoading: false,
 
   fetchDailyLog: async (date) => {
     set({ isLoading: true });
     try {
-      const d = date ?? new Date().toISOString().split('T')[0];
-      const res = await apiClient.get(`/log/daily?date=${d}`);
+      const d = date ?? getLocalDateYmd();
+      const tzOffset = getLocalTimezoneOffsetMinutes();
+      const res = await apiClient.get(`/log/daily?date=${d}&tz_offset_minutes=${tzOffset}`);
       set({ dailyLog: res.data });
     } finally {
       set({ isLoading: false });
@@ -45,9 +54,21 @@ export const useLogStore = create<LogState>((set, get) => ({
   },
 
   fetchActivityLogs: async (date) => {
-    const d = date ?? new Date().toISOString().split('T')[0];
-    const res = await apiClient.get(`/log/activity?date=${d}`);
+    const d = date ?? getLocalDateYmd();
+    const tzOffset = getLocalTimezoneOffsetMinutes();
+    const res = await apiClient.get(`/log/activity?date=${d}&tz_offset_minutes=${tzOffset}`);
     set({ activityLogs: res.data });
+  },
+
+  fetchDailyRoadmap: async (date) => {
+    try {
+      const d = date ?? getLocalDateYmd();
+      const res = await apiClient.get(`/roadmap/${d}`);
+      set({ dailyRoadmap: res.data });
+    } catch (error) {
+      console.error('Failed to fetch daily roadmap:', error);
+      set({ dailyRoadmap: [] });
+    }
   },
 
   addLog: async (data) => {
@@ -90,4 +111,32 @@ export const useLogStore = create<LogState>((set, get) => ({
     await get().fetchActivityLogs(date);
     return result;
   },
+
+  addRoadmapItem: async (dto) => {
+    const res = await apiClient.post('/roadmap', dto);
+    await get().fetchDailyRoadmap(dto.logged_date);
+    return res.data;
+  },
+
+  updateRoadmapItem: async (itemId, dto) => {
+    await apiClient.put(`/roadmap/${itemId}`, dto);
+    const roadmap = get().dailyRoadmap;
+    if (roadmap.length > 0) {
+      await get().fetchDailyRoadmap(roadmap[0].logged_date);
+    }
+  },
+
+  deleteRoadmapItem: async (itemId) => {
+    await apiClient.delete(`/roadmap/${itemId}`);
+    const roadmap = get().dailyRoadmap;
+    if (roadmap.length > 0) {
+      await get().fetchDailyRoadmap(roadmap[0].logged_date);
+    }
+  },
+
+  syncRoadmapBatch: async (dto) => {
+    await apiClient.post('/roadmap/sync/daily', dto);
+    await get().fetchDailyRoadmap(dto.logged_date);
+  },
 }));
+

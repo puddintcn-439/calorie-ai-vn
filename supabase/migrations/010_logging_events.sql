@@ -25,10 +25,12 @@ create index if not exists logging_events_user_created_idx on public.logging_eve
 
 alter table public.logging_events enable row level security;
 
+drop policy if exists "Users manage own logging events" on public.logging_events;
 create policy "Users manage own logging events"
   on public.logging_events for all
   using (auth.uid() = user_id);
 
+drop policy if exists "Service role full access on logging events" on public.logging_events;
 create policy "Service role full access on logging events"
   on public.logging_events for all
   using (auth.role() = 'service_role');

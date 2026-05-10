@@ -93,6 +93,41 @@ npm run dev:backend:ready
 npm run dev:mobile:web:ready
 ```
 
+### 7. Activity Sync Native QA
+
+Activity Sync now uses native HealthKit on iOS and Health Connect on Android. It is not available in Expo Go.
+
+Prerequisites:
+
+- Android: install Google Health Connect and grant steps, distance, and calories permissions
+- iPhone: Apple Health must be available and the app must be granted read access for steps, distance, and active energy
+- Use a dev build or internal preview build, not Expo Go
+
+Build commands:
+
+```bash
+# Android internal preview build
+cd apps/mobile
+npm run build:android:preview
+
+# iOS internal preview build
+cd apps/mobile
+npm run build:ios:preview
+```
+
+Phone test entry:
+
+```text
+calorieai://health-sync
+```
+
+The Health Sync diagnostics screen lets you:
+
+- verify provider readiness
+- inspect granted vs missing permissions
+- inspect today's synced steps / distance / calories snapshot
+- manually trigger activity sync for a chosen date
+
 ## API Endpoints
 
 | Method | Endpoint | Description |

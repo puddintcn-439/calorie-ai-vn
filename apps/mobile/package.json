@@ -8,6 +8,8 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "build": "eas build",
+    "build:android:preview": "npm exec eas-cli build -- --platform android --profile preview",
+    "build:ios:preview": "npm exec eas-cli build -- --platform ios --profile preview",
     "lint": "tsc --noEmit"
   },
   "dependencies": {

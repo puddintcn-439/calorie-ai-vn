@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   View, Text, StyleSheet, Alert,
   ActivityIndicator, useWindowDimensions, Switch, ScrollView, TouchableOpacity,
@@ -9,8 +9,9 @@ import { MaterialIcons } from '@expo/vector-icons';
 import { useAuthStore } from '../../store/auth.store';
 import { useReminderStore } from '../../store/reminder.store';
 import { useSubscriptionStore } from '../../store/subscription.store';
+import { useLogStore } from '../../store/log.store';
 import { apiClient } from '../../services/api';
-import { User, ActivityLevel, UserGoal, ReminderPreferences } from '@calorie-ai/types';
+import { User, ActivityLevel, UserGoal, ReminderPreferences, ActivityType, ACTIVITY_MET } from '@calorie-ai/types';
 import { BodyText, Eyebrow, HeroTitle, ScreenShell, SurfaceCard } from '../../components/ui-shell';
 import { UiButton } from '../../components/ui-button';
 import { UiChip } from '../../components/ui-chip';
@@ -30,6 +31,437 @@ const GOAL_LABELS: Record<UserGoal, string> = {
   gain_muscle: '💪 Tăng cơ',
 };
 
+type BodyStatus = 'underweight' | 'normal' | 'overweight' | 'obese';
+type WeightRecommendation = 'increase' | 'maintain' | 'decrease';
+
+type CalorieAssessment = {
+  bmi: number;
+  body_status: BodyStatus;
+  weight_recommendation: WeightRecommendation;
+  recommended_goal: UserGoal;
+  recommendation_note: string;
+  target_weight_kg: number;
+  weight_delta_kg: number;
+  recommended_activity_level: ActivityLevel;
+  activity_note: string;
+  exercise_plan: string[];
+};
+
+type InstantAssessmentResult = {
+  assessment: CalorieAssessment | null;
+  hint: string;
+};
+
+type InstantCalorieTargets = {
+  daily_calorie_target: number;
+  target_breakfast_cal: number;
+  target_lunch_cal: number;
+  target_dinner_cal: number;
+  target_snack_cal: number;
+};
+
+type ExerciseRoadmapItem = {
+  id: string;
+  title: string;
+  detail: string;
+  activity_type: ActivityType;
+  duration_min: number;
+  estimated_kcal: number;
+};
+
+const BODY_STATUS_LABELS: Record<BodyStatus, string> = {
+  underweight: 'Gầy',
+  normal: 'Bình thường',
+  overweight: 'Thừa cân',
+  obese: 'Béo phì',
+};
+
+const WEIGHT_RECOMMENDATION_LABELS: Record<WeightRecommendation, string> = {
+  increase: 'Nên tăng cân',
+  maintain: 'Nên duy trì cân nặng',
+  decrease: 'Nên giảm cân',
+};
+
+const ACTIVITY_RECOMMENDATION_LABELS: Record<ActivityLevel, string> = {
+  sedentary: 'Ít vận động',
+  light: 'Nhẹ',
+  moderate: 'Vừa',
+  active: 'Nhiều',
+  very_active: 'Rất nhiều',
+};
+
+const BODY_STATUS_TONES: Record<
+  BodyStatus,
+  { bg: string; border: string; accent: string; text: string; badgeBg: string }
+> = {
+  underweight: {
+    bg: '#0f2b3d',
+    border: '#2f95c6',
+    accent: '#7dd3fc',
+    text: '#e0f2fe',
+    badgeBg: '#123a53',
+  },
+  normal: {
+    bg: '#0f2f22',
+    border: '#22c55e',
+    accent: '#86efac',
+    text: '#dcfce7',
+    badgeBg: '#16442f',
+  },
+  overweight: {
+    bg: '#3a2a12',
+    border: '#f59e0b',
+    accent: '#fcd34d',
+    text: '#fef3c7',
+    badgeBg: '#52370f',
+  },
+  obese: {
+    bg: '#3b1720',
+    border: '#ef4444',
+    accent: '#fca5a5',
+    text: '#fee2e2',
+    badgeBg: '#5d1f2a',
+  },
+};
+
+function round1(value: number): number {
+  return Math.round(value * 10) / 10;
+}
+
+function buildExercisePlan(
+  level: ActivityLevel,
+  recommendation: WeightRecommendation,
+  bodyStatus: BodyStatus,
+): string[] {
+  if (bodyStatus === 'underweight') {
+    return [
+      'Tập sức mạnh 3-4 buổi/tuần (squat, push-up, row, hip hinge), tăng tạ nhẹ dần mỗi 1-2 tuần.',
+      'Cardio nhẹ 20-25 phút, 2-3 buổi/tuần (đi bộ nhanh hoặc xe đạp nhẹ), tránh đốt quá nhiều calo.',
+      'Bài tập core 2 buổi/tuần (plank, dead bug) + mobility 10 phút cuối buổi để hồi phục.',
+      'Ưu tiên số lần lặp 8-12 reps, nghỉ đủ 60-90 giây để hỗ trợ tăng cơ.',
+    ];
+  }
+
+  if (bodyStatus === 'normal') {
+    return [
+      'Cardio nền tảng 30-40 phút, 3-4 buổi/tuần (đi bộ nhanh, chạy nhẹ, bơi).',
+      'Tập sức mạnh toàn thân 2-3 buổi/tuần để duy trì cơ và tư thế tốt.',
+      'Thêm 1 buổi hoạt động yêu thích (thể thao, đạp xe, nhảy) để giữ thói quen bền vững.',
+      'Mỗi ngày 7.000-10.000 bước, kèm 5-10 phút giãn cơ.',
+    ];
+  }
+
+  if (bodyStatus === 'obese') {
+    return [
+      'Tuần 1-2: đi bộ 20-30 phút, 5 buổi/tuần; tăng dần lên 35-45 phút từ tuần 3.',
+      'Tập sức mạnh tác động thấp 2-3 buổi/tuần (sit-to-stand, wall push-up, glute bridge).',
+      'Thêm vận động ít áp lực khớp như xe đạp tại chỗ hoặc bơi 2 buổi/tuần.',
+      'Mục tiêu tăng dần thời gian vận động mỗi tuần, ưu tiên đều đặn hơn là cường độ cao.',
+    ];
+  }
+
+  if (level === 'active' || level === 'very_active') {
+    return [
+      'Cardio 45-60 phút, 5-6 buổi/tuần (zone 2 là chính) để giảm mỡ bền vững.',
+      'Tập sức mạnh 3-4 buổi/tuần, ưu tiên bài compound để giữ khối cơ khi giảm cân.',
+      'HIIT 1 buổi/tuần (12-18 phút) là đủ, tránh quá tải phục hồi.',
+      'Theo dõi nhịp tim và ngày nghỉ chủ động để kiểm soát mệt mỏi.',
+    ];
+  }
+
+  if (level === 'moderate') {
+    return [
+      'Cardio 35-45 phút, 4-5 buổi/tuần (đi bộ nhanh, đạp xe, elliptical).',
+      'Tập sức mạnh toàn thân 3 buổi/tuần, tập trung nhóm cơ lớn.',
+      '1 buổi interval nhẹ/tuần (nhanh 1 phút - chậm 2 phút, lặp 6-8 vòng).',
+      'Giãn cơ 10 phút sau tập và 1 ngày hồi phục chủ động/tuần.',
+    ];
+  }
+
+  if (recommendation === 'decrease') {
+    return [
+      'Đi bộ nhanh 30-40 phút, 5 buổi/tuần để tăng tiêu hao năng lượng ổn định.',
+      'Tập sức mạnh cơ bản 2-3 buổi/tuần (squat ghế, kéo dây, chống đẩy biến thể).',
+      'Tăng dần số bước hằng ngày (mục tiêu thêm 1.000 bước mỗi 2 tuần).',
+      'Ưu tiên kỹ thuật đúng và duy trì lịch tập đều trước khi tăng cường độ.',
+    ];
+  }
+
+  return [
+    'Hoạt động nhẹ 25-35 phút, 4-5 buổi/tuần để duy trì thể lực nền.',
+    'Tập sức mạnh cơ bản 2 buổi/tuần để giữ cơ và độ linh hoạt.',
+    'Kết hợp 1 buổi kéo giãn hoặc yoga nhẹ giúp phục hồi tốt hơn.',
+  ];
+}
+
+function estimateExerciseCalories(activityType: ActivityType, durationMin: number, weightKg: number): number {
+  const met = ACTIVITY_MET[activityType] ?? 5;
+  const safeWeight = Number.isFinite(weightKg) && weightKg > 0 ? weightKg : 65;
+  return Math.max(1, Math.round(met * safeWeight * (durationMin / 60)));
+}
+
+function buildExerciseRoadmap(
+  bodyStatus: BodyStatus,
+  activityLevel: ActivityLevel,
+  recommendation: WeightRecommendation,
+  weightKg: number,
+): ExerciseRoadmapItem[] {
+  const key = `${bodyStatus}-${activityLevel}-${recommendation}`;
+
+  const basePlan: Omit<ExerciseRoadmapItem, 'id' | 'estimated_kcal'>[] =
+    bodyStatus === 'underweight'
+      ? [
+          {
+            title: 'Sức mạnh thân dưới',
+            detail: 'Squat, glute bridge, lunge nhẹ để tăng cơ nền.',
+            activity_type: 'gym',
+            duration_min: 35,
+          },
+          {
+            title: 'Đi bộ hồi phục',
+            detail: 'Đi bộ nhẹ sau bữa tối để tăng trao đổi chất nhẹ nhàng.',
+            activity_type: 'walking',
+            duration_min: 20,
+          },
+          {
+            title: 'Core + mobility',
+            detail: 'Plank, dead bug và giãn cơ để cải thiện kỹ thuật tập.',
+            activity_type: 'yoga',
+            duration_min: 18,
+          },
+        ]
+      : bodyStatus === 'normal'
+        ? [
+            {
+              title: 'Cardio nền tảng',
+              detail: 'Đi bộ nhanh hoặc chạy rất nhẹ để giữ tim mạch tốt.',
+              activity_type: 'walking',
+              duration_min: 30,
+            },
+            {
+              title: 'Sức mạnh toàn thân',
+              detail: 'Push-up, row, squat bodyweight để giữ cơ.',
+              activity_type: 'gym',
+              duration_min: 30,
+            },
+            {
+              title: 'Kéo giãn chủ động',
+              detail: 'Yoga nhẹ để phục hồi và duy trì linh hoạt.',
+              activity_type: 'yoga',
+              duration_min: 20,
+            },
+          ]
+        : bodyStatus === 'obese'
+          ? [
+              {
+                title: 'Đi bộ chia chặng',
+                detail: 'Đi bộ 3 chặng ngắn trong ngày để giảm áp lực khớp.',
+                activity_type: 'walking',
+                duration_min: 35,
+              },
+              {
+                title: 'Sức mạnh tác động thấp',
+                detail: 'Sit-to-stand, wall push-up, band pull để tăng nền cơ.',
+                activity_type: 'gym',
+                duration_min: 25,
+              },
+              {
+                title: 'Đạp xe nhẹ',
+                detail: 'Nhịp ổn định, ưu tiên đều đặn hơn cường độ cao.',
+                activity_type: 'cycling',
+                duration_min: 20,
+              },
+            ]
+          : activityLevel === 'active' || activityLevel === 'very_active'
+            ? [
+                {
+                  title: 'Chạy zone 2',
+                  detail: 'Giữ nhịp thở ổn định để đốt mỡ bền vững.',
+                  activity_type: 'running',
+                  duration_min: 35,
+                },
+                {
+                  title: 'Sức mạnh compound',
+                  detail: 'Ưu tiên squat/hinge/push/pull để giữ cơ khi giảm mỡ.',
+                  activity_type: 'gym',
+                  duration_min: 35,
+                },
+                {
+                  title: 'Đi bộ cooldown',
+                  detail: 'Đi bộ nhẹ sau tập để hồi phục và thêm tiêu hao.',
+                  activity_type: 'walking',
+                  duration_min: 20,
+                },
+              ]
+            : [
+                {
+                  title: 'Đi bộ nhanh',
+                  detail: 'Mục tiêu nhịp tim vừa phải, duy trì đều mỗi ngày.',
+                  activity_type: 'walking',
+                  duration_min: 30,
+                },
+                {
+                  title: 'Buổi sức mạnh ngắn',
+                  detail: 'Bài tập cơ bản toàn thân giúp giữ cơ và tăng trao đổi chất.',
+                  activity_type: 'gym',
+                  duration_min: 25,
+                },
+                {
+                  title: 'Yoga phục hồi',
+                  detail: 'Giảm căng cơ, cải thiện giấc ngủ và độ linh hoạt.',
+                  activity_type: 'yoga',
+                  duration_min: 15,
+                },
+              ];
+
+  return basePlan.map((item, index) => ({
+    ...item,
+    id: `${key}-${index + 1}`,
+    estimated_kcal: estimateExerciseCalories(item.activity_type, item.duration_min, weightKg),
+  }));
+}
+
+function buildInstantAssessment(profile: Partial<User>): InstantAssessmentResult {
+  const weight = profile.weight_kg;
+  const height = profile.height_cm;
+
+  if (!weight || !height || weight <= 0 || height <= 0) {
+    return {
+      assessment: null,
+      hint: 'Nhập chiều cao và cân nặng để xem BMI, cân nặng mục tiêu và bài tập phù hợp ngay lập tức.',
+    };
+  }
+
+  const heightM = height / 100;
+  const bmi = round1(weight / (heightM * heightM));
+  const healthyMinWeight = round1(18.5 * heightM * heightM);
+  const healthyMaxWeight = round1(22.9 * heightM * heightM);
+
+  let bodyStatus: BodyStatus;
+  let weightRecommendation: WeightRecommendation;
+  let recommendedGoal: UserGoal;
+  let targetWeightKg: number;
+  let recommendedActivityLevel: ActivityLevel;
+  let recommendationNote: string;
+  let activityNote: string;
+
+  if (bmi < 18.5) {
+    bodyStatus = 'underweight';
+    weightRecommendation = 'increase';
+    recommendedGoal = 'gain_muscle';
+    targetWeightKg = healthyMinWeight;
+    recommendedActivityLevel = 'light';
+    recommendationNote =
+      'Thể trạng hiện nghiêng về gầy. Nên tăng cân theo hướng tăng cơ, ưu tiên ăn đủ đạm và tăng calo từ từ.';
+    activityNote =
+      'Mức vận động nên ở mức nhẹ-vừa, tập sức mạnh có kiểm soát để tăng cơ và hạn chế đốt quá nhiều calo.';
+  } else if (bmi < 23) {
+    bodyStatus = 'normal';
+    weightRecommendation = 'maintain';
+    recommendedGoal = 'maintain';
+    targetWeightKg = round1(weight);
+    recommendedActivityLevel = 'moderate';
+    recommendationNote =
+      'Thể trạng đang ở vùng khỏe mạnh. Nên duy trì cân nặng hiện tại và giữ thói quen ăn uống-vận động đều đặn.';
+    activityNote =
+      'Mức vận động vừa là tối ưu để duy trì sức khỏe tim mạch, cơ bắp và độ bền.';
+  } else if (bmi < 25) {
+    bodyStatus = 'overweight';
+    weightRecommendation = 'decrease';
+    recommendedGoal = 'lose_weight';
+    targetWeightKg = healthyMaxWeight;
+    recommendedActivityLevel = 'moderate';
+    recommendationNote =
+      'Thể trạng hơi thừa cân. Nên giảm cân từ từ với thâm hụt calo vừa phải để bảo vệ sức khỏe lâu dài.';
+    activityNote =
+      'Bắt đầu ở mức vận động vừa, ưu tiên cardio nền tảng và tập sức mạnh để giữ khối cơ.';
+  } else {
+    bodyStatus = 'obese';
+    weightRecommendation = 'decrease';
+    recommendedGoal = 'lose_weight';
+    targetWeightKg = healthyMaxWeight;
+    recommendedActivityLevel = 'active';
+    recommendationNote =
+      'Thể trạng đang ở mức béo phì. Nên giảm cân theo lộ trình bền vững, kết hợp dinh dưỡng kiểm soát và vận động đều.';
+    activityNote =
+      'Nên hướng đến mức vận động cao dần theo từng tuần, tăng từ nhẹ lên vừa rồi đến nhiều để an toàn.';
+  }
+
+  const weightDeltaKg = round1(Math.abs(targetWeightKg - weight));
+  const exercisePlan = buildExercisePlan(
+    recommendedActivityLevel,
+    weightRecommendation,
+    bodyStatus,
+  );
+
+  return {
+    assessment: {
+      bmi,
+      body_status: bodyStatus,
+      weight_recommendation: weightRecommendation,
+      recommended_goal: recommendedGoal,
+      recommendation_note: recommendationNote,
+      target_weight_kg: targetWeightKg,
+      weight_delta_kg: weightDeltaKg,
+      recommended_activity_level: recommendedActivityLevel,
+      activity_note: activityNote,
+      exercise_plan: exercisePlan,
+    },
+    hint: `Vùng cân nặng khỏe mạnh ước tính cho chiều cao này: ${healthyMinWeight} - ${healthyMaxWeight} kg.`,
+  };
+}
+
+function getActivityFactor(level: ActivityLevel): number {
+  const factors: Record<ActivityLevel, number> = {
+    sedentary: 1.2,
+    light: 1.375,
+    moderate: 1.55,
+    active: 1.725,
+    very_active: 1.9,
+  };
+  return factors[level];
+}
+
+function getGoalAdjustment(goal: UserGoal): number {
+  const adjustments: Record<UserGoal, number> = {
+    lose_weight: 0.8,
+    maintain: 1,
+    gain_muscle: 1.1,
+  };
+  return adjustments[goal];
+}
+
+function calculateInstantCalorieTargets(
+  profile: Partial<User>,
+  recommendedGoal: UserGoal,
+  recommendedActivity: ActivityLevel,
+): InstantCalorieTargets | null {
+  const weight = profile.weight_kg;
+  const height = profile.height_cm;
+  const age = profile.age;
+  const gender = profile.gender;
+
+  if (!weight || !height || !age || !gender) {
+    return null;
+  }
+
+  const bmr =
+    gender === 'male'
+      ? 10 * weight + 6.25 * height - 5 * age + 5
+      : 10 * weight + 6.25 * height - 5 * age - 161;
+
+  const tdee = bmr * getActivityFactor(recommendedActivity);
+  const daily = Math.round(tdee * getGoalAdjustment(recommendedGoal));
+
+  return {
+    daily_calorie_target: daily,
+    target_breakfast_cal: Math.round(daily * 0.25),
+    target_lunch_cal: Math.round(daily * 0.35),
+    target_dinner_cal: Math.round(daily * 0.3),
+    target_snack_cal: Math.round(daily * 0.1),
+  };
+}
+
 export default function ProfileScreen() {
   const router = useRouter();
   const { logout } = useAuthStore();
@@ -42,13 +474,53 @@ export default function ProfileScreen() {
     fetchPreviewNudge,
   } = useReminderStore();
   const { subscription, features, fetchSubscription } = useSubscriptionStore();
+  const { activityLogs, fetchActivityLogs, addActivity } = useLogStore();
   const { width } = useWindowDimensions();
   const [profile, setProfile] = useState<Partial<User>>({});
   const [reminders, setReminders] = useState<Partial<ReminderPreferences>>({});
   const [previewMeal, setPreviewMeal] = useState<'breakfast' | 'lunch' | 'dinner' | 'snack'>('lunch');
+  const [completingTaskId, setCompletingTaskId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const isDesktop = width >= 900;
+  const instantAssessment = useMemo(() => buildInstantAssessment(profile), [
+    profile.weight_kg,
+    profile.height_cm,
+  ]);
+  const assessmentTone = instantAssessment.assessment
+    ? BODY_STATUS_TONES[instantAssessment.assessment.body_status]
+    : null;
+  const exerciseRoadmap = useMemo(() => {
+    const assessment = instantAssessment.assessment;
+    if (!assessment) return [];
+    return buildExerciseRoadmap(
+      assessment.body_status,
+      assessment.recommended_activity_level,
+      assessment.weight_recommendation,
+      profile.weight_kg ?? 65,
+    );
+  }, [
+    instantAssessment.assessment?.body_status,
+    instantAssessment.assessment?.recommended_activity_level,
+    instantAssessment.assessment?.weight_recommendation,
+    profile.weight_kg,
+  ]);
+
+  const completedRoadmapTaskIds = useMemo(() => {
+    const ids = new Set<string>();
+    activityLogs.forEach((log) => {
+      const note = log.notes ?? '';
+      if (!note.startsWith('ROADMAP_TASK:')) return;
+      const [taskId] = note.replace('ROADMAP_TASK:', '').split('|');
+      if (taskId) ids.add(taskId);
+    });
+    return ids;
+  }, [activityLogs]);
+
+  const completedRoadmapKcal = useMemo(
+    () => exerciseRoadmap.reduce((sum, item) => sum + (completedRoadmapTaskIds.has(item.id) ? item.estimated_kcal : 0), 0),
+    [exerciseRoadmap, completedRoadmapTaskIds],
+  );
 
   useEffect(() => {
     Promise.all([
@@ -64,6 +536,7 @@ export default function ProfileScreen() {
       }),
       fetchSubscription(),
       fetchPreviewNudge('lunch').catch(() => {}),
+      fetchActivityLogs().catch(() => {}),
     ]).finally(() => setIsLoading(false));
   }, []);
 
@@ -73,6 +546,45 @@ export default function ProfileScreen() {
       setReminders(reminderPrefs);
     }
   }, [reminderPrefs]);
+
+  useEffect(() => {
+    const assessment = instantAssessment.assessment;
+    if (!assessment) {
+      return;
+    }
+
+    const calorieTargets = calculateInstantCalorieTargets(
+      profile,
+      assessment.recommended_goal,
+      assessment.recommended_activity_level,
+    );
+
+    setProfile((prev) => {
+      const next: Partial<User> = {
+        ...prev,
+        goal: assessment.recommended_goal,
+        activity_level: assessment.recommended_activity_level,
+      };
+
+      if (calorieTargets) {
+        next.daily_calorie_target = calorieTargets.daily_calorie_target;
+        next.target_breakfast_cal = calorieTargets.target_breakfast_cal;
+        next.target_lunch_cal = calorieTargets.target_lunch_cal;
+        next.target_dinner_cal = calorieTargets.target_dinner_cal;
+        next.target_snack_cal = calorieTargets.target_snack_cal;
+      }
+
+      return next;
+    });
+  }, [
+    instantAssessment.assessment?.body_status,
+    instantAssessment.assessment?.recommended_goal,
+    instantAssessment.assessment?.recommended_activity_level,
+    profile.age,
+    profile.gender,
+    profile.weight_kg,
+    profile.height_cm,
+  ]);
 
   const handleSaveProfile = async () => {
     setIsSaving(true);
@@ -116,6 +628,27 @@ export default function ProfileScreen() {
       Alert.alert('Lỗi', e?.response?.data?.message ?? 'Không thể lưu.');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleCompleteRoadmapTask = async (task: ExerciseRoadmapItem) => {
+    if (completedRoadmapTaskIds.has(task.id)) {
+      return;
+    }
+
+    setCompletingTaskId(task.id);
+    try {
+      await addActivity({
+        activity_type: task.activity_type,
+        duration_min: task.duration_min,
+        calories_burned: task.estimated_kcal,
+        notes: `ROADMAP_TASK:${task.id}|${task.title}`,
+      });
+      Alert.alert('Đã cập nhật calo đốt', `+${task.estimated_kcal} kcal từ "${task.title}".`);
+    } catch (error: any) {
+      Alert.alert('Không thể cập nhật', error?.response?.data?.message ?? 'Vui lòng thử lại.');
+    } finally {
+      setCompletingTaskId(null);
     }
   };
 
@@ -165,6 +698,82 @@ export default function ProfileScreen() {
           <Text style={styles.summaryLabel}>Mức vận động</Text>
         </SurfaceCard>
       </View>
+
+      <SurfaceCard style={styles.sectionCard}>
+        <Text style={styles.sectionTitle}>🩺 Đánh giá BMI & thể trạng</Text>
+        <Text style={styles.helperText}>
+          Tính tức thì theo số bạn vừa nhập, không cần bấm lưu database.
+        </Text>
+
+        {!!instantAssessment.assessment && (
+          <View
+            style={[
+              styles.assessmentCard,
+              { backgroundColor: assessmentTone?.bg, borderColor: assessmentTone?.border },
+            ]}
+          >
+            <View style={styles.assessmentTopRow}>
+              <View>
+                <Text style={[styles.assessmentBmiLabel, { color: assessmentTone?.accent }]}>BMI hiện tại</Text>
+                <Text style={[styles.assessmentBmiValue, { color: assessmentTone?.text }]}>{instantAssessment.assessment.bmi}</Text>
+              </View>
+              <View style={styles.assessmentMeta}>
+                <Text style={styles.assessmentMetaLabel}>Thể trạng</Text>
+                <Text style={[styles.assessmentMetaValue, { color: assessmentTone?.accent }]}>
+                  {BODY_STATUS_LABELS[instantAssessment.assessment.body_status]}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.assessmentGuidesRow}>
+              <View style={[styles.assessmentBadge, { backgroundColor: assessmentTone?.badgeBg, borderColor: assessmentTone?.border }]}>
+                <Text style={[styles.assessmentBadgeText, { color: assessmentTone?.text }]}>
+                  {WEIGHT_RECOMMENDATION_LABELS[instantAssessment.assessment.weight_recommendation]}
+                </Text>
+              </View>
+              <View style={[styles.assessmentBadge, { backgroundColor: assessmentTone?.badgeBg, borderColor: assessmentTone?.border }]}>
+                <Text style={[styles.assessmentBadgeText, { color: assessmentTone?.text }]}>
+                  Goal phù hợp: {GOAL_LABELS[instantAssessment.assessment.recommended_goal]}
+                </Text>
+              </View>
+              <View style={[styles.assessmentBadge, { backgroundColor: assessmentTone?.badgeBg, borderColor: assessmentTone?.border }]}>
+                <Text style={[styles.assessmentBadgeText, { color: assessmentTone?.text }]}>
+                  Vận động gợi ý: {ACTIVITY_RECOMMENDATION_LABELS[instantAssessment.assessment.recommended_activity_level]}
+                </Text>
+              </View>
+            </View>
+
+            <Text style={[styles.assessmentNote, { color: assessmentTone?.text }]}>
+              {instantAssessment.assessment.recommendation_note}
+            </Text>
+
+            <Text style={[styles.assessmentWeightPlan, { color: assessmentTone?.text }]}>
+              {instantAssessment.assessment.weight_recommendation === 'maintain'
+                ? `Bạn đang gần mức cân nặng mục tiêu khỏe mạnh (${instantAssessment.assessment.target_weight_kg} kg).`
+                : `Ước tính cần ${instantAssessment.assessment.weight_recommendation === 'increase' ? 'tăng' : 'giảm'} khoảng ${instantAssessment.assessment.weight_delta_kg} kg để về vùng khỏe mạnh (mục tiêu ~${instantAssessment.assessment.target_weight_kg} kg).`}
+            </Text>
+
+            <Text style={[styles.assessmentActivityNote, { color: assessmentTone?.text }]}>
+              {instantAssessment.assessment.activity_note}
+            </Text>
+
+            <View style={styles.exerciseListWrap}>
+              <Text style={[styles.exerciseListTitle, { color: assessmentTone?.accent }]}>Bài tập gợi ý:</Text>
+              {instantAssessment.assessment.exercise_plan.map((item, index) => (
+                <Text key={`exercise-${index}`} style={[styles.exerciseListItem, { color: assessmentTone?.text }]}>
+                  {index + 1}. {item}
+                </Text>
+              ))}
+            </View>
+
+            <Text style={styles.assessmentHint}>{instantAssessment.hint}</Text>
+          </View>
+        )}
+
+        {!instantAssessment.assessment && !!instantAssessment.hint && (
+          <Text style={styles.assessmentHint}>{instantAssessment.hint}</Text>
+        )}
+      </SurfaceCard>
 
       <SurfaceCard style={styles.sectionCard}>
         <Text style={styles.sectionTitle}>Thông tin cơ bản</Text>
@@ -485,6 +1094,66 @@ const styles = StyleSheet.create({
   summaryCard: { flex: 1, minHeight: 106, justifyContent: 'center' },
   summaryValue: { color: '#eff6ff', fontSize: 22, fontWeight: '800', marginBottom: 8 },
   summaryLabel: { color: '#8ea2c8', fontSize: 13, lineHeight: 18 },
+  assessmentCard: {
+    marginTop: 10,
+    backgroundColor: '#0f172a',
+    borderWidth: 1,
+    borderColor: '#1e3a5f',
+    borderRadius: 12,
+    padding: 12,
+    gap: 10,
+  },
+  assessmentTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  assessmentBmiLabel: { color: '#93c5fd', fontSize: 12, fontWeight: '600' },
+  assessmentBmiValue: { color: '#e2e8f0', fontSize: 28, fontWeight: '800' },
+  assessmentMeta: { alignItems: 'flex-end' },
+  assessmentMetaLabel: { color: '#94a3b8', fontSize: 12, marginBottom: 4 },
+  assessmentMetaValue: { color: '#dbeafe', fontSize: 16, fontWeight: '700' },
+  assessmentGuidesRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  assessmentBadge: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  assessmentBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  assessmentNote: { color: '#cbd5e1', fontSize: 13, lineHeight: 19 },
+  assessmentWeightPlan: { fontSize: 13, lineHeight: 19, fontWeight: '700' },
+  assessmentActivityNote: { fontSize: 13, lineHeight: 19 },
+  exerciseListWrap: { marginTop: 4, gap: 4 },
+  exerciseListTitle: { fontSize: 13, fontWeight: '800' },
+  exerciseListItem: { fontSize: 13, lineHeight: 18 },
+  roadmapWrap: { marginTop: 10, gap: 8 },
+  roadmapHeader: { gap: 4 },
+  roadmapTitle: { fontSize: 13, fontWeight: '800' },
+  roadmapSummary: { fontSize: 12, fontWeight: '700' },
+  roadmapItem: {
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    gap: 6,
+  },
+  roadmapItemLeft: { flexDirection: 'row', gap: 10, alignItems: 'flex-start' },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 5,
+    borderWidth: 1.5,
+    borderColor: '#94a3b8',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 1,
+  },
+  checkboxTick: { color: '#0f172a', fontSize: 12, fontWeight: '900' },
+  roadmapItemTitle: { fontSize: 13, fontWeight: '700', marginBottom: 2 },
+  roadmapItemDetail: { fontSize: 12, lineHeight: 17 },
+  roadmapItemMeta: { fontSize: 12, fontWeight: '700', marginTop: 4 },
+  roadmapCta: { fontSize: 11, fontWeight: '700' },
+  assessmentHint: { color: '#93c5fd', fontSize: 13, lineHeight: 19, marginTop: 10 },
   sectionCard: { marginBottom: 14 },
   sectionTitle: { fontSize: 18, fontWeight: '800', color: '#dbeafe', marginBottom: 6 },
   helperText: { color: '#8ea2c8', fontSize: 13, lineHeight: 19, marginBottom: 8 },

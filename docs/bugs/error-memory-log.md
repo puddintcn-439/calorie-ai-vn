@@ -32,6 +32,30 @@ Use this file to store compact lessons from real failures after they are fixed.
 - Files: `apps/mobile/app/(tabs)/coach.tsx`
 - Reuse Signal: Recheck this pattern first whenever TypeScript reports `TS1128` in a UI screen near the end of file.
 
+## 2026-05-09 - Native mobile build tooling failed because EAS CLI was invoked through unstable shell paths
+
+- Scope: mobile tooling
+- Error Signature: `eas : The term 'eas' is not recognized as the name of a cmdlet`, `npx : The term 'npx' is not recognized as the name of a cmdlet`, and `npm error could not determine executable to run` while attempting Android preview builds.
+- Trigger: Trying to run native preview builds for Activity Sync from Windows PowerShell.
+- Root Cause: The shell PATH was inconsistent for global CLIs and the repo relied on ad-hoc `eas` / `npx eas` invocation instead of a workspace-safe execution path.
+- Fix: Added explicit mobile scripts that use `npm exec eas-cli -- ...`, added `apps/mobile/eas.json` preview profiles, and verified the CLI resolves successfully with `npm exec eas-cli -- --version`.
+- Validation: `cd apps/mobile ; npm run lint`, `cd apps/mobile ; npm exec eas-cli -- --version` => `eas-cli/18.11.0`.
+- Prevention Rule: In this repo on Windows, prefer `npm exec <cli>` inside the target workspace over bare global CLIs or `npx` when build tooling must be reproducible across shells.
+- Files: `apps/mobile/package.json`, `apps/mobile/eas.json`
+- Reuse Signal: Recheck this first whenever Expo/EAS commands fail in VS Code PowerShell with PATH-related executable errors.
+
+## 2026-05-09 - Expo typed routes blocked compile right after adding a new stack screen
+
+- Scope: mobile
+- Error Signature: `TS2345: Argument of type '"/health-sync"' is not assignable to parameter of type ...` at `app/(tabs)/index.tsx:275` during `cd apps/mobile ; npm run lint`
+- Trigger: Navigating to a newly added top-level Expo Router screen immediately after creating the route file.
+- Root Cause: Expo typed route generation had not yet reflected the new route in the inferred `router.push()` union when the dashboard call site was typechecked.
+- Fix: Kept the new screen route and used a narrow `as never` cast at the call site so the route can compile without widening unrelated types.
+- Validation: `cd apps/mobile ; npm run lint`
+- Prevention Rule: After adding a new Expo Router screen under typed routes, expect a brief mismatch window; either regenerate routes if available or isolate the temporary cast to the navigation call site.
+- Files: `apps/mobile/app/(tabs)/index.tsx`, `apps/mobile/app/health-sync.tsx`
+- Reuse Signal: Recheck this whenever a newly added route exists on disk but `router.push()` rejects its path literal.
+
 ## 2026-05-09 - Supabase chained query mock mismatch in recommendation tests
 
 - Scope: backend
@@ -115,3 +139,111 @@ Use this file to store compact lessons from real failures after they are fixed.
 - Prevention Rule: After adding a new Expo module or new shared types, complete the full integration loop before calling the feature done: install the package, rebuild any dist-based shared workspace package, and verify required native permissions/plugins in Expo config.
 - Files: `apps/mobile/app/(tabs)/index.tsx`, `apps/mobile/package.json`, `apps/mobile/app.json`, `packages/types/dist/*`
 - Reuse Signal: Recheck this whenever mobile code imports a new Expo package or newly added exports from `@calorie-ai/types` are not seen by another workspace.
+
+## 2026-05-09 - Native health readiness UI overstated device readiness when permissions were still missing
+
+- Scope: mobile
+- Error Signature: No compile error; Activity Sync diagnostics showed the phone as ready and exposed a generic deep link even when Health permissions were still missing.
+- Trigger: Production-hardening pass on the native Activity Sync flow.
+- Root Cause: `getPhoneCheckInfo()` inferred readiness from provider availability alone and returned the app root deep link instead of the dedicated diagnostics route.
+- Fix: Derived phone readiness from `getDiagnostics()` permission state, introduced an explicit `needs-permission` status, and unified the phone QA link to `calorieai://health-sync`.
+- Validation: `cd apps/mobile ; npm run lint`, `cd apps/backend ; npm test -- log.controller.spec.ts`
+- Prevention Rule: For native diagnostics surfaces, never map provider availability directly to ready state; gate readiness on the real permission snapshot and keep any support/deep link aligned with the actual diagnostics route.
+- Files: `apps/mobile/services/activity-sync.service.ts`, `apps/mobile/app/health-sync.tsx`, `apps/mobile/app/(tabs)/index.tsx`
+- Reuse Signal: Recheck this whenever a mobile integration exposes a readiness badge plus a QA/deep-link entry point.
+
+## 2026-05-09 - CI/CD quality-gate YAML corrupt and smoke-tests job missing Postgres service
+
+- Scope: CI/CD
+- Error Signature: `yaml: invalid syntax` (corrupt indentation in quality-gate job after failed patch); smoke-tests job failing with `Connection refused` on DB_URL because no `services.postgres` block was present.
+- Trigger: Review of `.github/workflows/ci-cd.yml` during production hardening.
+- Root Cause: A previous patch applied to the wrong YAML context, leaving shell command text (`run:` + `env:`) inside a `run: |` block as literal YAML keys, corrupting the document. The smoke-tests job was originally a container-based step and still referenced `localhost:5432` without spawning a postgres service container.
+- Fix: Rewrote both `smoke-tests` and `quality-gate` jobs with correct YAML structure; added `services.postgres` to both; replaced brittle grep-based coverage gate with `npm run test:cov --workspace=backend`.
+- Validation: `npx tsc --noEmit` (backend, zero errors), `npm run test --workspace=backend` (233/233 pass).
+- Prevention Rule: When patching YAML workflow files with multi-line `run:` blocks, always read the full surrounding context first and verify indentation matches YAML spec. Never use grep on percentages as a CI coverage gate — let the test runner enforce thresholds.
+- Files: `.github/workflows/ci-cd.yml`
+- Reuse Signal: Recheck this whenever editing multi-line `run:` steps in GitHub Actions YAML.
+
+## 2026-05-09 - NestJS service constructor extended with new dependency breaks existing spec instantiations
+
+- Scope: backend
+- Error Signature: `TS2554: Expected 3 arguments, but got 2` in `auth.service.spec.ts`; `TS2554: Expected 2 arguments, but got 1` in `ai.service.spec.ts`; `NestJS dependency injection error` in `health.controller.spec.ts` when `MetricsService` was added to `HealthController`.
+- Trigger: Adding `MetricsService` dependency to `AuthService`, `AiService`, and `HealthController`.
+- Root Cause: Specs construct services with `new Service(dep1, dep2)` rather than via the NestJS DI container, so adding a new constructor parameter breaks all existing call sites. TestingModule-based specs miss the new provider if it is not added to the `providers` array.
+- Fix: Added `makeMetrics()` helper returning a partial mock in each affected spec; passed it as the additional constructor argument. Added `MetricsService` to the `providers` array in the NestJS `TestingModule` spec.
+- Validation: `npm run test --workspace=backend` → 233/233 pass.
+- Prevention Rule: After adding any new constructor dependency to a NestJS service/controller, immediately scan `__tests__/` for direct `new Service(...)` instantiations and add the mock dependency. For NestJS TestingModule specs, check that the new provider is listed.
+- Files: `src/modules/auth/__tests__/auth.service.spec.ts`, `src/modules/ai/__tests__/ai.service.spec.ts`, `src/health/__tests__/health.controller.spec.ts`
+- Reuse Signal: Recheck this any time a shared injectable (e.g., MetricsService, EventEmitter) is added to an existing NestJS service constructor.
+
+## 2026-05-09 - Supabase db push failed on partially migrated project with duplicate policies, indexes, and migration versions
+
+- Scope: supabase migrations
+- Error Signature: `ERROR: policy "Users can view own profile" for table "users" already exists (SQLSTATE 42710)`, `ERROR: relation "foods_name_search_idx" already exists (SQLSTATE 42P07)`, `ERROR: prepared statement "lrupsc_1_0" already exists (SQLSTATE 42P05)`, and `ERROR: duplicate key value violates unique constraint "schema_migrations_pkey" (SQLSTATE 23505) Key (version)=(004) already exists.`
+- Trigger: `npm exec supabase -- db push --db-url 'postgresql://...@aws-1-ap-southeast-2.pooler.supabase.com:6543/postgres' --include-all --yes`
+- Root Cause: The remote Supabase project already had part of the schema applied manually, while local migration files reused version numbers (`004`, `005`, `006`) and recreated policies/indexes without replay-safe guards.
+- Fix: Added `drop policy if exists` before policy creation, changed all remaining indexes to `if not exists`, renamed duplicate version files to `0041_saved_meals.sql`, `0051_reminders.sql`, and `0061_subscriptions.sql`, repaired remote history for version `004`, and reran `supabase db push` with `statement_cache_mode=describe`.
+- Validation: `npm exec supabase -- migration list --db-url 'postgresql://...@aws-1-ap-southeast-2.pooler.supabase.com:6543/postgres?sslmode=require&statement_cache_mode=describe'` showed local and remote aligned for `001`, `002`, `003`, `004`, `0041`, `005`, `0051`, `006`, `0061`, `007`, `008`, `009`, `010`, `011`, `012`, `013`.
+- Prevention Rule: When pushing Supabase migrations to an existing project, assume replay against pre-existing objects and make historical migrations idempotent, keep version prefixes unique, and repair migration history before retrying.
+- Files: `supabase/migrations/001_users.sql`, `supabase/migrations/002_foods.sql`, `supabase/migrations/003_logs.sql`, `supabase/migrations/004_corrections.sql`, `supabase/migrations/0041_saved_meals.sql`, `supabase/migrations/0051_reminders.sql`, `supabase/migrations/0061_subscriptions.sql`, `supabase/migrations/006_activities.sql`, `supabase/migrations/009_push_tokens.sql`, `supabase/migrations/010_logging_events.sql`, `supabase/migrations/011_user_context_events.sql`, `supabase/migrations/012_coach_insights.sql`, `supabase/migrations/013_body_progress.sql`
+- Reuse Signal: Recheck this first whenever `supabase db push` fails on an existing project with duplicate objects or a broken migration ledger.
+
+## 2026-05-10 - TS literal widening in mocked response broke controller spec after DTO union types were added
+
+- Scope: backend tests/build
+- Error Signature: `TS2345: Type 'string' is not assignable to type 'BodyStatus'` at `calorie-target.controller.spec.ts` when calling `mockReturnValue(expected)`.
+- Trigger: `cd apps/backend ; npm test -- calorie-target.service.spec.ts calorie-target.controller.spec.ts` and `cd apps/backend ; npm run build`
+- Root Cause: Test fixtures for `CalorieTargetResponse` were plain object literals without explicit typing, so string literals were widened to `string` and no longer matched new union fields (`BodyStatus`, `WeightRecommendation`).
+- Fix: Imported `CalorieTargetResponse` in the spec and typed each mocked `expected` payload as `CalorieTargetResponse`.
+- Validation: `cd apps/backend ; npm test -- calorie-target.service.spec.ts calorie-target.controller.spec.ts` => pass, `cd apps/backend ; npm run build` => pass.
+- Prevention Rule: After introducing DTO union-literal fields, type mock fixtures explicitly (`const expected: Interface = {...}`) or use `as const` to prevent widening.
+- Files: `apps/backend/src/modules/calorie-target/__tests__/calorie-target.controller.spec.ts`
+- Reuse Signal: Check this first whenever mocks fail with `Type 'string' is not assignable to type '<UnionLiteral>'` after response model changes.
+
+## 2026-05-10 - Activity add button looked unresponsive on web/android because add flow used iOS-only prompt
+
+- Scope: mobile
+- Error Signature: Clicking `+` in Activity section produced no usable add flow on web/android; code path called `Alert.prompt(...)` from `app/(tabs)/log.tsx` even though prompt input is iOS-only.
+- Trigger: Open mobile web (`localhost:19006`) and press the Activity `+` button.
+- Root Cause: `handleAddActivity` relied on `Alert.prompt` for entering minutes after selecting an activity type, but that API is not a cross-platform input mechanism.
+- Fix: Added platform-specific add flows in `handleAddActivity`: web uses `globalThis.prompt`, android uses quick minute preset buttons (15/30/45), iOS keeps `Alert.prompt`; centralized write path via `submitQuickActivity`.
+- Validation: `cd apps/mobile ; npm run lint`.
+- Prevention Rule: Do not use `Alert.prompt` as the only input path for features expected to run on web/android; always provide platform-safe fallbacks for user input.
+- Files: `apps/mobile/app/(tabs)/log.tsx`
+- Reuse Signal: Recheck this first whenever an action button on mobile web appears clickable but does not open an input flow.
+
+## 2026-05-10 - Roadmap delete button on web looked clickable but executed no removal
+
+- Scope: mobile web
+- Error Signature: Pressing `Xóa bài` in `Lộ trình tập hôm nay` produced no visible action on web; no confirm callback fired and task stayed in list.
+- Trigger: Open `app/(tabs)/index.tsx` on web (`localhost:19006`) and press roadmap `Xóa bài` button.
+- Root Cause: The delete flow relied on `Alert.alert(..., buttons)` callback handling, but React Native Web does not provide reliable multi-button callback behavior equivalent to native alert dialogs.
+- Fix: Added platform-safe branching in `handleRemoveRoadmapTask`: on web use `globalThis.confirm(...)` and execute removal directly; on iOS/Android keep `Alert.alert` with destructive callback.
+- Validation: `cd apps/mobile ; npx tsc --noEmit`.
+- Prevention Rule: For destructive confirmation actions in React Native screens that run on web, do not depend solely on `Alert.alert` button callbacks; provide explicit web confirmation path (`confirm` or custom modal) with direct action execution.
+- Files: `apps/mobile/app/(tabs)/index.tsx`
+- Reuse Signal: Recheck this first whenever a web button appears tappable but its confirm/delete action never executes.
+
+## 2026-05-10 - Daily roadmap state drift and local-day mismatch across tabs after partial backend migration
+
+- Scope: mobile + backend
+- Error Signature:
+	- Functional regression: roadmap tasks added/removed in `app/(tabs)/index.tsx` and `app/(tabs)/log.tsx` became inconsistent because one tab still used local-only custom state.
+	- Functional regression: daily data queries used UTC date conversion (`toISOString().split('T')[0]`) causing off-by-one day results around local midnight.
+	- Build/type regression introduced during fix: `TS1016: A required parameter cannot follow an optional parameter` in `src/modules/log/log.controller.ts` and downstream spec mismatch `TS2554: Expected 3 arguments, but got 2` in `src/modules/log/__tests__/log.controller.spec.ts`.
+- Trigger:
+	- Feature audit and immediate remediation pass (`làm luôn`) across roadmap/day-boundary logic.
+	- Validation commands: `cd apps/backend ; npm run build`, `cd apps/backend ; npm test -- log.controller.spec.ts`, `cd apps/mobile ; npx tsc --noEmit`.
+- Root Cause: Roadmap persistence strategy was split across screens (backend-backed in one tab, transient local state in another), and date handling mixed user-local semantics with UTC-derived day keys; controller query extension added an optional parameter before required `req`, then tests still asserted the old service call signature.
+- Fix:
+	- Unified roadmap handling in Log tab to use backend `dailyRoadmap` with `addRoadmapItem`/`deleteRoadmapItem`, including persisted removal markers (`removed:<baseTaskId>`).
+	- Added/propagated local date helpers and timezone offset query support (`tz_offset_minutes`) so backend computes UTC ranges from user local day.
+	- Removed weekly adherence cap logic so insights reflect true percentage.
+	- Reordered controller parameters and updated controller spec expectations for timezone-offset argument.
+- Validation:
+	- `cd apps/mobile ; npx tsc --noEmit` (pass)
+	- `cd apps/backend ; npm run build` (pass)
+	- `cd apps/backend ; npm test -- log.controller.spec.ts` (pass, 3/3 tests)
+- Prevention Rule: For any "daily" feature, enforce one canonical local-day contract end-to-end (client date key + timezone offset + server range derivation) and avoid per-screen shadow state for entities persisted in backend.
+- Files: `apps/mobile/app/(tabs)/log.tsx`, `apps/mobile/app/(tabs)/index.tsx`, `apps/mobile/store/log.store.ts`, `apps/mobile/services/date.ts`, `apps/mobile/app/(tabs)/progress.tsx`, `apps/mobile/services/activity-sync.service.ts`, `apps/mobile/app/health-sync.tsx`, `apps/backend/src/modules/log/log.controller.ts`, `apps/backend/src/modules/log/log.service.ts`, `apps/backend/src/modules/log/__tests__/log.controller.spec.ts`, `apps/backend/src/modules/insights/insights.service.ts`
+- Reuse Signal: Recheck this first whenever "today" totals differ by timezone or the same roadmap entity behaves differently between tabs.

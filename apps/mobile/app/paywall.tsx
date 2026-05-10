@@ -7,7 +7,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
-  Switch,
+  useWindowDimensions,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
@@ -18,6 +18,9 @@ export default function PaywallScreen() {
   const router = useRouter();
   const { subscription, isLoading, error, upgrade } = useSubscriptionStore();
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
+  const { width } = useWindowDimensions();
+  const isWide = width >= 1120;
+  const isTablet = width >= 820;
 
   useEffect(() => {
     useSubscriptionStore.getState().fetchSubscription();
@@ -49,6 +52,7 @@ export default function PaywallScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      <View style={styles.contentInner}>
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.title}>Nâng cấp kế hoạch</Text>
@@ -77,7 +81,13 @@ export default function PaywallScreen() {
       </View>
 
       {/* Tier Cards */}
-      <View style={styles.tiersContainer}>
+      <View
+        style={[
+          styles.tiersContainer,
+          isWide && styles.tiersWide,
+          !isWide && isTablet && styles.tiersTablet,
+        ]}
+      >
         {tiers.map((tier) => {
           const tierInfo = SUBSCRIPTION_TIERS[tier];
           const price = billingCycle === 'monthly' ? tierInfo.price_usd_monthly : tierInfo.price_usd_yearly;
@@ -89,11 +99,18 @@ export default function PaywallScreen() {
               key={tier}
               style={[
                 styles.tierCard,
+                isWide && styles.tierCardWide,
+                !isWide && isTablet && styles.tierCardTablet,
+                !isWide && isTablet && tier === 'pro' && styles.tierCardTabletFull,
                 isCurrentTier && styles.currentTierCard,
                 isPopular && styles.popularTierCard,
               ]}
             >
-              {isPopular && <View style={styles.popularBadge} />}
+              {isPopular && (
+                <View style={styles.popularBadge}>
+                  <Text style={styles.popularBadgeText}>Phổ biến nhất</Text>
+                </View>
+              )}
 
               <Text style={styles.tierName}>{tierInfo.name}</Text>
               <Text style={styles.tierDescription}>{tierInfo.description}</Text>
@@ -193,6 +210,7 @@ export default function PaywallScreen() {
           <Text style={styles.footerLink}>Quay lại</Text>
         </TouchableOpacity>
       </View>
+      </View>
     </ScrollView>
   );
 }
@@ -205,6 +223,11 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: 16,
     paddingVertical: 24,
+    alignItems: 'center',
+  },
+  contentInner: {
+    width: '100%',
+    maxWidth: 1080,
   },
   header: {
     marginBottom: 24,
@@ -254,7 +277,16 @@ const styles = StyleSheet.create({
   },
   tiersContainer: {
     marginBottom: 32,
-    gap: 16,
+    gap: 14,
+  },
+  tiersWide: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+  },
+  tiersTablet: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
   },
   tierCard: {
     backgroundColor: '#f9fafb',
@@ -263,13 +295,23 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: '#e5e7eb',
   },
+  tierCardWide: {
+    flex: 1,
+    minWidth: 0,
+  },
+  tierCardTablet: {
+    width: '48.8%',
+  },
+  tierCardTabletFull: {
+    width: '100%',
+  },
   currentTierCard: {
     backgroundColor: '#eff6ff',
     borderColor: '#3b82f6',
   },
   popularTierCard: {
     borderColor: '#f97316',
-    transform: [{ scale: 1.05 }],
+    backgroundColor: '#fff7ed',
   },
   popularBadge: {
     position: 'absolute',
@@ -313,7 +355,7 @@ const styles = StyleSheet.create({
   },
   featuresList: {
     marginBottom: 20,
-    gap: 12,
+    gap: 10,
   },
   featureRow: {
     flexDirection: 'row',

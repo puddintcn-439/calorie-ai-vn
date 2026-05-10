@@ -15,6 +15,7 @@ import { BodyProgressEntry, BodyProgressTrend, CreateBodyProgressDto } from '@ca
 import { ScreenShell, SurfaceCard, Eyebrow, HeroTitle, BodyText } from '../../components/ui-shell';
 import { UiButton } from '../../components/ui-button';
 import { apiClient } from '../../services/api';
+import { getLocalDateYmd } from '../../services/date';
 
 const ENERGY_LABELS = ['', '😴 Rất mệt', '😐 Mệt', '😊 Bình thường', '😄 Tốt', '🔥 Xuất sắc'];
 
@@ -53,7 +54,7 @@ export default function BodyProgressScreen() {
 
       // Pre-fill form with today's entry if exists
       const todayEntry = res.data?.entries?.find(
-        (e: BodyProgressEntry) => e.recorded_at === new Date().toISOString().split('T')[0],
+        (e: BodyProgressEntry) => e.recorded_at === getLocalDateYmd(),
       );
       if (todayEntry) {
         setWeightKg(todayEntry.weight_kg?.toString() ?? '');
@@ -89,7 +90,7 @@ export default function BodyProgressScreen() {
     setSaving(true);
     try {
       const dto: CreateBodyProgressDto = {
-        recorded_at: new Date().toISOString().split('T')[0],
+        recorded_at: getLocalDateYmd(),
         energy_level: energyLevel,
       };
       if (weightKg) dto.weight_kg = parseFloat(weightKg);

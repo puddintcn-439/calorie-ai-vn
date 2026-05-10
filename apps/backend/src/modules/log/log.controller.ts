@@ -101,9 +101,14 @@ export class LogController {
   }
 
   @Get('daily')
-  getDaily(@Query('date') date: string, @Request() req: any) {
+  getDaily(
+    @Query('date') date: string,
+    @Request() req: any,
+    @Query('tz_offset_minutes') tzOffsetMinutes?: string,
+  ) {
     const d = date ?? new Date().toISOString().split('T')[0];
-    return this.logService.getDailyLog(req.user.id, d);
+    const tzOffset = Number.isFinite(Number(tzOffsetMinutes)) ? Number(tzOffsetMinutes) : 0;
+    return this.logService.getDailyLog(req.user.id, d, tzOffset);
   }
 
   @Delete(':id')
@@ -144,9 +149,14 @@ export class LogController {
   }
 
   @Get('activity')
-  getActivities(@Query('date') date: string, @Request() req: any) {
+  getActivities(
+    @Query('date') date: string,
+    @Request() req: any,
+    @Query('tz_offset_minutes') tzOffsetMinutes?: string,
+  ) {
     const d = date ?? new Date().toISOString().slice(0, 10);
-    return this.logService.getActivityLogs(req.user.id, d);
+    const tzOffset = Number.isFinite(Number(tzOffsetMinutes)) ? Number(tzOffsetMinutes) : 0;
+    return this.logService.getActivityLogs(req.user.id, d, tzOffset);
   }
 
   @Post('activity/sync')

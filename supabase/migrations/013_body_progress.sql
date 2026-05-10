@@ -39,15 +39,19 @@ CREATE INDEX IF NOT EXISTS body_progress_user_recent
 -- RLS
 ALTER TABLE body_progress ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS body_progress_select ON body_progress;
 CREATE POLICY body_progress_select ON body_progress
   FOR SELECT USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS body_progress_insert ON body_progress;
 CREATE POLICY body_progress_insert ON body_progress
   FOR INSERT WITH CHECK (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS body_progress_update ON body_progress;
 CREATE POLICY body_progress_update ON body_progress
   FOR UPDATE USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS body_progress_delete ON body_progress;
 CREATE POLICY body_progress_delete ON body_progress
   FOR DELETE USING (auth.uid() = user_id);
 

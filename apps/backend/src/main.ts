@@ -3,6 +3,7 @@ import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { RequestLoggingMiddleware } from './common/middleware/request-logging.middleware';
+import { MetricsService } from './common/metrics/metrics.service';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -17,7 +18,9 @@ async function bootstrap() {
   );
 
   // Request logging middleware for observability
-  app.use(new RequestLoggingMiddleware().use.bind(new RequestLoggingMiddleware()));
+  const metricsService = app.get(MetricsService);
+  const loggingMiddleware = new RequestLoggingMiddleware(metricsService);
+  app.use(loggingMiddleware.use.bind(loggingMiddleware));
 
   // CORS
   const configuredOrigins = process.env.ALLOWED_ORIGINS

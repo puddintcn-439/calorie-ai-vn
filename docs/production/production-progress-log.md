@@ -3,7 +3,39 @@
 Use one new entry for each production readiness review or milestone.
 
 ## Review Entry
-- Timestamp: 2026-05-08T00:00:00Z
+- Timestamp: 2026-05-09T18:00:00Z
+- Scope: calorie-ai-vn — P0 production hardening sprint
+- Reviewer: Copilot
+- Previous Readiness %: 63%
+- New Readiness %: **72%**
+- Delta %: +9%
+
+### Completed Actions
+- **deploy.yml rewritten**: placeholder deploy job replaced with pre-deploy smoke tests (source checkout + Postgres service), post-deploy health check loop (6 × 5s retries), rollback-on-failure step, GitHub deployment status record.
+- **ci-cd.yml fixed**: smoke-tests and quality-gate jobs both now have proper Postgres service definitions; corrupted YAML in quality-gate removed; coverage gate runs `npm run test:cov --workspace=backend` (real command, no brittle grep).
+- **MetricsService created** (`src/common/metrics/metrics.service.ts`): in-process counters for auth login/register success+failure, AI scan success+failure, activity sync success+failure, HTTP 4xx/5xx; computed rates; alert flags with configurable thresholds.
+- **`/health/metrics` endpoint added**: HealthController now exposes GET /health/metrics returning full MetricsSnapshot.
+- **MetricsService injected into AuthService and AiService** to record events on every auth attempt and AI scan.
+- **RequestLoggingMiddleware updated** to call `metricsService.recordHttpRequest(statusCode)` on every response.
+- **monitoring-runbook.md created** with SLO table, alert thresholds (auth failure >25%, AI success <70%, 5xx >50), polling scripts, per-incident response playbooks, log parsing examples.
+- **mobile-preview-build-qa-record.md created** with EAS login steps, environment variable setup, build commands, eas.json explanation, native health QA checklist for Android and iOS.
+- **eas.json preview profile corrected**: removed `developmentClient: true` from preview profile (was building a dev client binary instead of standalone preview APK).
+- **Test suite**: 233/233 tests pass after updating health.controller.spec.ts, auth.service.spec.ts, and ai.service.spec.ts to provide MetricsService mock.
+
+### New Risks Found
+- EAS cloud build has not been executed yet — requires `npm exec eas-cli -- login` and an active Expo account. This is the only remaining external dependency.
+- Deploy workflow rollback step has a `# TODO` comment — the actual deploy/rollback command must be filled in once infra target (Docker host / Kubernetes) is decided.
+
+### Next Actions
+1. Wire one external alert: poll `/health/metrics`, Telegram bot when `alerts[].fired === true`
+2. Execute first EAS preview build and record Build ID in mobile-preview-build-qa-record.md
+3. Fill in real deploy/rollback command in deploy.yml based on chosen infra
+
+### Decision
+- Gate Status: CONDITIONAL NO-GO → near GO-LIVE
+- Notes: All P0 code changes are done. Remaining blockers are external-account (EAS) and tooling (alerting hook), not code quality or safety gaps.
+
+
 - Scope: calorie-ai-vn (initial baseline)
 - Reviewer: TBD
 - Previous Readiness %: N/A
@@ -130,4 +162,32 @@ Use one new entry for each production readiness review or milestone.
 
 - Gate Status: NO-GO
 - Notes: Environment reliability improved; production controls and P0 execution still pending.
+
+## Review Entry
+- Timestamp: 2026-05-09T15:45:00Z
+- Scope: calorie-ai-vn current production-readiness rescan
+- Reviewer: Copilot
+- Previous Readiness %: 56%
+- New Readiness %: 63%
+- Delta %: +5%
+
+### Completed Actions
+- Revalidated live backend health endpoint: status healthy, DB connected, latency reported.
+- Revalidated backend quality locally: `npm test` passed 233/233 and `npm run build` passed.
+- Revalidated mobile compile health: `npm run lint` passed in apps/mobile.
+- Refreshed readiness scoring to reflect shipped health endpoints, smoke coverage, food ingestion, native Activity Sync diagnostics, and the now-aligned backend CI coverage/smoke scripts.
+
+### New Risks Found
+- Production deploy workflow is not a real deploy yet; it stops at placeholder notices instead of verified rollout and rollback.
+- No concrete alerting/dashboard evidence yet, despite health and request logging existing.
+- Mobile native release path for Health Sync is documented but still lacks recorded successful build evidence.
+
+### Next Actions
+- Implement real deployment verification and rollback steps in the production workflow.
+- Add minimum production monitoring and test one alert path end-to-end.
+- Produce one signed-off mobile preview build QA record for the Health Sync flow.
+
+### Decision
+- Gate Status: NO-GO
+- Notes: Product and core backend behavior are materially more complete than the previous report. Remaining blockers are now mostly operational: CI correctness, deploy safety, monitoring, and native release evidence.
 

@@ -25,15 +25,19 @@ create table if not exists public.foods (
 );
 
 -- Index for search
-create index foods_name_search_idx on public.foods using gin (
+create index if not exists foods_name_search_idx on public.foods using gin (
   to_tsvector('simple', coalesce(name,'') || ' ' || coalesce(name_vi,''))
 );
-create index foods_is_vietnamese_idx on public.foods(is_vietnamese);
-create index foods_category_idx on public.foods(category);
+create index if not exists foods_is_vietnamese_idx on public.foods(is_vietnamese);
+create index if not exists foods_category_idx on public.foods(category);
 
 -- RLS: public read
 alter table public.foods enable row level security;
+
+drop policy if exists "Anyone can read foods" on public.foods;
 create policy "Anyone can read foods" on public.foods for select using (true);
+
+drop policy if exists "Service role manages foods" on public.foods;
 create policy "Service role manages foods" on public.foods for all using (auth.role() = 'service_role');
 
 -- ==========================================

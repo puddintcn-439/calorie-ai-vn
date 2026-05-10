@@ -2,12 +2,14 @@ import { Injectable, UnauthorizedException, ConflictException } from '@nestjs/co
 import { JwtService } from '@nestjs/jwt';
 import { SupabaseService } from '../../common/supabase/supabase.service';
 import { RegisterDto, LoginDto } from './dto/auth.dto';
+import { MetricsService } from '../../common/metrics/metrics.service';
 
 @Injectable()
 export class AuthService {
   constructor(
     private supabase: SupabaseService,
     private jwt: JwtService,
+    private metrics: MetricsService,
   ) {}
 
   async register(dto: RegisterDto) {
@@ -20,7 +22,10 @@ export class AuthService {
       email_confirm: true,
     });
 
-    if (error) throw new ConflictException(error.message);
+    if (error) {
+      this.metrics.recordAuthFailure('register');
+      throw new ConflictException(error.message);
+    }
 
     // Create user profile
     await this.supabase.db.from('users').insert({
@@ -29,6 +34,7 @@ export class AuthService {
       full_name: dto.full_name,
     });
 
+    this.metrics.recordAuthSuccess('register');
     return this.issueToken(data.user!.id, dto.email);
   }
 
@@ -39,8 +45,12 @@ export class AuthService {
       password: dto.password,
     });
 
-    if (error) throw new UnauthorizedException('Email hoặc mật khẩu không đúng');
+    if (error) {
+      this.metrics.recordAuthFailure('login');
+      throw new UnauthorizedException('Email hoặc mật khẩu không đúng');
+    }
 
+    this.metrics.recordAuthSuccess('login');
     return this.issueToken(data.user.id, data.user.email!);
   }
 

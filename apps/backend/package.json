@@ -7,7 +7,9 @@
     "dev": "nest start --watch",
     "start": "node dist/apps/backend/src/main",
     "lint": "eslint src --ext .ts",
-    "test": "jest"
+    "test": "jest",
+    "test:cov": "jest --coverage",
+    "test:e2e": "jest --runInBand"
   },
   "dependencies": {
     "@calorie-ai/types": "*",

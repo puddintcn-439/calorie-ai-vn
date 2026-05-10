@@ -179,6 +179,21 @@ jobs:
     runs-on: ubuntu-latest
     name: Quality Gate Check
     needs: [lint-and-typecheck, backend-tests, mobile-check, build-backend]
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: calorie_ai_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
     steps:
       - uses: actions/checkout@v4
 
@@ -191,17 +206,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Check backend test coverage (min 79%)
-        run: |
-          npm run test:cov --workspace=backend > coverage.txt 2>&1
-          if grep -q "coverage: 79.45%" coverage.txt; then
-            echo "✅ Coverage gate passed (≥79%)"
-            exit 0
-          else
-            echo "❌ Coverage gate failed (require ≥79%)"
-            cat coverage.txt
-            exit 1
-          fi
+      - name: Check backend test coverage
+        run: npm run test:cov --workspace=backend
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/calorie_ai_test
           NODE_ENV: test

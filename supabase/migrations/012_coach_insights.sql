@@ -89,30 +89,34 @@ CREATE TABLE user_coaching_summaries (
 );
 
 -- Create indexes for fast queries
-CREATE INDEX idx_patterns_user_type ON user_behavioral_patterns(user_id, pattern_type);
-CREATE INDEX idx_patterns_detected_at ON user_behavioral_patterns(user_id, last_detected_at);
-CREATE INDEX idx_insights_user_type ON user_coaching_insights(user_id, insight_type);
-CREATE INDEX idx_insights_created ON user_coaching_insights(user_id, created_at DESC);
-CREATE INDEX idx_summaries_user_week ON user_coaching_summaries(user_id, week_start_date DESC);
+CREATE INDEX IF NOT EXISTS idx_patterns_user_type ON user_behavioral_patterns(user_id, pattern_type);
+CREATE INDEX IF NOT EXISTS idx_patterns_detected_at ON user_behavioral_patterns(user_id, last_detected_at);
+CREATE INDEX IF NOT EXISTS idx_insights_user_type ON user_coaching_insights(user_id, insight_type);
+CREATE INDEX IF NOT EXISTS idx_insights_created ON user_coaching_insights(user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_summaries_user_week ON user_coaching_summaries(user_id, week_start_date DESC);
 
 -- RLS policies for security
 ALTER TABLE user_behavioral_patterns ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_coaching_insights ENABLE ROW LEVEL SECURITY;
 ALTER TABLE user_coaching_summaries ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Users can view own patterns" ON user_behavioral_patterns;
 CREATE POLICY "Users can view own patterns"
   ON user_behavioral_patterns FOR SELECT
   USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can view own insights" ON user_coaching_insights;
 CREATE POLICY "Users can view own insights"
   ON user_coaching_insights FOR SELECT
   USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can acknowledge insights" ON user_coaching_insights;
 CREATE POLICY "Users can acknowledge insights"
   ON user_coaching_insights FOR UPDATE
   USING (auth.uid() = user_id)
   WITH CHECK (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can view own summaries" ON user_coaching_summaries;
 CREATE POLICY "Users can view own summaries"
   ON user_coaching_summaries FOR SELECT
   USING (auth.uid() = user_id);

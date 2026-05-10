@@ -15,11 +15,13 @@ import { CalorieTargetModule } from './modules/calorie-target/calorie-target.mod
 import { CoachingModule } from './modules/coaching/coaching.module';
 import { BodyProgressModule } from './modules/body-progress/body-progress.module';
 import { HealthModule } from './health/health.module';
+import { MetricsModule } from './common/metrics/metrics.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     ThrottlerModule.forRoot([{ ttl: 60000, limit: 60 }]),
+    MetricsModule,
     HealthModule,
     AuthModule,
     AiModule,

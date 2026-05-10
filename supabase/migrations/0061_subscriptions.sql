@@ -18,18 +18,20 @@ create table if not exists public.user_subscriptions (
   updated_at        timestamptz not null default now()
 );
 
-create index user_subscriptions_user_idx on public.user_subscriptions(user_id);
-create index user_subscriptions_tier_idx on public.user_subscriptions(tier);
-create index user_subscriptions_active_idx on public.user_subscriptions(is_active);
-create index user_subscriptions_renews_idx on public.user_subscriptions(renews_at);
+create index if not exists user_subscriptions_user_idx on public.user_subscriptions(user_id);
+create index if not exists user_subscriptions_tier_idx on public.user_subscriptions(tier);
+create index if not exists user_subscriptions_active_idx on public.user_subscriptions(is_active);
+create index if not exists user_subscriptions_renews_idx on public.user_subscriptions(renews_at);
 
 -- RLS: users see only their own subscription
 alter table public.user_subscriptions enable row level security;
 
+drop policy if exists "Users view own subscription" on public.user_subscriptions;
 create policy "Users view own subscription"
   on public.user_subscriptions for select
   using (auth.uid() = user_id);
 
+drop policy if exists "Service role full access on subscriptions" on public.user_subscriptions;
 create policy "Service role full access on subscriptions"
   on public.user_subscriptions for all
   using (auth.role() = 'service_role');

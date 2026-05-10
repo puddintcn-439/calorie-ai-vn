@@ -15,10 +15,11 @@ create table if not exists public.saved_meals (
   created_at  timestamptz not null default now()
 );
 
-create index saved_meals_user_idx on public.saved_meals(user_id, use_count desc);
+create index if not exists saved_meals_user_idx on public.saved_meals(user_id, use_count desc);
 
 alter table public.saved_meals enable row level security;
 
+drop policy if exists "Users manage own saved meals" on public.saved_meals;
 create policy "Users manage own saved meals"
   on public.saved_meals for all
   using (auth.uid() = user_id);

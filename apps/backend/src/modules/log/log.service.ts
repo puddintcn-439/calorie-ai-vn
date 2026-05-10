@@ -6,6 +6,22 @@ import { FoodLog, DailyLog, MealType, SavedMeal, SavedMealItem, ActivityLog, Cre
 export class LogService {
   constructor(private supabase: SupabaseService) {}
 
+  private getDayRangeByTimezone(date: string, tzOffsetMinutes: number = 0): { startIso: string; endIso: string } {
+    const [y, m, d] = date.split('-').map((v) => parseInt(v, 10));
+    const safeYear = Number.isFinite(y) ? y : 1970;
+    const safeMonth = Number.isFinite(m) ? m - 1 : 0;
+    const safeDay = Number.isFinite(d) ? d : 1;
+
+    // Convert local-day boundaries to UTC using client offset (same semantics as JS getTimezoneOffset).
+    const localStartUtcMs = Date.UTC(safeYear, safeMonth, safeDay, 0, 0, 0, 0) + tzOffsetMinutes * 60_000;
+    const localEndUtcMs = localStartUtcMs + (24 * 60 * 60 * 1000) - 1;
+
+    return {
+      startIso: new Date(localStartUtcMs).toISOString(),
+      endIso: new Date(localEndUtcMs).toISOString(),
+    };
+  }
+
   async createLog(data: Partial<FoodLog>): Promise<FoodLog> {
     const { data: log, error } = await this.supabase.db
       .from('food_logs')
@@ -17,13 +33,15 @@ export class LogService {
     return log as FoodLog;
   }
 
-  async getDailyLog(userId: string, date: string): Promise<DailyLog> {
+  async getDailyLog(userId: string, date: string, tzOffsetMinutes: number = 0): Promise<DailyLog> {
+    const { startIso, endIso } = this.getDayRangeByTimezone(date, tzOffsetMinutes);
+
     const { data: logs, error } = await this.supabase.db
       .from('food_logs')
       .select('*')
       .eq('user_id', userId)
-      .gte('logged_at', `${date}T00:00:00`)
-      .lte('logged_at', `${date}T23:59:59`)
+      .gte('logged_at', startIso)
+      .lte('logged_at', endIso)
       .order('logged_at', { ascending: true });
 
     if (error) throw error;
@@ -216,15 +234,15 @@ export class LogService {
     };
   }
 
-  async getActivityLogs(userId: string, date: string): Promise<ActivityLog[]> {
-    const start = `${date}T00:00:00`;
-    const end = `${date}T23:59:59`;
+  async getActivityLogs(userId: string, date: string, tzOffsetMinutes: number = 0): Promise<ActivityLog[]> {
+    const { startIso, endIso } = this.getDayRangeByTimezone(date, tzOffsetMinutes);
+
     const { data, error } = await this.supabase.db
       .from('activity_logs')
       .select('*')
       .eq('user_id', userId)
-      .gte('logged_at', start)
-      .lte('logged_at', end)
+      .gte('logged_at', startIso)
+      .lte('logged_at', endIso)
       .order('logged_at', { ascending: false });
 
     if (error) throw error;

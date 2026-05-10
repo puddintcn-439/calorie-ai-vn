@@ -12,15 +12,17 @@ create table if not exists public.push_notification_tokens (
   unique (user_id, token)
 );
 
-create index push_tokens_user_idx on public.push_notification_tokens(user_id);
+create index if not exists push_tokens_user_idx on public.push_notification_tokens(user_id);
 
 -- RLS: users manage only their own tokens
 alter table public.push_notification_tokens enable row level security;
 
+drop policy if exists "Users manage own push tokens" on public.push_notification_tokens;
 create policy "Users manage own push tokens"
   on public.push_notification_tokens for all
   using (auth.uid() = user_id);
 
+drop policy if exists "Service role full access on push tokens" on public.push_notification_tokens;
 create policy "Service role full access on push tokens"
   on public.push_notification_tokens for all
   using (auth.role() = 'service_role');
