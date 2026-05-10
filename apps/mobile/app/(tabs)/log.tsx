@@ -526,54 +526,6 @@ export default function LogScreen() {
           );
         })}
 
-        {/* ---- Exercise Roadmap Section ---- */}
-        <SurfaceCard style={styles.roadmapSection}>
-          <View style={styles.roadmapHeader}>
-            <View style={styles.roadmapHeaderTopRow}>
-              <Text style={styles.roadmapTitle}>🧭 Lộ trình tập hôm nay</Text>
-              <TouchableOpacity style={styles.roadmapAddBtn} onPress={openAddRoadmapExercise}>
-                <Ionicons name="add" size={14} color="#0b1020" />
-                <Text style={styles.roadmapAddBtnText}>Thêm bài</Text>
-              </TouchableOpacity>
-            </View>
-            <Text style={styles.roadmapSummary}>
-              Hoàn thành {Object.keys(roadmapActivityByTaskId).length}/{roadmap.length} bài · +{completedRoadmapKcal} kcal
-            </Text>
-          </View>
-
-          {roadmap.length === 0 ? (
-            <EmptyState
-              icon="🧘"
-              title="Chưa có lộ trình hôm nay"
-              description="Hãy cập nhật hồ sơ hoặc thêm bài thủ công để bắt đầu."
-              style={styles.emptyStateCard}
-            />
-          ) : (
-            roadmap.map((task) => {
-              const done = Boolean(roadmapActivityByTaskId[task.id]);
-              return (
-                <View key={task.id} style={[styles.roadmapItem, done && styles.roadmapItemCompleted]}>
-                  <TouchableOpacity style={styles.roadmapLeft} onPress={() => void handleToggleRoadmapTask(task)}>
-                    <View style={[styles.roadmapCheckbox, done && styles.roadmapCheckboxCompleted]}>
-                      {done ? <Ionicons name="checkmark" size={14} color="#0b1020" /> : null}
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.roadmapItemTitle}>{task.title}</Text>
-                      <Text style={styles.roadmapItemDetail}>{task.detail}</Text>
-                      <Text style={styles.roadmapItemMeta}>~{task.estimated_kcal} kcal</Text>
-                      <Text style={styles.roadmapCta}>{done ? 'Đã ghi vào mục Hoạt động' : 'Nhấn để cộng calories burned vào Activity'}</Text>
-                    </View>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.roadmapRemoveBtn} onPress={() => handleRemoveRoadmapTask(task)}>
-                    <Ionicons name="trash-outline" size={12} color="#fda4af" />
-                    <Text style={styles.roadmapRemoveText}>Xóa bài</Text>
-                  </TouchableOpacity>
-                </View>
-              );
-            })
-          )}
-        </SurfaceCard>
-
         {/* ---- Activity Section ---- */}
         <SurfaceCard style={styles.activitySection}>
           <View style={styles.activityHeader}>

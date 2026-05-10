@@ -17,6 +17,8 @@ export interface AIScanResponse {
   items: AIDetectedItem[];
   unresolved_items?: AIUnresolvedItem[];
   total_calories: number;
+  total_calories_min?: number;
+  total_calories_max?: number;
   total_protein_g: number;
   total_carbs_g: number;
   total_fat_g: number;
@@ -34,6 +36,8 @@ export interface AIDetectedItem {
   unit: string;              // "gram" | "ml" | "cái" | "tô" | "bát"
   estimated_grams: number;
   calories: number;
+  calories_min?: number;
+  calories_max?: number;
   protein_g: number;
   carbs_g: number;
   fat_g: number;

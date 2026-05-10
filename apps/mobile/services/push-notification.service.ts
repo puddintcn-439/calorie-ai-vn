@@ -1,4 +1,5 @@
 import * as Notifications from 'expo-notifications';
+import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { apiClient } from './api';
 
@@ -14,6 +15,12 @@ Notifications.setNotificationHandler({
 });
 
 class PushNotificationService {
+  private getExpoProjectId(): string | null {
+    return Constants.easConfig?.projectId
+      ?? Constants.expoConfig?.extra?.eas?.projectId
+      ?? null;
+  }
+
   /**
    * Initialize push notifications for the app
    */
@@ -31,8 +38,14 @@ class PushNotificationService {
         return null;
       }
 
+      const projectId = this.getExpoProjectId();
+      if (!projectId) {
+        console.log('[Push] Skipping Expo push token registration because no Expo projectId is configured');
+        return null;
+      }
+
       // Get push token (on physical device or simulator with proper setup)
-      const token = (await Notifications.getExpoPushTokenAsync()).data;
+      const token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
       console.log('[Push] Expo push token:', token);
 
       // Register token with backend so server-side cron can send pushes
@@ -59,7 +72,7 @@ class PushNotificationService {
 
       return token;
     } catch (error) {
-      console.error('[Push] Failed to initialize:', error);
+      console.warn('[Push] Failed to initialize notifications:', error);
       return null;
     }
   }

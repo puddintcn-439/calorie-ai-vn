@@ -66,7 +66,7 @@ export const useLogStore = create<LogState>((set, get) => ({
       const res = await apiClient.get(`/roadmap/${d}`);
       set({ dailyRoadmap: res.data });
     } catch (error) {
-      console.error('Failed to fetch daily roadmap:', error);
+      console.warn('Failed to fetch daily roadmap:', error);
       set({ dailyRoadmap: [] });
     }
   },

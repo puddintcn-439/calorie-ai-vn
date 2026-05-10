@@ -22,6 +22,37 @@ interface ChatMessage {
   text: string;
 }
 
+function getCoachErrorMessage(error: unknown): string {
+  const fallback = 'Xin loi, toi dang bi gian doan ket noi. Ban thu lai sau it phut nhe.';
+
+  const err: any = error;
+  const rawMessage = String(err?.message ?? '').toLowerCase();
+  const status = Number(err?.response?.status ?? 0);
+  const backendMessage = String(err?.response?.data?.message ?? '').trim();
+
+  if (rawMessage.includes('only available on premium') || rawMessage.includes('premium or pro')) {
+    return 'AI Coach hien chi mo cho goi Premium/Pro. Ban nang cap de tiep tuc dung tinh nang nay nhe.';
+  }
+
+  if (status === 401) {
+    return 'Phien dang nhap da het han. Ban vui long dang nhap lai de tiep tuc chat voi Coach.';
+  }
+
+  if (status >= 500 && backendMessage) {
+    return `Coach tam thoi gap loi he thong: ${backendMessage}`;
+  }
+
+  if (backendMessage) {
+    return backendMessage;
+  }
+
+  if (rawMessage.includes('network')) {
+    return 'Khong the ket noi backend. Ban kiem tra lai server va thu lai giup minh nhe.';
+  }
+
+  return fallback;
+}
+
 export default function CoachScreen() {
   const { dailyLog, fetchDailyLog } = useLogStore();
   const [input, setInput] = useState('');
@@ -99,11 +130,11 @@ export default function CoachScreen() {
         text: res.message,
       };
       setMessages((prev) => [...prev, coachMessage]);
-    } catch {
+    } catch (error) {
       const fallback: ChatMessage = {
         id: `c-${Date.now()}`,
         role: 'coach',
-        text: 'Xin loi, toi dang bi gian doan ket noi. Ban thu lai sau it phut nhe.',
+        text: getCoachErrorMessage(error),
       };
       setMessages((prev) => [...prev, fallback]);
     } finally {

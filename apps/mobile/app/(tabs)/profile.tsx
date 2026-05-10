@@ -4,14 +4,13 @@ import {
   ActivityIndicator, useWindowDimensions, Switch, ScrollView, TouchableOpacity,
 } from 'react-native';
 import { Platform } from 'react-native';
-import { useRouter } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useAuthStore } from '../../store/auth.store';
 import { useReminderStore } from '../../store/reminder.store';
 import { useSubscriptionStore } from '../../store/subscription.store';
 import { useLogStore } from '../../store/log.store';
 import { apiClient } from '../../services/api';
-import { User, ActivityLevel, UserGoal, ReminderPreferences, ActivityType, ACTIVITY_MET } from '@calorie-ai/types';
+import { User, ActivityLevel, UserGoal, ReminderPreferences, ActivityType, ACTIVITY_MET, SUBSCRIPTION_TIERS, SubscriptionTier } from '@calorie-ai/types';
 import { BodyText, Eyebrow, HeroTitle, ScreenShell, SurfaceCard } from '../../components/ui-shell';
 import { UiButton } from '../../components/ui-button';
 import { UiChip } from '../../components/ui-chip';
@@ -463,7 +462,6 @@ function calculateInstantCalorieTargets(
 }
 
 export default function ProfileScreen() {
-  const router = useRouter();
   const { logout } = useAuthStore();
   const {
     preferences: reminderPrefs,
@@ -473,7 +471,7 @@ export default function ProfileScreen() {
     updatePreferences: updateReminders,
     fetchPreviewNudge,
   } = useReminderStore();
-  const { subscription, features, fetchSubscription } = useSubscriptionStore();
+  const { subscription, features, fetchSubscription, changeTier, isLoading: isSubscriptionLoading } = useSubscriptionStore();
   const { activityLogs, fetchActivityLogs, addActivity } = useLogStore();
   const { width } = useWindowDimensions();
   const [profile, setProfile] = useState<Partial<User>>({});
@@ -665,6 +663,19 @@ export default function ProfileScreen() {
       { text: 'Huỷ', style: 'cancel' },
       { text: 'Đăng xuất', style: 'destructive', onPress: () => void logout() },
     ]);
+  };
+
+  const handleChangeSubscriptionTier = async (tier: SubscriptionTier) => {
+    if (tier === subscription?.tier) {
+      return;
+    }
+
+    try {
+      await changeTier(tier);
+      Alert.alert('Đã cập nhật gói', `User hiện đang ở gói ${SUBSCRIPTION_TIERS[tier].name}.`);
+    } catch (error: any) {
+      Alert.alert('Không thể cập nhật gói', error?.response?.data?.message ?? error?.message ?? 'Vui lòng thử lại.');
+    }
   };
 
   if (isLoading) {
@@ -938,6 +949,43 @@ export default function ProfileScreen() {
             />
           </View>
 
+          <Text style={styles.subscriptionHelper}>
+            Chọn gói để áp quyền tính năng tương ứng cho user hiện tại.
+          </Text>
+
+          <View style={[styles.planSelectorRow, isDesktop && styles.planSelectorRowDesktop]}>
+            {(Object.keys(SUBSCRIPTION_TIERS) as SubscriptionTier[]).map((tier) => {
+              const tierInfo = SUBSCRIPTION_TIERS[tier];
+              const isCurrentTier = subscription?.tier === tier;
+              const accent = tier === 'pro' ? '#fbbf24' : tier === 'premium' ? '#f97316' : '#6ee7b7';
+
+              return (
+                <TouchableOpacity
+                  key={tier}
+                  style={[
+                    styles.planOption,
+                    isCurrentTier && styles.planOptionActive,
+                    isCurrentTier && { borderColor: accent, backgroundColor: '#16213f' },
+                  ]}
+                  onPress={() => void handleChangeSubscriptionTier(tier)}
+                  disabled={isSubscriptionLoading}
+                >
+                  <View style={styles.planOptionHeader}>
+                    <Text style={styles.planOptionName}>{tierInfo.name}</Text>
+                    {tierInfo.tag ? <Text style={[styles.planOptionTag, { color: accent }]}>{tierInfo.tag}</Text> : null}
+                  </View>
+                  <Text style={styles.planOptionDescription}>{tierInfo.description}</Text>
+                  <Text style={styles.planOptionPrice}>
+                    {tier === 'free' ? 'Miễn phí' : `$${tierInfo.price_usd_monthly}/tháng`}
+                  </Text>
+                  <Text style={[styles.planOptionAction, isCurrentTier && { color: accent }]}>
+                    {isCurrentTier ? 'Đang áp dụng' : 'Chuyển sang gói này'}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+
           {features && (
             <View style={styles.featuresPreview}>
               <Text style={styles.featuresLabel}>Các tính năng:</Text>
@@ -961,16 +1009,6 @@ export default function ProfileScreen() {
                 ))}
               </View>
             </View>
-          )}
-
-          {subscription?.tier === 'free' && (
-            <TouchableOpacity
-              style={styles.upgradeButton}
-              onPress={() => router.push('/paywall')}
-            >
-              <Text style={styles.upgradeButtonText}>Nâng cấp gói</Text>
-              <MaterialIcons name="arrow-forward" size={18} color="#fff" />
-            </TouchableOpacity>
           )}
         </View>
       </SurfaceCard>
@@ -1212,12 +1250,21 @@ const styles = StyleSheet.create({
   subscriptionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
   subscriptionTier: { fontSize: 18, fontWeight: '700', color: '#dbeafe', marginBottom: 2 },
   subscriptionStatus: { fontSize: 12, color: '#6b7280' },
+  subscriptionHelper: { color: '#8ea2c8', fontSize: 13, lineHeight: 19, marginBottom: 12 },
+  planSelectorRow: { gap: 10, marginBottom: 14 },
+  planSelectorRowDesktop: { flexDirection: 'row' },
+  planOption: { flex: 1, backgroundColor: '#0f1419', borderRadius: 12, borderWidth: 1, borderColor: '#23386b', padding: 12, gap: 6 },
+  planOptionActive: { borderWidth: 1.5 },
+  planOptionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
+  planOptionName: { fontSize: 15, fontWeight: '800', color: '#eff6ff' },
+  planOptionTag: { fontSize: 11, fontWeight: '800' },
+  planOptionDescription: { color: '#9fb1d1', fontSize: 12, lineHeight: 18 },
+  planOptionPrice: { color: '#dbeafe', fontSize: 13, fontWeight: '700' },
+  planOptionAction: { color: '#6ee7b7', fontSize: 12, fontWeight: '700', marginTop: 4 },
   featuresPreview: { marginBottom: 14 },
   featuresLabel: { fontSize: 12, color: '#8ea2c8', fontWeight: '500', marginBottom: 8 },
   featureGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   featureCheckItem: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 4, paddingHorizontal: 8, backgroundColor: '#0f1419', borderRadius: 6 },
   featureCheckLabel: { fontSize: 12, color: '#dbeafe', fontWeight: '500' },
   featureCheckLabelDisabled: { color: '#6b7280' },
-  upgradeButton: { backgroundColor: '#f97316', borderRadius: 10, paddingVertical: 12, paddingHorizontal: 14, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6 },
-  upgradeButtonText: { color: '#fff', fontSize: 14, fontWeight: '600' },
 });

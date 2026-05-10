@@ -10,6 +10,7 @@ interface SubscriptionState {
   error: string | null;
 
   fetchSubscription: () => Promise<void>;
+  changeTier: (tier: 'free' | 'premium' | 'pro') => Promise<void>;
   upgrade: (tier: 'premium' | 'pro', provider: 'stripe' | 'in_app' | 'trial', paymentId?: string) => Promise<void>;
   cancel: () => Promise<void>;
   refreshFeatures: () => Promise<void>;
@@ -35,6 +36,26 @@ export const useSubscriptionStore = create<SubscriptionState>((set) => ({
     }
   },
 
+  changeTier: async (tier: 'free' | 'premium' | 'pro') => {
+    set({ isLoading: true, error: null });
+    try {
+      const res = tier === 'free'
+        ? await apiClient.delete<UserSubscription>('/subscriptions/cancel')
+        : await apiClient.post<UserSubscription>('/subscriptions/upgrade', {
+            tier,
+            payment_provider: 'trial',
+            payment_id: `manual_${tier}_${Date.now()}`,
+          });
+
+      featureGatingService.invalidateCache();
+      const refreshedFeatures = await featureGatingService.getUserFeatures();
+      set({ subscription: res.data, features: refreshedFeatures, isLoading: false });
+    } catch (err: any) {
+      set({ error: err.message ?? 'Failed to change subscription tier', isLoading: false });
+      throw err;
+    }
+  },
+
   upgrade: async (tier: 'premium' | 'pro', provider: 'stripe' | 'in_app' | 'trial', paymentId?: string) => {
     set({ isLoading: true, error: null });
     try {
@@ -44,11 +65,11 @@ export const useSubscriptionStore = create<SubscriptionState>((set) => ({
         payment_id: paymentId,
       });
       featureGatingService.invalidateCache();
-      set({ subscription: res.data, isLoading: false });
-      // Refresh features after upgrade
-      await featureGatingService.getUserFeatures();
+      const refreshedFeatures = await featureGatingService.getUserFeatures();
+      set({ subscription: res.data, features: refreshedFeatures, isLoading: false });
     } catch (err: any) {
       set({ error: err.message ?? 'Failed to upgrade subscription', isLoading: false });
+      throw err;
     }
   },
 
@@ -57,11 +78,11 @@ export const useSubscriptionStore = create<SubscriptionState>((set) => ({
     try {
       const res = await apiClient.delete<UserSubscription>('/subscriptions/cancel');
       featureGatingService.invalidateCache();
-      set({ subscription: res.data, isLoading: false });
-      // Refresh features after cancel
-      await featureGatingService.getUserFeatures();
+      const refreshedFeatures = await featureGatingService.getUserFeatures();
+      set({ subscription: res.data, features: refreshedFeatures, isLoading: false });
     } catch (err: any) {
       set({ error: err.message ?? 'Failed to cancel subscription', isLoading: false });
+      throw err;
     }
   },
 

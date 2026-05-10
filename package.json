@@ -1,6 +1,7 @@
 {
   "name": "calorie-ai-vn",
   "private": true,
+  "packageManager": "npm@10",
   "workspaces": [
     "apps/*",
     "packages/*"

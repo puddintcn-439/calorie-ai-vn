@@ -12,11 +12,11 @@ import {
 import { useRouter } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useSubscriptionStore } from '../store/subscription.store';
-import { SUBSCRIPTION_TIERS } from '@calorie-ai/types';
+import { SUBSCRIPTION_TIERS, SubscriptionTier } from '@calorie-ai/types';
 
 export default function PaywallScreen() {
   const router = useRouter();
-  const { subscription, isLoading, error, upgrade } = useSubscriptionStore();
+  const { subscription, isLoading, error, changeTier } = useSubscriptionStore();
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
   const { width } = useWindowDimensions();
   const isWide = width >= 1120;
@@ -26,16 +26,13 @@ export default function PaywallScreen() {
     useSubscriptionStore.getState().fetchSubscription();
   }, []);
 
-  const handleUpgrade = async (tier: 'premium' | 'pro') => {
+  const handleChangeTier = async (tier: SubscriptionTier) => {
     try {
-      // In production, this would integrate with Stripe or in-app purchase
-      // For now, we'll just call upgrade with trial provider
-      await upgrade(tier, 'in_app', `payment_${Date.now()}`);
-      Alert.alert('Success', `Upgraded to ${tier} tier!`);
-      // Navigate back to home
+      await changeTier(tier);
+      Alert.alert('Success', `Switched to ${SUBSCRIPTION_TIERS[tier].name}!`);
       router.back();
     } catch (err: any) {
-      Alert.alert('Error', err.message);
+      Alert.alert('Error', err?.response?.data?.message ?? err?.message ?? 'Failed to update plan');
     }
   };
 
@@ -160,19 +157,17 @@ export default function PaywallScreen() {
                 style={[
                   styles.actionButton,
                   isCurrentTier && styles.currentButton,
-                  tier === 'free' && styles.freeButton,
                 ]}
-                onPress={() => tier !== 'free' && handleUpgrade(tier as 'premium' | 'pro')}
-                disabled={isCurrentTier || tier === 'free'}
+                onPress={() => void handleChangeTier(tier)}
+                disabled={isCurrentTier}
               >
                 <Text
                   style={[
                     styles.actionButtonText,
                     isCurrentTier && styles.currentButtonText,
-                    tier === 'free' && styles.freeButtonText,
                   ]}
                 >
-                  {isCurrentTier ? '✓ Hiện tại' : tier === 'free' ? 'Đang dùng' : 'Nâng cấp'}
+                  {isCurrentTier ? '✓ Hiện tại' : tier === 'free' ? 'Chuyển về Free' : 'Áp dụng gói này'}
                 </Text>
               </TouchableOpacity>
             </View>
@@ -381,9 +376,6 @@ const styles = StyleSheet.create({
   currentButton: {
     backgroundColor: '#e5e7eb',
   },
-  freeButton: {
-    backgroundColor: '#f3f4f6',
-  },
   actionButtonText: {
     color: '#fff',
     fontSize: 16,
@@ -391,9 +383,6 @@ const styles = StyleSheet.create({
   },
   currentButtonText: {
     color: '#6b7280',
-  },
-  freeButtonText: {
-    color: '#9ca3af',
   },
   faqSection: {
     marginBottom: 24,

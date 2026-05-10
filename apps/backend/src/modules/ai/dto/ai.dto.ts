@@ -117,7 +117,9 @@ export class RefineScanDto {
   context: string;
 
   @ApiProperty({ description: 'Tên các món đã detect lần đầu', type: [String] })
-  original_items_summary: string;
+  @IsString()
+  @IsOptional()
+  original_items_summary?: string;
 }
 
 export class CoachMessageDto {

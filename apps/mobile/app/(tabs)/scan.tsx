@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, TextInput,
-  ScrollView, ActivityIndicator, Alert, Image,
+  ScrollView, ActivityIndicator, Alert, Image, Platform,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { Audio } from 'expo-av';
@@ -18,6 +18,8 @@ import {
 import { useLogStore } from '../../store/log.store';
 import { useContextStore } from '../../store/context.store';
 import { apiClient } from '../../services/api';
+
+const IMAGE_MEDIA_TYPES = ['images'] as any;
 import { telemetryService } from '../../services/telemetry.service';
 import { router } from 'expo-router';
 import { BodyText, Eyebrow, HeroTitle, ScreenShell, SurfaceCard } from '../../components/ui-shell';
@@ -29,7 +31,32 @@ const MODE_ICONS: Record<InputMode, string> = {
   camera: '📸', gallery: '🖼', text: '✏️', voice: '🎙️', receipt: '🧾', barcode: '🔍', search: '🍜',
 };
 
+function formatCalorieRange(min: number, max: number): string {
+  const roundedMin = Math.round(min);
+  const roundedMax = Math.round(max);
+  if (roundedMin === roundedMax) {
+    return `${roundedMin} kcal`;
+  }
+  return `${roundedMin}-${roundedMax} kcal`;
+}
+
+function isQuotaFallbackResult(result: AIScanResponse): boolean {
+  return (
+    result.success === false
+    && result.metadata?.ai_fallback === 'quota_or_rate_limited'
+  );
+}
+
 export default function ScanScreen() {
+  // Determine default meal based on current time
+  const getDefaultMeal = (): MealType => {
+    const hour = new Date().getHours();
+    if (hour >= 5 && hour < 11) return 'breakfast'; // 5-11
+    if (hour >= 11 && hour < 16) return 'lunch';    // 11-16
+    if (hour >= 16 && hour < 20) return 'dinner';   // 16-20
+    return 'snack'; // 20-5 (late night or early morning)
+  };
+
   const [mode, setMode] = useState<InputMode>('camera');
   const [textInput, setTextInput] = useState('');
   const [voiceTranscript, setVoiceTranscript] = useState('');
@@ -37,7 +64,7 @@ export default function ScanScreen() {
   const [scanResult, setScanResult] = useState<AIScanResponse | null>(null);
   const [editableItems, setEditableItems] = useState<AIDetectedItem[]>([]);
   const [isScanning, setIsScanning] = useState(false);
-  const [selectedMeal, setSelectedMeal] = useState<MealType>('lunch');
+  const [selectedMeal, setSelectedMeal] = useState<MealType>(getDefaultMeal());
   const [refineContext, setRefineContext] = useState('');
   const [isRefining, setIsRefining] = useState(false);
   const [isSavingMeal, setIsSavingMeal] = useState(false);
@@ -49,6 +76,7 @@ export default function ScanScreen() {
   const [searchResults, setSearchResults] = useState<Food[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [isReceiptScanning, setIsReceiptScanning] = useState(false);
+  const [scanNotice, setScanNotice] = useState<string | null>(null);
 
   // Context state
   const { activeContexts, toggleContext } = useContextStore();
@@ -62,13 +90,28 @@ export default function ScanScreen() {
   const [voicePermissionGranted, setVoicePermissionGranted] = useState(false);
 
   const { addLog, saveMeal } = useLogStore();
-  const currentItems = editableItems.length > 0 ? editableItems : (scanResult?.items ?? []);
+  // Always prefer editableItems if we have a scan result, even if empty
+  const currentItems = scanResult ? editableItems : [];
   const totalCalories = currentItems.reduce((s, i) => s + i.calories, 0);
+  const totalCaloriesMin = currentItems.reduce((s, i) => s + (i.calories_min ?? i.calories), 0);
+  const totalCaloriesMax = currentItems.reduce((s, i) => s + (i.calories_max ?? i.calories), 0);
   const totalProtein = currentItems.reduce((s, i) => s + i.protein_g, 0);
   const totalCarbs = currentItems.reduce((s, i) => s + i.carbs_g, 0);
   const totalFat = currentItems.reduce((s, i) => s + i.fat_g, 0);
 
   const applyScanResult = (result: AIScanResponse) => {
+    if (isQuotaFallbackResult(result)) {
+      setScanResult(null);
+      setEditableItems([]);
+      setScanNotice('AI đang bận do quota/rate limit. Vui lòng thử lại sau vài phút.');
+      Alert.alert(
+        'AI đang bận',
+        'Hệ thống AI đang chạm giới hạn tạm thời (quota/rate limit). Vui lòng thử lại sau vài phút.',
+      );
+      return;
+    }
+
+    setScanNotice(null);
     setScanResult(result);
     setEditableItems(result.items.map((item) => ({ ...item })));
     
@@ -89,6 +132,8 @@ export default function ScanScreen() {
         ...old,
         estimated_grams: nextGrams,
         calories: Math.max(0, Math.round(old.calories * ratio)),
+        calories_min: old.calories_min != null ? Math.max(0, Math.round(old.calories_min * ratio)) : undefined,
+        calories_max: old.calories_max != null ? Math.max(0, Math.round(old.calories_max * ratio)) : undefined,
         protein_g: Number((old.protein_g * ratio).toFixed(1)),
         carbs_g: Number((old.carbs_g * ratio).toFixed(1)),
         fat_g: Number((old.fat_g * ratio).toFixed(1)),
@@ -123,7 +168,8 @@ export default function ScanScreen() {
       const item = prev[index];
       if (!item) return prev;
       void telemetryService.emitItemMismatch(item.name_vi ?? item.name, '(removed)', item.confidence);
-      return prev.filter((_, i) => i !== index);
+      const newItems = prev.filter((_, i) => i !== index);
+      return [...newItems]; // Create new array reference to ensure React detects change
     });
   }, []);
 
@@ -214,17 +260,17 @@ export default function ScanScreen() {
   const handleCameraCapture = async () => {
     const perm = await ImagePicker.requestCameraPermissionsAsync();
     if (!perm.granted) { Alert.alert('Cần quyền truy cập camera'); return; }
-    const result = await ImagePicker.launchCameraAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.8 });
+    const result = await ImagePicker.launchCameraAsync({ mediaTypes: IMAGE_MEDIA_TYPES, quality: 0.8 });
     if (!result.canceled) await runImageScan(result.assets[0].uri);
   };
 
   const handleGalleryPick = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.8 });
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: IMAGE_MEDIA_TYPES, quality: 0.8 });
     if (!result.canceled) await runImageScan(result.assets[0].uri);
   };
 
   const runImageScan = async (uri: string) => {
-    setScannedImage(uri); setScanResult(null); setEditableItems([]); setRefineContext(''); setIsScanning(true);
+    setScannedImage(uri); setScanResult(null); setEditableItems([]); setRefineContext(''); setScanNotice(null); setIsScanning(true);
     const startedAt = Date.now();
     void telemetryService.emitLogAttempted('image');
     try {
@@ -239,6 +285,7 @@ export default function ScanScreen() {
     }
     catch {
       void telemetryService.emitLogFailed('image', 'scan_api_error', Date.now() - startedAt);
+      setScanNotice('Không thể phân tích ảnh lúc này. Vui lòng thử lại sau ít phút.');
       Alert.alert('Lỗi', 'Không thể phân tích ảnh.');
     }
     finally { setIsScanning(false); }
@@ -246,7 +293,7 @@ export default function ScanScreen() {
 
   const handleTextScan = async () => {
     if (!textInput.trim()) return;
-    setScanResult(null); setEditableItems([]); setRefineContext(''); setIsScanning(true);
+    setScanResult(null); setEditableItems([]); setRefineContext(''); setScanNotice(null); setIsScanning(true);
     const startedAt = Date.now();
     void telemetryService.emitLogAttempted('text');
     try {
@@ -261,6 +308,7 @@ export default function ScanScreen() {
     }
     catch {
       void telemetryService.emitLogFailed('text', 'scan_api_error', Date.now() - startedAt);
+      setScanNotice('Không thể phân tích mô tả lúc này. Vui lòng thử lại sau ít phút.');
       Alert.alert('Lỗi', 'Không thể phân tích.');
     }
     finally { setIsScanning(false); }
@@ -270,7 +318,7 @@ export default function ScanScreen() {
     const transcript = voiceTranscript.trim();
     if (!transcript) return;
 
-    setScanResult(null); setEditableItems([]); setRefineContext(''); setIsScanning(true);
+    setScanResult(null); setEditableItems([]); setRefineContext(''); setScanNotice(null); setIsScanning(true);
     const startedAt = Date.now();
     void telemetryService.emitLogAttempted('voice');
     try {
@@ -290,6 +338,7 @@ export default function ScanScreen() {
     }
     catch {
       void telemetryService.emitLogFailed('voice', 'scan_api_error', Date.now() - startedAt);
+      setScanNotice('Không thể phân tích giọng nói lúc này. Vui lòng thử lại sau ít phút.');
       Alert.alert('Lỗi', 'Không thể phân tích giọng nói.');
     }
     finally { setIsScanning(false); }
@@ -297,7 +346,7 @@ export default function ScanScreen() {
 
   const runReceiptScan = async (uri: string) => {
     setLastReceiptUri(uri);
-    setScannedImage(uri); setScanResult(null); setEditableItems([]); setRefineContext(''); setIsReceiptScanning(true);
+    setScannedImage(uri); setScanResult(null); setEditableItems([]); setRefineContext(''); setScanNotice(null); setIsReceiptScanning(true);
     const startedAt = Date.now();
     void telemetryService.emitLogAttempted('receipt');
     try {
@@ -316,6 +365,7 @@ export default function ScanScreen() {
     }
     catch {
       void telemetryService.emitLogFailed('receipt', 'scan_api_error', Date.now() - startedAt);
+      setScanNotice('Không thể phân tích hóa đơn lúc này. Vui lòng thử lại sau ít phút.');
       Alert.alert('Lỗi', 'Không thể phân tích hóa đơn.');
     }
     finally { setIsReceiptScanning(false); }
@@ -324,12 +374,12 @@ export default function ScanScreen() {
   const handleReceiptCapture = async () => {
     const perm = await ImagePicker.requestCameraPermissionsAsync();
     if (!perm.granted) { Alert.alert('Cần quyền truy cập camera'); return; }
-    const result = await ImagePicker.launchCameraAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.8 });
+    const result = await ImagePicker.launchCameraAsync({ mediaTypes: IMAGE_MEDIA_TYPES, quality: 0.8 });
     if (!result.canceled) await runReceiptScan(result.assets[0].uri);
   };
 
   const handleReceiptPick = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.8 });
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: IMAGE_MEDIA_TYPES, quality: 0.8 });
     if (!result.canceled) await runReceiptScan(result.assets[0].uri);
   };
 
@@ -435,6 +485,7 @@ export default function ScanScreen() {
                 setBarcodeResult(null);
                 setScanResult(null);
                 setEditableItems([]);
+                setScanNotice(null);
                 setSearchResults([]);
                 setScannedImage(null);
                 setVoiceTranscript('');
@@ -447,6 +498,13 @@ export default function ScanScreen() {
 
         {/* ── Life Context Selector ── */}
         <ContextPicker activeContexts={activeContexts} onToggle={handleContextToggle} />
+
+        {scanNotice ? (
+          <SurfaceCard style={styles.scanNoticeCard}>
+            <Text style={styles.scanNoticeTitle}>⚠️ Tạm thời chưa có kết quả AI</Text>
+            <Text style={styles.scanNoticeBody}>{scanNotice}</Text>
+          </SurfaceCard>
+        ) : null}
 
         {/* ── Manual Search Mode ── */}
         {mode === 'search' && (
@@ -677,7 +735,7 @@ export default function ScanScreen() {
             <MealPicker selected={selectedMeal} onSelect={setSelectedMeal} />
             {currentItems.map((item, i) => (
               <ScanResultItem
-                key={`${item.name}-${i}`}
+                key={`${item.name}-${item.calories}-${item.estimated_grams}-${i}`}
                 item={item}
                 onDecrease={() => updateItemGrams(i, item.estimated_grams - 25)}
                 onIncrease={() => updateItemGrams(i, item.estimated_grams + 25)}
@@ -696,6 +754,7 @@ export default function ScanScreen() {
             <SurfaceCard style={styles.totalCard}>
               <Text style={styles.totalLabel}>Tổng cộng</Text>
               <Text style={styles.totalCalorie}>{Math.round(totalCalories)} kcal</Text>
+              <Text style={styles.totalRange}>Khoảng: {formatCalorieRange(totalCaloriesMin, totalCaloriesMax)}</Text>
               <Text style={styles.totalMacros}>P: {Math.round(totalProtein)}g  C: {Math.round(totalCarbs)}g  F: {Math.round(totalFat)}g</Text>
             </SurfaceCard>
             <TouchableOpacity style={styles.saveButton} onPress={handleSaveLog}>
@@ -856,7 +915,10 @@ function ScanResultItem({
             <Text style={styles.resultName}>{item.name_vi ?? item.name}</Text>
             <Text style={styles.editHint}>✏️</Text>
           </TouchableOpacity>
-          <Text style={styles.resultCalorie}>{item.calories} kcal</Text>
+          <View style={styles.calorieColumn}>
+            <Text style={styles.resultCalorie}>{item.calories} kcal</Text>
+            <Text style={styles.resultRange}>{formatCalorieRange(item.calories_min ?? item.calories, item.calories_max ?? item.calories)}</Text>
+          </View>
         </View>
       )}
 
@@ -915,10 +977,12 @@ const styles = StyleSheet.create({
   removeBtnText: { color: '#f87171', fontSize: 12, fontWeight: '700' },
   nameEditInput: { backgroundColor: '#0b1330', borderRadius: 10, padding: 10, color: '#fff', fontSize: 15, fontWeight: '700', borderWidth: 1.5, borderColor: '#6ee7b7', marginBottom: 6 },
   resultNameButton: { flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 },
+  calorieColumn: { alignItems: 'flex-end' },
   editHint: { fontSize: 12, opacity: 0.5 },
   resultHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
   resultName: { color: '#fff', fontWeight: '700', flex: 1 },
   resultCalorie: { color: '#6ee7b7', fontWeight: '800' },
+  resultRange: { color: '#9fb1d1', fontSize: 12, marginTop: 2 },
   resultDetail: { color: '#9fb1d1', fontSize: 13, marginBottom: 2 },
   resultMacros: { color: '#8194ba', fontSize: 12 },
   adjustRow: { flexDirection: 'row', gap: 10, marginTop: 10 },
@@ -927,9 +991,13 @@ const styles = StyleSheet.create({
   lowConfidenceBanner: { backgroundColor: '#2d1010', borderColor: '#7f1d1d', borderWidth: 1, marginBottom: 12 },
   lowConfidenceTitle: { color: '#f87171', fontSize: 15, fontWeight: '800', marginBottom: 6 },
   lowConfidenceBody: { color: '#fca5a5', fontSize: 13, lineHeight: 19 },
+  scanNoticeCard: { backgroundColor: '#2d1010', borderColor: '#7f1d1d', borderWidth: 1, marginBottom: 12 },
+  scanNoticeTitle: { color: '#f87171', fontSize: 15, fontWeight: '800', marginBottom: 6 },
+  scanNoticeBody: { color: '#fca5a5', fontSize: 13, lineHeight: 19 },
   totalCard: { marginVertical: 12, alignItems: 'center' },
   totalLabel: { color: '#9fb1d1', fontSize: 13, marginBottom: 4 },
   totalCalorie: { color: '#6ee7b7', fontSize: 30, fontWeight: '800' },
+  totalRange: { color: '#9fb1d1', fontSize: 13, marginTop: 4 },
   totalMacros: { color: '#9fb1d1', fontSize: 13, marginTop: 4 },
   saveButton: { backgroundColor: '#6ee7b7', borderRadius: 16, padding: 16, alignItems: 'center', marginBottom: 10 },
   saveButtonText: { color: '#07111f', fontWeight: '800', fontSize: 16 },
@@ -961,10 +1029,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 2,
     borderColor: '#fee2e2',
-    shadowColor: '#f87171',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.5,
-    shadowRadius: 10,
+    ...(Platform.OS === 'web'
+      ? { boxShadow: '0px 0px 10px rgba(248, 113, 113, 0.5)' }
+      : {
+          shadowColor: '#f87171',
+          shadowOffset: { width: 0, height: 0 },
+          shadowOpacity: 0.5,
+          shadowRadius: 10,
+        }),
     elevation: 8,
   },
   recordingDuration: { color: '#fff', fontSize: 32, fontWeight: '800' },

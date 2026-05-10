@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import { AIScanResponse, AICoachResponse } from '@calorie-ai/types';
 import { apiClient } from './api';
 import { featureGatingService } from './feature-gating.service';
@@ -23,11 +24,18 @@ export interface ScanReceiptPayload {
 
 export async function scanImageFromUri(uri: string): Promise<AIScanResponse> {
   const formData = new FormData();
-  formData.append('image', {
-    uri,
-    name: 'food.jpg',
-    type: 'image/jpeg',
-  } as any);
+
+  if (Platform.OS === 'web') {
+    const response = await fetch(uri);
+    const blob = await response.blob();
+    formData.append('image', blob, 'food.jpg');
+  } else {
+    formData.append('image', {
+      uri,
+      name: 'food.jpg',
+      type: 'image/jpeg',
+    } as any);
+  }
 
   const res = await apiClient.post<AIScanResponse>('/ai/scan/image', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
@@ -49,11 +57,18 @@ export async function scanVoice(payload: ScanVoicePayload): Promise<AIScanRespon
 
 export async function scanReceipt(payload: ScanReceiptPayload): Promise<AIScanResponse> {
   const formData = new FormData();
-  formData.append('receipt_image', {
-    uri: payload.uri,
-    name: 'receipt.jpg',
-    type: 'image/jpeg',
-  } as any);
+
+  if (Platform.OS === 'web') {
+    const response = await fetch(payload.uri);
+    const blob = await response.blob();
+    formData.append('receipt_image', blob, 'receipt.jpg');
+  } else {
+    formData.append('receipt_image', {
+      uri: payload.uri,
+      name: 'receipt.jpg',
+      type: 'image/jpeg',
+    } as any);
+  }
 
   if (payload.locale) formData.append('locale', payload.locale);
   if (payload.currency) formData.append('currency', payload.currency);

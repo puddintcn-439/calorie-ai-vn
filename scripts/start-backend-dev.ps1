@@ -8,7 +8,7 @@ if ($LASTEXITCODE -ne 0) {
 
 Set-Location "$PSScriptRoot\..\apps\backend"
 
-# Start watch mode in background and wait until HTTP endpoint is healthy.
+# Build once, then start the compiled server in background and wait until HTTP endpoint is healthy.
 $stdoutLog = Join-Path $env:TEMP 'calorie-ai-backend-dev.out.log'
 $stderrLog = Join-Path $env:TEMP 'calorie-ai-backend-dev.err.log'
 if (Test-Path $stdoutLog) {
@@ -18,8 +18,14 @@ if (Test-Path $stderrLog) {
 	Remove-Item $stderrLog -Force -ErrorAction SilentlyContinue
 }
 
+& npm.cmd run build
+if ($LASTEXITCODE -ne 0) {
+	Write-Output 'Backend build failed before startup'
+	exit 1
+}
+
 try {
-	$process = Start-Process -FilePath 'npm.cmd' -ArgumentList @('run', 'dev') -PassThru -RedirectStandardOutput $stdoutLog -RedirectStandardError $stderrLog
+	$process = Start-Process -FilePath 'node.exe' -ArgumentList @('dist/apps/backend/src/main') -PassThru -RedirectStandardOutput $stdoutLog -RedirectStandardError $stderrLog
 } catch {
 	Write-Output "Failed to start backend process: $($_.Exception.Message)"
 	exit 1

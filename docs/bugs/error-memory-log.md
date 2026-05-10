@@ -247,3 +247,140 @@ Use this file to store compact lessons from real failures after they are fixed.
 - Prevention Rule: For any "daily" feature, enforce one canonical local-day contract end-to-end (client date key + timezone offset + server range derivation) and avoid per-screen shadow state for entities persisted in backend.
 - Files: `apps/mobile/app/(tabs)/log.tsx`, `apps/mobile/app/(tabs)/index.tsx`, `apps/mobile/store/log.store.ts`, `apps/mobile/services/date.ts`, `apps/mobile/app/(tabs)/progress.tsx`, `apps/mobile/services/activity-sync.service.ts`, `apps/mobile/app/health-sync.tsx`, `apps/backend/src/modules/log/log.controller.ts`, `apps/backend/src/modules/log/log.service.ts`, `apps/backend/src/modules/log/__tests__/log.controller.spec.ts`, `apps/backend/src/modules/insights/insights.service.ts`
 - Reuse Signal: Recheck this first whenever "today" totals differ by timezone or the same roadmap entity behaves differently between tabs.
+
+## 2026-05-10 - AI coach returned 500 after key setup due Gemini quota=0 and dev startup intermittently failed via Turbo
+
+- Scope: backend AI + tooling
+- Error Signature:
+	- `POST /ai/coach` returned `500 Internal server error`
+	- Backend log: `[GoogleGenerativeAI Error] ... [429 Too Many Requests] ... Quota exceeded ... limit: 0`
+	- Dev startup via root script: `× Could not resolve workspaces. Missing packageManager field in package.json`
+- Trigger:
+	- After setting `GEMINI_API_KEY` and running end-to-end coach validation (`auth/register -> auth/login -> ai/coach`).
+	- Running `npm run backend` from workspace root under Turbo 2.9.9.
+
+## 2026-05-10 - Expo image picker deprecation fix broke mobile typecheck because installed typings lag runtime API
+
+- Scope: mobile
+- Error Signature:
+	- Browser warning: `[expo-image-picker] ImagePicker.MediaTypeOptions have been deprecated. Use ImagePicker.MediaType or an array of ImagePicker.MediaType instead.`
+	- Typecheck failure: `TS2339: Property 'MediaType' does not exist on type 'typeof import(".../expo-image-picker/build/ImagePicker")'` at `app/(tabs)/scan.tsx`
+- Trigger:
+	- `cd apps/mobile ; npm run lint`
+	- Manual scan/gallery upload hardening on web/mobile.
+- Root Cause: The installed `expo-image-picker` runtime warns against `MediaTypeOptions`, but this repo's current type definitions do not yet expose `ImagePicker.MediaType`, so a direct migration fixed the warning path while breaking TypeScript.
+- Fix: Replaced direct enum usage in `scan.tsx` with a compatible media type array constant (`['images'] as any`) so the code avoids the deprecated option shape without depending on typings that are not present in the installed package version.
+- Validation: `cd apps/mobile ; npm run lint` => pass.
+- Prevention Rule: When Expo warns about a replacement API, verify the installed package's type surface before switching call sites; if typings lag runtime, prefer a small compatibility wrapper/constant over direct use of the advertised symbol.
+- Files: `apps/mobile/app/(tabs)/scan.tsx`
+- Reuse Signal: Recheck this whenever Expo runtime deprecation guidance mentions a symbol that TypeScript cannot resolve in the currently installed SDK package.
+- Root Cause:
+	- API key was valid, but Gemini project quota for `generateContent` was effectively unavailable (`limit: 0`), and `getCoachReply()` did not catch provider errors, so exceptions bubbled to 500.
+	- Root `package.json` lacked `packageManager`, which Turbo now requires to resolve workspaces in this environment.
+- Fix:
+	- Added try/catch in `AiService.getCoachReply()` and returned a safe Vietnamese fallback response when error indicates quota/rate-limit (`429`, `quota exceeded`, `too many requests`).
+	- Switched AI model from `gemini-2.0-flash` to `gemini-2.5-flash` across AI service after validating the configured key can generate content on 2.5.
+	- Added root metadata: `"packageManager": "npm@10"`.
+- Validation:
+	- `GET /health` => `200`.
+	- Backend boot successful on `http://localhost:3000` after clean restart.
+	- `POST /ai/coach` E2E (`auth/register -> auth/login -> ai/coach`) now returns `200` with real coach text on `gemini-2.5-flash`; quota/rate fallback remains active as safety net.
+- Prevention Rule: Treat LLM provider calls as unreliable I/O: always guard with explicit fallback paths for quota/rate failures, and keep root workspace metadata (`packageManager`) aligned with current Turbo requirements.
+- Files: `apps/backend/src/modules/ai/ai.service.ts`, `package.json`
+- Reuse Signal: Recheck this first whenever AI endpoints start failing immediately after key rotation/config changes or Turbo suddenly stops resolving workspaces.
+
+## 2026-05-10 - Coach UI masked real failures with generic "connection interrupted" message
+
+- Scope: mobile UI
+- Error Signature: In Coach tab, any error path (feature-gate denied, auth expired, backend 5xx, network issue) displayed the same message: `Xin loi, toi dang bi gian doan ket noi. Ban thu lai sau it phut nhe.`
+- Trigger: Sending chat in `app/(tabs)/coach.tsx` while account lacks `ai_coach` feature or when request fails for non-network reasons.
+- Root Cause: `handleSend()` had a broad `catch { ... }` and always appended one generic fallback text, hiding the real reason and making troubleshooting misleading.
+- Fix: Added `getCoachErrorMessage(error)` to map errors into specific user-facing messages (premium gate, 401 session expiry, backend 5xx detail, network error fallback), and wired `catch (error)` to use that mapper.
+- Validation: UI still receives normal AI responses on success; failure paths now surface actionable reasons instead of a single generic message.
+- Prevention Rule: Never swallow chat/API exceptions with a single generic catch message in product UI. Preserve category-level error context for auth, entitlement, backend, and network failures.
+- Files: `apps/mobile/app/(tabs)/coach.tsx`
+- Reuse Signal: Recheck this whenever support reports "khong hoat dong" but backend health/API tests look normal.
+
+## 2026-05-10 - Native app showed red LogBox because Expo push token registration ran without projectId
+
+- Scope: mobile native
+- Error Signature: `[Push] Failed to initialize: Error: No "projectId" found. If "projectId" can't be inferred from the manifest (for instance, in bare workflow), you have to pass it in yourself.`
+- Trigger: Launching the logged-in app on iPhone while `pushNotificationService.initializePushNotifications()` ran from auth store startup/login/register.
+- Root Cause: The push notification service called `Notifications.getExpoPushTokenAsync()` without an explicit `projectId`, and this app config does not currently expose `extra.eas.projectId`; the catch block then used `console.error`, which promoted the setup problem into a red LogBox.
+- Fix: Added a `getExpoProjectId()` helper using `Constants.easConfig?.projectId` and `Constants.expoConfig?.extra?.eas?.projectId`, skipped token registration entirely when no project ID is configured, and downgraded the catch path from `console.error` to `console.warn`.
+- Validation: `cd apps/mobile ; npm run lint` => pass.
+- Prevention Rule: Any Expo push token registration path must either provide an explicit EAS `projectId` or treat missing project metadata as a non-fatal configuration gap instead of logging a runtime error.
+- Files: `apps/mobile/services/push-notification.service.ts`
+- Reuse Signal: Recheck this first whenever native Expo builds show push notification initialization errors during login or app bootstrap.
+
+## 2026-05-10 - Dynamic Expo config injection hit TypeScript narrowing on imported app.json
+
+- Scope: mobile config/build
+- Error Signature: `TS2339: Property 'extra' does not exist on type ...` in `app.config.ts` during `cd apps/mobile ; npm run lint`.
+- Trigger: Adding dynamic Expo config to inject `EXPO_PUBLIC_EAS_PROJECT_ID` into `extra.eas.projectId`.
+- Root Cause: TypeScript inferred `appJson.expo` from the current static `app.json` shape, which does not declare an `extra` field even though Expo will merge/use it at runtime.
+- Fix: Widened the imported config shape locally with a narrow cast before reading/writing `extra.eas.projectId`.
+- Validation: `cd apps/mobile ; npm run lint` => pass, `cd apps/mobile ; npx expo config --json` => pass.
+- Prevention Rule: When layering dynamic Expo config on top of static `app.json`, widen the imported config type explicitly before accessing optional fields that are not present in the source JSON yet.
+- Files: `apps/mobile/app.config.ts`
+- Reuse Signal: Recheck this whenever a new optional Expo config branch is injected from env through `app.config.ts`.
+
+## 2026-05-10 - Native mobile requests hit localhost and roadmap fetch surfaced as Network Error LogBox
+
+- Scope: mobile native
+- Error Signature: `Failed to fetch daily roadmap: AxiosError: Network Error` shown in native LogBox while calling `fetchDailyRoadmap` from `apps/mobile/store/log.store.ts`.
+- Trigger: Opening the app on iPhone in Expo/Expo Go after roadmap fetch was added.
+- Root Cause: `apps/mobile/services/api.ts` used `EXPO_PUBLIC_API_URL ?? 'http://localhost:3000'` directly; in native dev, any stale bundle or missing env propagation leaves `localhost`, which points to the phone itself rather than the dev machine.
+- Fix: Added native-only base URL resolution that derives the Expo host from `expo-constants` (`expoConfig.hostUri` / `linkingUri` / `experienceUrl`) and rewrites loopback API URLs to `http://<expo-host>:3000`. Also downgraded roadmap fetch logging from `console.error` to `console.warn` to avoid red LogBox for a recoverable connectivity miss.
+- Validation: `cd apps/mobile ; npm run lint` => pass.
+- Prevention Rule: In Expo native dev, never rely on `localhost` as the API origin. Either inject a LAN URL explicitly or derive the dev host from the running Expo manifest/session metadata.
+- Files: `apps/mobile/services/api.ts`, `apps/mobile/store/log.store.ts`
+- Reuse Signal: Recheck this whenever native iOS/Android reports Axios `Network Error` while web works against the same backend.
+
+## 2026-05-10 - Backend watch compile failed after refine DTO made summary optional
+
+- Scope: backend AI
+- Error Signature: `TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string'` at `src/modules/ai/ai.controller.ts:95` during backend watch startup.
+- Trigger: Restarting backend after making `RefineScanDto.original_items_summary` optional to fix request validation.
+- Root Cause: The DTO contract was widened to allow `original_items_summary?: string`, but `AiService.refineScan(...)` still required a non-optional `string`, so the controller call no longer typechecked.
+- Fix: Updated `AiService.refineScan(...)` to accept `string | undefined` and normalize a missing summary to a safe fallback sentence before composing the Gemini prompt.
+- Validation: VS Code diagnostics for `apps/backend/src/modules/ai/ai.service.ts` and `apps/backend/src/modules/ai/ai.controller.ts` => no errors.
+- Prevention Rule: When relaxing a DTO field from required to optional, immediately propagate the same optionality through the service boundary or add normalization at the controller edge.
+- Files: `apps/backend/src/modules/ai/ai.service.ts`, `apps/backend/src/modules/ai/ai.controller.ts`
+- Reuse Signal: Recheck this whenever a DTO validation fix is followed by a new TypeScript mismatch in the owning controller/service pair.
+
+## 2026-05-10 - Backend ready script failed on Windows because Nest watch crashed with tree-kill spawn UNKNOWN
+
+- Scope: backend tooling
+- Error Signature: `Error: spawn UNKNOWN` from `node_modules/tree-kill/index.js` while running `nest start --watch`, surfaced through `npm error Lifecycle script dev failed` during `npm run dev:backend:ready`.
+- Trigger: Restarting backend on Windows after code changes.
+- Root Cause: The ready script used watch mode (`npm run dev` -> `nest start --watch`) even though its job is just to bring the backend back up; on this Windows/Node 24 environment the Nest watch process crashes inside `tree-kill` during restart handling.
+- Fix: Changed `scripts/start-backend-dev.ps1` to build once with `npm run build` and then launch `node dist/apps/backend/src/main` in the background, keeping the same readiness probe against `http://localhost:3000/api/docs`.
+- Validation: `npm run dev:backend:ready` => `Backend ready on http://localhost:3000`.
+- Prevention Rule: On this repo's Windows setup, use build-then-run for ready/restart automation; reserve `nest start --watch` for manual interactive development only.
+- Files: `scripts/start-backend-dev.ps1`, `apps/backend/package.json`
+- Reuse Signal: Recheck this first whenever backend startup fails with `tree-kill`, `spawn UNKNOWN`, or only crashes in watch mode on Windows.
+
+## 2026-05-10 - Web bundle called LAN backend URL and showed connection refused after Expo-native API fallback work
+
+- Scope: mobile web
+- Error Signature: Browser console showed `192.168.0.100:3000/... Failed to load resource: net::ERR_CONNECTION_REFUSED` plus `Failed to fetch daily roadmap: AxiosError: Network Error` while the app was opened on `http://localhost:19006`.
+- Trigger: Running the web app locally after updating the shared API client to support Expo/native LAN fallback.
+- Root Cause: The shared API client still honored `EXPO_PUBLIC_API_URL=http://192.168.0.100:3000` on web, so the localhost-served browser app unnecessarily called the LAN address instead of `localhost:3000`.
+- Fix: Updated `apps/mobile/services/api.ts` so web prefers `http://<window.location.hostname>:3000` when the page itself is loaded from `localhost`/`127.0.0.1`, while native Expo keeps the LAN fallback logic.
+- Validation: `cd apps/mobile ; npm run lint` => pass.
+- Prevention Rule: When one API client is shared between Expo native and web, resolve the backend origin per platform/runtime instead of forcing a LAN URL from env onto localhost-served web sessions.
+- Files: `apps/mobile/services/api.ts`
+- Reuse Signal: Recheck this whenever web shows `ERR_CONNECTION_REFUSED` to a private LAN IP after adding native-device networking fallbacks.
+
+## 2026-05-11 - AI scan/refine returned 500 when Gemini quota was exhausted
+
+- Scope: backend AI + mobile web UX
+- Error Signature: `POST /ai/scan/refine -> 500 Internal Server Error` and backend stack `Error: [GoogleGenerativeAI Error] ... [429 Too Many Requests] ... Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, model: gemini-2.5-flash`.
+- Trigger: Running scan/refine flows from Scan tab while Gemini free-tier quota was exhausted.
+- Root Cause: AI scan endpoints (`scanImage`, `scanText`, `scanVoice`, `scanReceipt`, `refineScan`) rethrew Gemini 429 quota/rate-limit errors, so Nest converted them into 500 responses instead of returning a safe degraded payload.
+- Fix: Added quota/rate-limit fallback handling across scan/refine endpoints in `AiService` and returned a structured empty `AIScanResponse` with `metadata.ai_fallback=quota_or_rate_limited` instead of throwing 500; removed temporary debug log noise in mobile scan remove-item handler.
+- Validation: Reproduced live backend error signature from logs (`Gemini ... 429 Too Many Requests`), then re-tested APIs after fix: `POST /ai/scan/text` => `200` with fallback payload, `POST /ai/scan/refine` => `200` with fallback payload (no 500).
+- Prevention Rule: For all LLM-backed endpoints (not only coach chat), treat provider 429/quota failures as expected runtime conditions and return explicit degraded responses rather than uncaught exceptions.
+- Files: `apps/backend/src/modules/ai/ai.service.ts`, `apps/mobile/app/(tabs)/scan.tsx`
+- Reuse Signal: Recheck this first whenever AI endpoints suddenly flip from normal behavior to 500 with durations around 1-5s and provider quota/rate warnings appear in backend logs.
