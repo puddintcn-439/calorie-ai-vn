@@ -3,6 +3,7 @@ import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert, Modal,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import { useLogStore } from '../../store/log.store';
 import { FoodLog, MealType, SavedMeal, ActivityLog, ActivityType, ACTIVITY_LABELS, User, ActivityLevel, UserGoal, ACTIVITY_MET } from '@calorie-ai/types';
 import { BodyText, Eyebrow, HeroTitle, ScreenShell, SurfaceCard } from '../../components/ui-shell';
@@ -308,6 +309,7 @@ export default function LogScreen() {
     Alert.alert('➕ Thêm hoạt động', 'Bạn muốn thêm theo cách nào?', [
       { text: 'Theo lộ trình', onPress: openRoadmapQuickAdd },
       { text: 'Thủ công', onPress: openManualAddActivity },
+      { text: 'Tập tạ', onPress: () => router.push('/strength') },
       { text: 'Huỷ', style: 'cancel' },
     ]);
   };
