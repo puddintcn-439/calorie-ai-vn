@@ -45,4 +45,11 @@ export interface CalorieTargetResponse {
   target_dinner_cal: number;
   target_snack_cal: number;
   calculation_date: string;
+  // Macros
+  protein_target_g?: number;
+  protein_g_per_kg?: number;
+  fat_pct?: number; // target fat percent of kcal
+  fat_g?: number;
+  carbs_g?: number;
+  carbs_pct?: number;
 }

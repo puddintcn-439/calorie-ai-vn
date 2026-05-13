@@ -169,6 +169,25 @@ export class CalorieTargetService {
     // Step 4: Calculate meal targets
     const meal_breakdown = this.getMealBreakdown(daily_calorie_target);
 
+    // Step 5: Macros (protein, fat, carbs)
+    const PROTEIN_G_PER_KG: Record<string, number> = {
+      lose_weight: 1.6,
+      maintain: 1.6,
+      gain_muscle: 1.9,
+    };
+    const protein_g_per_kg = PROTEIN_G_PER_KG[goal] ?? 1.6;
+    const protein_target_g = Math.round(protein_g_per_kg * weight_kg);
+
+    // Default fat percent (20-35% recommended). Use 25% as baseline.
+    const fat_pct = 25;
+    const fat_kcal = Math.round((fat_pct / 100) * daily_calorie_target);
+    const fat_g = Math.round(fat_kcal / 9);
+
+    const protein_kcal = protein_target_g * 4;
+    const remaining_kcal = Math.max(0, daily_calorie_target - (protein_kcal + fat_kcal));
+    const carbs_g = Math.round(remaining_kcal / 4);
+    const carbs_pct = Math.round(((carbs_g * 4) / daily_calorie_target) * 100);
+
     return {
       daily_calorie_target,
       bmr: Math.round(bmr),
@@ -183,6 +202,12 @@ export class CalorieTargetService {
       target_dinner_cal: meal_breakdown.dinner,
       target_snack_cal: meal_breakdown.snack,
       calculation_date: new Date().toISOString(),
+      protein_target_g,
+      protein_g_per_kg: protein_g_per_kg,
+      fat_pct,
+      fat_g,
+      carbs_g,
+      carbs_pct,
     };
   }
 

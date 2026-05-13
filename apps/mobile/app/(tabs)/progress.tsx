@@ -77,8 +77,14 @@ export default function BodyProgressScreen() {
     loadData();
   }, []);
 
+  useEffect(() => {
+    fetchMyTarget();
+  }, []);
+
   const [preview, setPreview] = useState<WeeklyAdaptiveResult | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [myTarget, setMyTarget] = useState<import('../../services/calorie-target.service').CalorieTargetResponse | null>(null);
+  const [targetLoading, setTargetLoading] = useState(false);
 
   const fetchPreview = async () => {
     setPreviewLoading(true);
@@ -89,6 +95,18 @@ export default function BodyProgressScreen() {
       Alert.alert('Lỗi', 'Không thể lấy dữ liệu điều chỉnh.');
     } finally {
       setPreviewLoading(false);
+    }
+  };
+
+  const fetchMyTarget = async () => {
+    setTargetLoading(true);
+    try {
+      const res = await calorieTargetService.getMyTarget();
+      setMyTarget(res);
+    } catch (err) {
+      // ignore
+    } finally {
+      setTargetLoading(false);
     }
   };
 
@@ -249,6 +267,14 @@ export default function BodyProgressScreen() {
                 <Text style={styles.previewRow}>Mục tiêu đề xuất: {preview.adjusted_daily_target} kcal ({preview.adjustment_percentage}%)</Text>
                 <Text style={[styles.previewRow, { marginTop: 6 }]}>{preview.recommendation}</Text>
                 <UiButton label="Áp dụng điều chỉnh" onPress={handleApplyAdjustment} loading={saving} style={{ marginTop: 8 }} />
+              </View>
+            )}
+            {myTarget && (
+              <View style={{ marginTop: 12 }}>
+                <Text style={styles.previewRow}>Mục tiêu hàng ngày: {myTarget.daily_calorie_target} kcal</Text>
+                <Text style={styles.previewRow}>Protein: {myTarget.protein_target_g ?? '—'} g ({myTarget.protein_g_per_kg ?? '—'} g/kg)</Text>
+                <Text style={styles.previewRow}>Chất béo: {myTarget.fat_pct ?? '—'}% ({myTarget.fat_g ?? '—'} g)</Text>
+                <Text style={styles.previewRow}>Carbs: {myTarget.carbs_g ?? '—'} g ({myTarget.carbs_pct ?? '—'}%)</Text>
               </View>
             )}
           </View>

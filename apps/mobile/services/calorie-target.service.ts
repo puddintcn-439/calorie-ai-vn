@@ -41,6 +41,28 @@ export interface WeeklyAdaptiveResult {
   weight_logs?: number;
 }
 
+export interface CalorieTargetResponse {
+  daily_calorie_target: number;
+  bmr: number;
+  tdee: number;
+  bmi: number;
+  body_status: string;
+  weight_recommendation: string;
+  recommended_goal: string;
+  recommendation_note: string;
+  target_breakfast_cal: number;
+  target_lunch_cal: number;
+  target_dinner_cal: number;
+  target_snack_cal: number;
+  calculation_date: string;
+  protein_target_g?: number;
+  protein_g_per_kg?: number;
+  fat_pct?: number;
+  fat_g?: number;
+  carbs_g?: number;
+  carbs_pct?: number;
+}
+
 class CalorieTargetService {
   async getMyRecommendations(): Promise<WeeklyRecommendations> {
     const res = await apiClient.get<WeeklyRecommendations>('/calorie-target/recommendations/me');
@@ -54,6 +76,11 @@ class CalorieTargetService {
 
   async getWeeklyAdjustmentPreview(): Promise<WeeklyAdaptiveResult> {
     const res = await apiClient.get<WeeklyAdaptiveResult>('/calorie-target/weekly-adjustment/preview');
+    return res.data;
+  }
+
+  async getMyTarget(): Promise<CalorieTargetResponse> {
+    const res = await apiClient.get<CalorieTargetResponse>('/calorie-target/me');
     return res.data;
   }
 }
