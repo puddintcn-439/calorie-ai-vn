@@ -120,6 +120,22 @@ export class CalorieTargetController {
     return this.weeklyAdaptiveService.applyWeeklyAdjustment(req.user.id, profile as any);
   }
 
+  /**
+   * Preview weekly adjustment without persisting changes
+   * GET /calorie-target/weekly-adjustment/preview
+   */
+  @Get('weekly-adjustment/preview')
+  @UseGuards(JwtAuthGuard)
+  async previewMyWeeklyAdjustment(@Request() req: any): Promise<WeeklyAdaptiveResult> {
+    const profile = await this.userService.getProfile(req.user.id, req.user.email);
+
+    if (!profile) {
+      throw new BadRequestException('User profile not found');
+    }
+
+    return this.weeklyAdaptiveService.calculateWeeklyAdjustment(req.user.id, profile as any);
+  }
+
   @Get('recommendations/me')
   @UseGuards(JwtAuthGuard)
   async getMyRecommendations(@Request() req: any): Promise<WeeklyRecommendations> {

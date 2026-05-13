@@ -15,6 +15,7 @@ import { BodyProgressEntry, BodyProgressTrend, CreateBodyProgressDto } from '@ca
 import { ScreenShell, SurfaceCard, Eyebrow, HeroTitle, BodyText } from '../../components/ui-shell';
 import { UiButton } from '../../components/ui-button';
 import { apiClient } from '../../services/api';
+import { calorieTargetService, WeeklyAdaptiveResult } from '../../services/calorie-target.service';
 import { getLocalDateYmd } from '../../services/date';
 
 const ENERGY_LABELS = ['', '😴 Rất mệt', '😐 Mệt', '😊 Bình thường', '😄 Tốt', '🔥 Xuất sắc'];
@@ -75,6 +76,48 @@ export default function BodyProgressScreen() {
   useEffect(() => {
     loadData();
   }, []);
+
+  const [preview, setPreview] = useState<WeeklyAdaptiveResult | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+
+  const fetchPreview = async () => {
+    setPreviewLoading(true);
+    try {
+      const res = await calorieTargetService.getWeeklyAdjustmentPreview();
+      setPreview(res);
+    } catch (error) {
+      Alert.alert('Lỗi', 'Không thể lấy dữ liệu điều chỉnh.');
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const handleApplyAdjustment = () => {
+    if (!preview) return Alert.alert('Không có dữ liệu', 'Chưa có kết quả để áp dụng.');
+    Alert.alert(
+      'Áp dụng điều chỉnh',
+      `Áp dụng mục tiêu mới ${preview.adjusted_daily_target} kcal/ngày?`,
+      [
+        { text: 'Huỷ', style: 'cancel' },
+        {
+          text: 'Áp dụng',
+          onPress: async () => {
+            setSaving(true);
+            try {
+              const res = await calorieTargetService.applyWeeklyAdjustment();
+              Alert.alert('Đã áp dụng', 'Mục tiêu đã được cập nhật.');
+              setPreview(res);
+              loadData();
+            } catch (err) {
+              Alert.alert('Lỗi', 'Không thể áp dụng điều chỉnh.');
+            } finally {
+              setSaving(false);
+            }
+          },
+        },
+      ],
+    );
+  };
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -190,6 +233,26 @@ export default function BodyProgressScreen() {
             )}
           </SurfaceCard>
         )}
+
+        {/* ── Why This Target (Preview) ── */}
+        <SurfaceCard style={styles.previewCard}>
+          <Text style={styles.trendTitle}>❓ Tại sao mục tiêu này?</Text>
+          <BodyText style={{ marginTop: 6 }}>Tính toán điều chỉnh dựa trên nhật ký ăn uống và cân nặng. Xem trước điều chỉnh tuần này và lý do (ActualTDEE, clamp).</BodyText>
+          <View style={{ marginTop: 10 }}>
+            <UiButton label={preview ? 'Làm mới' : 'Xem lý do'} onPress={fetchPreview} loading={previewLoading} />
+            {preview && (
+              <View style={{ marginTop: 10 }}>
+                <Text style={styles.previewRow}>Phiên bản: {preview.algorithm_version}</Text>
+                <Text style={styles.previewRow}>Actual TDEE: {preview.actual_tdee ?? '—'} kcal</Text>
+                <Text style={styles.previewRow}>Clamp: {preview.clamp_reason ?? '—'}</Text>
+                <Text style={styles.previewRow}>Mục tiêu hiện tại: {preview.original_daily_target} kcal</Text>
+                <Text style={styles.previewRow}>Mục tiêu đề xuất: {preview.adjusted_daily_target} kcal ({preview.adjustment_percentage}%)</Text>
+                <Text style={[styles.previewRow, { marginTop: 6 }]}>{preview.recommendation}</Text>
+                <UiButton label="Áp dụng điều chỉnh" onPress={handleApplyAdjustment} loading={saving} style={{ marginTop: 8 }} />
+              </View>
+            )}
+          </View>
+        </SurfaceCard>
 
         {/* ── Log Today Button ── */}
         <UiButton
@@ -388,4 +451,6 @@ const styles = StyleSheet.create({
   historyNote: { color: '#7082a9', fontSize: 12, marginTop: 6, fontStyle: 'italic' },
   emptyCard: { borderColor: '#27426f', backgroundColor: '#101a37' },
   emptyText: { color: '#7082a9', fontSize: 14, textAlign: 'center', lineHeight: 21 },
+  previewCard: { marginBottom: 14, borderColor: '#335273', backgroundColor: '#081423' },
+  previewRow: { color: '#cfe8ff', fontSize: 13, marginTop: 4 },
 });

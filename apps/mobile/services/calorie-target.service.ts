@@ -51,6 +51,11 @@ class CalorieTargetService {
     const res = await apiClient.post<WeeklyAdaptiveResult>('/calorie-target/weekly-adjustment');
     return res.data;
   }
+
+  async getWeeklyAdjustmentPreview(): Promise<WeeklyAdaptiveResult> {
+    const res = await apiClient.get<WeeklyAdaptiveResult>('/calorie-target/weekly-adjustment/preview');
+    return res.data;
+  }
 }
 
 export const calorieTargetService = new CalorieTargetService();

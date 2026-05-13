@@ -38,6 +38,22 @@ const GOAL_FACTOR = {
   recomp: 0.92,
 };
 
+const PROTEIN_G_PER_KG = {
+  lose_weight: 1.6,
+  maintain: 1.6,
+  gain_muscle: 1.9,
+  gain_weight: 1.6,
+  recomp: 1.9,
+};
+
+const SESSIONS_PER_WEEK = {
+  lose_weight: 3,
+  maintain: 2,
+  gain_muscle: 4,
+  gain_weight: 3,
+  recomp: 4,
+};
+
 function estimateBMR(person){
   const katch = (person.bodyFatPct != null) ? bmrKatch(person) : null;
   if (katch && Number.isFinite(katch)) return katch;
@@ -61,6 +77,17 @@ function simulatePersona(person){
 
     if (!previousTarget) previousTarget = target;
 
+    // macros / training: compute protein target and simulate intake
+    const proteinPerKg = PROTEIN_G_PER_KG[person.goal] ?? 1.6;
+    const proteinTargetG = Math.round(proteinPerKg * weight);
+    const proteinIntakeG = Math.max(0, Math.round(proteinTargetG * (person.proteinAdherence ?? 0.9) * (1 + randRangePct(0.1))));
+    const proteinAdequacy = clamp(proteinIntakeG / Math.max(1, proteinTargetG), 0, 2);
+
+    // training sessions
+    const plannedSessions = SESSIONS_PER_WEEK[person.goal] ?? 2;
+    const sessionsCompleted = Math.max(0, Math.round(plannedSessions * (person.trainingAdherence ?? 0.7) + randRangePct(0.2) * plannedSessions));
+    const trainingEffectiveness = plannedSessions > 0 ? clamp(sessionsCompleted / plannedSessions, 0, 1) : 0;
+
     // simulate daily intake for the week with some noise
     const daily = [];
     for(let d=0; d<7; d++){
@@ -72,6 +99,19 @@ function simulatePersona(person){
 
     // weight change predicted by energy balance
     const predictedWeeklyKg = (avgCalories - trueTdee) * 7 / 7700;
+
+    // estimate lean vs fat change using protein & training
+    let leanChangeKg = 0;
+    let fatChangeKg = 0;
+    if (predictedWeeklyKg > 0) {
+      const leanShare = clamp(0.5 * (trainingEffectiveness * proteinAdequacy), 0.05, 0.9);
+      leanChangeKg = predictedWeeklyKg * leanShare;
+      fatChangeKg = predictedWeeklyKg - leanChangeKg;
+    } else {
+      const leanLossShare = clamp(0.25 * (1 - (trainingEffectiveness * proteinAdequacy)) + 0.05, 0.05, 0.9);
+      leanChangeKg = predictedWeeklyKg * leanLossShare; // negative
+      fatChangeKg = predictedWeeklyKg - leanChangeKg; // more negative
+    }
 
     // measurement noise in recorded weight change (water/scale) up to +/-0.25kg
     const measuredNoise = rand(-0.25, 0.25);
@@ -105,6 +145,12 @@ function simulatePersona(person){
       avgCalories: Math.round(avgCalories),
       trueTdee: Math.round(trueTdee),
       actualTdee: Math.round(actualTdee),
+      proteinTargetG,
+      proteinIntakeG,
+      sessionsCompleted,
+      trainingEffectiveness: +trainingEffectiveness.toFixed(2),
+      leanChangeKg: +leanChangeKg.toFixed(3),
+      fatChangeKg: +fatChangeKg.toFixed(3),
       prevTarget: Math.round(previousTarget),
       newTarget: Math.round(newTarget),
       clampReason,
