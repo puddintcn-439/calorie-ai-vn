@@ -16,6 +16,7 @@ import { BodyText, Eyebrow, HeroTitle, ScreenShell, SurfaceCard } from '../../co
 import { UiButton } from '../../components/ui-button';
 import { UiChip } from '../../components/ui-chip';
 import { UiInput } from '../../components/ui-input';
+import MacrosCard from '../../components/macros-card';
 
 const ACTIVITY_LABELS: Record<ActivityLevel, string> = {
   sedentary: '🪑 Ít vận động',
@@ -938,6 +939,7 @@ export default function ProfileScreen() {
               <MealTargetField label="🌙 Tối" value={String(profile.target_dinner_cal ?? '')} onChangeText={(v) => setProfile((p) => ({ ...p, target_dinner_cal: Number(v) || undefined }))} />
               <MealTargetField label="🍎 Vặt" value={String(profile.target_snack_cal ?? '')} onChangeText={(v) => setProfile((p) => ({ ...p, target_snack_cal: Number(v) || undefined }))} />
             </View>
+            <MacrosCard daily_calorie_target={profile.daily_calorie_target} weight_kg={profile.weight_kg} goal={profile.goal} />
           </>
         )}
       </SurfaceCard>

@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { BodyProgressEntry, BodyProgressTrend, CreateBodyProgressDto } from '@calorie-ai/types';
 import { ScreenShell, SurfaceCard, Eyebrow, HeroTitle, BodyText } from '../../components/ui-shell';
 import { UiButton } from '../../components/ui-button';
+import MacrosCard from '../../components/macros-card';
 import { apiClient } from '../../services/api';
 import { calorieTargetService, WeeklyAdaptiveResult } from '../../services/calorie-target.service';
 import { getLocalDateYmd } from '../../services/date';
@@ -269,14 +270,7 @@ export default function BodyProgressScreen() {
                 <UiButton label="Áp dụng điều chỉnh" onPress={handleApplyAdjustment} loading={saving} style={{ marginTop: 8 }} />
               </View>
             )}
-            {myTarget && (
-              <View style={{ marginTop: 12 }}>
-                <Text style={styles.previewRow}>Mục tiêu hàng ngày: {myTarget.daily_calorie_target} kcal</Text>
-                <Text style={styles.previewRow}>Protein: {myTarget.protein_target_g ?? '—'} g ({myTarget.protein_g_per_kg ?? '—'} g/kg)</Text>
-                <Text style={styles.previewRow}>Chất béo: {myTarget.fat_pct ?? '—'}% ({myTarget.fat_g ?? '—'} g)</Text>
-                <Text style={styles.previewRow}>Carbs: {myTarget.carbs_g ?? '—'} g ({myTarget.carbs_pct ?? '—'}%)</Text>
-              </View>
-            )}
+            {myTarget && <MacrosCard target={myTarget} />}
           </View>
         </SurfaceCard>
 
