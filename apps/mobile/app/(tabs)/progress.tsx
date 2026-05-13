@@ -15,6 +15,7 @@ import { BodyProgressEntry, BodyProgressTrend, CreateBodyProgressDto } from '@ca
 import { ScreenShell, SurfaceCard, Eyebrow, HeroTitle, BodyText } from '../../components/ui-shell';
 import { UiButton } from '../../components/ui-button';
 import MacrosCard from '../../components/macros-card';
+import AdherenceCard from '../../components/adherence-card';
 import { apiClient } from '../../services/api';
 import { calorieTargetService, WeeklyAdaptiveResult } from '../../services/calorie-target.service';
 import { getLocalDateYmd } from '../../services/date';
@@ -273,6 +274,9 @@ export default function BodyProgressScreen() {
             {myTarget && <MacrosCard target={myTarget} />}
           </View>
         </SurfaceCard>
+
+        {/* ── Adherence Summary ── */}
+        <AdherenceCard />
 
         {/* ── Log Today Button ── */}
         <UiButton
