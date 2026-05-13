@@ -14,6 +14,17 @@ jest.mock('@google/generative-ai', () => ({
 function makeConfig(apiKey = 'test-key'): ConfigService {
   return {
     getOrThrow: jest.fn().mockReturnValue(apiKey),
+    get: jest.fn().mockImplementation((key: string) => {
+      const defaults: Record<string, string> = {
+        IMAGE_WEB_EVIDENCE_ENABLED: 'false',
+        GOOGLE_SEARCH_ENABLED: 'false',
+        TAVILY_SEARCH_ENABLED: 'false',
+        GOOGLE_SEARCH_API_KEY: '',
+        GOOGLE_SEARCH_CX: '',
+        TAVILY_API_KEY: '',
+      };
+      return defaults[key];
+    }),
   } as unknown as ConfigService;
 }
 
