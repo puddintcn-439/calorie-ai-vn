@@ -102,10 +102,10 @@ function inferWeightRecommendation(bodyStatus: BodyStatus): WeightRecommendation
   return 'decrease';
 }
 
+import { estimateExerciseCalories as _estimateExerciseCalories } from '../../services/exercise.service';
+
 function estimateExerciseCalories(activityType: ActivityType, durationMin: number, weightKg: number): number {
-  const met = ACTIVITY_MET[activityType] ?? 5;
-  const safeWeight = Number.isFinite(weightKg) && weightKg > 0 ? weightKg : 65;
-  return Math.max(1, Math.round(met * safeWeight * (durationMin / 60)));
+  return _estimateExerciseCalories(activityType, durationMin, weightKg);
 }
 
 function buildExerciseRoadmap(
@@ -631,6 +631,13 @@ export default function DashboardScreen() {
                 <View style={styles.streakPill}>
                   <Text style={styles.streakPillValue}>🔥 {summary.current_streak}</Text>
                 </View>
+                {phoneCheckInfo.today ? (
+                  <View style={styles.syncResultRow}>
+                    <Text style={styles.syncResultText}>
+                      Hôm nay: {phoneCheckInfo.today.steps} bước · ~{phoneCheckInfo.today.steps_estimated_kcal ?? 0} kcal từ bước · Đốt: {phoneCheckInfo.today.caloriesBurned} kcal
+                    </Text>
+                  </View>
+                ) : null}
               </View>
 
               <View style={styles.streakStatsRow}>
@@ -704,10 +711,18 @@ export default function DashboardScreen() {
             ) : null}
 
             {latestAdjustment ? (
-              <Text style={styles.recommendationAdjustment}>
-                Điều chỉnh mới: {latestAdjustment.adjustment_percentage > 0 ? '+' : ''}
-                {latestAdjustment.adjustment_percentage}% → {latestAdjustment.adjusted_daily_target} kcal/ngày
-              </Text>
+              <View style={{ marginTop: 8 }}>
+                <Text style={styles.recommendationAdjustment}>
+                  Điều chỉnh mới: {latestAdjustment.adjustment_percentage > 0 ? '+' : ''}
+                  {latestAdjustment.adjustment_percentage}% → {latestAdjustment.adjusted_daily_target} kcal/ngày
+                </Text>
+                {latestAdjustment.actual_tdee != null ? (
+                  <Text style={styles.recommendationDetail}>Actual TDEE: {latestAdjustment.actual_tdee} kcal</Text>
+                ) : null}
+                {latestAdjustment.clamp_reason ? (
+                  <Text style={styles.recommendationDetail}>Lý do giới hạn: {latestAdjustment.clamp_reason}</Text>
+                ) : null}
+              </View>
             ) : null}
 
             <TouchableOpacity
@@ -970,6 +985,7 @@ const styles = StyleSheet.create({
   recommendationMeal: { color: '#dbeafe', fontSize: 13, fontWeight: '700' },
   recommendationValue: { color: '#6ee7b7', fontSize: 13, fontWeight: '800' },
   recommendationHint: { color: '#cbd5e1', fontSize: 12, marginTop: 2, lineHeight: 18 },
+  recommendationDetail: { color: '#9fb1d1', fontSize: 12, marginTop: 4 },
   recommendationAdjustment: { color: '#c4b5fd', fontSize: 12, marginTop: 10, fontWeight: '600' },
   adjustButton: { marginTop: 12, borderRadius: 12, backgroundColor: '#22d3ee', paddingVertical: 12, alignItems: 'center' },
   adjustButtonText: { color: '#06202a', fontSize: 13, fontWeight: '800' },

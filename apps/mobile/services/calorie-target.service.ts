@@ -34,6 +34,11 @@ export interface WeeklyAdaptiveResult {
   adherence_last_week: number;
   recommendation: string;
   last_updated: string;
+  algorithm_version?: string;
+  clamp_reason?: string | null;
+  actual_tdee?: number | null;
+  days_logged?: number;
+  weight_logs?: number;
 }
 
 class CalorieTargetService {

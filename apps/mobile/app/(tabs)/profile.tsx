@@ -194,10 +194,10 @@ function buildExercisePlan(
   ];
 }
 
+import { estimateExerciseCalories as _estimateExerciseCalories } from '../../services/exercise.service';
+
 function estimateExerciseCalories(activityType: ActivityType, durationMin: number, weightKg: number): number {
-  const met = ACTIVITY_MET[activityType] ?? 5;
-  const safeWeight = Number.isFinite(weightKg) && weightKg > 0 ? weightKg : 65;
-  return Math.max(1, Math.round(met * safeWeight * (durationMin / 60)));
+  return _estimateExerciseCalories(activityType, durationMin, weightKg);
 }
 
 function buildExerciseRoadmap(

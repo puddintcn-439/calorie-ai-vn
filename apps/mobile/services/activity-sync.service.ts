@@ -32,6 +32,7 @@ export interface ActivitySyncDiagnostics {
     steps: number;
     distanceKm: number;
     caloriesBurned: number;
+    steps_estimated_kcal?: number;
   } | null;
   notes: string[];
 }
@@ -356,6 +357,8 @@ class ActivitySyncService {
       const activeCalories = activeCaloriesRes.records.reduce((sum, record: any) => sum + toKcal(record.energy), 0);
       const totalCalories = totalCaloriesRes.records.reduce((sum, record: any) => sum + toKcal(record.energy), 0);
 
+      const estimatedStepsKcal = Math.max(0, Math.round(steps * 0.04));
+
       return {
         platform: 'android',
         providerName: 'Google Health Connect',
@@ -367,6 +370,7 @@ class ActivitySyncService {
           steps: Math.round(steps),
           distanceKm: Number(distanceKm.toFixed(2)),
           caloriesBurned: Math.round(activeCalories > 0 ? activeCalories : totalCalories),
+          steps_estimated_kcal: estimatedStepsKcal,
         },
         notes: ['Snapshot doc truc tiep tu Google Health Connect tren thiet bi hien tai.'],
       };
@@ -429,6 +433,9 @@ class ActivitySyncService {
         return sum + (Number.isFinite(value) ? value : 0);
       }, 0);
 
+      const steps = Math.round(Number(stepCount?.value ?? 0));
+      const estimatedStepsKcal = Math.max(0, Math.round(steps * 0.04));
+
       return {
         platform: 'ios',
         providerName: 'Apple Health',
@@ -437,9 +444,10 @@ class ActivitySyncService {
         missingPermissions: [],
         today: {
           date: targetDate,
-          steps: Math.round(Number(stepCount?.value ?? 0)),
+          steps,
           distanceKm: Number((Number(distance?.value ?? 0) / 1000).toFixed(2)),
           caloriesBurned: Math.round(caloriesBurned),
+          steps_estimated_kcal: estimatedStepsKcal,
         },
         notes: ['Snapshot doc truc tiep tu Apple Health tren thiet bi hien tai.'],
       };
