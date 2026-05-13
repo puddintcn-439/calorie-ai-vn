@@ -51,6 +51,8 @@ export interface ActivityLog {
   calories_burned: number;
   logged_at: string;
   notes?: string;
+  // Optional structured exercises for strength training sessions
+  exercises?: Exercise[];
   created_at: string;
 }
 
@@ -65,6 +67,20 @@ export interface CreateActivityLogDto {
   duration_min: number;
   calories_burned?: number;   // if omitted, backend estimates
   logged_at?: string;
+  notes?: string;
+  // Optional structured exercises payload
+  exercises?: Exercise[];
+}
+
+export interface ExerciseSet {
+  reps: number;
+  weight_kg?: number;
+  rest_seconds?: number;
+}
+
+export interface Exercise {
+  name: string;
+  sets: ExerciseSet[];
   notes?: string;
 }
 

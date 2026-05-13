@@ -58,6 +58,7 @@ class ActivityLogDto {
   @ApiProperty({ required: false }) @IsOptional() @IsInt() calories_burned?: number;
   @ApiProperty({ required: false }) @IsOptional() @IsString() logged_at?: string;
   @ApiProperty({ required: false }) @IsOptional() @IsString() notes?: string;
+  @ApiProperty({ required: false, type: [Object] }) @IsOptional() @IsArray() exercises?: any[];
 }
 
 class SyncedActivityEntryDto implements SyncedActivityEntry {
