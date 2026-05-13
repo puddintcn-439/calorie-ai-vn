@@ -2,10 +2,9 @@ import {
   Controller, Get, Post, Delete,
   Body, Param, Query, Request, UseGuards, HttpCode, HttpStatus,
 } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth, ApiProperty } from '@nestjs/swagger';
 import { IsString, IsEnum, IsNumber, IsOptional, Min, IsArray, ValidateNested, IsInt } from 'class-validator';
 import { Type } from 'class-transformer';
-import { ApiProperty } from '@nestjs/swagger';
 import { LogService } from './log.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { MealType, LogSource, SavedMealItem, ActivityType, CreateActivityLogDto, ActivitySyncBatchDto, ActivitySource, SyncedActivityEntry } from '@calorie-ai/types';
@@ -46,6 +45,22 @@ class LogSavedMealDto {
   @ApiProperty() @IsEnum(['breakfast','lunch','dinner','snack']) meal_type: MealType;
 }
 
+class ExerciseSetDto {
+  @ApiProperty() @IsInt() @Min(1) reps: number;
+  @ApiProperty() @IsNumber() @Min(0) weight_kg: number;
+  @ApiProperty({ required: false }) @IsOptional() @IsInt() @Min(0) rest_seconds?: number;
+}
+
+class ExerciseDto {
+  @ApiProperty() @IsString() name: string;
+  @ApiProperty({ type: [ExerciseSetDto] })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ExerciseSetDto)
+  sets: ExerciseSetDto[];
+  @ApiProperty({ required: false }) @IsOptional() @IsString() notes?: string;
+}
+
 class ActivityLogDto {
   @ApiProperty() @IsEnum(['running','walking','cycling','swimming','gym','yoga','football','basketball','other']) activity_type: ActivityType;
   @ApiProperty({ required: false }) @IsOptional() @IsString() activity_name?: string;
@@ -58,25 +73,8 @@ class ActivityLogDto {
   @ApiProperty({ required: false }) @IsOptional() @IsInt() calories_burned?: number;
   @ApiProperty({ required: false }) @IsOptional() @IsString() logged_at?: string;
   @ApiProperty({ required: false }) @IsOptional() @IsString() notes?: string;
-  @ApiProperty({ required: false, type: [Object] }) @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => ExerciseDto)
+  @ApiProperty({ required: false, type: [ExerciseDto] }) @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => ExerciseDto)
   exercises?: ExerciseDto[];
-}
-
-class ExerciseSetDto {
-  @ApiProperty() @IsInt() @Min(1) reps: number;
-  @ApiProperty() @IsNumber() @Min(0) weight_kg: number;
-  @ApiProperty({ required: false }) @IsOptional() @IsInt() @Min(0) rest_sec?: number;
-}
-
-class ExerciseDto {
-  @ApiProperty() @IsString() name: string;
-  @ApiProperty({ type: [ExerciseSetDto] })
-  @IsArray()
-  @ValidateNested({ each: true })
-  @Type(() => ExerciseSetDto)
-  sets: ExerciseSetDto[];
-  @ApiProperty({ required: false }) @IsOptional() @IsInt() @Min(0) duration_min?: number;
-  @ApiProperty({ required: false }) @IsOptional() @IsNumber() @Min(0) calories_burned?: number;
 }
 
 class SyncedActivityEntryDto implements SyncedActivityEntry {
