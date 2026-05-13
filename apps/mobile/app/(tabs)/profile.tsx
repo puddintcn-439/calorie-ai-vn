@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
+  Animated,
   View, Text, StyleSheet, Alert,
   ActivityIndicator, useWindowDimensions, Switch, ScrollView, TouchableOpacity,
 } from 'react-native';
@@ -480,6 +481,14 @@ export default function ProfileScreen() {
   const [completingTaskId, setCompletingTaskId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [basicCollapsed, setBasicCollapsed] = useState(true);
+  const [assessmentCollapsed, setAssessmentCollapsed] = useState(true);
+  const [notificationsCollapsed, setNotificationsCollapsed] = useState(true);
+  const [goalCollapsed, setGoalCollapsed] = useState(true);
+  const [calorieCollapsed, setCalorieCollapsed] = useState(true);
+  const highlightAnim = React.useRef(new Animated.Value(0)).current;
+  const highlightLoopRef = React.useRef<Animated.CompositeAnimation | null>(null);
+  const basicIncomplete = !profile.weight_kg || !profile.height_cm || !profile.age;
   const isDesktop = width >= 900;
   const instantAssessment = useMemo(() => buildInstantAssessment(profile), [
     profile.weight_kg,
@@ -544,6 +553,32 @@ export default function ProfileScreen() {
       setReminders(reminderPrefs);
     }
   }, [reminderPrefs]);
+
+  // Auto-expand BMI assessment when both weight and height are set
+  useEffect(() => {
+    if (profile.weight_kg && profile.height_cm) {
+      setAssessmentCollapsed(false);
+    }
+  }, [profile.weight_kg, profile.height_cm]);
+
+  // Highlight basic info card when required fields are missing
+  useEffect(() => {
+    if (basicIncomplete && basicCollapsed) {
+      if (!highlightLoopRef.current) {
+        highlightLoopRef.current = Animated.loop(
+          Animated.sequence([
+            Animated.timing(highlightAnim, { toValue: 1, duration: 700, useNativeDriver: true }),
+            Animated.timing(highlightAnim, { toValue: 0, duration: 700, useNativeDriver: true }),
+          ]),
+        );
+        highlightLoopRef.current.start();
+      }
+    } else if (highlightLoopRef.current) {
+      highlightLoopRef.current.stop();
+      highlightLoopRef.current = null;
+      highlightAnim.setValue(0);
+    }
+  }, [basicIncomplete, basicCollapsed]);
 
   useEffect(() => {
     const assessment = instantAssessment.assessment;
@@ -695,241 +730,327 @@ export default function ProfileScreen() {
           Điều chỉnh thông tin cơ thể, mục tiêu và phân bổ calo theo từng bữa để dashboard và nhật ký phản ánh sát thực tế hơn.
         </BodyText>
 
-      <View style={[styles.summaryRow, isDesktop && styles.summaryRowDesktop]}>
-        <SurfaceCard style={styles.summaryCard}>
-          <Text style={styles.summaryValue}>{profile.daily_calorie_target ?? '--'}</Text>
-          <Text style={styles.summaryLabel}>Kcal mỗi ngày</Text>
-        </SurfaceCard>
-        <SurfaceCard style={styles.summaryCard}>
-          <Text style={styles.summaryValue}>{profile.goal ? GOAL_LABELS[profile.goal] : '--'}</Text>
-          <Text style={styles.summaryLabel}>Mục tiêu hiện tại</Text>
-        </SurfaceCard>
-        <SurfaceCard style={styles.summaryCard}>
-          <Text style={styles.summaryValue}>{profile.activity_level ? ACTIVITY_LABELS[profile.activity_level] : '--'}</Text>
-          <Text style={styles.summaryLabel}>Mức vận động</Text>
-        </SurfaceCard>
-      </View>
-
-      <SurfaceCard style={styles.sectionCard}>
-        <Text style={styles.sectionTitle}>🩺 Đánh giá BMI & thể trạng</Text>
-        <Text style={styles.helperText}>
-          Tính tức thì theo số bạn vừa nhập, không cần bấm lưu database.
-        </Text>
-
-        {!!instantAssessment.assessment && (
-          <View
-            style={[
-              styles.assessmentCard,
-              { backgroundColor: assessmentTone?.bg, borderColor: assessmentTone?.border },
-            ]}
-          >
-            <View style={styles.assessmentTopRow}>
-              <View>
-                <Text style={[styles.assessmentBmiLabel, { color: assessmentTone?.accent }]}>BMI hiện tại</Text>
-                <Text style={[styles.assessmentBmiValue, { color: assessmentTone?.text }]}>{instantAssessment.assessment.bmi}</Text>
-              </View>
-              <View style={styles.assessmentMeta}>
-                <Text style={styles.assessmentMetaLabel}>Thể trạng</Text>
-                <Text style={[styles.assessmentMetaValue, { color: assessmentTone?.accent }]}>
-                  {BODY_STATUS_LABELS[instantAssessment.assessment.body_status]}
+        <SurfaceCard style={[styles.sectionCard, basicCollapsed && styles.sectionCardCompact]}>
+          <Animated.View pointerEvents="none" style={[styles.highlightOverlay, { opacity: highlightAnim }]} />
+          <TouchableOpacity onPress={() => setBasicCollapsed((s) => !s)} activeOpacity={0.8} style={styles.sectionHeaderRow}>
+            <View>
+              <Text style={styles.sectionTitle}>Thiết lập thông tin thể trạng</Text>
+              {basicCollapsed && (
+                <Text style={styles.sectionSubtitle}>
+                  {profile.weight_kg ? `${profile.weight_kg} kg · ${profile.height_cm ?? '--'} cm · ${profile.age ?? '--'} tuổi` : 'Chưa thiết lập'}
                 </Text>
-              </View>
+              )}
             </View>
+            <MaterialIcons name={basicCollapsed ? 'expand-more' : 'expand-less'} size={26} color="#9fb1d1" />
+          </TouchableOpacity>
 
-            <View style={styles.assessmentGuidesRow}>
-              <View style={[styles.assessmentBadge, { backgroundColor: assessmentTone?.badgeBg, borderColor: assessmentTone?.border }]}>
-                <Text style={[styles.assessmentBadgeText, { color: assessmentTone?.text }]}>
-                  {WEIGHT_RECOMMENDATION_LABELS[instantAssessment.assessment.weight_recommendation]}
-                </Text>
+          {!basicCollapsed && (
+            <>
+              <View style={[styles.metricsGrid, isDesktop && styles.metricsGridDesktop]}>
+                <Field label="Họ và tên" value={profile.full_name ?? ''} onChangeText={(v) => setProfile((p) => ({ ...p, full_name: v }))} placeholder="Nguyễn Văn A" fullWidth />
+                <Field label="Cân nặng (kg)" value={String(profile.weight_kg ?? '')} onChangeText={(v) => setProfile((p) => ({ ...p, weight_kg: Number(v) || undefined }))} keyboardType="numeric" placeholder="65" />
+                <Field label="Chiều cao (cm)" value={String(profile.height_cm ?? '')} onChangeText={(v) => setProfile((p) => ({ ...p, height_cm: Number(v) || undefined }))} keyboardType="numeric" placeholder="170" />
+                <Field label="Tuổi" value={String(profile.age ?? '')} onChangeText={(v) => setProfile((p) => ({ ...p, age: Number(v) || undefined }))} keyboardType="numeric" placeholder="25" />
               </View>
-              <View style={[styles.assessmentBadge, { backgroundColor: assessmentTone?.badgeBg, borderColor: assessmentTone?.border }]}>
-                <Text style={[styles.assessmentBadgeText, { color: assessmentTone?.text }]}>
-                  Goal phù hợp: {GOAL_LABELS[instantAssessment.assessment.recommended_goal]}
-                </Text>
+
+              <Text style={styles.label}>Giới tính</Text>
+              <View style={styles.chipRow}>
+                {(['male', 'female'] as const).map((g) => (
+                  <UiChip key={g} label={g === 'male' ? '👨 Nam' : '👩 Nữ'} selected={profile.gender === g} onPress={() => setProfile((p) => ({ ...p, gender: g }))} />
+                ))}
               </View>
-              <View style={[styles.assessmentBadge, { backgroundColor: assessmentTone?.badgeBg, borderColor: assessmentTone?.border }]}>
-                <Text style={[styles.assessmentBadgeText, { color: assessmentTone?.text }]}>
-                  Vận động gợi ý: {ACTIVITY_RECOMMENDATION_LABELS[instantAssessment.assessment.recommended_activity_level]}
+            </>
+          )}
+        </SurfaceCard>
+
+        <SurfaceCard style={[styles.sectionCard, assessmentCollapsed && styles.sectionCardCompact]}>
+          <TouchableOpacity onPress={() => setAssessmentCollapsed((s) => !s)} activeOpacity={0.8} style={styles.sectionHeaderRow}>
+            <View>
+              <Text style={styles.sectionTitle}>🩺 Đánh giá BMI & thể trạng</Text>
+              {assessmentCollapsed && (
+                <Text style={styles.sectionSubtitle}>
+                  {instantAssessment.assessment
+                    ? `BMI ${instantAssessment.assessment.bmi} · ${BODY_STATUS_LABELS[instantAssessment.assessment.body_status]}`
+                    : 'Nhập chiều cao và cân nặng để xem đánh giá'}
                 </Text>
-              </View>
+              )}
             </View>
+            <MaterialIcons name={assessmentCollapsed ? 'expand-more' : 'expand-less'} size={26} color="#9fb1d1" />
+          </TouchableOpacity>
 
-            <Text style={[styles.assessmentNote, { color: assessmentTone?.text }]}>
-              {instantAssessment.assessment.recommendation_note}
-            </Text>
+          {!assessmentCollapsed && (
+            <>
+              <Text style={styles.helperText}>
+                Tính tức thì theo số bạn vừa nhập, không cần bấm lưu database.
+              </Text>
 
-            <Text style={[styles.assessmentWeightPlan, { color: assessmentTone?.text }]}>
-              {instantAssessment.assessment.weight_recommendation === 'maintain'
-                ? `Bạn đang gần mức cân nặng mục tiêu khỏe mạnh (${instantAssessment.assessment.target_weight_kg} kg).`
-                : `Ước tính cần ${instantAssessment.assessment.weight_recommendation === 'increase' ? 'tăng' : 'giảm'} khoảng ${instantAssessment.assessment.weight_delta_kg} kg để về vùng khỏe mạnh (mục tiêu ~${instantAssessment.assessment.target_weight_kg} kg).`}
-            </Text>
+              {!!instantAssessment.assessment && (
+                <View
+                  style={[
+                    styles.assessmentCard,
+                    { backgroundColor: assessmentTone?.bg, borderColor: assessmentTone?.border },
+                  ]}
+                >
+                  <View style={styles.assessmentTopRow}>
+                    <View>
+                      <Text style={[styles.assessmentBmiLabel, { color: assessmentTone?.accent }]}>BMI hiện tại</Text>
+                      <Text style={[styles.assessmentBmiValue, { color: assessmentTone?.text }]}>{instantAssessment.assessment.bmi}</Text>
+                    </View>
+                    <View style={styles.assessmentMeta}>
+                      <Text style={styles.assessmentMetaLabel}>Thể trạng</Text>
+                      <Text style={[styles.assessmentMetaValue, { color: assessmentTone?.accent }]}> 
+                        {BODY_STATUS_LABELS[instantAssessment.assessment.body_status]}
+                      </Text>
+                    </View>
+                  </View>
 
-            <Text style={[styles.assessmentActivityNote, { color: assessmentTone?.text }]}>
-              {instantAssessment.assessment.activity_note}
-            </Text>
+                  <View style={styles.assessmentGuidesRow}>
+                    <View style={[styles.assessmentBadge, { backgroundColor: assessmentTone?.badgeBg, borderColor: assessmentTone?.border }]}>
+                      <Text style={[styles.assessmentBadgeText, { color: assessmentTone?.text }]}> 
+                        {WEIGHT_RECOMMENDATION_LABELS[instantAssessment.assessment.weight_recommendation]}
+                      </Text>
+                    </View>
+                    <View style={[styles.assessmentBadge, { backgroundColor: assessmentTone?.badgeBg, borderColor: assessmentTone?.border }]}>
+                      <Text style={[styles.assessmentBadgeText, { color: assessmentTone?.text }]}> 
+                        Goal phù hợp: {GOAL_LABELS[instantAssessment.assessment.recommended_goal]}
+                      </Text>
+                    </View>
+                    <View style={[styles.assessmentBadge, { backgroundColor: assessmentTone?.badgeBg, borderColor: assessmentTone?.border }]}>
+                      <Text style={[styles.assessmentBadgeText, { color: assessmentTone?.text }]}> 
+                        Vận động gợi ý: {ACTIVITY_RECOMMENDATION_LABELS[instantAssessment.assessment.recommended_activity_level]}
+                      </Text>
+                    </View>
+                  </View>
 
-            <View style={styles.exerciseListWrap}>
-              <Text style={[styles.exerciseListTitle, { color: assessmentTone?.accent }]}>Bài tập gợi ý:</Text>
-              {instantAssessment.assessment.exercise_plan.map((item, index) => (
-                <Text key={`exercise-${index}`} style={[styles.exerciseListItem, { color: assessmentTone?.text }]}>
-                  {index + 1}. {item}
-                </Text>
+                  <Text style={[styles.assessmentNote, { color: assessmentTone?.text }]}> 
+                    {instantAssessment.assessment.recommendation_note}
+                  </Text>
+
+                  <Text style={[styles.assessmentWeightPlan, { color: assessmentTone?.text }]}> 
+                    {instantAssessment.assessment.weight_recommendation === 'maintain'
+                      ? `Bạn đang gần mức cân nặng mục tiêu khỏe mạnh (${instantAssessment.assessment.target_weight_kg} kg).`
+                      : `Ước tính cần ${instantAssessment.assessment.weight_recommendation === 'increase' ? 'tăng' : 'giảm'} khoảng ${instantAssessment.assessment.weight_delta_kg} kg để về vùng khỏe mạnh (mục tiêu ~${instantAssessment.assessment.target_weight_kg} kg).`}
+                  </Text>
+
+                  <Text style={[styles.assessmentActivityNote, { color: assessmentTone?.text }]}> 
+                    {instantAssessment.assessment.activity_note}
+                  </Text>
+
+                  <View style={styles.exerciseListWrap}>
+                    <Text style={[styles.exerciseListTitle, { color: assessmentTone?.accent }]}>Bài tập gợi ý:</Text>
+                    {instantAssessment.assessment.exercise_plan.map((item, index) => (
+                      <Text key={`exercise-${index}`} style={[styles.exerciseListItem, { color: assessmentTone?.text }]}> 
+                        {index + 1}. {item}
+                      </Text>
+                    ))}
+                  </View>
+
+                  <Text style={styles.assessmentHint}>{instantAssessment.hint}</Text>
+                </View>
+              )}
+
+              {!instantAssessment.assessment && !!instantAssessment.hint && (
+                <Text style={styles.assessmentHint}>{instantAssessment.hint}</Text>
+              )}
+            </>
+          )}
+        </SurfaceCard>
+
+        <View style={[styles.summaryRow, isDesktop && styles.summaryRowDesktop]}>
+          <SurfaceCard style={styles.summaryCard}>
+            <Text style={styles.summaryValue}>{profile.daily_calorie_target ?? '--'}</Text>
+            <Text style={styles.summaryLabel}>Kcal mỗi ngày</Text>
+          </SurfaceCard>
+          <SurfaceCard style={styles.summaryCard}>
+            <Text style={styles.summaryValue}>{profile.goal ? GOAL_LABELS[profile.goal] : '--'}</Text>
+            <Text style={styles.summaryLabel}>Mục tiêu hiện tại</Text>
+          </SurfaceCard>
+          <SurfaceCard style={styles.summaryCard}>
+            <Text style={styles.summaryValue}>{profile.activity_level ? ACTIVITY_LABELS[profile.activity_level] : '--'}</Text>
+            <Text style={styles.summaryLabel}>Mức vận động</Text>
+          </SurfaceCard>
+        </View>
+
+      <SurfaceCard style={[styles.sectionCard, goalCollapsed && styles.sectionCardCompact]}>
+        <TouchableOpacity onPress={() => setGoalCollapsed((s) => !s)} activeOpacity={0.8} style={styles.sectionHeaderRow}>
+          <View>
+            <Text style={styles.sectionTitle}>Phong cách mục tiêu</Text>
+            {goalCollapsed && (
+              <Text style={styles.sectionSubtitle}>{profile.goal ? GOAL_LABELS[profile.goal] : 'Chưa chọn'} · {profile.activity_level ? ACTIVITY_LABELS[profile.activity_level] : '...'}</Text>
+            )}
+          </View>
+          <MaterialIcons name={goalCollapsed ? 'expand-more' : 'expand-less'} size={26} color="#9fb1d1" />
+        </TouchableOpacity>
+
+        {!goalCollapsed && (
+          <>
+            <Text style={styles.helperText}>Chọn kết quả bạn đang muốn đạt được và mức vận động thực tế mỗi tuần.</Text>
+
+            <Text style={styles.label}>Mục tiêu</Text>
+            <View style={styles.chipRow}>
+              {(Object.keys(GOAL_LABELS) as UserGoal[]).map((g) => (
+                <UiChip key={g} label={GOAL_LABELS[g]} selected={profile.goal === g} onPress={() => setProfile((p) => ({ ...p, goal: g }))} />
               ))}
             </View>
 
-            <Text style={styles.assessmentHint}>{instantAssessment.hint}</Text>
+            <Text style={styles.label}>Mức độ vận động</Text>
+            <View style={styles.chipRow}>
+              {(Object.keys(ACTIVITY_LABELS) as ActivityLevel[]).map((a) => (
+                <UiChip key={a} label={ACTIVITY_LABELS[a]} selected={profile.activity_level === a} onPress={() => setProfile((p) => ({ ...p, activity_level: a }))} style={styles.activityChip} />
+              ))}
+            </View>
+          </>
+        )}
+      </SurfaceCard>
+
+      <SurfaceCard style={[styles.sectionCard, calorieCollapsed && styles.sectionCardCompact]}>
+        <TouchableOpacity onPress={() => setCalorieCollapsed((s) => !s)} activeOpacity={0.8} style={styles.sectionHeaderRow}>
+          <View>
+            <Text style={styles.sectionTitle}>🎯 Mục tiêu calo</Text>
+            {calorieCollapsed && (
+              <Text style={styles.sectionSubtitle}>{profile.daily_calorie_target ? `${profile.daily_calorie_target} kcal/ngày` : 'Chưa đặt'}</Text>
+            )}
           </View>
+          <MaterialIcons name={calorieCollapsed ? 'expand-more' : 'expand-less'} size={26} color="#9fb1d1" />
+        </TouchableOpacity>
+
+        {!calorieCollapsed && (
+          <>
+            <Text style={styles.helperText}>Phân bổ mức calo theo từng bữa để app hiển thị tiến độ rõ hơn trong nhật ký.</Text>
+            <Field label="Tổng calo/ngày" value={String(profile.daily_calorie_target ?? '')} onChangeText={(v) => setProfile((p) => ({ ...p, daily_calorie_target: Number(v) || undefined }))} keyboardType="numeric" placeholder="1800" fullWidth />
+            <View style={[styles.mealTargetRow, isDesktop && styles.mealTargetRowDesktop]}>
+              <MealTargetField label="🌅 Sáng" value={String(profile.target_breakfast_cal ?? '')} onChangeText={(v) => setProfile((p) => ({ ...p, target_breakfast_cal: Number(v) || undefined }))} />
+              <MealTargetField label="☀️ Trưa" value={String(profile.target_lunch_cal ?? '')} onChangeText={(v) => setProfile((p) => ({ ...p, target_lunch_cal: Number(v) || undefined }))} />
+              <MealTargetField label="🌙 Tối" value={String(profile.target_dinner_cal ?? '')} onChangeText={(v) => setProfile((p) => ({ ...p, target_dinner_cal: Number(v) || undefined }))} />
+              <MealTargetField label="🍎 Vặt" value={String(profile.target_snack_cal ?? '')} onChangeText={(v) => setProfile((p) => ({ ...p, target_snack_cal: Number(v) || undefined }))} />
+            </View>
+          </>
         )}
-
-        {!instantAssessment.assessment && !!instantAssessment.hint && (
-          <Text style={styles.assessmentHint}>{instantAssessment.hint}</Text>
-        )}
       </SurfaceCard>
 
-      <SurfaceCard style={styles.sectionCard}>
-        <Text style={styles.sectionTitle}>Thông tin cơ bản</Text>
-        <View style={[styles.metricsGrid, isDesktop && styles.metricsGridDesktop]}>
-          <Field label="Họ và tên" value={profile.full_name ?? ''} onChangeText={(v) => setProfile((p) => ({ ...p, full_name: v }))} placeholder="Nguyễn Văn A" fullWidth />
-          <Field label="Cân nặng (kg)" value={String(profile.weight_kg ?? '')} onChangeText={(v) => setProfile((p) => ({ ...p, weight_kg: Number(v) || undefined }))} keyboardType="numeric" placeholder="65" />
-          <Field label="Chiều cao (cm)" value={String(profile.height_cm ?? '')} onChangeText={(v) => setProfile((p) => ({ ...p, height_cm: Number(v) || undefined }))} keyboardType="numeric" placeholder="170" />
-          <Field label="Tuổi" value={String(profile.age ?? '')} onChangeText={(v) => setProfile((p) => ({ ...p, age: Number(v) || undefined }))} keyboardType="numeric" placeholder="25" />
-        </View>
+      <SurfaceCard style={[styles.sectionCard, notificationsCollapsed && styles.sectionCardCompact]}>
+        <View style={styles.sectionHeaderRow}>
+          <TouchableOpacity onPress={() => setNotificationsCollapsed((s) => !s)} activeOpacity={0.8} style={{ flex: 1 }}>
+            <View>
+              <Text style={styles.sectionTitle}>🔔 Nhận thông báo</Text>
+              {notificationsCollapsed && (
+                <Text style={styles.sectionSubtitle}>{(reminders.allow_push_notifications ?? true) ? 'Bật' : 'Tắt'}</Text>
+              )}
+            </View>
+          </TouchableOpacity>
 
-        <Text style={styles.label}>Giới tính</Text>
-        <View style={styles.chipRow}>
-          {(['male', 'female'] as const).map((g) => (
-            <UiChip key={g} label={g === 'male' ? '👨 Nam' : '👩 Nữ'} selected={profile.gender === g} onPress={() => setProfile((p) => ({ ...p, gender: g }))} />
-          ))}
-        </View>
-      </SurfaceCard>
-
-      <SurfaceCard style={styles.sectionCard}>
-        <Text style={styles.sectionTitle}>Phong cách mục tiêu</Text>
-        <Text style={styles.helperText}>Chọn kết quả bạn đang muốn đạt được và mức vận động thực tế mỗi tuần.</Text>
-
-        <Text style={styles.label}>Mục tiêu</Text>
-        <View style={styles.chipRow}>
-          {(Object.keys(GOAL_LABELS) as UserGoal[]).map((g) => (
-            <UiChip key={g} label={GOAL_LABELS[g]} selected={profile.goal === g} onPress={() => setProfile((p) => ({ ...p, goal: g }))} />
-          ))}
-        </View>
-
-        <Text style={styles.label}>Mức độ vận động</Text>
-        {(Object.keys(ACTIVITY_LABELS) as ActivityLevel[]).map((a) => (
-          <UiChip key={a} label={ACTIVITY_LABELS[a]} selected={profile.activity_level === a} onPress={() => setProfile((p) => ({ ...p, activity_level: a }))} style={styles.activityChip} />
-        ))}
-      </SurfaceCard>
-
-      <SurfaceCard style={styles.sectionCard}>
-        <Text style={styles.sectionTitle}>🎯 Mục tiêu calo</Text>
-        <Text style={styles.helperText}>Phân bổ mức calo theo từng bữa để app hiển thị tiến độ rõ hơn trong nhật ký.</Text>
-        <Field label="Tổng calo/ngày" value={String(profile.daily_calorie_target ?? '')} onChangeText={(v) => setProfile((p) => ({ ...p, daily_calorie_target: Number(v) || undefined }))} keyboardType="numeric" placeholder="1800" fullWidth />
-        <View style={[styles.mealTargetRow, isDesktop && styles.mealTargetRowDesktop]}>
-          <MealTargetField label="🌅 Sáng" value={String(profile.target_breakfast_cal ?? '')} onChangeText={(v) => setProfile((p) => ({ ...p, target_breakfast_cal: Number(v) || undefined }))} />
-          <MealTargetField label="☀️ Trưa" value={String(profile.target_lunch_cal ?? '')} onChangeText={(v) => setProfile((p) => ({ ...p, target_lunch_cal: Number(v) || undefined }))} />
-          <MealTargetField label="🌙 Tối" value={String(profile.target_dinner_cal ?? '')} onChangeText={(v) => setProfile((p) => ({ ...p, target_dinner_cal: Number(v) || undefined }))} />
-          <MealTargetField label="🍎 Vặt" value={String(profile.target_snack_cal ?? '')} onChangeText={(v) => setProfile((p) => ({ ...p, target_snack_cal: Number(v) || undefined }))} />
-        </View>
-      </SurfaceCard>
-
-      <SurfaceCard style={styles.sectionCard}>
-        <Text style={styles.sectionTitle}>🔔 Nhận thông báo</Text>
-        <Text style={styles.helperText}>Bật thông báo mealtime để nhận nhắc nhở ăn và cập nhật tiến độ.</Text>
-
-        <View style={styles.switchRow}>
-          <Text style={styles.switchLabel}>Cho phép thông báo push</Text>
           <Switch
             value={reminders.allow_push_notifications ?? true}
             onValueChange={(v) => setReminders((r) => ({ ...r, allow_push_notifications: v }))}
             trackColor={{ false: '#203463', true: '#4ade80' }}
-            thumbColor={reminders.allow_push_notifications ? '#6ee7b7' : '#7082a9'}
+            thumbColor={(reminders.allow_push_notifications ?? true) ? '#6ee7b7' : '#7082a9'}
           />
+
+          <TouchableOpacity onPress={() => setNotificationsCollapsed((s) => !s)} style={{ paddingLeft: 8 }}>
+            <MaterialIcons name={notificationsCollapsed ? 'expand-more' : 'expand-less'} size={26} color="#9fb1d1" />
+          </TouchableOpacity>
         </View>
 
-        <Text style={styles.label}>Phong cách nhắc nhở</Text>
-        <View style={styles.chipRow}>
-          {(['encouraging', 'neutral', 'warning'] as const).map((style) => (
-            <UiChip
-              key={style}
-              label={style === 'encouraging' ? '💪 Khuyến khích' : style === 'neutral' ? '📝 Trung lập' : '⚠️ Cảnh báo'}
-              selected={reminders.nudge_motivation_style === style}
-              onPress={() => setReminders((r) => ({ ...r, nudge_motivation_style: style }))}
-            />
-          ))}
-        </View>
+        {!notificationsCollapsed && (
+          <>
+            <Text style={styles.helperText}>Bật thông báo mealtime để nhận nhắc nhở ăn và cập nhật tiến độ.</Text>
 
-        <ReminderTimePickerRow
-          meal="breakfast"
-          mealLabel="🌅 Sáng"
-          enabled={reminders.breakfast_reminder_enabled ?? true}
-          time={reminders.breakfast_reminder_time ?? '07:00'}
-          onEnabledChange={(v) => setReminders((r) => ({ ...r, breakfast_reminder_enabled: v }))}
-          onTimeChange={(v) => setReminders((r) => ({ ...r, breakfast_reminder_time: v }))}
-        />
-
-        <ReminderTimePickerRow
-          meal="lunch"
-          mealLabel="🌤️ Trưa"
-          enabled={reminders.lunch_reminder_enabled ?? true}
-          time={reminders.lunch_reminder_time ?? '12:00'}
-          onEnabledChange={(v) => setReminders((r) => ({ ...r, lunch_reminder_enabled: v }))}
-          onTimeChange={(v) => setReminders((r) => ({ ...r, lunch_reminder_time: v }))}
-        />
-
-        <ReminderTimePickerRow
-          meal="dinner"
-          mealLabel="🌙 Tối"
-          enabled={reminders.dinner_reminder_enabled ?? true}
-          time={reminders.dinner_reminder_time ?? '19:00'}
-          onEnabledChange={(v) => setReminders((r) => ({ ...r, dinner_reminder_enabled: v }))}
-          onTimeChange={(v) => setReminders((r) => ({ ...r, dinner_reminder_time: v }))}
-        />
-
-        <ReminderTimePickerRow
-          meal="snack"
-          mealLabel="🍿 Vặt"
-          enabled={reminders.snack_reminder_enabled ?? false}
-          time={reminders.snack_reminder_time ?? '15:00'}
-          onEnabledChange={(v) => setReminders((r) => ({ ...r, snack_reminder_enabled: v }))}
-          onTimeChange={(v) => setReminders((r) => ({ ...r, snack_reminder_time: v }))}
-        />
-
-        <View style={styles.previewSection}>
-          <Text style={styles.label}>Xem trước nudge theo bữa</Text>
-          <View style={styles.chipRow}>
-            {([
-              ['breakfast', '🌅 Sáng'],
-              ['lunch', '🌤️ Trưa'],
-              ['dinner', '🌙 Tối'],
-              ['snack', '🍿 Vặt'],
-            ] as const).map(([mealType, label]) => (
-              <UiChip
-                key={mealType}
-                label={label}
-                selected={previewMeal === mealType}
-                onPress={() => {
-                  setPreviewMeal(mealType);
-                  void fetchPreviewNudge(mealType);
-                }}
+            <View style={styles.switchRow}>
+              <Text style={styles.switchLabel}>Cho phép thông báo push</Text>
+              <Switch
+                value={reminders.allow_push_notifications ?? true}
+                onValueChange={(v) => setReminders((r) => ({ ...r, allow_push_notifications: v }))}
+                trackColor={{ false: '#203463', true: '#4ade80' }}
+                thumbColor={reminders.allow_push_notifications ? '#6ee7b7' : '#7082a9'}
               />
-            ))}
-          </View>
+            </View>
 
-          <SurfaceCard style={styles.previewCard}>
-            {isPreviewLoading && <ActivityIndicator color="#6ee7b7" />}
-            {!isPreviewLoading && previewNudge && (
-              <>
-                <Text style={styles.previewTitle}>{previewNudge.emoji} {previewNudge.title}</Text>
-                <Text style={styles.previewBody}>{previewNudge.body}</Text>
-                {!!previewNudge.streakContext && (
-                  <Text style={styles.previewMeta}>
-                    Streak hiện tại {previewNudge.streakContext.currentStreak} ngày · Best {previewNudge.streakContext.longestStreak} ngày
-                  </Text>
+            <Text style={styles.label}>Phong cách nhắc nhở</Text>
+            <View style={styles.chipRow}>
+              {(['encouraging', 'neutral', 'warning'] as const).map((style) => (
+                <UiChip
+                  key={style}
+                  label={style === 'encouraging' ? '💪 Khuyến khích' : style === 'neutral' ? '📝 Trung lập' : '⚠️ Cảnh báo'}
+                  selected={reminders.nudge_motivation_style === style}
+                  onPress={() => setReminders((r) => ({ ...r, nudge_motivation_style: style }))}
+                />
+              ))}
+            </View>
+
+            <ReminderTimePickerRow
+              meal="breakfast"
+              mealLabel="🌅 Sáng"
+              enabled={reminders.breakfast_reminder_enabled ?? true}
+              time={reminders.breakfast_reminder_time ?? '07:00'}
+              onEnabledChange={(v) => setReminders((r) => ({ ...r, breakfast_reminder_enabled: v }))}
+              onTimeChange={(v) => setReminders((r) => ({ ...r, breakfast_reminder_time: v }))}
+            />
+
+            <ReminderTimePickerRow
+              meal="lunch"
+              mealLabel="🌤️ Trưa"
+              enabled={reminders.lunch_reminder_enabled ?? true}
+              time={reminders.lunch_reminder_time ?? '12:00'}
+              onEnabledChange={(v) => setReminders((r) => ({ ...r, lunch_reminder_enabled: v }))}
+              onTimeChange={(v) => setReminders((r) => ({ ...r, lunch_reminder_time: v }))}
+            />
+
+            <ReminderTimePickerRow
+              meal="dinner"
+              mealLabel="🌙 Tối"
+              enabled={reminders.dinner_reminder_enabled ?? true}
+              time={reminders.dinner_reminder_time ?? '19:00'}
+              onEnabledChange={(v) => setReminders((r) => ({ ...r, dinner_reminder_enabled: v }))}
+              onTimeChange={(v) => setReminders((r) => ({ ...r, dinner_reminder_time: v }))}
+            />
+
+            <ReminderTimePickerRow
+              meal="snack"
+              mealLabel="🍿 Vặt"
+              enabled={reminders.snack_reminder_enabled ?? false}
+              time={reminders.snack_reminder_time ?? '15:00'}
+              onEnabledChange={(v) => setReminders((r) => ({ ...r, snack_reminder_enabled: v }))}
+              onTimeChange={(v) => setReminders((r) => ({ ...r, snack_reminder_time: v }))}
+            />
+
+            <View style={styles.previewSection}>
+              <Text style={styles.label}>Xem trước nudge theo bữa</Text>
+              <View style={styles.chipRow}>
+                {([
+                  ['breakfast', '🌅 Sáng'],
+                  ['lunch', '🌤️ Trưa'],
+                  ['dinner', '🌙 Tối'],
+                  ['snack', '🍿 Vặt'],
+                ] as const).map(([mealType, label]) => (
+                  <UiChip
+                    key={mealType}
+                    label={label}
+                    selected={previewMeal === mealType}
+                    onPress={() => {
+                      setPreviewMeal(mealType);
+                      void fetchPreviewNudge(mealType);
+                    }}
+                  />
+                ))}
+              </View>
+
+              <SurfaceCard style={styles.previewCard}>
+                {isPreviewLoading && <ActivityIndicator color="#6ee7b7" />}
+                {!isPreviewLoading && previewNudge && (
+                  <>
+                    <Text style={styles.previewTitle}>{previewNudge.emoji} {previewNudge.title}</Text>
+                    <Text style={styles.previewBody}>{previewNudge.body}</Text>
+                    {!!previewNudge.streakContext && (
+                      <Text style={styles.previewMeta}>
+                        Streak hiện tại {previewNudge.streakContext.currentStreak} ngày · Best {previewNudge.streakContext.longestStreak} ngày
+                      </Text>
+                    )}
+                  </>
                 )}
-              </>
-            )}
-          </SurfaceCard>
-        </View>
+              </SurfaceCard>
+            </View>
+          </>
+        )}
       </SurfaceCard>
 
       <SurfaceCard style={styles.sectionCard}>
@@ -1193,6 +1314,10 @@ const styles = StyleSheet.create({
   roadmapCta: { fontSize: 11, fontWeight: '700' },
   assessmentHint: { color: '#93c5fd', fontSize: 13, lineHeight: 19, marginTop: 10 },
   sectionCard: { marginBottom: 14 },
+  highlightOverlay: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, borderRadius: 12, backgroundColor: 'rgba(250,204,21,0.12)' },
+  sectionCardCompact: { paddingVertical: 8, paddingHorizontal: 12 },
+  sectionHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  sectionSubtitle: { color: '#9fb1d1', fontSize: 13, marginTop: 2 },
   sectionTitle: { fontSize: 18, fontWeight: '800', color: '#dbeafe', marginBottom: 6 },
   helperText: { color: '#8ea2c8', fontSize: 13, lineHeight: 19, marginBottom: 8 },
   label: { color: '#94a3b8', fontSize: 13, marginBottom: 6, marginTop: 12, fontWeight: '500' },

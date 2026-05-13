@@ -70,6 +70,44 @@ npm run backend
 # Mobile (trong terminal khác)
 npm run mobile
 # → Quét QR bằng Expo Go app
+
+### Run both dev (Windows) — helper script
+
+There is a small PowerShell helper that starts the backend and mobile (Expo) dev servers in separate PowerShell windows and prints the reachable dev links (including `http://localhost:19006` when available).
+
+Run it from repository root:
+
+```powershell
+.\scripts\start-all.ps1
+```
+
+The script will:
+- free common dev ports (3000, 8081, 19006) if occupied
+- open two PowerShell windows and run `npm run dev` in each
+- wait briefly and print the reachable URLs (backend, Expo Metro, Expo web, and a best-effort dev-client URL)
+
+File: [scripts/start-all.ps1](scripts/start-all.ps1)
+
+### Restart + Verify agent (Windows)
+
+If you want a single command to build (optional), restart dev servers, and run a quick verification check (after adding a function or fixing a bug), use the PowerShell agent:
+
+```powershell
+.\scripts\restart-verify.ps1    # defaults: build backend, restart backend+mobile, verify health
+.\scripts\restart-verify.ps1 -NoOpenWindows    # show commands instead of opening windows
+.\scripts\restart-verify.ps1 -Build -RunTests  # build + run backend tests before restart
+.\scripts\restart-verify.ps1 -SkipVerify       # restart only, skip HTTP verification
+```
+
+What it does:
+- Stops common dev ports (3000, 8081, 19006) if occupied
+- Optionally builds `apps/backend` and runs a TS check for `apps/mobile`
+- Starts `npm run dev` in `apps/backend` and `apps/mobile` (in new PowerShell windows)
+- Waits for ports and performs a basic health check against `http://localhost:3000/health/ready`
+
+File: [scripts/restart-verify.ps1](scripts/restart-verify.ps1)
+
+
 ```
 
 ### 6. Stable Dev Startup (Windows)

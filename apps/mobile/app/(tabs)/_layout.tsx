@@ -66,6 +66,15 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
+        name="log"
+        options={{
+          title: 'Nhật ký',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="list" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="progress"
         options={{
           title: 'Tiến trình',
@@ -80,15 +89,6 @@ export default function TabsLayout() {
           title: 'Thống kê',
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="stats-chart" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="log"
-        options={{
-          title: 'Nhật ký',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="list" size={size} color={color} />
           ),
         }}
       />

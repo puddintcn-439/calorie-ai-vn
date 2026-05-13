@@ -384,3 +384,47 @@ Use this file to store compact lessons from real failures after they are fixed.
 - Prevention Rule: For all LLM-backed endpoints (not only coach chat), treat provider 429/quota failures as expected runtime conditions and return explicit degraded responses rather than uncaught exceptions.
 - Files: `apps/backend/src/modules/ai/ai.service.ts`, `apps/mobile/app/(tabs)/scan.tsx`
 - Reuse Signal: Recheck this first whenever AI endpoints suddenly flip from normal behavior to 500 with durations around 1-5s and provider quota/rate warnings appear in backend logs.
+
+## 2026-05-12 - Expo web started on port 19006 (one dev session failed, new web server up)
+
+- Scope: mobile tooling / dev-server
+- Error Signature: One running dev terminal showed `npm error Lifecycle script `dev` failed with error: npm error code 4294967295` while a new Expo web process was started and is listening on port 19006.
+- Trigger: Starting Expo dev (web) after freeing ports via helper script; observed when running `npm run dev` or the helper scripts that start Expo.
+- Reproduction (exact):
+	- Killed existing Expo-related processes matching `expo` in command line.
+	- Started Expo web with: `npm exec expo -- start --web --port 19006 --clear --non-interactive`.
+	- Observed netstat: port 19006 LISTENING with PID 23876.
+	- Another terminal (previous `npm run dev`) printed Metro output and warnings then exited with `npm error Lifecycle script 'dev' failed`.
+
+- Observation / Root Cause: The failing `npm run dev` session exited with a generic npm error code; however a separate Expo web process was successfully started and is listening on `http://localhost:19006`. The failing terminal logged Metro bundles, warnings (package exports fallback, expo-notifications notes) and a Push token registration before the error. Root cause appears transient (expo/cli or environment), not a deterministic code compile error.
+- Action Taken: Killed stale Expo processes, launched a fresh Expo web process, waited for port 19006 to become available, and confirmed listening via `netstat`.
+- Validation: `netstat -aon` shows port 19006 LISTENING (PID 23876). Backend and Metro remain running; quick health checks show backend OK and Metro on 8081.
+- Recommended next steps: Open the new Expo web terminal window (the one started by the helper) and inspect full runtime logs for the process with PID 23876 if the error recurs; if reproducible, capture the Expo CLI logs and consider updating `expo`/`@expo/metro` packages or investigating environment PATH conflicts.
+- Files: `scripts/start-all.ps1`, `scripts/restart-verify.ps1`, `apps/mobile/package.json`
+- Reuse Signal: Re-run port-clean + restart (scripts) first whenever Expo web fails to start or `npm run dev` exits with a non-zero lifecycle code; collect full terminal logs for persistent failures.
+
+## 2026-05-12 - `restart-verify.ps1` falsely reported backend build failure
+
+- Scope: tooling / scripts
+- Error Signature: `Backend build failed (exit ). Aborting.` (printed by `scripts/restart-verify.ps1` when run interactively)
+- Trigger: Running `.\	emplates\scripts\restart-verify.ps1` (actually `.\	emplates` is a mistaken path—see reproduction) or simply `cd calorie-ai-vn; .\scripts\restart-verify.ps1`
+- Reproduction (exact):
+	- Run from repository root: `.\scripts
+estart-verify.ps1`
+	- Script output snippet:
+
+```
+Workspace: C:\Users\VuNH44\calorie-ai-vn
+Backend: C:\Users\VuNH44\calorie-ai-vn\apps\backend
+Options => Build:True  RunTests:False  SkipVerify:False  NoOpenWindows:False
+
+[1/3] Building backend...
+Backend build failed (exit ). Aborting.
+```
+
+- Root Cause: The script used `Start-Process -FilePath npm -ArgumentList "run","build" -NoNewWindow -Wait -PassThru` and then inspected `$proc.ExitCode`, but in the active VS Code PowerShell session `Start-Process` returned an empty/null PassThru object (or ExitCode was not populated), causing the script to treat a missing exit code as a failure. Running `npm run build` directly in the same shell returns `EXIT:0` and produces a successful build, so the underlying build itself is fine—the detection logic is faulty.
+- Fix: Change the script to run CLI commands inline (e.g. `& npm run build`) and check `$LASTEXITCODE` after the command, or redirect stdout/stderr to files and inspect them. Also add clearer logging when PassThru is null.
+- Validation: After the fix, running `.\scripts\restart-verify.ps1` should proceed past the build step and continue to restart backend and Expo; direct `npm run build` returns `EXIT:0` and produces `dist/apps/backend` as expected.
+- Prevention Rule: In Windows PowerShell automation scripts for this repo, prefer inline invocation and `$LASTEXITCODE` checks for Node/npm CLIs instead of relying on `Start-Process -PassThru` for exit status across shells.
+- Files: `scripts/restart-verify.ps1`
+- Reuse Signal: Recheck this pattern whenever a PowerShell helper uses `Start-Process -PassThru` to run `npm`/`node` CLIs; prefer `$LASTEXITCODE` or capture stdout/stderr files.
