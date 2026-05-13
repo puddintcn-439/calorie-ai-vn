@@ -58,7 +58,25 @@ class ActivityLogDto {
   @ApiProperty({ required: false }) @IsOptional() @IsInt() calories_burned?: number;
   @ApiProperty({ required: false }) @IsOptional() @IsString() logged_at?: string;
   @ApiProperty({ required: false }) @IsOptional() @IsString() notes?: string;
-  @ApiProperty({ required: false, type: [Object] }) @IsOptional() @IsArray() exercises?: any[];
+  @ApiProperty({ required: false, type: [Object] }) @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => ExerciseDto)
+  exercises?: ExerciseDto[];
+}
+
+class ExerciseSetDto {
+  @ApiProperty() @IsInt() @Min(1) reps: number;
+  @ApiProperty() @IsNumber() @Min(0) weight_kg: number;
+  @ApiProperty({ required: false }) @IsOptional() @IsInt() @Min(0) rest_sec?: number;
+}
+
+class ExerciseDto {
+  @ApiProperty() @IsString() name: string;
+  @ApiProperty({ type: [ExerciseSetDto] })
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ExerciseSetDto)
+  sets: ExerciseSetDto[];
+  @ApiProperty({ required: false }) @IsOptional() @IsInt() @Min(0) duration_min?: number;
+  @ApiProperty({ required: false }) @IsOptional() @IsNumber() @Min(0) calories_burned?: number;
 }
 
 class SyncedActivityEntryDto implements SyncedActivityEntry {
