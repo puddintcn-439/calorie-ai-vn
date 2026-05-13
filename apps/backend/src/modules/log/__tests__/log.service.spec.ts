@@ -462,6 +462,30 @@ describe('LogService.createActivityLog', () => {
       service.createActivityLog('u1', { activity_type: 'running', duration_min: 20, calories_burned: 100 }),
     ).rejects.toThrow('activity insert failed');
   });
+
+  it('persists exercises JSON when provided', async () => {
+    const captured: Record<string, unknown>[] = [];
+    const supabase = makeSupabase((table: string) => {
+      if (table === 'activity_logs') {
+        return {
+          insert: jest.fn().mockImplementation((row: Record<string, unknown>) => {
+            captured.push(row);
+            return {
+              select: jest.fn().mockReturnThis(),
+              single: jest.fn().mockResolvedValue({ data: { id: 'a3', ...row }, error: null }),
+            };
+          }),
+        };
+      }
+      return makeChain({ data: null, error: null });
+    });
+
+    const service = new LogService(supabase);
+    const exercises = [ { name: 'Back Squat', sets: [ { reps: 5, weight_kg: 120 } ] } ];
+    await service.createActivityLog('u1', { activity_type: 'gym', duration_min: 45, exercises } as any);
+
+    expect(captured[0]).toMatchObject({ exercises });
+  });
 });
 
 describe('LogService.syncActivityBatch', () => {
