@@ -1,0 +1,613 @@
+# AI Calorie / Fitness App — Product Spec & Formula System
+
+## Product Goal
+
+Build an AI-powered app that helps users:
+
+* Lose weight
+* Gain weight
+* Maintain weight
+* Build muscle
+
+using:
+
+* AI food logging
+* Adaptive calorie targets
+* Habit tracking
+* Smart coaching
+
+---
+
+# Core Product Philosophy
+
+## NOT:
+
+“An AI food recognition app”
+
+## BUT:
+
+“A system that helps users achieve body goals”
+
+---
+
+# 1. Main User Flow
+
+```text
+Onboarding
+↓
+Calculate TDEE + Goal Calories
+↓
+Daily food/activity tracking
+↓
+Adaptive calorie adjustment
+↓
+Weight prediction
+↓
+Goal achieved
+```
+
+---
+
+# 2. Core Features (MVP)
+
+# A. User Onboarding
+
+Collect:
+
+* Age
+* Gender
+* Height
+* Weight
+* Body fat % (optional)
+* Activity level
+* Goal type
+* Target weight
+* Goal speed
+
+Goal Types:
+
+* Lose weight
+* Gain weight
+* Maintain
+* Build muscle
+
+---
+
+# B. Calorie Engine
+
+## Step 1 — Calculate BMR
+
+### Mifflin-St Jeor Formula
+
+```text
+BMR = 10W + 6.25H - 5A + s
+```
+
+Where:
+
+* W = weight (kg)
+* H = height (cm)
+* A = age
+* s = +5 for male / -161 for female
+
+---
+
+## Step 2 — Activity Multiplier
+
+| Activity Level | Multiplier |
+| -------------- | ---------- |
+| Sedentary      | 1.2        |
+| Light          | 1.375      |
+| Moderate       | 1.55       |
+| Heavy          | 1.725      |
+| Athlete        | 1.9        |
+
+---
+
+## Step 3 — Calculate TDEE
+
+```text
+TDEE = BMR × ActivityMultiplier
+```
+
+---
+
+## Step 4 — Goal Calories
+
+### Fat Loss
+
+```text
+GoalCalories = TDEE - 300~700
+```
+
+### Muscle Gain
+
+```text
+GoalCalories = TDEE + 200~500
+```
+
+### Maintain
+
+```text
+GoalCalories = TDEE
+```
+
+---
+
+# 3. Weight Prediction System
+
+## Core Rule
+
+```text
+7700 kcal ≈ 1kg fat
+```
+
+---
+
+## Prediction Formula
+
+```text
+PredictedWeightChange = CalorieDelta / 7700
+```
+
+---
+
+## Example
+
+500 kcal deficit/day:
+
+```text
+≈ 0.45kg loss/week
+```
+
+---
+
+## Timeline Prediction
+
+Example:
+
+```text
+Current Weight: 80kg
+Target Weight: 70kg
+Need to lose: 10kg
+```
+
+Total deficit needed:
+
+```text
+10 × 7700 = 77000 kcal
+```
+
+If:
+
+```text
+500 kcal deficit/day
+```
+
+Then:
+
+```text
+≈ 154 days
+```
+
+---
+
+# 4. Adaptive Metabolism Engine
+
+## Why Important
+
+Human metabolism changes over time.
+
+As users:
+
+* lose weight
+* gain muscle
+* diet longer
+
+their TDEE changes.
+
+---
+
+# Weekly Adaptive Calculation
+
+Every 7 days:
+
+Collect:
+
+* Average calories consumed
+* Weight trend
+* Steps
+* Exercise calories
+
+Estimate actual TDEE:
+
+```text
+ActualTDEE = AvgCalories - (7700 × WeeklyWeightChange / 7)
+```
+
+---
+
+## Example
+
+User:
+
+```text
+eats 2000 kcal/day
+```
+
+Weight trend:
+
+```text
+loses 0.5kg/week
+```
+
+Estimated deficit:
+
+```text
+≈ 550 kcal/day
+```
+
+Estimated TDEE:
+
+```text
+≈ 2550 kcal/day
+```
+
+---
+
+# 5. AI Food Logging System
+
+# Flow
+
+```text
+Upload image
+↓
+Gemini detects foods
+↓
+User confirms portions
+↓
+Nutrition DB lookup
+↓
+Save meal
+```
+
+---
+
+# IMPORTANT
+
+Do NOT let AI directly calculate calories.
+
+Correct architecture:
+
+```text
+AI detects foods
++
+Nutrition database calculates calories/macros
+```
+
+---
+
+# Example AI Output
+
+```json
+{
+  "foods": [
+    {
+      "name": "pho bo",
+      "portion": "large",
+      "estimated_grams": 600
+    }
+  ]
+}
+```
+
+---
+
+# 6. Nutrition Database Design
+
+## foods table
+
+```sql
+id
+name
+brand
+serving_size
+calories
+protein
+carbs
+fat
+fiber
+barcode
+```
+
+---
+
+## meals table
+
+```sql
+user_id
+food_id
+grams
+meal_type
+timestamp
+```
+
+---
+
+## weight_logs table
+
+```sql
+user_id
+weight
+date
+```
+
+---
+
+# 7. Exercise / Calories Burned
+
+## Inputs
+
+* Steps
+* Workouts
+* Cardio sessions
+* Apple Health sync
+* Google Fit sync
+
+---
+
+## Walking Estimation
+
+```text
+CaloriesBurned ≈ Steps × 0.04
+```
+
+---
+
+## Exercise Table
+
+```sql
+exercise_logs
+- type
+- duration
+- calories_burned
+```
+
+---
+
+# 8. Daily Dashboard
+
+Must show:
+
+## Calories
+
+```text
+eaten / target
+```
+
+---
+
+## Macros
+
+* Protein
+* Carbs
+* Fat
+
+---
+
+## Weight Trend
+
+---
+
+## Goal Progress
+
+---
+
+## Predicted Goal Date
+
+Example:
+
+```text
+Estimated goal date:
+Aug 15
+```
+
+---
+
+# 9. AI Coach (Retention Feature)
+
+This is one of the strongest retention systems.
+
+---
+
+## Example Messages
+
+```text
+“You are plateauing this week.”
+```
+
+```text
+“Protein intake is low this week.”
+```
+
+```text
+“You ate out more during weekends.”
+```
+
+---
+
+# 10. Habit / Streak System
+
+Features:
+
+* Daily logging streak
+* Weekly consistency
+* Achievement system
+* Progress milestones
+
+---
+
+# 11. Notifications
+
+Examples:
+
+```text
+“You still have 400 calories left today.”
+```
+
+```text
+“Don’t forget to log dinner 😄”
+```
+
+---
+
+# 12. Premium Features
+
+## Free Plan
+
+* Manual logging
+* Limited AI scans
+* Basic dashboard
+
+---
+
+## Premium Plan
+
+* Unlimited AI scans
+* AI coaching
+* Adaptive calories
+* Meal planning
+* Advanced analytics
+
+---
+
+# 13. Recommended Tech Stack
+
+| Layer    | Stack                 |
+| -------- | --------------------- |
+| Mobile   | React Native + Expo   |
+| Backend  | Node.js + NestJS      |
+| Database | PostgreSQL / Supabase |
+| AI       | Gemini 2.5 Flash      |
+| Cache    | Redis                 |
+| Queue    | BullMQ                |
+| Search   | Meilisearch           |
+| Storage  | Supabase Storage      |
+
+---
+
+# 14. Cost Optimization
+
+## Resize Images Before Upload
+
+```text
+Max width: 768px
+```
+
+---
+
+## Compress Images
+
+Use:
+
+* WebP
+* JPEG compression
+
+---
+
+## Cache Common Meals
+
+Examples:
+
+* White rice
+* Pho
+* Bun Bo Hue
+
+---
+
+## AI Routing
+
+Simple meals:
+
+```text
+Gemini Flash Lite
+```
+
+Complex meals:
+
+```text
+Gemini Flash
+```
+
+---
+
+# 15. Most Important Metrics
+
+NOT:
+
+```text
+AI accuracy
+```
+
+BUT:
+
+| Metric          | Why Important   |
+| --------------- | --------------- |
+| D1 Retention    | Users come back |
+| D7 Retention    | Habit formation |
+| Scans/day       | Engagement      |
+| Paid Conversion | Revenue         |
+| Streak Length   | User addiction  |
+
+---
+
+# 16. Product Roadmap
+
+## V1
+
+* AI scan
+* Calorie tracking
+* Goal calories
+
+---
+
+## V2
+
+* Adaptive TDEE
+* AI coaching
+
+---
+
+## V3
+
+* Meal recommendations
+* Community/social
+* Wearable sync
+
+---
+
+# Final Insight
+
+This is NOT just:
+
+```text
+a food recognition app
+```
+
+It is:
+
+```text
+a behavior change system
+```
+
+If users:
+
+* log daily
+* see progress
+* feel understood
+
+then:
+
+* retention increases
+* paid conversion improves
+* long-term growth becomes possible

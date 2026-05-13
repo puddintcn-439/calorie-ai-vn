@@ -132,18 +132,34 @@ export class CalorieTargetService {
    * Calculate daily calorie target based on user profile
    */
   calculateTarget(dto: CalculateTargetDto): CalorieTargetResponse {
-    const { weight_kg, height_cm, age, gender, activity_level, goal } = dto;
+    const { weight_kg, height_cm, age, gender, activity_level, goal, body_fat_pct } = dto;
 
     // Step 1: Calculate BMR
-    const bmr = this.calculateBMR(weight_kg, height_cm, age, gender);
+    // If body_fat_pct provided, prefer Katch–McArdle for higher accuracy
+    let bmr: number;
+    if (typeof body_fat_pct === 'number' && body_fat_pct > 0 && body_fat_pct < 100) {
+      const lbm = weight_kg * (1 - body_fat_pct / 100);
+      bmr = 370 + 21.6 * lbm;
+    } else {
+      bmr = this.calculateBMR(weight_kg, height_cm, age, gender);
+    }
 
     // Step 2: Calculate TDEE (Total Daily Energy Expenditure)
     const activity_factor = this.getActivityFactor(activity_level);
     const tdee = bmr * activity_factor;
 
+    // Safety clamps / floors
+    const floor_by_sex = gender === 'female' ? 1200 : 1500;
+    const min_allowed = Math.max(floor_by_sex, Math.round(bmr * 1.1));
+    const max_deficit_pct = 0.2; // do not allow deficit >20% of TDEE
+    const min_by_deficit = Math.round(tdee * (1 - max_deficit_pct));
+
     // Step 3: Apply goal adjustment
     const goal_adjustment = this.getGoalAdjustment(goal);
-    const daily_calorie_target = Math.round(tdee * goal_adjustment);
+    const raw_target = Math.round(tdee * goal_adjustment);
+
+    // Apply clamps to ensure safe targets
+    const daily_calorie_target = Math.max(raw_target, min_allowed, min_by_deficit);
 
     // Step 3.5: Calculate BMI and recommendation based on body status
     const bmiValue = this.calculateBMI(weight_kg, height_cm);

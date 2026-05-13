@@ -11,6 +11,12 @@ export interface WeeklyAdaptiveResult {
   adherence_last_week: number;
   recommendation: string;
   last_updated: string;
+  // audit fields
+  algorithm_version?: string;
+  clamp_reason?: string | null;
+  actual_tdee?: number | null;
+  days_logged?: number;
+  weight_logs?: number;
 }
 
 @Injectable()
@@ -19,6 +25,12 @@ export class WeeklyAdaptiveService {
     private readonly supabaseService: SupabaseService,
     private readonly calorieTargetService: CalorieTargetService,
   ) {}
+
+  private readonly MIN_DAYS_FOR_ADAPTIVE = 14;
+  private readonly SMOOTHING_WINDOW_DAYS = 14;
+  private readonly WEEKLY_CHANGE_CAP = 150; // kcal per week
+  private readonly MAX_DEFICIT_PCT = 0.2;
+  private readonly ALGORITHM_VERSION = 'v1.1';
 
   /**
    * Get logs for the last 7 days
@@ -51,6 +63,58 @@ export class WeeklyAdaptiveService {
       date,
       total_calories,
     }));
+  }
+
+  private async getLastNDaysLogs(
+    user_id: string,
+    days: number,
+  ): Promise<{ date: string; total_calories: number }[]> {
+    const since = new Date();
+    since.setDate(since.getDate() - days);
+
+    const { data } = await this.supabaseService.db
+      .from('food_logs')
+      .select('logged_at, calories')
+      .eq('user_id', user_id)
+      .gte('logged_at', since.toISOString())
+      .order('logged_at', { ascending: true });
+
+    if (!data || data.length === 0) return [];
+
+    const dailyTotals: Record<string, number> = {};
+    for (const log of data) {
+      const date = log.logged_at.split('T')[0];
+      dailyTotals[date] = (dailyTotals[date] || 0) + log.calories;
+    }
+
+    return Object.entries(dailyTotals).map(([date, total_calories]) => ({
+      date,
+      total_calories,
+    }));
+  }
+
+  private async getLastNDaysWeights(
+    user_id: string,
+    days: number,
+  ): Promise<{ date: string; weight_kg: number }[]> {
+    const since = new Date();
+    since.setDate(since.getDate() - days);
+
+    const { data } = await this.supabaseService.db
+      .from('body_progress')
+      .select('recorded_at, weight_kg')
+      .eq('user_id', user_id)
+      .gte('recorded_at', since.toISOString())
+      .order('recorded_at', { ascending: true });
+
+    if (!data || data.length === 0) return [];
+
+    return data.map((d: any) => {
+      const rawDate = d.recorded_at || d.logged_at || d.recorded_at;
+      const date = rawDate ? rawDate.split('T')[0] : ''; 
+      const weight = typeof d.weight_kg === 'number' ? d.weight_kg : d.weight;
+      return { date, weight_kg: weight };
+    });
   }
 
   /**
@@ -125,29 +189,123 @@ export class WeeklyAdaptiveService {
     // Get current target
     const currentTarget = profile.daily_calorie_target || 2000;
 
-    // Get last 7 days logs
-    const logs = await this.getLast7DaysLogs(user_id);
+    // Get recent logs and weights
+    const logs = await this.getLastNDaysLogs(user_id, this.SMOOTHING_WINDOW_DAYS);
+    const weightSeries = await this.getLastNDaysWeights(user_id, this.SMOOTHING_WINDOW_DAYS);
 
-    // Calculate adherence
-    const adherence = this.calculateAdherence(logs, currentTarget);
+    const daysLogged = logs.length;
+    const weightLogs = weightSeries.length;
 
-    // Get adjustment factor
-    const adjustmentFactor = this.getAdjustmentFactor(adherence);
+    // Average calories over the smoothing window
+    const avgCalories = daysLogged === 0 ? 0 : Math.round(logs.reduce((s, r) => s + r.total_calories, 0) / daysLogged);
 
-    // Calculate new target
-    const adjustedTarget = Math.round(currentTarget * adjustmentFactor);
+    // Estimate weekly weight change (kg/week) using closest-to-7d entries
+    let weeklyWeightChange: number | null = null;
+    if (weightSeries.length > 0) {
+      const sorted = [...weightSeries].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      const latest = sorted[sorted.length - 1];
+      const sevenDaysAgo = new Date();
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+      const entrySevenDaysAgo = sorted.filter((e) => new Date(e.date) <= sevenDaysAgo).pop() || sorted[0];
+      if (latest && entrySevenDaysAgo && typeof latest.weight_kg === 'number' && typeof entrySevenDaysAgo.weight_kg === 'number') {
+        weeklyWeightChange = Math.round((latest.weight_kg - entrySevenDaysAgo.weight_kg) * 10) / 10;
+      }
+    }
 
-    // Generate recommendation
-    const recommendation = this.getRecommendation(adherence, adjustmentFactor);
+    // Data quality checks
+    const dataQuality = daysLogged >= this.MIN_DAYS_FOR_ADAPTIVE && weightLogs >= 4 && weeklyWeightChange != null && Math.abs(weeklyWeightChange) <= 2;
+
+    let adjustedTarget = currentTarget;
+    let adjustmentPercentage = 0;
+    let recommendation = 'Maintain target';
+    let clamp_reason: string | null = null;
+    let actualTDEE: number | null = null;
+
+    if (dataQuality) {
+      // Compute ActualTDEE
+      actualTDEE = Math.round(avgCalories - (7700 * (weeklyWeightChange as number) / 7));
+
+      // Determine goal factor (conservative adaptive changes)
+      const goalFactorMap: Record<string, number> = {
+        lose_weight: 0.9,
+        maintain: 1.0,
+        gain_muscle: 1.08,
+      };
+      const goalFactor = goalFactorMap[profile.goal || 'maintain'] ?? 1.0;
+
+      let proposed = Math.round(actualTDEE * goalFactor);
+
+      // Use CalorieTargetService to get BMR/TDEE for floors
+      const dto = {
+        weight_kg: profile.weight_kg || 70,
+        height_cm: profile.height_cm || 170,
+        age: profile.age || 30,
+        gender: profile.gender || 'female',
+        activity_level: profile.activity_level || 'sedentary',
+        goal: profile.goal || 'maintain',
+      } as any;
+      const baseline = this.calorieTargetService.calculateTarget(dto);
+      const min_allowed = Math.max(baseline.bmr ? Math.round(baseline.bmr * 1.1) : 1200, profile.gender === 'female' ? 1200 : 1500);
+      const min_by_deficit = Math.round((baseline.tdee || proposed) * (1 - this.MAX_DEFICIT_PCT));
+
+      if (proposed < min_allowed) {
+        clamp_reason = 'min_allowed_floor';
+        proposed = min_allowed;
+      }
+      if (proposed < min_by_deficit) {
+        clamp_reason = clamp_reason || 'max_deficit_pct';
+        proposed = min_by_deficit;
+      }
+
+      // Apply weekly change cap
+      const delta = proposed - currentTarget;
+      const cappedDelta = Math.max(Math.min(delta, this.WEEKLY_CHANGE_CAP), -this.WEEKLY_CHANGE_CAP);
+      if (cappedDelta !== delta) clamp_reason = clamp_reason || 'weekly_change_cap';
+      adjustedTarget = Math.round(currentTarget + cappedDelta);
+
+      adjustmentPercentage = Math.round(((adjustedTarget / currentTarget) - 1) * 100 * 10) / 10;
+      recommendation = `Adaptive update based on ActualTDEE (${this.ALGORITHM_VERSION})`;
+    } else {
+      // Fallback to adherence-based heuristic
+      const logs7 = await this.getLast7DaysLogs(user_id);
+      const adherence = this.calculateAdherence(logs7, currentTarget);
+      const adjustmentFactor = this.getAdjustmentFactor(adherence);
+      const rawAdjusted = Math.round(currentTarget * adjustmentFactor);
+
+      // Apply weekly cap & clamps similar to above
+      const dto = {
+        weight_kg: profile.weight_kg || 70,
+        height_cm: profile.height_cm || 170,
+        age: profile.age || 30,
+        gender: profile.gender || 'female',
+        activity_level: profile.activity_level || 'sedentary',
+        goal: profile.goal || 'maintain',
+      } as any;
+      const baseline = this.calorieTargetService.calculateTarget(dto);
+      const min_allowed = Math.max(baseline.bmr ? Math.round(baseline.bmr * 1.1) : 1200, profile.gender === 'female' ? 1200 : 1500);
+      const min_by_deficit = Math.round((baseline.tdee || rawAdjusted) * (1 - this.MAX_DEFICIT_PCT));
+      let proposed = Math.max(rawAdjusted, min_allowed, min_by_deficit);
+      const delta = proposed - currentTarget;
+      const cappedDelta = Math.max(Math.min(delta, this.WEEKLY_CHANGE_CAP), -this.WEEKLY_CHANGE_CAP);
+      if (cappedDelta !== delta) clamp_reason = 'weekly_change_cap';
+      adjustedTarget = Math.round(currentTarget + cappedDelta);
+      adjustmentPercentage = Math.round((adjustmentFactor - 1) * 100 * 10) / 10;
+      recommendation = this.getRecommendation(adherence, adjustmentFactor);
+    }
 
     return {
       user_id,
       original_daily_target: currentTarget,
       adjusted_daily_target: adjustedTarget,
-      adjustment_percentage: Math.round((adjustmentFactor - 1) * 100 * 10) / 10,
-      adherence_last_week: Math.round(adherence * 10) / 10,
+      adjustment_percentage: adjustmentPercentage,
+      adherence_last_week: Math.round((daysLogged === 0 ? 100 : this.calculateAdherence(logs, currentTarget)) * 10) / 10,
       recommendation,
       last_updated: new Date().toISOString(),
+      algorithm_version: this.ALGORITHM_VERSION,
+      clamp_reason,
+      actual_tdee: actualTDEE,
+      days_logged: daysLogged,
+      weight_logs: weightLogs,
     };
   }
 

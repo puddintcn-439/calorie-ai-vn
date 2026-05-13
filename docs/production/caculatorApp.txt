@@ -1,0 +1,395 @@
+Các công thức và logic mình đưa dựa trên:
+
+Mifflin–St Jeor
+TDEE adaptive tracking
+calorie deficit models
+cách hoạt động của các app như MacroFactor, MyFitnessPal và các guideline TDEE hiện nay.
+
+🚀 Product Spec — AI Calorie / Weight Goal App
+Mục tiêu app:
+Giúp user:- giảm cân- tăng cân- giữ cân- tăng cơ
+bằng:
+
+
+AI food logging
+
+
+adaptive calories
+
+
+habit tracking
+
+
+coaching
+
+
+
+🧠 CORE PRODUCT PHILOSOPHY
+❌ KHÔNG phải:
+"AI nhận diện món ăn"
+
+✅ Mà là:
+"giúp user đạt body goal"
+
+🔥 1. USER FLOW TỔNG THỂ
+Onboarding↓Tính TDEE + Goal↓Daily tracking↓Adaptive calorie adjustment↓Weight prediction↓Goal achieved
+
+🚀 2. CORE FEATURES (MVP)
+✅ A. ONBOARDING
+Input:
+
+
+tuổi
+
+
+giới tính
+
+
+chiều cao
+
+
+cân nặng
+
+
+body fat (optional)
+
+
+activity level
+
+
+goal:
+
+
+giảm cân
+
+
+tăng cân
+
+
+giữ cân
+
+
+tăng cơ
+
+
+
+
+target weight
+
+
+target speed
+
+
+
+✅ B. TDEE / CALORIE ENGINE
+
+Step 1 — BMR
+Dùng công thức Mifflin-St Jeor:
+BMR=10W+6.25H−5A+sBMR = 10W + 6.25H - 5A + sBMR=10W+6.25H−5A+s
+Trong đó:
+
+
+WWW: weight (kg)
+
+
+HHH: height (cm)
+
+
+AAA: age
+
+
+sss:
+
+
+male = +5
+
+
+female = -161
+
+
+
+
+
+Step 2 — Activity multiplier
+ActivityMultiplierSedentary1.2Light1.375Moderate1.55Heavy1.725Athlete1.9
+
+Step 3 — TDEE
+TDEE=BMR×ActivityMultiplierTDEE = BMR \times ActivityMultiplierTDEE=BMR×ActivityMultiplier
+
+Step 4 — Goal calories
+Cut:
+TDEE - 300~700
+
+Bulk:
+TDEE + 200~500
+
+Maintain:
+TDEE
+
+🔥 3. WEIGHT PREDICTION ENGINE
+Core rule:
+7700 kcal≈1 kg fat7700\ \text{kcal} \approx 1\ \text{kg fat}7700 kcal≈1 kg fat
+
+Formula:
+PredictedWeightChange=CalorieDelta7700PredictedWeightChange = \frac{CalorieDelta}{7700}PredictedWeightChange=7700CalorieDelta​
+
+Example
+500 kcal deficit/day→ ~0.45kg/week
+
+Timeline prediction
+Goal:80kg → 70kgNeed:10 × 7700= 77000 kcal deficit
+Nếu:
+500 kcal/day
+→ khoảng:
+154 days
+
+🚀 4. ADAPTIVE METABOLISM ENGINE (VERY IMPORTANT)
+Vì:
+TDEE thay đổi theo thời gian.
+
+Logic:
+Mỗi:
+7 ngày
+app sẽ:
+Input:
+
+
+calories consumed
+
+
+weight trend
+
+
+exercise
+
+
+steps
+
+
+
+Estimate:
+Actual TDEE
+
+Formula idea
+ActualTDEE=AvgCalories−(7700×WeeklyWeightChange/7)ActualTDEE = AvgCalories - (7700 \times WeeklyWeightChange / 7)ActualTDEE=AvgCalories−(7700×WeeklyWeightChange/7)
+
+Example
+User:
+ăn 2000 cal/day
+Weight:
+giảm 0.5kg/week
+=> deficit:
+550 kcal/day
+=> actual TDEE:
+2550
+
+🚀 5. AI FOOD LOGGING
+MVP FLOW
+📸 Upload image↓Gemini detect foods↓User confirm portion↓Nutrition DB lookup↓Save meal
+
+AI OUTPUT FORMAT
+{  "foods": [    {      "name": "com tam",      "portion": "large",      "estimated_grams": 450    }  ]}
+
+🚨 IMPORTANT
+KHÔNG để AI:
+directly decide calories
+
+Use:
+AI detect+DB nutrition
+
+🚀 6. NUTRITION DATABASE
+Tables
+foods
+idnamebrandserving_sizecaloriesproteincarbsfatfiberbarcode
+
+meals
+user_idfood_idgramsmeal_typetimestamp
+
+weight_logs
+user_idweightdate
+
+🚀 7. EXERCISE / CALORIE BURN
+Input:
+
+
+steps
+
+
+workouts
+
+
+cardio
+
+
+Apple Health / Google Fit sync
+
+
+
+Estimate calories burn
+Ví dụ walking:
+CaloriesBurned≈Steps×0.04CaloriesBurned \approx Steps \times 0.04CaloriesBurned≈Steps×0.04
+
+Workout table
+exercise_logs- type- duration- calories_burned
+
+🚀 8. DAILY DASHBOARD
+MUST SHOW
+Calories
+eaten / target
+
+Macros
+
+
+protein
+
+
+carbs
+
+
+fat
+
+
+
+Weight trend
+
+Goal progress
+
+Predicted date
+Ví dụ:
+"Estimated goal date:Aug 15"
+
+🚀 9. AI COACH (RETENTION FEATURE)
+Đây là feature GIỮ USER mạnh nhất
+
+Examples
+"Bạn đang plateau."
+"Protein tuần này hơi thấp."
+"Bạn ăn ngoài nhiều hơn cuối tuần."
+
+🚀 10. STREAK / HABIT SYSTEM
+Daily streak
+7-day logging streak
+
+Weekly consistency
+
+Achievement system
+
+🚀 11. NOTIFICATIONS
+Examples
+"Bạn còn 400 calories hôm nay."
+"Đừng quên log bữa tối 😄"
+
+🚀 12. PREMIUM FEATURES
+Free
+
+
+manual logging
+
+
+limited AI scans
+
+
+basic dashboard
+
+
+
+Premium
+
+
+unlimited AI scans
+
+
+AI coach
+
+
+adaptive calories
+
+
+meal planning
+
+
+advanced analytics
+
+
+
+🚀 13. TECH STACK
+LayerStackMobileReact Native + ExpoBackendNode.js + NestJSDBPostgres / SupabaseAIGemini 2.5 FlashCacheRedisQueueBullMQSearchMeilisearchStorageSupabase Storage
+
+🚀 14. COST OPTIMIZATION
+IMPORTANT
+Resize image before upload
+768px max
+
+Compress WebP
+
+Cache common meals
+
+AI routing
+Simple meals:
+Gemini Flash Lite
+Complex meals:
+Gemini Flash
+
+🚀 15. MOST IMPORTANT METRICS
+NOT:
+AI accuracy
+
+BUT:
+MetricWhyD1 retentionuser quay lạiD7 retentionhabit formingscan/dayengagementpaid conversionrevenuestreak lengthaddiction 😄
+
+🚀 16. ROADMAP
+V1
+
+
+AI scan
+
+
+calorie tracking
+
+
+goal calories
+
+
+
+V2
+
+
+adaptive TDEE
+
+
+AI coaching
+
+
+
+V3
+
+
+meal recommendations
+
+
+social/community
+
+
+wearable sync
+
+
+
+🧠 MOST IMPORTANT INSIGHT
+App này KHÔNG phải:
+food recognition app
+
+Mà là:
+👉 behavior change system
+Nếu user:
+
+
+log mỗi ngày
+
+
+thấy progress
+
+
+tin app hiểu họ
+
+
+=> retention + paid conversion sẽ mạnh 😄

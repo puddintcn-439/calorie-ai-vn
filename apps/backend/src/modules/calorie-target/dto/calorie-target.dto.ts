@@ -1,4 +1,4 @@
-import { IsNumber, IsPositive, IsEnum } from 'class-validator';
+import { IsNumber, IsPositive, IsEnum, IsOptional } from 'class-validator';
 import { UserGoal, ActivityLevel } from '@calorie-ai/types';
 
 export type BodyStatus = 'underweight' | 'normal' | 'overweight' | 'obese';
@@ -25,6 +25,10 @@ export class CalculateTargetDto {
 
   @IsEnum(['lose_weight', 'maintain', 'gain_muscle'])
   goal: UserGoal;
+
+  @IsOptional()
+  @IsNumber()
+  body_fat_pct?: number;
 }
 
 export interface CalorieTargetResponse {

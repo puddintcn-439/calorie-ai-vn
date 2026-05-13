@@ -445,13 +445,27 @@ function calculateInstantCalorieTargets(
     return null;
   }
 
-  const bmr =
-    gender === 'male'
-      ? 10 * weight + 6.25 * height - 5 * age + 5
-      : 10 * weight + 6.25 * height - 5 * age - 161;
+  // Prefer Katch–McArdle if body fat is available on profile
+  const bodyFat = (profile as any).body_fat_pct;
+  let bmr: number;
+  if (typeof bodyFat === 'number' && bodyFat > 0 && bodyFat < 100) {
+    const lbm = weight * (1 - bodyFat / 100);
+    bmr = 370 + 21.6 * lbm;
+  } else {
+    bmr =
+      gender === 'male'
+        ? 10 * weight + 6.25 * height - 5 * age + 5
+        : 10 * weight + 6.25 * height - 5 * age - 161;
+  }
 
   const tdee = bmr * getActivityFactor(recommendedActivity);
-  const daily = Math.round(tdee * getGoalAdjustment(recommendedGoal));
+  const raw = Math.round(tdee * getGoalAdjustment(recommendedGoal));
+
+  // Safety clamps (keep parity with backend)
+  const floorBySex = gender === 'female' ? 1200 : 1500;
+  const minAllowed = Math.max(floorBySex, Math.round(bmr * 1.1));
+  const minByDeficit = Math.round(tdee * (1 - 0.2));
+  const daily = Math.max(raw, minAllowed, minByDeficit);
 
   return {
     daily_calorie_target: daily,
