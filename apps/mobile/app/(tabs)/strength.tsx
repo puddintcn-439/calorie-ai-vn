@@ -1,21 +1,26 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, Button, ScrollView, StyleSheet, Alert } from 'react-native';
 import { ScreenShell, BodyText } from '../../components/ui-shell';
 import { useLogStore } from '../../store/log.store';
+import { loadPresets, savePreset as savePresetService, removePreset as removePresetService } from '../../services/presets.service';
 
 export default function StrengthLogScreen() {
   const { addActivity } = useLogStore();
   type LocalSet = { reps: number; weight_kg: number };
-  type LocalExercise = { id: string; name: string; sets: LocalSet[]; repsInput: string; weightInput: string };
+  type LocalExercise = { id: string; name: string; sets: LocalSet[]; repsInput: string; weightInput: string; notes?: string };
 
-  const defaultExercise = (name = ''): LocalExercise => ({ id: String(Date.now()) + Math.random().toString(36).slice(2), name, sets: [{ reps: 5, weight_kg: 50 }], repsInput: '5', weightInput: '50' });
+  const defaultExercise = (name = ''): LocalExercise => ({ id: String(Date.now()) + Math.random().toString(36).slice(2), name, sets: [{ reps: 5, weight_kg: 50 }], repsInput: '5', weightInput: '50', notes: '' });
 
   const [exercises, setExercises] = useState<LocalExercise[]>([defaultExercise('Squat')]);
+  const [sessionNotes, setSessionNotes] = useState('');
+  const [presetsState, setPresetsState] = useState<string[]>([]);
 
   const addExercise = (name?: string) => setExercises((s) => [...s, defaultExercise(name ?? '')]);
   const removeExercise = (id: string) => setExercises((s) => s.filter((e) => e.id !== id));
 
   const updateExerciseName = (id: string, name: string) => setExercises((s) => s.map((e) => (e.id === id ? { ...e, name } : e)));
+
+  const updateExerciseNotes = (id: string, notes: string) => setExercises((s) => s.map((e) => (e.id === id ? { ...e, notes } : e)));
 
   const addSetToExercise = (id: string) => {
     setExercises((s) =>
@@ -34,7 +39,33 @@ export default function StrengthLogScreen() {
 
   const setExerciseInput = (id: string, reps: string, weight: string) => setExercises((s) => s.map((e) => (e.id === id ? { ...e, repsInput: reps, weightInput: weight } : e)));
 
-  const presets = ['Squat', 'Bench Press', 'Deadlift', 'Overhead Press', 'Barbell Row'];
+  useEffect(() => {
+    let mounted = true;
+    loadPresets().then((p) => { if (mounted) setPresetsState(p); }).catch(() => { if (mounted) setPresetsState(['Squat','Bench Press','Deadlift','Overhead Press','Barbell Row']); });
+    return () => { mounted = false; };
+  }, []);
+
+  const handleSavePreset = async (name: string) => {
+    if (!name || name.trim().length === 0) return Alert.alert('Tên rỗng');
+    try {
+      await savePresetService(name);
+      const p = await loadPresets();
+      setPresetsState(p);
+      Alert.alert('Đã lưu preset');
+    } catch (err) {
+      Alert.alert('Lỗi', 'Không lưu preset');
+    }
+  };
+
+  const handleRemovePreset = async (name: string) => {
+    try {
+      await removePresetService(name);
+      const p = await loadPresets();
+      setPresetsState(p);
+    } catch (err) {
+      console.warn('remove preset failed', err);
+    }
+  };
 
   const submit = async () => {
     if (exercises.length === 0) return Alert.alert('Vui lòng thêm ít nhất 1 bài tập');
@@ -47,9 +78,15 @@ export default function StrengthLogScreen() {
     const duration_min = Math.max(5, Math.round(totalSets * 3));
 
     try {
-      await addActivity({ activity_type: 'gym', duration_min, exercises: exercises.map((e) => ({ name: e.name, sets: e.sets.map((s) => ({ reps: s.reps, weight_kg: s.weight_kg })) })) } as any);
+      await addActivity({
+        activity_type: 'gym',
+        duration_min,
+        notes: sessionNotes,
+        exercises: exercises.map((e) => ({ name: e.name, sets: e.sets.map((s) => ({ reps: s.reps, weight_kg: s.weight_kg })), notes: e.notes })),
+      } as any);
       Alert.alert('Đã lưu', 'Buổi tập đã được ghi');
       setExercises([defaultExercise('')]);
+      setSessionNotes('');
     } catch (err) {
       Alert.alert('Lỗi', 'Không thể lưu buổi tập');
     }
@@ -60,11 +97,16 @@ export default function StrengthLogScreen() {
       <ScrollView contentContainerStyle={styles.container}>
         <Text style={styles.title}>Ghi buổi Strength</Text>
 
+        <Text style={styles.label}>Ghi chú buổi</Text>
+        <TextInput value={sessionNotes} onChangeText={setSessionNotes} placeholder="Ghi chú cho buổi tập..." multiline style={[styles.input, { minHeight: 80 }]} />
+
         <Text style={styles.label}>Presets</Text>
         <View style={styles.presetsRow}>
-          {presets.map((p) => (
-            <View key={p} style={{ marginRight: 8 }}>
+          {presetsState.map((p) => (
+            <View key={p} style={{ marginRight: 8, flexDirection: 'row', alignItems: 'center' }}>
               <Button title={p} onPress={() => addExercise(p)} />
+              <View style={{ width: 6 }} />
+              <Button title="Del" onPress={() => handleRemovePreset(p)} />
             </View>
           ))}
         </View>
@@ -73,7 +115,9 @@ export default function StrengthLogScreen() {
           <View key={ex.id} style={styles.exerciseCard}>
             <View style={styles.exerciseHeader}>
               <TextInput placeholder={`Bài tập #${idx + 1}`} value={ex.name} onChangeText={(v) => updateExerciseName(ex.id, v)} style={[styles.input, { flex: 1 }]} />
-              <View style={{ marginLeft: 8 }}>
+              <View style={{ flexDirection: 'row', marginLeft: 8 }}>
+                <Button title="Save" onPress={() => handleSavePreset(ex.name)} />
+                <View style={{ width: 6 }} />
                 <Button title="Xóa" onPress={() => removeExercise(ex.id)} />
               </View>
             </View>
@@ -92,6 +136,9 @@ export default function StrengthLogScreen() {
                 <Button title="Remove" onPress={() => removeSetFromExercise(ex.id, i)} />
               </View>
             ))}
+
+            <Text style={styles.label}>Ghi chú bài tập</Text>
+            <TextInput value={ex.notes} onChangeText={(v) => updateExerciseNotes(ex.id, v)} placeholder="Ghi chú..." multiline style={[styles.input, { minHeight: 40 }]} />
           </View>
         ))}
 
