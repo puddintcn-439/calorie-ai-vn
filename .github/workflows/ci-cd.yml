@@ -295,9 +295,24 @@ jobs:
           run: |
             echo "EXPO_TOKEN is set"
 
+        - name: Restore Android keystore (from secrets)
+          if: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+          run: |
+            echo "Restoring Android keystore from secrets"
+            echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > ./android.keystore
+            echo "ANDROID_KEYSTORE_PASSWORD=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" >> $GITHUB_ENV
+            echo "ANDROID_KEY_ALIAS=${{ secrets.ANDROID_KEY_ALIAS }}" >> $GITHUB_ENV
+            echo "ANDROID_KEY_PASSWORD=${{ secrets.ANDROID_KEY_PASSWORD }}" >> $GITHUB_ENV
+
         - name: Run EAS Android preview build
           env:
             EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
           run: |
             cd apps/mobile
+            # if keystore restored, configure eas credentials (optional)
+            if [ -f ./android.keystore ]; then
+              echo "Keystore restored, configuring eas credentials"
+              # The following is an example; customize as needed for your eas.json
+              # eas credentials:manager --platform android --profile preview --non-interactive || true
+            fi
             npm run build:android:preview
