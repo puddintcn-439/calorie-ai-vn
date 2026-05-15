@@ -239,3 +239,65 @@ jobs:
               repo: context.repo.repo,
               body: `${status} CI/CD Pipeline Results\n\n- ✅ Lint & TypeScript\n- ✅ Backend Tests\n- ✅ Mobile Checks\n- ✅ Backend Build\n- ✅ Quality Gates`
             })
+
+    # Job 8: Mobile Web E2E (Playwright)
+    mobile-e2e:
+      runs-on: ubuntu-latest
+      name: Mobile Web E2E
+      needs: [smoke-tests, mobile-check]
+      steps:
+        - uses: actions/checkout@v4
+
+        - name: Setup Node.js
+          uses: actions/setup-node@v4
+          with:
+            node-version: ${{ env.NODE_VERSION }}
+            cache: 'npm'
+
+        - name: Install dependencies
+          run: npm ci
+
+        - name: Start Expo Web (background)
+          run: |
+            cd apps/mobile
+            npm run dev:web --silent &
+
+        - name: Wait for web to be ready
+          run: npx wait-on http://localhost:19006 --timeout 450000
+
+        - name: Install Playwright browsers
+          run: npx playwright install
+
+        - name: Run mobile web E2E
+          run: cd apps/mobile && npm run e2e
+
+    # Job 9: Mobile EAS Android preview build (optional)
+    mobile-eas-build:
+      runs-on: ubuntu-latest
+      name: Mobile EAS Android Preview Build
+      needs: [mobile-e2e]
+      if: ${{ secrets.EXPO_TOKEN != '' }}
+      steps:
+        - uses: actions/checkout@v4
+
+        - name: Setup Node.js
+          uses: actions/setup-node@v4
+          with:
+            node-version: ${{ env.NODE_VERSION }}
+            cache: 'npm'
+
+        - name: Install dependencies
+          run: npm ci
+
+        - name: Configure expo token
+          env:
+            EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          run: |
+            echo "EXPO_TOKEN is set"
+
+        - name: Run EAS Android preview build
+          env:
+            EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          run: |
+            cd apps/mobile
+            npm run build:android:preview
