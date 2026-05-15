@@ -19,6 +19,7 @@ export interface ActivitySyncPhoneCheckInfo {
   actionLabel: string;
   installLabel: string;
   supportUrl?: string;
+  today?: ActivitySyncDiagnostics['today'];
 }
 
 export interface ActivitySyncDiagnostics {

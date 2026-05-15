@@ -9,9 +9,11 @@ test.describe('Mobile web smoke', () => {
       await route.fulfill(jsonResponse({ full_name: 'Test', weight_kg: 65, height_cm: 170, age: 30, gender: 'male' }));
     });
     await page.goto('/');
-    // Wait for the tab bar label "Tiến trình" to appear
-    await expect(page.getByRole('tab', { name: /Tiến trình/ })).toBeVisible({ timeout: 10000 });
-    // Check expected top bar title for the default tab
-    await expect(page.getByRole('tab', { name: /Hôm nay/ })).toBeVisible();
+    await expect(page.getByRole('tab', { name: /Hôm nay/ })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('tab', { name: /Scan/ })).toBeVisible();
+    await expect(page.getByRole('tab', { name: /Log/ })).toBeVisible();
+    await expect(page.getByRole('tab', { name: /Coach/ })).toBeVisible();
+    await expect(page.getByRole('tab', { name: /Hồ sơ/ })).toBeVisible();
+    await expect(page.getByRole('tab', { name: /Cơ thể/ })).toHaveCount(0);
   });
 });

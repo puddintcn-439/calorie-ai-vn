@@ -5,6 +5,7 @@ import {
   ActivityIndicator, useWindowDimensions, Switch, ScrollView, TouchableOpacity,
 } from 'react-native';
 import { Platform } from 'react-native';
+import { router } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useAuthStore } from '../../store/auth.store';
 import { useReminderStore } from '../../store/reminder.store';
@@ -742,8 +743,23 @@ export default function ProfileScreen() {
         <Eyebrow>Personal Coach</Eyebrow>
         <HeroTitle>Thiết lập hồ sơ để AI tính target hợp lý hơn.</HeroTitle>
         <BodyText style={styles.heroBody}>
-          Điều chỉnh thông tin cơ thể, mục tiêu và phân bổ calo theo từng bữa để dashboard và nhật ký phản ánh sát thực tế hơn.
+          Cập nhật chỉ số, mục tiêu và nhắc nhở.
         </BodyText>
+
+        <View style={styles.profileShortcutRow}>
+          <TouchableOpacity style={styles.profileShortcut} onPress={() => router.push('/progress' as never)}>
+            <MaterialIcons name="monitor-weight" size={18} color="#75c7e8" />
+            <Text style={styles.profileShortcutText}>Cơ thể</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.profileShortcut} onPress={() => router.push('/insights' as never)}>
+            <MaterialIcons name="insights" size={18} color="#75c7e8" />
+            <Text style={styles.profileShortcutText}>Insight</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.profileShortcut} onPress={() => router.push('/achievements' as never)}>
+            <MaterialIcons name="emoji-events" size={18} color="#f3b84b" />
+            <Text style={styles.profileShortcutText}>Thành tích</Text>
+          </TouchableOpacity>
+        </View>
 
         <SurfaceCard style={[styles.sectionCard, basicCollapsed && styles.sectionCardCompact]}>
           <Animated.View pointerEvents="none" style={[styles.highlightOverlay, { opacity: highlightAnim }]} />
@@ -1264,6 +1280,20 @@ function ReminderTimePickerRow({
 
 const styles = StyleSheet.create({
   heroBody: { marginBottom: 18, maxWidth: 720 },
+  profileShortcutRow: { flexDirection: 'row', gap: 8, marginBottom: 14 },
+  profileShortcut: {
+    flex: 1,
+    minHeight: 48,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#243244',
+    backgroundColor: '#162435',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 6,
+  },
+  profileShortcutText: { color: '#dbeafe', fontSize: 12, fontWeight: '800' },
   summaryRow: { gap: 12, marginBottom: 14 },
   summaryRowDesktop: { flexDirection: 'row' },
   summaryCard: { flex: 1, minHeight: 106, justifyContent: 'center' },

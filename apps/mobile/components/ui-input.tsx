@@ -75,9 +75,9 @@ const styles = StyleSheet.create({
     letterSpacing: 0.4,
   },
   inputWrap: {
-    borderRadius: 14,
-    borderWidth: 1.5,
-    backgroundColor: '#121d3f',
+    borderRadius: theme.radii.lg,
+    borderWidth: 1,
+    backgroundColor: theme.colors.surfaceAlt,
     overflow: 'hidden',
   },
   inputWrapError: {

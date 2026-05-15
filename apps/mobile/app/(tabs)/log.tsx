@@ -455,8 +455,8 @@ export default function LogScreen() {
       </Modal>
 
       <Eyebrow>Timeline</Eyebrow>
-      <HeroTitle>Nhật ký ăn uống và vận động trong ngày.</HeroTitle>
-      <BodyText style={styles.heroBody}>Mỗi bữa được nhóm rõ ràng, có target theo từng meal và log nhanh từ bộ sưu tập.</BodyText>
+      <HeroTitle>Nhật ký hôm nay</HeroTitle>
+      <BodyText style={styles.heroBody}>Bữa ăn, món đã lưu và vận động trong một luồng.</BodyText>
 
       {isLoading && <ActivityIndicator color="#4ade80" style={{ marginTop: 40 }} />}
 

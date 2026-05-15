@@ -1,6 +1,5 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import MacrosServiceType from '../services/calorie-target.service';
 import { SurfaceCard } from './ui-shell';
 
 type CalorieTargetResponse = {

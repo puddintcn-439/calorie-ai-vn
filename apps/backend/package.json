@@ -6,7 +6,7 @@
     "build": "nest build",
     "dev": "nest start --watch",
     "start": "node dist/apps/backend/src/main",
-    "lint": "eslint src --ext .ts",
+    "lint": "tsc --noEmit",
     "test": "jest",
     "test:cov": "jest --coverage",
     "test:e2e": "jest --runInBand"

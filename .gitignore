@@ -15,6 +15,10 @@ apps/backend/coverage/
 # Expo
 .expo/
 apps/mobile/.expo/
+apps/mobile/playwright-report/
+apps/mobile/test-results/
+supabase/.temp/
+scripts/output/
 
 # Logs
 *.log

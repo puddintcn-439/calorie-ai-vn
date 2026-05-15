@@ -13,6 +13,7 @@ import { useRouter } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useSubscriptionStore } from '../store/subscription.store';
 import { SUBSCRIPTION_TIERS, SubscriptionTier } from '@calorie-ai/types';
+import { theme } from '../components/theme';
 
 export default function PaywallScreen() {
   const router = useRouter();
@@ -29,17 +30,17 @@ export default function PaywallScreen() {
   const handleChangeTier = async (tier: SubscriptionTier) => {
     try {
       await changeTier(tier);
-      Alert.alert('Success', `Switched to ${SUBSCRIPTION_TIERS[tier].name}!`);
+      Alert.alert('Đã cập nhật', `Bạn đang dùng gói ${SUBSCRIPTION_TIERS[tier].name}.`);
       router.back();
     } catch (err: any) {
-      Alert.alert('Error', err?.response?.data?.message ?? err?.message ?? 'Failed to update plan');
+      Alert.alert('Không cập nhật được', err?.response?.data?.message ?? err?.message ?? 'Vui lòng thử lại sau');
     }
   };
 
   if (isLoading) {
     return (
       <View style={styles.container}>
-        <ActivityIndicator size="large" color="#F97316" />
+        <ActivityIndicator size="large" color={theme.colors.accentMint} />
       </View>
     );
   }
@@ -52,8 +53,8 @@ export default function PaywallScreen() {
       <View style={styles.contentInner}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.title}>Nâng cấp kế hoạch</Text>
-        <Text style={styles.subtitle}>Mở khóa các tính năng cao cấp</Text>
+        <Text style={styles.title}>Nâng cấp trải nghiệm theo dõi</Text>
+        <Text style={styles.subtitle}>Log nhanh hơn, nhận insight rõ hơn và đồng bộ sức khỏe khi bạn cần.</Text>
       </View>
 
       {/* Billing Toggle */}
@@ -142,7 +143,7 @@ export default function PaywallScreen() {
                       <MaterialIcons
                         name={hasFeature ? 'check-circle' : 'cancel'}
                         size={18}
-                        color={hasFeature ? '#10b981' : '#d1d5db'}
+                        color={hasFeature ? theme.colors.accentMint : theme.colors.textMuted}
                       />
                       <Text style={[styles.featureText, !hasFeature && styles.featureDisabled]}>
                         {label}
@@ -213,11 +214,11 @@ export default function PaywallScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: theme.colors.bgBottom,
   },
   content: {
     paddingHorizontal: 16,
-    paddingVertical: 24,
+    paddingVertical: 28,
     alignItems: 'center',
   },
   contentInner: {
@@ -230,43 +231,49 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 28,
-    fontWeight: '700',
-    color: '#1f2937',
+    fontWeight: '800',
+    color: theme.colors.text,
     marginBottom: 8,
+    textAlign: 'center',
   },
   subtitle: {
-    fontSize: 16,
-    color: '#6b7280',
+    fontSize: 14,
+    lineHeight: 21,
+    color: theme.colors.textSoft,
+    textAlign: 'center',
+    maxWidth: 560,
   },
   billingToggle: {
     flexDirection: 'row',
-    backgroundColor: '#f3f4f6',
-    borderRadius: 12,
+    backgroundColor: theme.colors.surfaceAlt,
+    borderRadius: theme.radii.lg,
     padding: 4,
     marginBottom: 24,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
   },
   billingOption: {
     flex: 1,
     paddingVertical: 12,
     paddingHorizontal: 16,
-    borderRadius: 10,
+    borderRadius: theme.radii.lg,
     alignItems: 'center',
     justifyContent: 'center',
   },
   activeOption: {
-    backgroundColor: '#fff',
+    backgroundColor: theme.colors.surfaceWarm,
   },
   billingText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#6b7280',
+    color: theme.colors.textMuted,
   },
   activeText: {
-    color: '#1f2937',
+    color: theme.colors.text,
   },
   savingsBadge: {
     fontSize: 12,
-    color: '#10b981',
+    color: theme.colors.accentMint,
     fontWeight: '600',
     marginTop: 4,
   },
@@ -284,11 +291,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   tierCard: {
-    backgroundColor: '#f9fafb',
-    borderRadius: 16,
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radii.xl,
     padding: 20,
-    borderWidth: 2,
-    borderColor: '#e5e7eb',
+    borderWidth: 1,
+    borderColor: theme.colors.border,
   },
   tierCardWide: {
     flex: 1,
@@ -301,36 +308,36 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   currentTierCard: {
-    backgroundColor: '#eff6ff',
-    borderColor: '#3b82f6',
+    backgroundColor: '#142438',
+    borderColor: theme.colors.accentCyan,
   },
   popularTierCard: {
-    borderColor: '#f97316',
-    backgroundColor: '#fff7ed',
+    borderColor: theme.colors.accentCoral,
+    backgroundColor: '#251b18',
   },
   popularBadge: {
     position: 'absolute',
     top: -12,
     left: 20,
-    backgroundColor: '#f97316',
+    backgroundColor: theme.colors.accentCoral,
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 20,
+    borderRadius: theme.radii.lg,
   },
   popularBadgeText: {
-    color: '#fff',
+    color: '#111827',
     fontSize: 12,
     fontWeight: '700',
   },
   tierName: {
     fontSize: 20,
-    fontWeight: '700',
-    color: '#1f2937',
+    fontWeight: '800',
+    color: theme.colors.text,
     marginBottom: 4,
   },
   tierDescription: {
     fontSize: 14,
-    color: '#6b7280',
+    color: theme.colors.textSoft,
     marginBottom: 16,
   },
   priceContainer: {
@@ -341,11 +348,11 @@ const styles = StyleSheet.create({
   price: {
     fontSize: 32,
     fontWeight: '700',
-    color: '#1f2937',
+    color: theme.colors.text,
   },
   billingPeriod: {
     fontSize: 14,
-    color: '#6b7280',
+    color: theme.colors.textMuted,
     marginLeft: 4,
   },
   featuresList: {
@@ -359,30 +366,30 @@ const styles = StyleSheet.create({
   },
   featureText: {
     fontSize: 14,
-    color: '#374151',
+    color: theme.colors.textSoft,
     fontWeight: '500',
   },
   featureDisabled: {
-    color: '#d1d5db',
+    color: '#536174',
   },
   actionButton: {
-    backgroundColor: '#f97316',
+    backgroundColor: theme.colors.accentMint,
     paddingVertical: 14,
     paddingHorizontal: 16,
-    borderRadius: 10,
+    borderRadius: theme.radii.lg,
     alignItems: 'center',
     justifyContent: 'center',
   },
   currentButton: {
-    backgroundColor: '#e5e7eb',
+    backgroundColor: theme.colors.surfaceAlt,
   },
   actionButtonText: {
-    color: '#fff',
+    color: '#07131d',
     fontSize: 16,
     fontWeight: '600',
   },
   currentButtonText: {
-    color: '#6b7280',
+    color: theme.colors.textMuted,
   },
   faqSection: {
     marginBottom: 24,
@@ -390,29 +397,29 @@ const styles = StyleSheet.create({
   faqTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#1f2937',
+    color: theme.colors.text,
     marginBottom: 16,
   },
   faqItem: {
     marginBottom: 16,
     paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
+    borderBottomColor: theme.colors.border,
   },
   faqQuestion: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#1f2937',
+    color: theme.colors.text,
     marginBottom: 6,
   },
   faqAnswer: {
     fontSize: 13,
-    color: '#6b7280',
+    color: theme.colors.textSoft,
     lineHeight: 20,
   },
   errorBanner: {
-    backgroundColor: '#fee2e2',
-    borderRadius: 10,
+    backgroundColor: '#2c1117',
+    borderRadius: theme.radii.lg,
     padding: 12,
     marginBottom: 16,
     flexDirection: 'row',
@@ -422,18 +429,18 @@ const styles = StyleSheet.create({
   errorText: {
     flex: 1,
     fontSize: 14,
-    color: '#dc2626',
+    color: theme.colors.danger,
     fontWeight: '500',
   },
   footer: {
     alignItems: 'center',
     paddingTop: 16,
     borderTopWidth: 1,
-    borderTopColor: '#e5e7eb',
+    borderTopColor: theme.colors.border,
   },
   footerLink: {
     fontSize: 14,
-    color: '#f97316',
+    color: theme.colors.accentMint,
     fontWeight: '600',
   },
 });

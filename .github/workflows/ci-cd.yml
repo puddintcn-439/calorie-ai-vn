@@ -216,10 +216,7 @@ jobs:
         if: always()
         run: |
           echo "::notice::CI/CD Pipeline Complete"
-          echo "::notice::✅ Lint & TypeScript passed"
-          echo "::notice::✅ Backend tests passed"
-          echo "::notice::✅ Mobile checks passed"
-          echo "::notice::✅ Backend built successfully"
+          echo "::notice::Quality gate job reached report step. Check upstream job statuses for details."
 
   # Job 7: Comment PR with results
   comment-pr:
@@ -232,87 +229,85 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const status = '${{ needs.quality-gate.result }}' === 'success' ? '✅' : '❌';
+            const result = '${{ needs.quality-gate.result }}';
+            const status = result === 'success' ? 'PASS' : 'FAIL';
             github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: `${status} CI/CD Pipeline Results\n\n- ✅ Lint & TypeScript\n- ✅ Backend Tests\n- ✅ Mobile Checks\n- ✅ Backend Build\n- ✅ Quality Gates`
+              body: `${status} CI/CD Pipeline Results\n\nQuality gate result: ${result}`
             })
 
-    # Job 8: Mobile Web E2E (Playwright)
-    mobile-e2e:
-      runs-on: ubuntu-latest
-      name: Mobile Web E2E
-      needs: [smoke-tests, mobile-check]
-      steps:
-        - uses: actions/checkout@v4
+  # Job 8: Mobile Web E2E (Playwright)
+  mobile-e2e:
+    runs-on: ubuntu-latest
+    name: Mobile Web E2E
+    needs: [smoke-tests, mobile-check]
+    steps:
+      - uses: actions/checkout@v4
 
-        - name: Setup Node.js
-          uses: actions/setup-node@v4
-          with:
-            node-version: ${{ env.NODE_VERSION }}
-            cache: 'npm'
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
 
-        - name: Install dependencies
-          run: npm ci
+      - name: Install dependencies
+        run: npm ci
 
-        - name: Start Expo Web (background)
-          run: |
-            cd apps/mobile
-            npm run dev:web --silent &
+      - name: Start Expo Web (background)
+        run: |
+          cd apps/mobile
+          npm run dev:web --silent &
 
-        - name: Wait for web to be ready
-          run: npx wait-on http://localhost:19006 --timeout 450000
+      - name: Wait for web to be ready
+        run: npx wait-on http://localhost:19006 --timeout 450000
 
-        - name: Install Playwright browsers
-          run: npx playwright install
+      - name: Install Playwright browsers
+        run: npx playwright install
 
-        - name: Run mobile web E2E
-          run: cd apps/mobile && npm run e2e
+      - name: Run mobile web E2E
+        run: cd apps/mobile && npm run e2e
 
-    # Job 9: Mobile EAS Android preview build (optional)
-    mobile-eas-build:
-      runs-on: ubuntu-latest
-      name: Mobile EAS Android Preview Build
-      needs: [mobile-e2e]
-      if: ${{ secrets.EXPO_TOKEN != '' }}
-      steps:
-        - uses: actions/checkout@v4
+  # Job 9: Mobile EAS Android preview build (optional)
+  mobile-eas-build:
+    runs-on: ubuntu-latest
+    name: Mobile EAS Android Preview Build
+    needs: [mobile-e2e]
+    if: ${{ secrets.EXPO_TOKEN != '' }}
+    steps:
+      - uses: actions/checkout@v4
 
-        - name: Setup Node.js
-          uses: actions/setup-node@v4
-          with:
-            node-version: ${{ env.NODE_VERSION }}
-            cache: 'npm'
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
 
-        - name: Install dependencies
-          run: npm ci
+      - name: Install dependencies
+        run: npm ci
 
-        - name: Configure expo token
-          env:
-            EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-          run: |
-            echo "EXPO_TOKEN is set"
+      - name: Configure expo token
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          echo "EXPO_TOKEN is set"
 
-        - name: Restore Android keystore (from secrets)
-          if: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
-          run: |
-            echo "Restoring Android keystore from secrets"
-            echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > ./android.keystore
-            echo "ANDROID_KEYSTORE_PASSWORD=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" >> $GITHUB_ENV
-            echo "ANDROID_KEY_ALIAS=${{ secrets.ANDROID_KEY_ALIAS }}" >> $GITHUB_ENV
-            echo "ANDROID_KEY_PASSWORD=${{ secrets.ANDROID_KEY_PASSWORD }}" >> $GITHUB_ENV
+      - name: Restore Android keystore (from secrets)
+        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+        run: |
+          echo "Restoring Android keystore from secrets"
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > ./android.keystore
+          echo "ANDROID_KEYSTORE_PASSWORD=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" >> $GITHUB_ENV
+          echo "ANDROID_KEY_ALIAS=${{ secrets.ANDROID_KEY_ALIAS }}" >> $GITHUB_ENV
+          echo "ANDROID_KEY_PASSWORD=${{ secrets.ANDROID_KEY_PASSWORD }}" >> $GITHUB_ENV
 
-        - name: Run EAS Android preview build
-          env:
-            EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-          run: |
-            cd apps/mobile
-            # if keystore restored, configure eas credentials (optional)
-            if [ -f ./android.keystore ]; then
-              echo "Keystore restored, configuring eas credentials"
-              # The following is an example; customize as needed for your eas.json
-              # eas credentials:manager --platform android --profile preview --non-interactive || true
-            fi
-            npm run build:android:preview
+      - name: Run EAS Android preview build
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          cd apps/mobile
+          if [ -f ./android.keystore ]; then
+            echo "Keystore restored, configure EAS credentials here if required"
+          fi
+          npm run build:android:preview

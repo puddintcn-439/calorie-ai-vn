@@ -60,7 +60,7 @@ export default function HealthSyncScreen() {
     try {
       await activitySyncService.openProviderSettings();
     } catch (error: any) {
-      Alert.alert('Khong mo duoc', error?.message ?? 'Vui long thu lai sau.');
+      Alert.alert('Không mở được', error?.message ?? 'Vui lòng thử lại sau.');
     }
   };
 
@@ -68,7 +68,7 @@ export default function HealthSyncScreen() {
     try {
       await activitySyncService.openSupportUrl();
     } catch (error: any) {
-      Alert.alert('Khong mo duoc link', error?.message ?? 'Vui long thu lai sau.');
+      Alert.alert('Không mở được link', error?.message ?? 'Vui lòng thử lại sau.');
     }
   };
 
@@ -80,7 +80,7 @@ export default function HealthSyncScreen() {
       setDiagnostics(details);
       setPhoneCheckInfo(info);
     } catch (error: any) {
-      Alert.alert('Khong tai lai duoc', error?.message ?? 'Vui long thu lai sau.');
+      Alert.alert('Không tải lại được', error?.message ?? 'Vui lòng thử lại sau.');
     } finally {
       setIsLoadingDiagnostics(false);
     }
@@ -89,27 +89,27 @@ export default function HealthSyncScreen() {
   return (
     <ScreenShell>
       <Eyebrow>Health Sync</Eyebrow>
-      <HeroTitle>Trang kiem tra Activity Sync tren phone.</HeroTitle>
+      <HeroTitle>Kiểm tra Activity Sync trên phone.</HeroTitle>
       <BodyText style={styles.heroBody}>
-        Deep link co dinh de mo trang nay tren ban native la {HEALTH_SYNC_SCREEN_LINK}.
+        Deep link cố định để mở trang này trên bản native là {HEALTH_SYNC_SCREEN_LINK}.
       </BodyText>
 
       <SurfaceCard style={styles.linkCard}>
-        <Text style={styles.sectionLabel}>Link de toi check tren phone</Text>
+        <Text style={styles.sectionLabel}>Link để test trên phone</Text>
         <Text style={styles.linkValue}>{HEALTH_SYNC_SCREEN_LINK}</Text>
         <Text style={styles.helperText}>
-          Dung link nay sau khi cai dev build/internal build. Route nay khong phu thuoc tab, de test nhanh hon.
+          Dùng link này sau khi cài dev build hoặc internal build. Route này không phụ thuộc tab, nên test nhanh hơn.
         </Text>
       </SurfaceCard>
 
       <SurfaceCard style={styles.statusCard}>
         <View style={styles.statusHeader}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.statusTitle}>Chan doan thiet bi</Text>
-            <Text style={styles.statusSubtitle}>Nen tang hien tai: {Platform.OS}</Text>
+            <Text style={styles.statusTitle}>Chẩn đoán thiết bị</Text>
+            <Text style={styles.statusSubtitle}>Nền tảng hiện tại: {Platform.OS}</Text>
           </View>
           <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-            <Text style={styles.backButtonText}>Quay lai</Text>
+            <Text style={styles.backButtonText}>Quay lại</Text>
           </TouchableOpacity>
         </View>
 
@@ -132,32 +132,32 @@ export default function HealthSyncScreen() {
             </View>
           </>
         ) : (
-          <Text style={styles.statusDetail}>Khong doc duoc thong tin Health Sync tren thiet bi hien tai.</Text>
+          <Text style={styles.statusDetail}>Không đọc được thông tin Health Sync trên thiết bị hiện tại.</Text>
         )}
       </SurfaceCard>
 
       <SurfaceCard style={styles.stepsCard}>
-        <Text style={styles.sectionTitle}>Checklist test tren phone</Text>
-        <Text style={styles.checkItem}>1. Cai dev build hoac internal build cua app.</Text>
-        <Text style={styles.checkItem}>2. Mo link {HEALTH_SYNC_SCREEN_LINK} tren phone.</Text>
-        <Text style={styles.checkItem}>3. Bam mo Health Connect / Apple Health va cap quyen doc steps, distance, calories.</Text>
-        <Text style={styles.checkItem}>4. Quay lai trang nay va bam dong bo.</Text>
-        <Text style={styles.checkItem}>5. Xac nhan calories burned va imported count duoc cap nhat.</Text>
+        <Text style={styles.sectionTitle}>Checklist test trên phone</Text>
+        <Text style={styles.checkItem}>1. Cài dev build hoặc internal build của app.</Text>
+        <Text style={styles.checkItem}>2. Mở link {HEALTH_SYNC_SCREEN_LINK} trên phone.</Text>
+        <Text style={styles.checkItem}>3. Mở Health Connect / Apple Health và cấp quyền đọc steps, distance, calories.</Text>
+        <Text style={styles.checkItem}>4. Quay lại trang này và bấm đồng bộ.</Text>
+        <Text style={styles.checkItem}>5. Xác nhận calories burned và imported count được cập nhật.</Text>
       </SurfaceCard>
 
       <SurfaceCard style={styles.stepsCard}>
         <View style={styles.statusHeader}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.sectionTitle}>Diagnostics chi tiet</Text>
-            <Text style={styles.statusSubtitle}>Doc truc tiep readiness, quyen va du lieu hom nay.</Text>
+            <Text style={styles.sectionTitle}>Diagnostics chi tiết</Text>
+            <Text style={styles.statusSubtitle}>Đọc trực tiếp readiness, quyền và dữ liệu hôm nay.</Text>
           </View>
           <TouchableOpacity style={styles.backButton} onPress={handleRefreshDiagnostics}>
-            <Text style={styles.backButtonText}>{isLoadingDiagnostics ? 'Dang tai...' : 'Tai lai'}</Text>
+            <Text style={styles.backButtonText}>{isLoadingDiagnostics ? 'Đang tải...' : 'Tải lại'}</Text>
           </TouchableOpacity>
         </View>
 
         <UiInput
-          label="Ngay can kiem tra (YYYY-MM-DD)"
+          label="Ngày cần kiểm tra (YYYY-MM-DD)"
           value={selectedDate}
           onChangeText={setSelectedDate}
           autoCapitalize="none"
@@ -170,12 +170,12 @@ export default function HealthSyncScreen() {
         ) : diagnostics ? (
           <>
             <Text style={styles.diagLine}>Availability: {diagnostics.availability}</Text>
-            <Text style={styles.diagLine}>Granted: {diagnostics.grantedPermissions.length ? diagnostics.grantedPermissions.join(', ') : 'Chua co'}</Text>
-            <Text style={styles.diagLine}>Missing: {diagnostics.missingPermissions.length ? diagnostics.missingPermissions.join(', ') : 'Khong thieu'}</Text>
+            <Text style={styles.diagLine}>Granted: {diagnostics.grantedPermissions.length ? diagnostics.grantedPermissions.join(', ') : 'Chưa có'}</Text>
+            <Text style={styles.diagLine}>Missing: {diagnostics.missingPermissions.length ? diagnostics.missingPermissions.join(', ') : 'Không thiếu'}</Text>
 
             {diagnostics.today ? (
               <View style={styles.resultBox}>
-                <Text style={styles.resultTitle}>Snapshot hom nay ({diagnostics.today.date})</Text>
+                <Text style={styles.resultTitle}>Snapshot hôm nay ({diagnostics.today.date})</Text>
                 <Text style={styles.resultLine}>Steps: {diagnostics.today.steps}</Text>
                 <Text style={styles.resultLine}>Distance: {diagnostics.today.distanceKm} km</Text>
                 <Text style={styles.resultLine}>Calories burned: {diagnostics.today.caloriesBurned}</Text>
@@ -183,19 +183,19 @@ export default function HealthSyncScreen() {
             ) : null}
 
             <View style={styles.notesBox}>
-              <Text style={styles.resultTitle}>Ghi chu chan doan</Text>
+              <Text style={styles.resultTitle}>Ghi chú chẩn đoán</Text>
               {diagnostics.notes.map((note) => (
                 <Text key={note} style={styles.noteLine}>{note}</Text>
               ))}
             </View>
           </>
         ) : (
-          <Text style={styles.statusDetail}>Khong lay duoc diagnostics tren thiet bi hien tai.</Text>
+          <Text style={styles.statusDetail}>Không lấy được diagnostics trên thiết bị hiện tại.</Text>
         )}
       </SurfaceCard>
 
       <SurfaceCard style={styles.syncCard}>
-        <Text style={styles.sectionTitle}>Chay thu dong bo</Text>
+        <Text style={styles.sectionTitle}>Chạy thử đồng bộ</Text>
         <TouchableOpacity
           style={[styles.primaryButton, isSyncing && styles.disabledButton]}
           onPress={async () => {
@@ -206,23 +206,23 @@ export default function HealthSyncScreen() {
               setLastSyncResult(result);
               setDiagnostics(refreshedDiagnostics);
               Alert.alert(
-                'Dong bo thanh cong',
-                `Da nhap ${result.imported_count} hoat dong va ${result.total_calories_burned} kcal tieu hao.`,
+                'Đồng bộ thành công',
+                `Đã nhập ${result.imported_count} hoạt động và ${result.total_calories_burned} kcal tiêu hao.`,
               );
             } catch (error: any) {
-              Alert.alert('Khong the dong bo', error?.message ?? 'Vui long thu lai tren phone native.');
+              Alert.alert('Không thể đồng bộ', error?.message ?? 'Vui lòng thử lại trên phone native.');
             } finally {
               setIsSyncing(false);
             }
           }}
           disabled={isSyncing}
         >
-          <Text style={styles.primaryButtonText}>{isSyncing ? 'Dang dong bo...' : 'Dong bo activity ngay bay gio'}</Text>
+          <Text style={styles.primaryButtonText}>{isSyncing ? 'Đang đồng bộ...' : 'Đồng bộ activity ngay bây giờ'}</Text>
         </TouchableOpacity>
 
         {lastSyncResult && (
           <View style={styles.resultBox}>
-            <Text style={styles.resultTitle}>Ket qua lan gan nhat</Text>
+            <Text style={styles.resultTitle}>Kết quả lần gần nhất</Text>
             <Text style={styles.resultLine}>Source: {lastSyncResult.source}</Text>
             <Text style={styles.resultLine}>Imported: {lastSyncResult.imported_count}</Text>
             <Text style={styles.resultLine}>Skipped: {lastSyncResult.skipped_count}</Text>

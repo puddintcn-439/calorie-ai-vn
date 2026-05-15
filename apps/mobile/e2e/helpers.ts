@@ -1,10 +1,10 @@
 import { Page } from '@playwright/test';
 
 export async function setAuthToken(page: Page, token = 'test-token', userId = 'user-1') {
-  await page.addInitScript((t: string, u: string) => {
-    localStorage.setItem('auth_token', t);
-    localStorage.setItem('user_id', u);
-  }, token, userId);
+  await page.addInitScript(({ token: authToken, userId: authUserId }) => {
+    localStorage.setItem('auth_token', authToken);
+    localStorage.setItem('user_id', authUserId);
+  }, { token, userId });
 }
 
 export function jsonResponse(obj: any) {

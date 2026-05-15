@@ -25,10 +25,22 @@ import { router } from 'expo-router';
 import { BodyText, Eyebrow, HeroTitle, ScreenShell, SurfaceCard } from '../../components/ui-shell';
 import { EmptyState } from '../../components/empty-state';
 
+const scanHeroIllustration = require('../../assets/images/scan-hero.png') as number;
+
 type InputMode = 'camera' | 'gallery' | 'text' | 'voice' | 'receipt' | 'barcode' | 'search';
 
 const MODE_ICONS: Record<InputMode, string> = {
   camera: '📸', gallery: '🖼', text: '✏️', voice: '🎙️', receipt: '🧾', barcode: '🔍', search: '🍜',
+};
+
+const MODE_LABELS: Record<InputMode, string> = {
+  camera: 'Camera',
+  gallery: 'Ảnh',
+  text: 'Nhập',
+  voice: 'Giọng nói',
+  receipt: 'Hóa đơn',
+  barcode: 'Mã vạch',
+  search: 'Tìm món',
 };
 
 function formatCalorieRange(min: number, max: number): string {
@@ -471,9 +483,14 @@ export default function ScanScreen() {
 
   return (
     <ScreenShell>
-        <Eyebrow>AI Scanner</Eyebrow>
-        <HeroTitle>Chụp, mô tả hoặc quét mã vạch rồi log bữa ăn ngay.</HeroTitle>
-        <BodyText style={styles.heroBody}>Flow được tối ưu cho mobile nhưng vẫn đủ gọn và đẹp khi mở trên desktop/web.</BodyText>
+        <View style={styles.scanHeroCard}>
+          <Image source={scanHeroIllustration} style={styles.scanHeroImage} resizeMode="cover" />
+          <View style={styles.scanHeroCopy}>
+            <Eyebrow>Scan</Eyebrow>
+            <HeroTitle>Log món ăn nhanh hơn.</HeroTitle>
+            <BodyText style={styles.heroBody}>Chụp, nói hoặc nhập món Việt trong vài giây.</BodyText>
+          </View>
+        </View>
 
         {/* Mode Tabs */}
         <View style={styles.modeTabs}>
@@ -491,7 +508,7 @@ export default function ScanScreen() {
                 setVoiceTranscript('');
                 setLastReceiptUri(null);
               }}>
-              <Text style={[styles.modeTabText, mode === m && styles.modeTabTextActive]}>{MODE_ICONS[m]} {m}</Text>
+              <Text style={[styles.modeTabText, mode === m && styles.modeTabTextActive]}>{MODE_ICONS[m]} {MODE_LABELS[m]}</Text>
             </TouchableOpacity>
           ))}
         </View>
@@ -518,7 +535,7 @@ export default function ScanScreen() {
                 placeholderTextColor="#6b7280"
               />
               <TouchableOpacity style={styles.analyzeButton} onPress={handleSearchFoods}>
-                <Text style={styles.analyzeButtonText}>Tim mon</Text>
+                <Text style={styles.analyzeButtonText}>Tìm món</Text>
               </TouchableOpacity>
             </View>
             <MealPicker selected={selectedMeal} onSelect={setSelectedMeal} />
@@ -526,7 +543,7 @@ export default function ScanScreen() {
             {isSearching ? (
               <View style={styles.scanningContainer}>
                 <ActivityIndicator size="large" color="#4ade80" />
-                <Text style={styles.scanningText}>Dang tim trong co so du lieu...</Text>
+                <Text style={styles.scanningText}>Đang tìm trong cơ sở dữ liệu...</Text>
               </View>
             ) : null}
 
@@ -536,19 +553,20 @@ export default function ScanScreen() {
                   <Text style={styles.resultName}>{food.name_vi ?? food.name}</Text>
                   <Text style={styles.resultCalorie}>{food.calories_per_100g ?? 0} kcal</Text>
                 </View>
-                <Text style={styles.resultDetail}>Khau phan mac dinh: {food.serving_size_g ?? 100}g</Text>
+                <Text style={styles.resultDetail}>Khẩu phần mặc định: {food.serving_size_g ?? 100}g</Text>
                 <Text style={styles.resultMacros}>P: {food.protein_g ?? 0}g  C: {food.carbs_g ?? 0}g  F: {food.fat_g ?? 0}g</Text>
                 <TouchableOpacity style={styles.saveButton} onPress={() => handleLogSearchedFood(food)}>
-                  <Text style={styles.saveButtonText}>+ Log mon nay</Text>
+                  <Text style={styles.saveButtonText}>+ Log món này</Text>
                 </TouchableOpacity>
               </SurfaceCard>
             ))}
 
             {!isSearching && searchQuery.trim().length > 0 && searchResults.length === 0 ? (
               <EmptyState
+                imageSource={scanHeroIllustration}
                 icon="🔎"
-                title="Chua tim thay mon phu hop"
-                description="Thu ten mon don gian hon hoac doi tu khoa gan voi ten pho bien."
+                title="Chưa tìm thấy món phù hợp"
+                description="Thử tên món đơn giản hơn hoặc đổi sang từ khóa phổ biến."
               />
             ) : null}
           </View>
@@ -779,6 +797,7 @@ export default function ScanScreen() {
 
         {scanResult?.items.length === 0 && !isScanning && (
           <EmptyState
+            imageSource={scanHeroIllustration}
             icon="🤖"
             title="AI chưa nhận ra món ăn"
             description="Thử chụp rõ hơn, thêm mô tả bằng chữ hoặc dùng phần điều chỉnh để AI hiểu đúng hơn."
@@ -937,26 +956,41 @@ function ScanResultItem({
 }
 
 const styles = StyleSheet.create({
-  heroBody: { marginBottom: 16, maxWidth: 700 },
+  scanHeroCard: {
+    borderRadius: 8,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: '#243244',
+    backgroundColor: '#101b29',
+    marginBottom: 16,
+  },
+  scanHeroImage: {
+    width: '100%',
+    height: 168,
+  },
+  scanHeroCopy: {
+    padding: 14,
+  },
+  heroBody: { maxWidth: 700 },
   modeTabs: { flexDirection: 'row', gap: 8, marginBottom: 18, flexWrap: 'wrap' },
-  modeTab: { paddingVertical: 12, paddingHorizontal: 14, borderRadius: 14, backgroundColor: '#0f1b3b', alignItems: 'center', borderWidth: 1, borderColor: '#23386b' },
+  modeTab: { paddingVertical: 11, paddingHorizontal: 13, borderRadius: 8, backgroundColor: '#0f1b3b', alignItems: 'center', borderWidth: 1, borderColor: '#23386b' },
   modeTabActive: { backgroundColor: '#6ee7b7', borderColor: '#6ee7b7' },
   modeTabText: { color: '#c5d3eb', fontWeight: '700', fontSize: 14, textTransform: 'capitalize' },
   modeTabTextActive: { color: '#07111f' },
   searchContainer: { marginBottom: 16 },
   searchItemCard: { marginBottom: 10 },
-  captureButton: { backgroundColor: '#0f1a37ee', borderRadius: 24, padding: 40, alignItems: 'center', gap: 12, marginBottom: 16, borderWidth: 1, borderColor: '#203463' },
+  captureButton: { backgroundColor: '#0f1a37ee', borderRadius: 8, padding: 30, alignItems: 'center', gap: 12, marginBottom: 14, borderWidth: 1, borderColor: '#203463' },
   captureText: { color: '#9fb1d1', fontSize: 15, fontWeight: '600' },
   textInputContainer: { gap: 10, marginBottom: 16 },
-  textInput: { backgroundColor: '#121d3f', borderRadius: 16, padding: 14, color: '#fff', minHeight: 80, borderWidth: 1, borderColor: '#23386b' },
-  analyzeButton: { backgroundColor: '#7dd3fc', borderRadius: 14, padding: 14, alignItems: 'center' },
+  textInput: { backgroundColor: '#121d3f', borderRadius: 8, padding: 14, color: '#fff', minHeight: 80, borderWidth: 1, borderColor: '#23386b' },
+  analyzeButton: { backgroundColor: '#7dd3fc', borderRadius: 8, padding: 14, alignItems: 'center' },
   analyzeButtonText: { color: '#07111f', fontWeight: '800', fontSize: 16 },
-  previewImage: { width: '100%', height: 220, borderRadius: 18, marginBottom: 16 },
+  previewImage: { width: '100%', height: 220, borderRadius: 8, marginBottom: 16 },
   scanningContainer: { alignItems: 'center', padding: 30, gap: 12 },
   scanningText: { color: '#9fb1d1', fontSize: 15, marginTop: 8 },
   sectionTitle: { fontSize: 18, fontWeight: '700', color: '#eff6ff', marginBottom: 12 },
   mealPicker: { flexDirection: 'row', gap: 8, marginBottom: 12 },
-  mealChip: { flex: 1, padding: 10, borderRadius: 12, backgroundColor: '#122041', alignItems: 'center', borderWidth: 1, borderColor: '#23386b' },
+  mealChip: { flex: 1, padding: 10, borderRadius: 8, backgroundColor: '#122041', alignItems: 'center', borderWidth: 1, borderColor: '#23386b' },
   mealChipActive: { backgroundColor: '#6ee7b720', borderWidth: 1, borderColor: '#6ee7b7' },
   mealChipText: { color: '#b6c7e3', fontSize: 13, fontWeight: '600' },
   mealChipTextActive: { color: '#6ee7b7', fontWeight: '800' },
@@ -964,7 +998,7 @@ const styles = StyleSheet.create({
   contextPickerContainer: { marginBottom: 16 },
   contextPickerLabel: { color: '#9fb1d1', fontSize: 12, fontWeight: '600', marginBottom: 8 },
   contextPicker: { flexDirection: 'row', gap: 6, flexWrap: 'wrap' },
-  contextChip: { paddingVertical: 8, paddingHorizontal: 10, borderRadius: 10, backgroundColor: '#122041', borderWidth: 1, borderColor: '#23386b', alignItems: 'center', flexDirection: 'row', gap: 4 },
+  contextChip: { paddingVertical: 8, paddingHorizontal: 10, borderRadius: 8, backgroundColor: '#122041', borderWidth: 1, borderColor: '#23386b', alignItems: 'center', flexDirection: 'row', gap: 4 },
   contextChipActive: { backgroundColor: '#6ee7b720', borderColor: '#6ee7b7' },
   contextChipIcon: { fontSize: 16 },
   contextChipText: { color: '#b6c7e3', fontSize: 12, fontWeight: '600' },
@@ -975,7 +1009,7 @@ const styles = StyleSheet.create({
   confidenceBadge: { fontSize: 12, fontWeight: '700' },
   removeBtn: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, backgroundColor: '#1c1c2e', borderWidth: 1, borderColor: '#374151' },
   removeBtnText: { color: '#f87171', fontSize: 12, fontWeight: '700' },
-  nameEditInput: { backgroundColor: '#0b1330', borderRadius: 10, padding: 10, color: '#fff', fontSize: 15, fontWeight: '700', borderWidth: 1.5, borderColor: '#6ee7b7', marginBottom: 6 },
+  nameEditInput: { backgroundColor: '#0b1330', borderRadius: 8, padding: 10, color: '#fff', fontSize: 15, fontWeight: '700', borderWidth: 1.5, borderColor: '#6ee7b7', marginBottom: 6 },
   resultNameButton: { flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 },
   calorieColumn: { alignItems: 'flex-end' },
   editHint: { fontSize: 12, opacity: 0.5 },
@@ -999,23 +1033,23 @@ const styles = StyleSheet.create({
   totalCalorie: { color: '#6ee7b7', fontSize: 30, fontWeight: '800' },
   totalRange: { color: '#9fb1d1', fontSize: 13, marginTop: 4 },
   totalMacros: { color: '#9fb1d1', fontSize: 13, marginTop: 4 },
-  saveButton: { backgroundColor: '#6ee7b7', borderRadius: 16, padding: 16, alignItems: 'center', marginBottom: 10 },
+  saveButton: { backgroundColor: '#6ee7b7', borderRadius: 8, padding: 16, alignItems: 'center', marginBottom: 10 },
   saveButtonText: { color: '#07111f', fontWeight: '800', fontSize: 16 },
-  secondaryButton: { borderRadius: 16, padding: 14, alignItems: 'center', marginBottom: 10, borderWidth: 1, borderColor: '#7dd3fc', backgroundColor: '#0d2440' },
+  secondaryButton: { borderRadius: 8, padding: 14, alignItems: 'center', marginBottom: 10, borderWidth: 1, borderColor: '#7dd3fc', backgroundColor: '#0d2440' },
   secondaryButtonText: { color: '#7dd3fc', fontWeight: '700', fontSize: 15 },
   buttonDisabled: { opacity: 0.4 },
   refineContainer: { marginBottom: 20 },
   refineTitle: { color: '#fff', fontWeight: '700', fontSize: 16, marginBottom: 4 },
   refineHint: { color: '#9fb1d1', fontSize: 13, marginBottom: 10 },
-  refineInput: { backgroundColor: '#0b1330', borderRadius: 14, padding: 12, color: '#fff', minHeight: 60, marginBottom: 10, borderWidth: 1, borderColor: '#203463' },
-  refineButton: { backgroundColor: '#8b5cf6', borderRadius: 12, padding: 12, alignItems: 'center' },
+  refineInput: { backgroundColor: '#0b1330', borderRadius: 8, padding: 12, color: '#fff', minHeight: 60, marginBottom: 10, borderWidth: 1, borderColor: '#203463' },
+  refineButton: { backgroundColor: '#8b5cf6', borderRadius: 8, padding: 12, alignItems: 'center' },
   refineButtonText: { color: '#fff', fontWeight: '600', fontSize: 14 },
   // Barcode
   barcodeContainer: { marginBottom: 16 },
-  barcodeCamera: { width: '100%', height: 280, borderRadius: 16, overflow: 'hidden' },
+  barcodeCamera: { width: '100%', height: 280, borderRadius: 8, overflow: 'hidden' },
   barcodeScanningOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0008' },
   barcodeHint: { color: '#9fb1d1', textAlign: 'center', marginTop: 10, fontSize: 13 },
-  barcodeImage: { width: '100%', height: 160, borderRadius: 16, marginBottom: 12 },
+  barcodeImage: { width: '100%', height: 160, borderRadius: 8, marginBottom: 12 },
   barcodeProductName: { color: '#fff', fontSize: 18, fontWeight: '800', marginBottom: 4 },
   barcodeServing: { color: '#9fb1d1', fontSize: 13, marginBottom: 12 },
   // Voice recording styles
@@ -1040,7 +1074,7 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   recordingDuration: { color: '#fff', fontSize: 32, fontWeight: '800' },
-  stopRecordingButton: { backgroundColor: '#f87171', borderRadius: 20, paddingHorizontal: 24, paddingVertical: 16, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  stopRecordingButton: { backgroundColor: '#f87171', borderRadius: 8, paddingHorizontal: 24, paddingVertical: 16, flexDirection: 'row', alignItems: 'center', gap: 12 },
   stopRecordingText: { color: '#fff', fontWeight: '800', fontSize: 16 },
   captureButtonSecondary: { opacity: 0.7 },
   transcriptContainer: { marginVertical: 12 },

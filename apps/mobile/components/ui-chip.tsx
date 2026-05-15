@@ -57,13 +57,13 @@ const styles = StyleSheet.create({
   chip: {
     paddingHorizontal: 14,
     paddingVertical: 9,
-    borderRadius: 20,
+    borderRadius: theme.radii.lg,
     backgroundColor: theme.colors.surfaceAlt,
-    borderWidth: 1.5,
+    borderWidth: 1,
     borderColor: theme.colors.border,
   },
   chipSelected: {
-    backgroundColor: '#0d2a1e',
+    backgroundColor: '#163024',
     borderColor: theme.colors.accentMint,
   },
   label: {

@@ -81,23 +81,25 @@ export function UiButton({
 
 const styles = StyleSheet.create({
   base: {
-    borderRadius: 14,
-    paddingVertical: 16,
+    borderRadius: theme.radii.lg,
+    paddingVertical: 14,
     paddingHorizontal: 20,
     alignItems: 'center',
     justifyContent: 'center',
   },
   primary: {
     backgroundColor: theme.colors.accentMint,
+    borderWidth: 1,
+    borderColor: '#84e4b5',
   },
   secondary: {
     backgroundColor: 'transparent',
-    borderWidth: 1.5,
+    borderWidth: 1,
     borderColor: theme.colors.accentMint,
   },
   danger: {
     backgroundColor: '#1a0a0a',
-    borderWidth: 1.5,
+    borderWidth: 1,
     borderColor: theme.colors.danger,
   },
   ghost: {
@@ -107,7 +109,7 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   baseText: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '800',
   },
   primaryText: {

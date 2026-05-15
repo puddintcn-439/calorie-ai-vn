@@ -45,8 +45,6 @@ export function ScreenShell({
   return (
     <LinearGradient colors={[theme.colors.bgTop, theme.colors.bgMid, theme.colors.bgBottom]} style={styles.gradient}>
       <SafeAreaView style={styles.safeArea}>
-        <View style={styles.blobTop} />
-        <View style={styles.blobBottom} />
         {scroll ? (
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
             {content}
@@ -109,24 +107,6 @@ const styles = StyleSheet.create({
   innerDesktop: {
     paddingHorizontal: 12,
   },
-  blobTop: {
-    position: 'absolute',
-    top: -140,
-    right: -80,
-    width: 280,
-    height: 280,
-    borderRadius: 140,
-    backgroundColor: '#34d39922',
-  },
-  blobBottom: {
-    position: 'absolute',
-    bottom: -120,
-    left: -60,
-    width: 240,
-    height: 240,
-    borderRadius: 120,
-    backgroundColor: '#f9731620',
-  },
   card: {
     backgroundColor: theme.colors.surface,
     borderRadius: theme.radii.xl,
@@ -134,27 +114,27 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.border,
     padding: 16,
     ...(Platform.OS === 'web'
-      ? { boxShadow: '0px 16px 20px rgba(2, 6, 23, 0.28)' }
+      ? { boxShadow: '0px 10px 18px rgba(2, 6, 23, 0.22)' }
       : {
           shadowColor: '#020617',
-          shadowOpacity: 0.28,
-          shadowRadius: 20,
-          shadowOffset: { width: 0, height: 16 },
+          shadowOpacity: 0.18,
+          shadowRadius: 14,
+          shadowOffset: { width: 0, height: 8 },
         }),
-    elevation: 10,
+    elevation: 5,
   },
   eyebrow: {
     color: theme.colors.accentCyan,
     fontSize: 12,
     textTransform: 'uppercase',
-    letterSpacing: 1.4,
+    letterSpacing: 0.8,
     fontWeight: '700',
     marginBottom: 10,
   },
   heroTitle: {
     color: theme.colors.text,
-    fontSize: 30,
-    lineHeight: 36,
+    fontSize: 28,
+    lineHeight: 34,
     fontWeight: '800',
     marginBottom: 8,
   },

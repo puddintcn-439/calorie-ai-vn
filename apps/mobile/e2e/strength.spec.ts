@@ -7,6 +7,10 @@ test.describe('Strength session', () => {
 
     let postCalled = false;
 
+    await page.route('**/user/profile', async (route) => {
+      await route.fulfill(jsonResponse({ id: 'user-1', email: 'test@example.com' }));
+    });
+
     await page.route('**/log/activity', async (route) => {
       const method = route.request().method();
       if (method === 'GET') {
@@ -21,16 +25,13 @@ test.describe('Strength session', () => {
 
     await page.goto('/strength');
 
-    await page.getByPlaceholder('Ghi chú cho buổi tập...').fill('Felt strong today');
+    await page.getByPlaceholder('Ghi chú buổi tập...').fill('Felt strong today');
     await page.getByPlaceholder('Bài tập #1').fill('Squat');
     await page.getByPlaceholder('Reps').fill('5');
-    await page.getByPlaceholder('Weight (kg)').fill('80');
+    await page.getByPlaceholder('Kg').fill('80');
 
-    // Add the set
-    await page.getByText('Add').click();
-
-    // Submit session
-    await page.getByText('Save Strength Session').click();
+    await page.getByText('Thêm set').click();
+    await page.getByText('Lưu buổi tập').click();
 
     await page.waitForTimeout(300);
     expect(postCalled).toBeTruthy();

@@ -1,14 +1,16 @@
 import React from 'react';
-import { StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
+import { Image, ImageSourcePropType, StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
 import { SurfaceCard } from './ui-shell';
 import { theme } from './theme';
 
 export function EmptyState({
+  imageSource,
   icon,
   title,
   description,
   style,
 }: {
+  imageSource?: ImageSourcePropType;
   icon: string;
   title: string;
   description: string;
@@ -16,9 +18,13 @@ export function EmptyState({
 }) {
   return (
     <SurfaceCard style={[styles.card, style]}>
-      <View style={styles.iconWrap}>
-        <Text style={styles.icon}>{icon}</Text>
-      </View>
+      {imageSource ? (
+        <Image source={imageSource} style={styles.image} resizeMode="cover" />
+      ) : (
+        <View style={styles.iconWrap}>
+          <Text style={styles.icon}>{icon}</Text>
+        </View>
+      )}
       <Text style={styles.title}>{title}</Text>
       <Text style={styles.description}>{description}</Text>
     </SurfaceCard>
@@ -29,6 +35,13 @@ const styles = StyleSheet.create({
   card: {
     alignItems: 'center',
     paddingVertical: 22,
+  },
+  image: {
+    width: '100%',
+    height: 142,
+    borderRadius: theme.radii.lg,
+    marginBottom: 14,
+    backgroundColor: theme.colors.surfaceAlt,
   },
   iconWrap: {
     width: 58,

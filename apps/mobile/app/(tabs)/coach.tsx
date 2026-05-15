@@ -23,7 +23,7 @@ interface ChatMessage {
 }
 
 function getCoachErrorMessage(error: unknown): string {
-  const fallback = 'Xin loi, toi dang bi gian doan ket noi. Ban thu lai sau it phut nhe.';
+  const fallback = 'Xin lỗi, tôi đang bị gián đoạn kết nối. Bạn thử lại sau ít phút nhé.';
 
   const err: any = error;
   const rawMessage = String(err?.message ?? '').toLowerCase();
@@ -31,15 +31,15 @@ function getCoachErrorMessage(error: unknown): string {
   const backendMessage = String(err?.response?.data?.message ?? '').trim();
 
   if (rawMessage.includes('only available on premium') || rawMessage.includes('premium or pro')) {
-    return 'AI Coach hien chi mo cho goi Premium/Pro. Ban nang cap de tiep tuc dung tinh nang nay nhe.';
+    return 'AI Coach hiện chỉ mở cho gói Premium/Pro. Bạn nâng cấp để tiếp tục dùng tính năng này nhé.';
   }
 
   if (status === 401) {
-    return 'Phien dang nhap da het han. Ban vui long dang nhap lai de tiep tuc chat voi Coach.';
+    return 'Phiên đăng nhập đã hết hạn. Bạn vui lòng đăng nhập lại để tiếp tục chat với Coach.';
   }
 
   if (status >= 500 && backendMessage) {
-    return `Coach tam thoi gap loi he thong: ${backendMessage}`;
+    return `Coach tạm thời gặp lỗi hệ thống: ${backendMessage}`;
   }
 
   if (backendMessage) {
@@ -47,7 +47,7 @@ function getCoachErrorMessage(error: unknown): string {
   }
 
   if (rawMessage.includes('network')) {
-    return 'Khong the ket noi backend. Ban kiem tra lai server va thu lai giup minh nhe.';
+    return 'Không thể kết nối backend. Bạn kiểm tra lại server và thử lại giúp mình nhé.';
   }
 
   return fallback;
@@ -65,7 +65,7 @@ export default function CoachScreen() {
     {
       id: 'welcome',
       role: 'coach',
-      text: 'Xin chao. Toi la AI Coach. Ban co the hoi ve bua an, macro hoac cach dat muc tieu calo hom nay.',
+      text: 'Xin chào. Tôi là AI Coach. Bạn có thể hỏi về bữa ăn, macro hoặc cách đặt mục tiêu calo hôm nay.',
     },
   ]);
 
