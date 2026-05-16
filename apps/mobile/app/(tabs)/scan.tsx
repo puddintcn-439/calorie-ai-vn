@@ -99,6 +99,7 @@ export default function ScanScreen() {
   const [recording, setRecording] = useState<Audio.Recording | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
+  const [voiceRecordingNote, setVoiceRecordingNote] = useState('');
   const [voicePermissionGranted, setVoicePermissionGranted] = useState(false);
 
   const { addLog, saveMeal } = useLogStore();
@@ -227,6 +228,7 @@ export default function ScanScreen() {
       setIsRecording(true);
       setRecordingDuration(0);
       setVoiceTranscript('');
+      setVoiceRecordingNote('');
 
       // Animate duration counter
       const durationInterval = setInterval(() => {
@@ -257,10 +259,11 @@ export default function ScanScreen() {
       setIsRecording(false);
 
       if (uri) {
-        // For demo purposes, use placeholder transcript
-        // In production, integrate with speech-to-text API
-        setVoiceTranscript(`[Ghi âm ${recordingDuration}s - sử dụng nút "Phân tích từ giọng nói" để xử lý]`);
-        Alert.alert('✅ Ghi âm thành công', `Thời gian: ${recordingDuration}s\n\nNhấp "Phân tích từ giọng nói" để phân tích.`);
+        setVoiceRecordingNote(`Đã ghi âm ${recordingDuration}s. Bản hiện tại chưa tự chuyển giọng nói thành chữ, hãy nhập hoặc dán nội dung bữa ăn bên dưới để phân tích.`);
+        Alert.alert(
+          'Đã ghi âm',
+          'Bản hiện tại chưa có speech-to-text tự động. Hãy nhập hoặc dán nội dung bữa ăn để AI phân tích.',
+        );
       }
     } catch (error) {
       console.error('Lỗi dừng ghi âm:', error);
@@ -440,8 +443,18 @@ export default function ScanScreen() {
 
   const handleLogBarcode = async () => {
     if (!barcodeResult) return;
+    const grams = barcodeResult.serving_size_g ?? 100;
+    const ratio = grams / 100;
     try {
-      await addLog({ name: barcodeResult.name_vi ?? barcodeResult.name, meal_type: selectedMeal, calories: barcodeResult.calories_per_100g ?? 0, protein_g: barcodeResult.protein_g ?? 0, carbs_g: barcodeResult.carbs_g ?? 0, fat_g: barcodeResult.fat_g ?? 0, estimated_grams: barcodeResult.serving_size_g ?? 100 });
+      await addLog({
+        name: barcodeResult.name_vi ?? barcodeResult.name,
+        meal_type: selectedMeal,
+        calories: Math.round((barcodeResult.calories_per_100g ?? 0) * ratio),
+        protein_g: Number(((barcodeResult.protein_g ?? 0) * ratio).toFixed(1)),
+        carbs_g: Number(((barcodeResult.carbs_g ?? 0) * ratio).toFixed(1)),
+        fat_g: Number(((barcodeResult.fat_g ?? 0) * ratio).toFixed(1)),
+        estimated_grams: grams,
+      });
       Alert.alert('✅ Đã lưu!', undefined, [{ text: 'OK', onPress: () => router.replace('/') }]);
     } catch { Alert.alert('Lỗi', 'Không thể lưu log'); }
   };
@@ -603,9 +616,19 @@ export default function ScanScreen() {
             <Text style={styles.barcodeProductName}>{barcodeResult.name_vi ?? barcodeResult.name}</Text>
             <Text style={styles.barcodeServing}>{barcodeResult.serving_description ?? `${barcodeResult.serving_size_g ?? 100}g`} / khẩu phần</Text>
             <SurfaceCard style={styles.totalCard}>
-              <Text style={styles.totalLabel}>Dinh dưỡng / 100g</Text>
-              <Text style={styles.totalCalorie}>{barcodeResult.calories_per_100g ?? 0} kcal</Text>
-              <Text style={styles.totalMacros}>P: {barcodeResult.protein_g ?? 0}g  C: {barcodeResult.carbs_g ?? 0}g  F: {barcodeResult.fat_g ?? 0}g</Text>
+              {(() => {
+                const grams = barcodeResult.serving_size_g ?? 100;
+                const ratio = grams / 100;
+                return (
+                  <>
+                    <Text style={styles.totalLabel}>Dinh dưỡng / khẩu phần</Text>
+                    <Text style={styles.totalCalorie}>{Math.round((barcodeResult.calories_per_100g ?? 0) * ratio)} kcal</Text>
+                    <Text style={styles.totalMacros}>
+                      P: {Number(((barcodeResult.protein_g ?? 0) * ratio).toFixed(1))}g  C: {Number(((barcodeResult.carbs_g ?? 0) * ratio).toFixed(1))}g  F: {Number(((barcodeResult.fat_g ?? 0) * ratio).toFixed(1))}g
+                    </Text>
+                  </>
+                );
+              })()}
             </SurfaceCard>
             <MealPicker selected={selectedMeal} onSelect={setSelectedMeal} />
             <TouchableOpacity style={styles.saveButton} onPress={handleLogBarcode}>
@@ -646,15 +669,14 @@ export default function ScanScreen() {
         {/* ── Voice Mode ── */}
         {mode === 'voice' && (
           <View style={styles.textInputContainer}>
-            {/* Recording controls */}
             {!isRecording ? (
               <TouchableOpacity 
-                style={[styles.captureButton, voiceTranscript && styles.captureButtonSecondary]} 
+                style={[styles.captureButton, voiceRecordingNote && styles.captureButtonSecondary]}
                 onPress={startVoiceRecording}
               >
-                <Ionicons name="mic" size={40} color={voiceTranscript ? '#7dd3fc' : '#4ade80'} />
-                <Text style={[styles.captureText, voiceTranscript && { color: '#7dd3fc' }]}>
-                  {voiceTranscript ? '🎙️ Ghi âm thêm' : '🎙️ Bắt đầu ghi âm'}
+                <Ionicons name="mic" size={40} color={voiceRecordingNote ? '#7dd3fc' : '#4ade80'} />
+                <Text style={[styles.captureText, voiceRecordingNote && { color: '#7dd3fc' }]}>
+                  {voiceRecordingNote ? '🎙️ Ghi âm lại' : '🎙️ Ghi âm nháp'}
                 </Text>
               </TouchableOpacity>
             ) : (
@@ -672,10 +694,13 @@ export default function ScanScreen() {
               </View>
             )}
 
-            {/* Transcript input and editing */}
+            {!!voiceRecordingNote && (
+              <Text style={styles.voiceHintText}>{voiceRecordingNote}</Text>
+            )}
+
             {voiceTranscript ? (
               <View style={styles.transcriptContainer}>
-                <Text style={styles.transcriptLabel}>📝 Bản ghi: (có thể chỉnh sửa)</Text>
+                <Text style={styles.transcriptLabel}>📝 Nội dung bữa ăn</Text>
                 <TextInput
                   style={styles.textInput}
                   value={voiceTranscript}
@@ -686,9 +711,18 @@ export default function ScanScreen() {
                 />
               </View>
             ) : (
-              <Text style={styles.voiceHintText}>
-                💡 Hãy ghi âm mô tả những gì bạn ăn. Ví dụ: "sáng nay mình ăn 1 tô bún bò và uống 1 ly sữa đậu nành"
-              </Text>
+              <View style={styles.transcriptContainer}>
+                <Text style={styles.transcriptLabel}>📝 Nhập lời mô tả bữa ăn</Text>
+                <TextInput
+                  style={styles.textInput}
+                  value={voiceTranscript}
+                  onChangeText={setVoiceTranscript}
+                  placeholder='VD: sáng nay mình ăn 1 tô bún bò và uống 1 ly sữa đậu nành'
+                  placeholderTextColor="#6b7280"
+                  multiline
+                  editable={!isScanning}
+                />
+              </View>
             )}
 
             <MealPicker selected={selectedMeal} onSelect={setSelectedMeal} />
@@ -698,7 +732,7 @@ export default function ScanScreen() {
               disabled={!voiceTranscript || isScanning}
             >
               <Text style={styles.analyzeButtonText}>
-                {isScanning ? 'Đang phân tích...' : 'Phân tích từ giọng nói'}
+                {isScanning ? 'Đang phân tích...' : 'Phân tích mô tả'}
               </Text>
             </TouchableOpacity>
           </View>

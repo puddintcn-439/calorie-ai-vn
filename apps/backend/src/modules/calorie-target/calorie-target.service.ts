@@ -22,7 +22,6 @@ export class CalorieTargetService {
     recommended_goal: UserGoal;
     recommendation_note: string;
   } {
-    // Asia-Pacific cutoffs are used to fit Vietnamese population context.
     if (bmi < 18.5) {
       return {
         body_status: 'underweight',
@@ -33,7 +32,7 @@ export class CalorieTargetService {
       };
     }
 
-    if (bmi < 23) {
+    if (bmi < 25) {
       return {
         body_status: 'normal',
         weight_recommendation: 'maintain',
@@ -43,7 +42,7 @@ export class CalorieTargetService {
       };
     }
 
-    if (bmi < 25) {
+    if (bmi < 30) {
       return {
         body_status: 'overweight',
         weight_recommendation: 'decrease',
@@ -133,14 +132,24 @@ export class CalorieTargetService {
    */
   calculateTarget(dto: CalculateTargetDto): CalorieTargetResponse {
     const { weight_kg, height_cm, age, gender, activity_level, goal, body_fat_pct } = dto;
+    const safetyWarnings: string[] = [
+      'Calorie targets are wellness estimates, not medical diagnosis or treatment.',
+    ];
+    const macroWarnings: string[] = [];
+    const bmiValue = this.calculateBMI(weight_kg, height_cm);
+    const bmi = Math.round(bmiValue * 10) / 10;
+    const bodyGuidance = this.classifyBodyStatus(bmi);
 
     // Step 1: Calculate BMR
-    // If body_fat_pct provided, prefer Katch–McArdle for higher accuracy
+    // If a realistic body fat estimate is provided, prefer Katch-McArdle.
     let bmr: number;
-    if (typeof body_fat_pct === 'number' && body_fat_pct > 0 && body_fat_pct < 100) {
+    if (typeof body_fat_pct === 'number' && body_fat_pct >= 3 && body_fat_pct <= 70) {
       const lbm = weight_kg * (1 - body_fat_pct / 100);
       bmr = 370 + 21.6 * lbm;
     } else {
+      if (typeof body_fat_pct === 'number') {
+        safetyWarnings.push('Body-fat percentage was outside a realistic range, so Mifflin-St Jeor was used instead.');
+      }
       bmr = this.calculateBMR(weight_kg, height_cm, age, gender);
     }
 
@@ -154,17 +163,25 @@ export class CalorieTargetService {
     const max_deficit_pct = 0.2; // do not allow deficit >20% of TDEE
     const min_by_deficit = Math.round(tdee * (1 - max_deficit_pct));
 
+    let effectiveGoal = goal;
+    if (age < 18 && goal !== 'maintain') {
+      effectiveGoal = 'maintain';
+      safetyWarnings.push('Users under 18 should use maintenance estimates only and work with a qualified clinician or guardian for weight goals.');
+    }
+    if (bodyGuidance.body_status === 'underweight' && goal === 'lose_weight') {
+      effectiveGoal = 'maintain';
+      safetyWarnings.push('Weight-loss target was not applied because BMI is in the underweight range.');
+    }
+
     // Step 3: Apply goal adjustment
-    const goal_adjustment = this.getGoalAdjustment(goal);
+    const goal_adjustment = this.getGoalAdjustment(effectiveGoal);
     const raw_target = Math.round(tdee * goal_adjustment);
 
     // Apply clamps to ensure safe targets
     const daily_calorie_target = Math.max(raw_target, min_allowed, min_by_deficit);
-
-    // Step 3.5: Calculate BMI and recommendation based on body status
-    const bmiValue = this.calculateBMI(weight_kg, height_cm);
-    const bmi = Math.round(bmiValue * 10) / 10;
-    const bodyGuidance = this.classifyBodyStatus(bmi);
+    if (daily_calorie_target > raw_target) {
+      safetyWarnings.push('Calorie target was raised to avoid an aggressive deficit or a very-low-calorie floor.');
+    }
 
     // Step 4: Calculate meal targets
     const meal_breakdown = this.getMealBreakdown(daily_calorie_target);
@@ -175,7 +192,7 @@ export class CalorieTargetService {
       maintain: 1.6,
       gain_muscle: 1.9,
     };
-    const protein_g_per_kg = PROTEIN_G_PER_KG[goal] ?? 1.6;
+    const protein_g_per_kg = PROTEIN_G_PER_KG[effectiveGoal] ?? 1.6;
     const protein_target_g = Math.round(protein_g_per_kg * weight_kg);
 
     // Default fat percent (20-35% recommended). Use 25% as baseline.
@@ -187,6 +204,12 @@ export class CalorieTargetService {
     const remaining_kcal = Math.max(0, daily_calorie_target - (protein_kcal + fat_kcal));
     const carbs_g = Math.round(remaining_kcal / 4);
     const carbs_pct = Math.round(((carbs_g * 4) / daily_calorie_target) * 100);
+    if (carbs_pct < 45) {
+      macroWarnings.push('Carbohydrate share is below the general 45-65% AMDR range; review energy, fiber, and training needs.');
+    }
+    if (carbs_g < 130) {
+      macroWarnings.push('Carbohydrate grams are below the common 130 g/day reference intake for adults.');
+    }
 
     return {
       daily_calorie_target,
@@ -196,7 +219,9 @@ export class CalorieTargetService {
       body_status: bodyGuidance.body_status,
       weight_recommendation: bodyGuidance.weight_recommendation,
       recommended_goal: bodyGuidance.recommended_goal,
+      effective_goal: effectiveGoal,
       recommendation_note: bodyGuidance.recommendation_note,
+      bmi_standard: 'global_adult',
       target_breakfast_cal: meal_breakdown.breakfast,
       target_lunch_cal: meal_breakdown.lunch,
       target_dinner_cal: meal_breakdown.dinner,
@@ -208,6 +233,9 @@ export class CalorieTargetService {
       fat_g,
       carbs_g,
       carbs_pct,
+      is_estimate: true,
+      safety_warnings: safetyWarnings,
+      macro_warnings: macroWarnings,
     };
   }
 

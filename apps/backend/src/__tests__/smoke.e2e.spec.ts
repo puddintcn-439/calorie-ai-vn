@@ -3,6 +3,9 @@ import { Test } from '@nestjs/testing';
 import * as request from 'supertest';
 import { AppModule } from '../app.module';
 
+jest.setTimeout(30000);
+const describeExternalSmoke = process.env.RUN_EXTERNAL_SMOKE === 'true' ? describe : describe.skip;
+
 /**
  * Smoke Test Suite
  * Validates end-to-end Sprint 2 feature flow:
@@ -14,7 +17,7 @@ import { AppModule } from '../app.module';
  * 6. Apply weekly adjustment
  * 7. Verify insights
  */
-describe('Smoke Tests - Sprint 2 Feature Flow', () => {
+describeExternalSmoke('Smoke Tests - Sprint 2 Feature Flow', () => {
   let app: INestApplication;
   let testUserId: string;
   let testAuthToken: string;

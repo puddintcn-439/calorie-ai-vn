@@ -174,14 +174,14 @@ Map 10 user segments → current app features + gaps + test scenarios
 |-----------|---------|
 | **Core Pain** | Nutrition labels confusing, don't know what's healthy |
 | **Key Features** | Barcode scan, health score, product comparison |
-| **Current App Support** | ⚠️ Can scan food items, ❌ No barcode-specific DB |
-| **Gaps** | ❌ UPC/barcode linking, ❌ Health score formula, ❌ Alerts for sugar/sodium |
+| **Current App Support** | ✅ Barcode lookup exists with local DB first and Open Food Facts fallback |
+| **Gaps** | ⚠️ Needs staging coverage validation, health score formula, and sugar/sodium alerts |
 
 ### E2E Test Scenario 8.1: "Barcode scan in supermarket"
 ```
 1. User stands in cereal aisle, scans barcode
 2. App returns: product info + health rating
-❌ Not implemented: Need barcode partner (Open Food Facts integration)
+✅ Implemented baseline: local barcode lookup + Open Food Facts fallback. Next validation: packaged-food coverage and serving-size QA.
 ```
 
 ---

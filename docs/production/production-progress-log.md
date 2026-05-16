@@ -3,6 +3,28 @@
 Use one new entry for each production readiness review or milestone.
 
 ## Review Entry
+- Timestamp: 2026-05-16T00:00:00Z
+- Scope: P0 trust, health-safety, build/deploy, and global-first alignment
+- Reviewer: Codex
+- Gate Status: CONDITIONAL NO-GO until EAS preview build, production deploy webhook, and food DB validation are proven
+
+### Completed Actions
+- Updated product docs to global-first positioning with Vietnamese food support as a strength, not a sole market assumption.
+- Updated README, app flow, EAS secrets, deployment guide, and readiness summary to match the current 5-tab app and Expo SDK 54.
+- Replaced deploy placeholder behavior with required production deploy and rollback webhooks, so CI cannot report a fake successful rollout.
+- Normalized barcode fallback from Open Food Facts and cache fallback products locally.
+- Fixed barcode logging to scale nutrition by serving size.
+- Removed fake voice transcript behavior; voice mode now requires a typed or pasted transcript until real speech-to-text is integrated.
+- Added global adult BMI defaults and calorie target safety warnings.
+- Blocked weight-loss targets for underweight users and weight-change targets for under-18 users.
+
+### Remaining External Gates
+1. Run first EAS Android/iOS preview builds and record build IDs.
+2. Configure `PRODUCTION_DEPLOY_WEBHOOK_URL`, `PRODUCTION_ROLLBACK_WEBHOOK_URL`, `PRODUCTION_URL`, and `DEPLOY_TOKEN`.
+3. Validate food database coverage on staging for global staples, packaged foods, and localized dishes.
+4. Run native QA on HealthKit, Health Connect, barcode, receipt, camera, and auth flows.
+
+## Review Entry
 - Timestamp: 2026-05-09T18:00:00Z
 - Scope: calorie-ai-vn — P0 production hardening sprint
 - Reviewer: Copilot

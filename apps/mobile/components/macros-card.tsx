@@ -10,7 +10,9 @@ type CalorieTargetResponse = {
   body_status: string;
   weight_recommendation: string;
   recommended_goal: string;
+  effective_goal?: string;
   recommendation_note: string;
+  bmi_standard?: 'global_adult';
   target_breakfast_cal: number;
   target_lunch_cal: number;
   target_dinner_cal: number;
@@ -22,6 +24,9 @@ type CalorieTargetResponse = {
   fat_g?: number;
   carbs_g?: number;
   carbs_pct?: number;
+  is_estimate?: boolean;
+  safety_warnings?: string[];
+  macro_warnings?: string[];
 };
 
 type Props = {
@@ -104,6 +109,9 @@ export default function MacrosCard({ target, daily_calorie_target, weight_kg, go
           <Text style={styles.value}>{carbs_g ?? '—'} g · {carbs_pct ?? '—'}%</Text>
         </View>
       </View>
+      {!!target?.macro_warnings?.length && (
+        <Text style={styles.warning}>{target.macro_warnings[0]}</Text>
+      )}
     </SurfaceCard>
   );
 }
@@ -116,4 +124,5 @@ const styles = StyleSheet.create({
   label: { color: '#b8c8e8', fontSize: 12 },
   value: { color: '#eff6ff', fontSize: 14, fontWeight: '700' },
   empty: { color: '#7082a9', fontSize: 13 },
+  warning: { color: '#fcd34d', fontSize: 12, marginTop: 4, lineHeight: 17 },
 });

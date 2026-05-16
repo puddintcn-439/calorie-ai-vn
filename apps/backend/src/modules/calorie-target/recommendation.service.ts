@@ -28,6 +28,16 @@ export interface WeeklyRecommendations {
   };
 }
 
+type FoodRow = {
+  name: string;
+  name_vi?: string;
+  calories_per_100g?: number;
+  protein_g?: number;
+  carbs_g?: number;
+  fat_g?: number;
+  serving_size_g?: number;
+};
+
 @Injectable()
 export class RecommendationService {
   constructor(private readonly supabaseService: SupabaseService) {}
@@ -49,16 +59,20 @@ export class RecommendationService {
     }[]
   > {
     const tolerance = remaining_calories * 0.2; // ±20% tolerance
+    void meal_type;
 
     const { data } = await this.supabaseService.db
       .from('foods')
-      .select('name, calories, protein_g, carbs_g, fat_g')
-      .gte('calories', remaining_calories - tolerance)
-      .lte('calories', remaining_calories + tolerance)
+      .select('name, name_vi, calories_per_100g, protein_g, carbs_g, fat_g, serving_size_g')
+      .gte('calories_per_100g', 20)
+      .lte('calories_per_100g', 900)
       .order('nutrient_confidence', { ascending: false })
-      .limit(limit);
+      .limit(Math.max(limit * 8, 30));
 
-    return data || [];
+    return ((data ?? []) as FoodRow[])
+      .map((food) => this.toFoodSuggestion(food))
+      .filter((food) => food.calories >= remaining_calories - tolerance && food.calories <= remaining_calories + tolerance)
+      .slice(0, limit);
   }
 
   /**
@@ -154,6 +168,24 @@ export class RecommendationService {
     };
   }
 
+  private toFoodSuggestion(food: FoodRow): {
+    name: string;
+    calories: number;
+    protein_g: number;
+    carbs_g: number;
+    fat_g: number;
+  } {
+    const grams = food.serving_size_g && food.serving_size_g > 0 ? food.serving_size_g : 100;
+    const ratio = grams / 100;
+    return {
+      name: food.name_vi ?? food.name,
+      calories: Math.round((food.calories_per_100g ?? 0) * ratio),
+      protein_g: Number(((food.protein_g ?? 0) * ratio).toFixed(1)),
+      carbs_g: Number(((food.carbs_g ?? 0) * ratio).toFixed(1)),
+      fat_g: Number(((food.fat_g ?? 0) * ratio).toFixed(1)),
+    };
+  }
+
   /**
    * Calculate average adherence for the week
    */
@@ -233,13 +265,13 @@ export class RecommendationService {
     // Fetch foods pool once to reuse across all 7 days
     const { data: foodPool } = await this.supabaseService.db
       .from('foods')
-      .select('name, calories, protein_g, carbs_g, fat_g')
-      .gte('calories', 50)
-      .lte('calories', 800)
+      .select('name, name_vi, calories_per_100g, protein_g, carbs_g, fat_g, serving_size_g')
+      .gte('calories_per_100g', 20)
+      .lte('calories_per_100g', 900)
       .order('nutrient_confidence', { ascending: false })
       .limit(50);
 
-    const foods = foodPool || [];
+    const foods = ((foodPool || []) as FoodRow[]).map((food) => this.toFoodSuggestion(food));
 
     // Meal distribution ratios vary slightly per day for dietary variety
     const dayVariations = [
@@ -315,25 +347,25 @@ export class RecommendationService {
           {
             meal_type: 'breakfast' as const,
             recommended_calories: breakfastTarget,
-            suggested_foods: slice(0, 5).map((f) => ({ name: f.name, calories: f.calories, protein_g: f.protein_g, carbs_g: f.carbs_g, fat_g: f.fat_g })),
+            suggested_foods: slice(0, 5),
             tips: mealTips.breakfast[i % mealTips.breakfast.length],
           },
           {
             meal_type: 'lunch' as const,
             recommended_calories: lunchTarget,
-            suggested_foods: slice(5, 5).map((f) => ({ name: f.name, calories: f.calories, protein_g: f.protein_g, carbs_g: f.carbs_g, fat_g: f.fat_g })),
+            suggested_foods: slice(5, 5),
             tips: mealTips.lunch[i % mealTips.lunch.length],
           },
           {
             meal_type: 'dinner' as const,
             recommended_calories: dinnerTarget,
-            suggested_foods: slice(10, 5).map((f) => ({ name: f.name, calories: f.calories, protein_g: f.protein_g, carbs_g: f.carbs_g, fat_g: f.fat_g })),
+            suggested_foods: slice(10, 5),
             tips: mealTips.dinner[i % mealTips.dinner.length],
           },
           {
             meal_type: 'snack' as const,
             recommended_calories: snackTarget,
-            suggested_foods: slice(15, 3).map((f) => ({ name: f.name, calories: f.calories, protein_g: f.protein_g, carbs_g: f.carbs_g, fat_g: f.fat_g })),
+            suggested_foods: slice(15, 3),
             tips: mealTips.snack[i % mealTips.snack.length],
           },
         ],

@@ -166,7 +166,7 @@ describe('WeeklyAdaptiveService', () => {
         profile as any,
       );
 
-      expect(result.adjustment_percentage).toBe(-8);
+      expect(result.adjustment_percentage).toBe(-7.5);
       // weekly change cap = 150 kcal so -160 -> capped to -150
       expect(result.adjusted_daily_target).toBe(1850);
       expect(result.recommendation).toContain('significantly above');

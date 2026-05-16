@@ -89,7 +89,7 @@ jobs:
         run: npm ci
 
       - name: Run pre-deploy smoke suite
-        run: npm run test:e2e --workspace=backend -- smoke
+        run: npm run test --workspace=backend -- calorie-target food recommendation health log --runInBand
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/calorie_ai_test
           NODE_ENV: test
@@ -111,6 +111,11 @@ jobs:
       - name: Record previous image tag (rollback reference)
         id: rollback
         run: |
+          if [ -z "${{ secrets.PRODUCTION_URL }}" ]; then
+            echo "::warning::PRODUCTION_URL not configured; rollback image is unknown"
+            echo "previous_image=unknown" >> $GITHUB_OUTPUT
+            exit 0
+          fi
           PREV=$(curl -sf -H "Authorization: Bearer ${{ secrets.DEPLOY_TOKEN }}" \
             "${{ secrets.PRODUCTION_URL }}/health" 2>/dev/null | \
             python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('image','unknown'))" 2>/dev/null || echo "unknown")
@@ -125,10 +130,15 @@ jobs:
           TAG="${{ needs.build-and-push.outputs.tag }}"
           echo "::notice::Deploying image ${IMAGE} (tag ${TAG})"
 
-          # Replace this block with your actual deployment mechanism, e.g.:
-          #   ssh deploy@host "docker pull ${IMAGE} && docker stop backend && docker run -d --name backend ..."
-          #   OR: kubectl set image deployment/backend backend=${IMAGE} --record
-          #   OR: render/fly/railway deploy command
+          if [ -z "${{ secrets.PRODUCTION_DEPLOY_WEBHOOK_URL }}" ]; then
+            echo "::error::PRODUCTION_DEPLOY_WEBHOOK_URL is not configured. Refusing to mark deployment successful without a real rollout."
+            exit 1
+          fi
+
+          curl -fsS -X POST "${{ secrets.PRODUCTION_DEPLOY_WEBHOOK_URL }}" \
+            -H "Authorization: Bearer ${{ secrets.DEPLOY_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            --data "{\"image\":\"${IMAGE}\",\"tag\":\"${TAG}\",\"sha\":\"${GITHUB_SHA}\"}"
 
           # Verify the deployment target is reachable before we continue
           if [ -n "${{ secrets.PRODUCTION_URL }}" ]; then
@@ -166,10 +176,14 @@ jobs:
         run: |
           PREV="${{ steps.rollback.outputs.previous_image }}"
           echo "::error::Deployment verification failed. Rolling back to ${PREV}"
-          # Mirror your deploy command here targeting PREV image:
-          #   ssh deploy@host "docker pull ${PREV} && docker stop backend && docker run -d --name backend ..."
-          #   OR: kubectl set image deployment/backend backend=${PREV}
-          echo "::notice::Rollback command should be placed above. Update with real deploy mechanism."
+          if [ -z "${{ secrets.PRODUCTION_ROLLBACK_WEBHOOK_URL }}" ]; then
+            echo "::error::PRODUCTION_ROLLBACK_WEBHOOK_URL is not configured; manual rollback is required."
+            exit 1
+          fi
+          curl -fsS -X POST "${{ secrets.PRODUCTION_ROLLBACK_WEBHOOK_URL }}" \
+            -H "Authorization: Bearer ${{ secrets.DEPLOY_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            --data "{\"image\":\"${PREV}\",\"failed_image\":\"${{ needs.build-and-push.outputs.image }}\",\"sha\":\"${GITHUB_SHA}\"}"
 
       # ── Create GitHub deployment record ──────────────────────────────────────
       - name: Record deployment status

@@ -289,7 +289,7 @@ export class WeeklyAdaptiveService {
       const cappedDelta = Math.max(Math.min(delta, this.WEEKLY_CHANGE_CAP), -this.WEEKLY_CHANGE_CAP);
       if (cappedDelta !== delta) clamp_reason = 'weekly_change_cap';
       adjustedTarget = Math.round(currentTarget + cappedDelta);
-      adjustmentPercentage = Math.round((adjustmentFactor - 1) * 100 * 10) / 10;
+      adjustmentPercentage = Math.round(((adjustedTarget / currentTarget) - 1) * 100 * 10) / 10;
       recommendation = this.getRecommendation(adherence, adjustmentFactor);
     }
 

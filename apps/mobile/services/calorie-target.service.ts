@@ -49,7 +49,9 @@ export interface CalorieTargetResponse {
   body_status: string;
   weight_recommendation: string;
   recommended_goal: string;
+  effective_goal?: string;
   recommendation_note: string;
+  bmi_standard?: 'global_adult';
   target_breakfast_cal: number;
   target_lunch_cal: number;
   target_dinner_cal: number;
@@ -61,6 +63,9 @@ export interface CalorieTargetResponse {
   fat_g?: number;
   carbs_g?: number;
   carbs_pct?: number;
+  is_estimate?: boolean;
+  safety_warnings?: string[];
+  macro_warnings?: string[];
 }
 
 class CalorieTargetService {

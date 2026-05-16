@@ -115,20 +115,43 @@ describe('FoodService.findByBarcode – OFF fallback', () => {
   });
 
   it('returns normalised OFF product when local is empty', async () => {
+    const insertedFood = {
+      id: 'cached-1',
+      name: 'Test Product',
+      source: 'openfoodfacts',
+      calories_per_100g: 200,
+      barcode: '012345',
+    };
+    const localQuery = {
+      select: jest.fn().mockReturnThis(),
+      eq: jest.fn().mockReturnThis(),
+      maybeSingle: jest.fn().mockResolvedValue({ data: null }),
+    };
+    const insertQuery = {
+      insert: jest.fn().mockReturnThis(),
+      select: jest.fn().mockReturnThis(),
+      single: jest.fn().mockResolvedValue({ data: insertedFood, error: null }),
+    };
     const db = {
-      from: jest.fn().mockReturnValue({
-        select: jest.fn().mockReturnThis(),
-        eq: jest.fn().mockReturnThis(),
-        maybeSingle: jest.fn().mockResolvedValue({ data: null }),
-      }),
+      from: jest.fn()
+        .mockReturnValueOnce(localQuery)
+        .mockReturnValueOnce(insertQuery),
     };
 
     const offPayload = {
       status: 1,
       product: {
+        code: '012345',
         product_name: 'Test Product',
-        nutriments: { 'energy-kcal_100g': 200, proteins_100g: 10, carbohydrates_100g: 30, fat_100g: 5 },
-        serving_size: '100g',
+        nutriments: {
+          'energy-kcal_100g': 200,
+          proteins_100g: 10,
+          carbohydrates_100g: 30,
+          fat_100g: 5,
+          sugars_100g: 12,
+          sodium_100g: 0.2,
+        },
+        serving_size: '1 bottle (250 ml)',
         image_url: 'https://example.com/img.jpg',
       },
     };
@@ -142,6 +165,13 @@ describe('FoodService.findByBarcode – OFF fallback', () => {
     expect(result.name).toBe('Test Product');
     expect(result.source).toBe('openfoodfacts');
     expect(result.calories_per_100g).toBe(200);
+    expect(insertQuery.insert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        barcode: '012345',
+        serving_size_g: 250,
+        source_id: '012345',
+      }),
+    );
   });
 
   it('throws SERVICE_UNAVAILABLE when fetch fails', async () => {

@@ -4,6 +4,8 @@
 **Test Segments:** 4 key user personas  
 **Status:** 🟢 Core features working | 🟡 AI/external services degraded | 🔴 Critical gaps identified
 
+> Historical web QA note: these results describe the 2026-05-10 web run. Barcode fallback and several UI flows have changed since then. The food database coverage finding remains a staging validation gate until a seeded DB run proves global staples, packaged foods, and localized dishes all return results.
+
 ---
 
 ## 1. Test Execution Summary

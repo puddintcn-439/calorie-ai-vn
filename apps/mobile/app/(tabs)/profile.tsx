@@ -42,6 +42,7 @@ type CalorieAssessment = {
   weight_recommendation: WeightRecommendation;
   recommended_goal: UserGoal;
   recommendation_note: string;
+  safety_warnings: string[];
   target_weight_kg: number;
   weight_delta_kg: number;
   recommended_activity_level: ActivityLevel;
@@ -337,7 +338,13 @@ function buildInstantAssessment(profile: Partial<User>): InstantAssessmentResult
   const heightM = height / 100;
   const bmi = round1(weight / (heightM * heightM));
   const healthyMinWeight = round1(18.5 * heightM * heightM);
-  const healthyMaxWeight = round1(22.9 * heightM * heightM);
+  const healthyMaxWeight = round1(24.9 * heightM * heightM);
+  const safetyWarnings: string[] = [
+    'BMI and calorie targets are wellness estimates, not medical diagnosis.',
+  ];
+  if (profile.age && profile.age < 18) {
+    safetyWarnings.push('Under-18 users should use maintenance targets only and work with a qualified clinician or guardian.');
+  }
 
   let bodyStatus: BodyStatus;
   let weightRecommendation: WeightRecommendation;
@@ -357,7 +364,7 @@ function buildInstantAssessment(profile: Partial<User>): InstantAssessmentResult
       'Thể trạng hiện nghiêng về gầy. Nên tăng cân theo hướng tăng cơ, ưu tiên ăn đủ đạm và tăng calo từ từ.';
     activityNote =
       'Mức vận động nên ở mức nhẹ-vừa, tập sức mạnh có kiểm soát để tăng cơ và hạn chế đốt quá nhiều calo.';
-  } else if (bmi < 23) {
+  } else if (bmi < 25) {
     bodyStatus = 'normal';
     weightRecommendation = 'maintain';
     recommendedGoal = 'maintain';
@@ -367,7 +374,7 @@ function buildInstantAssessment(profile: Partial<User>): InstantAssessmentResult
       'Thể trạng đang ở vùng khỏe mạnh. Nên duy trì cân nặng hiện tại và giữ thói quen ăn uống-vận động đều đặn.';
     activityNote =
       'Mức vận động vừa là tối ưu để duy trì sức khỏe tim mạch, cơ bắp và độ bền.';
-  } else if (bmi < 25) {
+  } else if (bmi < 30) {
     bodyStatus = 'overweight';
     weightRecommendation = 'decrease';
     recommendedGoal = 'lose_weight';
@@ -389,6 +396,13 @@ function buildInstantAssessment(profile: Partial<User>): InstantAssessmentResult
       'Nên hướng đến mức vận động cao dần theo từng tuần, tăng từ nhẹ lên vừa rồi đến nhiều để an toàn.';
   }
 
+  if (profile.age && profile.age < 18) {
+    weightRecommendation = 'maintain';
+    recommendedGoal = 'maintain';
+    recommendationNote =
+      'Với người dưới 18 tuổi, app chỉ hiển thị ước tính duy trì. Mục tiêu giảm/tăng cân nên có chuyên gia y tế hoặc người giám hộ theo dõi.';
+  }
+
   const weightDeltaKg = round1(Math.abs(targetWeightKg - weight));
   const exercisePlan = buildExercisePlan(
     recommendedActivityLevel,
@@ -403,6 +417,7 @@ function buildInstantAssessment(profile: Partial<User>): InstantAssessmentResult
       weight_recommendation: weightRecommendation,
       recommended_goal: recommendedGoal,
       recommendation_note: recommendationNote,
+      safety_warnings: safetyWarnings,
       target_weight_kg: targetWeightKg,
       weight_delta_kg: weightDeltaKg,
       recommended_activity_level: recommendedActivityLevel,
@@ -509,6 +524,7 @@ export default function ProfileScreen() {
   const instantAssessment = useMemo(() => buildInstantAssessment(profile), [
     profile.weight_kg,
     profile.height_cm,
+    profile.age,
   ]);
   const assessmentTone = instantAssessment.assessment
     ? BODY_STATUS_TONES[instantAssessment.assessment.body_status]
@@ -856,6 +872,14 @@ export default function ProfileScreen() {
                   <Text style={[styles.assessmentNote, { color: assessmentTone?.text }]}> 
                     {instantAssessment.assessment.recommendation_note}
                   </Text>
+
+                  <View style={styles.safetyNotice}>
+                    {instantAssessment.assessment.safety_warnings.map((warning, index) => (
+                      <Text key={`safety-${index}`} style={styles.safetyNoticeText}>
+                        {warning}
+                      </Text>
+                    ))}
+                  </View>
 
                   <Text style={[styles.assessmentWeightPlan, { color: assessmentTone?.text }]}> 
                     {instantAssessment.assessment.weight_recommendation === 'maintain'
@@ -1326,6 +1350,8 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   assessmentNote: { color: '#cbd5e1', fontSize: 13, lineHeight: 19 },
+  safetyNotice: { borderWidth: 1, borderColor: '#f59e0b55', backgroundColor: '#3a2a1233', borderRadius: 8, padding: 8, gap: 4 },
+  safetyNoticeText: { color: '#fcd34d', fontSize: 12, lineHeight: 17 },
   assessmentWeightPlan: { fontSize: 13, lineHeight: 19, fontWeight: '700' },
   assessmentActivityNote: { fontSize: 13, lineHeight: 19 },
   exerciseListWrap: { marginTop: 4, gap: 4 },
