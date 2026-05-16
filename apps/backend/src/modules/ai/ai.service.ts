@@ -572,6 +572,10 @@ Trả lời ngắn gọn, thân thiện bằng tiếng Việt. Không quá 3 câ
         protein_g: Number(item.protein_g) || 0,
         carbs_g: Number(item.carbs_g) || 0,
         fat_g: Number(item.fat_g) || 0,
+        fiber_g: this.numOpt(item.fiber_g),
+        sugar_g: this.numOpt(item.sugar_g),
+        saturated_fat_g: this.numOpt(item.saturated_fat_g),
+        sodium_mg: this.numOpt(item.sodium_mg),
         confidence: Number(item.confidence) || 0.7,
       }));
 
@@ -658,6 +662,11 @@ Trả lời ngắn gọn, thân thiện bằng tiếng Việt. Không quá 3 câ
     };
   }
 
+  private numOpt(value: unknown): number | undefined {
+    const n = Number(value);
+    return Number.isFinite(n) && n >= 0 ? n : undefined;
+  }
+
   private createDeterministicModel() {
     return this.genAI.getGenerativeModel({
       model: 'gemini-2.5-flash',
@@ -730,6 +739,10 @@ Trả về JSON theo đúng format sau (KHÔNG có text thêm, chỉ JSON thuầ
       "protein_g": 25,
       "carbs_g": 55,
       "fat_g": 12,
+      "fiber_g": 3,
+      "sugar_g": 2,
+      "saturated_fat_g": 4,
+      "sodium_mg": 980,
       "confidence": 0.92
     }
   ]
@@ -741,6 +754,7 @@ Quy tắc:
 - category phải là 1 trong: rice_dish, noodle, meat, seafood, vegetable, fruit, drink, snack, dessert, fast_food, other
 - confidence từ 0 đến 1
 - Luon tra ve calories_min va calories_max cho tung item (khoang uoc luong hop ly)
+- Có thể thêm fiber_g, sugar_g, saturated_fat_g, sodium_mg khi có nhãn dinh dưỡng hoặc ước lượng đáng tin; nếu không chắc thì bỏ qua trường đó
 - Nếu không thấy đồ ăn, trả về items: []`;
 
 const FOOD_TEXT_PROMPT = `Bạn là chuyên gia dinh dưỡng AI. Phân tích mô tả đồ ăn/đồ uống.
@@ -761,12 +775,17 @@ Trả về JSON theo đúng format sau (KHÔNG có text thêm, chỉ JSON thuầ
       "protein_g": 28,
       "carbs_g": 75,
       "fat_g": 22,
+      "fiber_g": 4,
+      "sugar_g": 7,
+      "saturated_fat_g": 6,
+      "sodium_mg": 1150,
       "confidence": 0.85
     }
   ]
 }
 
-Nếu nhập nhiều món, tách ra từng item. Ước lượng khẩu phần thực tế cho người Việt.`;
+Nếu nhập nhiều món, tách ra từng item. Ước lượng khẩu phần thực tế cho người Việt.
+Có thể thêm fiber_g, sugar_g, saturated_fat_g, sodium_mg khi có nhãn dinh dưỡng hoặc ước lượng đáng tin; nếu không chắc thì bỏ qua trường đó.`;
 
 const FOOD_REFINE_PROMPT = `Bạn là chuyên gia dinh dưỡng AI. Người dùng vừa scan đồ ăn và muốn điều chỉnh lại ước lượng.
 
@@ -784,6 +803,10 @@ Trả về JSON theo đúng format sau (KHÔNG có text thêm, chỉ JSON thuầ
       "protein_g": 50,
       "carbs_g": 110,
       "fat_g": 24,
+      "fiber_g": 6,
+      "sugar_g": 4,
+      "saturated_fat_g": 8,
+      "sodium_mg": 1960,
       "confidence": 0.95
     }
   ]
@@ -793,6 +816,7 @@ Quy tắc:
 - Dựa vào thông tin bổ sung để điều chỉnh khẩu phần và calories cho chính xác hơn
 - Nếu người dùng nói "thêm trứng" thì add trứng vào items
 - Nếu người dùng nói "2 phần" thì nhân đôi calories
+- Có thể thêm fiber_g, sugar_g, saturated_fat_g, sodium_mg khi có nhãn dinh dưỡng hoặc ước lượng đáng tin; nếu không chắc thì bỏ qua trường đó
 - category phải là 1 trong: rice_dish, noodle, meat, seafood, vegetable, fruit, drink, snack, dessert, fast_food, other`;
 
 const FOOD_VOICE_PROMPT = `You are a nutrition AI. Parse the user's spoken meal transcript into structured food items.
@@ -811,6 +835,10 @@ Return strict JSON only:
       "protein_g": 34,
       "carbs_g": 18,
       "fat_g": 24,
+      "fiber_g": 5,
+      "sugar_g": 6,
+      "saturated_fat_g": 6,
+      "sodium_mg": 720,
       "confidence": 0.82
     }
   ]
@@ -820,6 +848,7 @@ Rules:
 - Keep locale awareness from provided context.
 - Split multiple foods into separate items.
 - Estimate realistic portion size.
+- Add optional fiber_g, sugar_g, saturated_fat_g, sodium_mg only when a label/context supports them or the estimate is reasonably reliable; omit when uncertain.
 - category must be one of: rice_dish, noodle, meat, seafood, vegetable, fruit, drink, snack, dessert, fast_food, other.
 - confidence must be between 0 and 1.
 - If no food is detected, return items: []`;
@@ -840,6 +869,10 @@ Return strict JSON only:
       "protein_g": 12,
       "carbs_g": 8,
       "fat_g": 4,
+      "fiber_g": 0,
+      "sugar_g": 5,
+      "saturated_fat_g": 2.5,
+      "sodium_mg": 65,
       "confidence": 0.88
     }
   ],
@@ -855,6 +888,7 @@ Return strict JSON only:
 Rules:
 - Extract only food/drink line items relevant for nutrition estimation.
 - Put uncertain lines into unresolved_items.
+- Add optional fiber_g, sugar_g, saturated_fat_g, sodium_mg when receipt context or known packaged-food nutrition supports it; omit when uncertain.
 - category must be one of: rice_dish, noodle, meat, seafood, vegetable, fruit, drink, snack, dessert, fast_food, other.
 - confidence must be between 0 and 1.
 - If nothing useful can be detected, return items: [] and unresolved_items when possible.`;

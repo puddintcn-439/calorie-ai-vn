@@ -1,10 +1,11 @@
 import { Injectable } from '@nestjs/common';
-import { UserProfile, ActivityLevel, UserGoal } from '@calorie-ai/types';
+import { UserProfile, ActivityLevel, UserGoal, HealthFlag, HEALTH_FLAGS } from '@calorie-ai/types';
 import {
   CalculateTargetDto,
   CalorieTargetResponse,
   BodyStatus,
   WeightRecommendation,
+  NutritionTargets,
 } from './dto/calorie-target.dto';
 
 @Injectable()
@@ -28,7 +29,7 @@ export class CalorieTargetService {
         weight_recommendation: 'increase',
         recommended_goal: 'gain_muscle',
         recommendation_note:
-          'Body status indicates underweight. Consider increasing calories gradually with protein-rich meals and resistance training.',
+          'BMI screening suggests lower-than-reference weight risk. Consider gradual nutrition and strength work with professional support if needed.',
       };
     }
 
@@ -38,7 +39,7 @@ export class CalorieTargetService {
         weight_recommendation: 'maintain',
         recommended_goal: 'maintain',
         recommendation_note:
-          'Body status is in a healthy range. Maintain current weight with consistent calorie intake and activity.',
+          'BMI screening is within the general adult reference range. Maintain consistent nutrition and activity.',
       };
     }
 
@@ -48,7 +49,7 @@ export class CalorieTargetService {
         weight_recommendation: 'decrease',
         recommended_goal: 'lose_weight',
         recommendation_note:
-          'Body status indicates overweight. A moderate calorie deficit can help reduce weight safely.',
+          'BMI screening suggests elevated weight-related risk. If appropriate, use a moderate and sustainable calorie deficit.',
       };
     }
 
@@ -57,7 +58,25 @@ export class CalorieTargetService {
       weight_recommendation: 'decrease',
       recommended_goal: 'lose_weight',
       recommendation_note:
-        'Body status indicates obesity. Prioritize gradual weight loss with a sustainable calorie deficit and regular activity.',
+        'BMI screening suggests higher weight-related risk. Prioritize gradual changes and professional support when possible.',
+    };
+  }
+
+  private normaliseHealthFlags(flags?: HealthFlag[]): HealthFlag[] {
+    if (!Array.isArray(flags)) return [];
+    return [...new Set(flags.filter((flag): flag is HealthFlag => HEALTH_FLAGS.includes(flag as HealthFlag)))];
+  }
+
+  private buildNutritionTargets(dailyCalories: number): NutritionTargets {
+    return {
+      fiber_g_min: Math.round((dailyCalories / 1000) * 14),
+      sodium_mg_max: 2300,
+      free_sugar_g_max: Math.round((dailyCalories * 0.1) / 4),
+      added_sugar_g_max: Math.round((dailyCalories * 0.1) / 4),
+      saturated_fat_g_max: Math.round((dailyCalories * 0.1) / 9),
+      free_sugar_pct_max: 10,
+      saturated_fat_pct_max: 10,
+      basis: 'General wellness targets: fiber 14 g/1000 kcal; sodium <2300 mg/day; free or added sugar <10% kcal; saturated fat <10% kcal. These are not disease-specific limits.',
     };
   }
 
@@ -132,10 +151,13 @@ export class CalorieTargetService {
    */
   calculateTarget(dto: CalculateTargetDto): CalorieTargetResponse {
     const { weight_kg, height_cm, age, gender, activity_level, goal, body_fat_pct } = dto;
+    const healthFlags = this.normaliseHealthFlags(dto.health_flags);
+    const hasHealthFlag = (flag: HealthFlag) => healthFlags.includes(flag);
     const safetyWarnings: string[] = [
-      'Calorie targets are wellness estimates, not medical diagnosis or treatment.',
+      'BMI and calorie targets are wellness screening estimates, not medical diagnosis or treatment.',
     ];
     const macroWarnings: string[] = [];
+    let medicalReviewRecommended = false;
     const bmiValue = this.calculateBMI(weight_kg, height_cm);
     const bmi = Math.round(bmiValue * 10) / 10;
     const bodyGuidance = this.classifyBodyStatus(bmi);
@@ -167,6 +189,35 @@ export class CalorieTargetService {
     if (age < 18 && goal !== 'maintain') {
       effectiveGoal = 'maintain';
       safetyWarnings.push('Users under 18 should use maintenance estimates only and work with a qualified clinician or guardian for weight goals.');
+    }
+    if (age < 18) {
+      medicalReviewRecommended = true;
+      safetyWarnings.push('Adult BMI cutoffs are not diagnostic for minors; use age- and sex-specific growth charts with a clinician.');
+    }
+    if (hasHealthFlag('pregnant') || hasHealthFlag('breastfeeding')) {
+      medicalReviewRecommended = true;
+      if (effectiveGoal !== 'maintain') effectiveGoal = 'maintain';
+      safetyWarnings.push('Pregnancy or breastfeeding needs clinician-guided energy and nutrient targets; weight-change goals were replaced with maintenance.');
+      macroWarnings.push('Pregnancy or breastfeeding flag: use these macro targets only as a general log, not as prenatal or lactation nutrition advice.');
+    }
+    if (hasHealthFlag('eating_disorder_history')) {
+      medicalReviewRecommended = true;
+      if (effectiveGoal !== 'maintain') effectiveGoal = 'maintain';
+      safetyWarnings.push('History or risk of disordered eating: calorie targets and weight goals can be harmful; use this app only with qualified support.');
+    }
+    if (hasHealthFlag('kidney_disease')) {
+      medicalReviewRecommended = true;
+      safetyWarnings.push('Kidney disease can require individualized protein, potassium, phosphorus, fluid, and sodium limits; confirm targets with a clinician.');
+      macroWarnings.push('Kidney disease flag: protein and sodium targets are not individualized and may be inappropriate.');
+    }
+    if (hasHealthFlag('diabetes')) {
+      medicalReviewRecommended = true;
+      safetyWarnings.push('Diabetes nutrition needs individualized carb timing, medication, and glucose monitoring guidance; this app does not replace clinical care.');
+      macroWarnings.push('Diabetes flag: carb and sugar targets are general tracking limits, not a personalized glucose-management plan.');
+    }
+    if (hasHealthFlag('weight_affecting_medication')) {
+      medicalReviewRecommended = true;
+      safetyWarnings.push('Some medications affect appetite, fluid balance, or weight; review weight targets with the prescriber.');
     }
     if (bodyGuidance.body_status === 'underweight' && goal === 'lose_weight') {
       effectiveGoal = 'maintain';
@@ -210,6 +261,7 @@ export class CalorieTargetService {
     if (carbs_g < 130) {
       macroWarnings.push('Carbohydrate grams are below the common 130 g/day reference intake for adults.');
     }
+    const nutritionTargets = this.buildNutritionTargets(daily_calorie_target);
 
     return {
       daily_calorie_target,
@@ -222,6 +274,7 @@ export class CalorieTargetService {
       effective_goal: effectiveGoal,
       recommendation_note: bodyGuidance.recommendation_note,
       bmi_standard: 'global_adult',
+      bmi_interpretation: 'screening_risk_not_diagnosis',
       target_breakfast_cal: meal_breakdown.breakfast,
       target_lunch_cal: meal_breakdown.lunch,
       target_dinner_cal: meal_breakdown.dinner,
@@ -236,6 +289,9 @@ export class CalorieTargetService {
       is_estimate: true,
       safety_warnings: safetyWarnings,
       macro_warnings: macroWarnings,
+      health_flags: healthFlags,
+      medical_review_recommended: medicalReviewRecommended,
+      nutrition_targets: nutritionTargets,
     };
   }
 
@@ -263,6 +319,7 @@ export class CalorieTargetService {
       gender: profile.gender,
       activity_level: profile.activity_level,
       goal: profile.goal,
+      health_flags: profile.health_flags,
     });
 
     return {

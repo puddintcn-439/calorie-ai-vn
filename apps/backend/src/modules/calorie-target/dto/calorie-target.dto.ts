@@ -1,8 +1,20 @@
-import { IsNumber, IsPositive, IsEnum, IsOptional } from 'class-validator';
-import { UserGoal, ActivityLevel } from '@calorie-ai/types';
+import { IsNumber, IsPositive, IsEnum, IsOptional, IsArray, IsIn } from 'class-validator';
+import { UserGoal, ActivityLevel, HealthFlag, HEALTH_FLAGS } from '@calorie-ai/types';
 
 export type BodyStatus = 'underweight' | 'normal' | 'overweight' | 'obese';
 export type WeightRecommendation = 'increase' | 'maintain' | 'decrease';
+export type BmiInterpretation = 'screening_risk_not_diagnosis';
+
+export interface NutritionTargets {
+  fiber_g_min: number;
+  sodium_mg_max: number;
+  free_sugar_g_max: number;
+  added_sugar_g_max: number;
+  saturated_fat_g_max: number;
+  free_sugar_pct_max: number;
+  saturated_fat_pct_max: number;
+  basis: string;
+}
 
 export class CalculateTargetDto {
   @IsNumber()
@@ -29,6 +41,11 @@ export class CalculateTargetDto {
   @IsOptional()
   @IsNumber()
   body_fat_pct?: number;
+
+  @IsOptional()
+  @IsArray()
+  @IsIn(HEALTH_FLAGS, { each: true })
+  health_flags?: HealthFlag[];
 }
 
 export interface CalorieTargetResponse {
@@ -42,6 +59,7 @@ export interface CalorieTargetResponse {
   effective_goal?: UserGoal;
   recommendation_note: string;
   bmi_standard?: 'global_adult';
+  bmi_interpretation?: BmiInterpretation;
   target_breakfast_cal: number;
   target_lunch_cal: number;
   target_dinner_cal: number;
@@ -57,4 +75,7 @@ export interface CalorieTargetResponse {
   is_estimate?: boolean;
   safety_warnings?: string[];
   macro_warnings?: string[];
+  health_flags?: HealthFlag[];
+  medical_review_recommended?: boolean;
+  nutrition_targets?: NutritionTargets;
 }

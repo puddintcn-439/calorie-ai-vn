@@ -55,6 +55,7 @@ describe('FoodIngestionService.computeNutrientConfidence', () => {
       fat_g: 3,
       fiber_g: 2,
       sugar_g: 4,
+      saturated_fat_g: 1,
       sodium_mg: 200,
       serving_size_g: 150,
     } as Partial<Food>);
@@ -66,7 +67,7 @@ describe('FoodIngestionService.computeNutrientConfidence', () => {
     expect(score).toBe(0.0);
   });
 
-  it('returns 0.925 when all required + 3 of 4 optionals present', () => {
+  it('returns 0.88 when all required + 3 of 5 optionals present', () => {
     const score = service.computeNutrientConfidence({
       calories_per_100g: 100,
       protein_g: 5,
@@ -75,10 +76,10 @@ describe('FoodIngestionService.computeNutrientConfidence', () => {
       fiber_g: 2,
       sugar_g: 4,
       sodium_mg: 200,
-      // serving_size_g missing
+      // saturated_fat_g and serving_size_g missing
     } as Partial<Food>);
-    // required: 4/4 = 1.0 * 0.7 = 0.7; optional: 3/4 = 0.75 * 0.3 = 0.225; total = 0.925
-    expect(score).toBe(0.925);
+    // required: 4/4 = 1.0 * 0.7 = 0.7; optional: 3/5 = 0.6 * 0.3 = 0.18; total = 0.88
+    expect(score).toBe(0.88);
   });
 
   it('returns 0.525 when only 3 of 4 required fields present and no optionals', () => {

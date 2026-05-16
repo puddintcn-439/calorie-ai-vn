@@ -87,6 +87,35 @@ describe('WeeklyAdaptiveService', () => {
       expect(result.adjusted_daily_target).toBe(2000);
     });
 
+    it('pauses automatic adjustment when profile needs medical review', async () => {
+      const profile = {
+        id: 'user123',
+        email: 'test@example.com',
+        weight_kg: 72,
+        height_cm: 168,
+        age: 32,
+        gender: 'female',
+        activity_level: 'light',
+        goal: 'lose_weight',
+        daily_calorie_target: 2000,
+        health_flags: ['pregnant'],
+      };
+
+      const emptyChain = makeChain({ data: [], error: null });
+      emptyChain.order = jest.fn().mockResolvedValue({ data: [], error: null });
+      supabaseService.db.from = jest.fn().mockReturnValue(emptyChain);
+
+      const result = await service.calculateWeeklyAdjustment(
+        'user123',
+        profile as any,
+      );
+
+      expect(result.adjusted_daily_target).toBe(2000);
+      expect(result.adjustment_percentage).toBe(0);
+      expect(result.clamp_reason).toBe('medical_review_required');
+      expect(result.recommendation).toContain('medical review');
+    });
+
     it('should increase target when adherence is <70%', async () => {
       const profile = {
         id: 'user123',

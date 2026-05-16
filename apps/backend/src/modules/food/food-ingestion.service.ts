@@ -12,6 +12,8 @@ const NUTRIENT_LIMITS = {
   carbs_g:           { min: 0, max: 100 },
   fat_g:             { min: 0, max: 100 },
   fiber_g:           { min: 0, max: 80 },
+  sugar_g:           { min: 0, max: 100 },
+  saturated_fat_g:   { min: 0, max: 100 },
   sodium_mg:         { min: 0, max: 40_000 }, // salt = 39,000 mg/100g
 };
 
@@ -177,7 +179,16 @@ export class FoodIngestionService {
     }
 
     const rawHash = createHash('sha256')
-      .update(JSON.stringify({ calories, protein, carbs, fat }))
+      .update(JSON.stringify({
+        calories,
+        protein,
+        carbs,
+        fat,
+        fiber: this.numOpt(n['fiber_100g']),
+        sugar: this.numOpt(n['sugars_100g']),
+        saturatedFat: this.numOpt(n['saturated-fat_100g']),
+        sodium: this.numOpt(n['sodium_100g']),
+      }))
       .digest('hex');
 
     // Skip if hash unchanged (no nutrient delta)
@@ -199,6 +210,8 @@ export class FoodIngestionService {
       carbs_g: carbs,
       fat_g: fat,
       fiber_g: this.numOpt(n['fiber_100g']),
+      sugar_g: this.numOpt(n['sugars_100g']),
+      saturated_fat_g: this.numOpt(n['saturated-fat_100g']),
       sodium_mg: this.numOpt(n['sodium_100g']) !== undefined
         ? (this.numOpt(n['sodium_100g'])! * 1000)
         : undefined,
@@ -218,6 +231,8 @@ export class FoodIngestionService {
       carbs_g: carbs,
       fat_g: fat,
       fiber_g: partial.fiber_g,
+      sugar_g: partial.sugar_g,
+      saturated_fat_g: partial.saturated_fat_g,
       sodium_mg: partial.sodium_mg,
       serving_size_g: product.serving_size ? parseFloat(product.serving_size) || undefined : undefined,
       serving_description: product.serving_size ?? undefined,
@@ -272,6 +287,7 @@ export class FoodIngestionService {
     const optional = [
       food.fiber_g != null,
       food.sugar_g != null,
+      food.saturated_fat_g != null,
       food.sodium_mg != null,
       food.serving_size_g != null,
     ];

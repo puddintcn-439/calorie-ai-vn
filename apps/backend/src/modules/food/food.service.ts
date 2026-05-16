@@ -108,6 +108,7 @@ export class FoodService {
       fat_g: this.num(n.fat_100g),
       fiber_g: this.numOpt(n.fiber_100g),
       sugar_g: this.numOpt(n.sugars_100g),
+      saturated_fat_g: this.numOpt(n['saturated-fat_100g']),
       sodium_mg: this.numOpt(n.sodium_100g) != null
         ? Math.round(Number(n.sodium_100g) * 1000)
         : undefined,
@@ -159,6 +160,7 @@ export class FoodService {
     const optional = [
       food.fiber_g != null,
       food.sugar_g != null,
+      food.saturated_fat_g != null,
       food.sodium_mg != null,
       food.serving_size_g != null,
       food.image_url != null,
@@ -176,6 +178,7 @@ export class FoodService {
       fat_g: { min: 0, max: 100 },
       fiber_g: { min: 0, max: 80 },
       sugar_g: { min: 0, max: 100 },
+      saturated_fat_g: { min: 0, max: 100 },
       sodium_mg: { min: 0, max: 40000 },
     };
 

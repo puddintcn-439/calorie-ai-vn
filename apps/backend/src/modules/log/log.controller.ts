@@ -16,6 +16,10 @@ class CreateLogDto {
   @ApiProperty() @IsNumber() @Min(0) protein_g: number;
   @ApiProperty() @IsNumber() @Min(0) carbs_g: number;
   @ApiProperty() @IsNumber() @Min(0) fat_g: number;
+  @ApiProperty({ required: false }) @IsNumber() @Min(0) @IsOptional() fiber_g?: number;
+  @ApiProperty({ required: false }) @IsNumber() @Min(0) @IsOptional() sugar_g?: number;
+  @ApiProperty({ required: false }) @IsNumber() @Min(0) @IsOptional() saturated_fat_g?: number;
+  @ApiProperty({ required: false }) @IsNumber() @Min(0) @IsOptional() sodium_mg?: number;
   @ApiProperty() @IsNumber() @Min(0) estimated_grams: number;
   @ApiProperty({ required: false }) @IsString() @IsOptional() scan_id?: string;
   @ApiProperty({ required: false }) @IsString() @IsOptional() image_url?: string;
@@ -29,6 +33,10 @@ class SavedMealItemDto implements SavedMealItem {
   @IsNumber() @Min(0) protein_g: number;
   @IsNumber() @Min(0) carbs_g: number;
   @IsNumber() @Min(0) fat_g: number;
+  @IsNumber() @Min(0) @IsOptional() fiber_g?: number;
+  @IsNumber() @Min(0) @IsOptional() sugar_g?: number;
+  @IsNumber() @Min(0) @IsOptional() saturated_fat_g?: number;
+  @IsNumber() @Min(0) @IsOptional() sodium_mg?: number;
   @IsNumber() @Min(0) estimated_grams: number;
 }
 

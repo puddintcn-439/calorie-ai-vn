@@ -13,6 +13,10 @@ export interface FoodLog {
   protein_g: number;
   carbs_g: number;
   fat_g: number;
+  fiber_g?: number;
+  sugar_g?: number;
+  saturated_fat_g?: number;
+  sodium_mg?: number;
   name: string;
   name_vi?: string;
   image_url?: string;
@@ -33,6 +37,17 @@ export interface DailyLog {
   total_protein_g: number;
   total_carbs_g: number;
   total_fat_g: number;
+  total_fiber_g: number;
+  total_sugar_g: number;
+  total_saturated_fat_g: number;
+  total_sodium_mg: number;
+  nutrition_quality_coverage: {
+    total_items: number;
+    fiber_items: number;
+    sugar_items: number;
+    saturated_fat_items: number;
+    sodium_items: number;
+  };
   target_calories: number;
   remaining_calories: number;
 }
@@ -52,6 +67,10 @@ export interface SavedMealItem {
   protein_g: number;
   carbs_g: number;
   fat_g: number;
+  fiber_g?: number;
+  sugar_g?: number;
+  saturated_fat_g?: number;
+  sodium_mg?: number;
   estimated_grams: number;
 }
 
@@ -64,6 +83,10 @@ export interface SavedMeal {
   total_protein_g: number;
   total_carbs_g: number;
   total_fat_g: number;
+  total_fiber_g?: number;
+  total_sugar_g?: number;
+  total_saturated_fat_g?: number;
+  total_sodium_mg?: number;
   use_count: number;
   last_used_at?: string;
   created_at: string;

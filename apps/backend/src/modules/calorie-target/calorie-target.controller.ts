@@ -71,6 +71,7 @@ export class CalorieTargetController {
       gender: profile.gender,
       activity_level: profile.activity_level,
       goal: profile.goal,
+      health_flags: profile.health_flags,
     });
   }
 
@@ -105,6 +106,7 @@ export class CalorieTargetController {
       gender: profile.gender,
       activity_level: profile.activity_level,
       goal: profile.goal,
+      health_flags: profile.health_flags,
     });
   }
 

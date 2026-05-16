@@ -221,6 +221,33 @@ export class WeeklyAdaptiveService {
     let clamp_reason: string | null = null;
     let actualTDEE: number | null = null;
 
+    const safetyBaseline = this.calorieTargetService.calculateTarget({
+      weight_kg: profile.weight_kg || 70,
+      height_cm: profile.height_cm || 170,
+      age: profile.age || 30,
+      gender: profile.gender || 'female',
+      activity_level: profile.activity_level || 'sedentary',
+      goal: profile.goal || 'maintain',
+      health_flags: profile.health_flags,
+    } as any);
+
+    if (safetyBaseline.medical_review_recommended) {
+      return {
+        user_id,
+        original_daily_target: currentTarget,
+        adjusted_daily_target: currentTarget,
+        adjustment_percentage: 0,
+        adherence_last_week: daysLogged === 0 ? 0 : this.calculateAdherence(logs, currentTarget),
+        recommendation: 'Automatic weekly target changes are paused because this profile needs medical review.',
+        last_updated: new Date().toISOString(),
+        algorithm_version: this.ALGORITHM_VERSION,
+        clamp_reason: 'medical_review_required',
+        actual_tdee: null,
+        days_logged: daysLogged,
+        weight_logs: weightLogs,
+      };
+    }
+
     if (dataQuality) {
       // Compute ActualTDEE
       actualTDEE = Math.round(avgCalories - (7700 * (weeklyWeightChange as number) / 7));
@@ -231,7 +258,8 @@ export class WeeklyAdaptiveService {
         maintain: 1.0,
         gain_muscle: 1.08,
       };
-      const goalFactor = goalFactorMap[profile.goal || 'maintain'] ?? 1.0;
+      const safeGoal = safetyBaseline.effective_goal || profile.goal || 'maintain';
+      const goalFactor = goalFactorMap[safeGoal] ?? 1.0;
 
       let proposed = Math.round(actualTDEE * goalFactor);
 
@@ -243,6 +271,7 @@ export class WeeklyAdaptiveService {
         gender: profile.gender || 'female',
         activity_level: profile.activity_level || 'sedentary',
         goal: profile.goal || 'maintain',
+        health_flags: profile.health_flags,
       } as any;
       const baseline = this.calorieTargetService.calculateTarget(dto);
       const min_allowed = Math.max(baseline.bmr ? Math.round(baseline.bmr * 1.1) : 1200, profile.gender === 'female' ? 1200 : 1500);
@@ -269,8 +298,6 @@ export class WeeklyAdaptiveService {
       // Fallback to adherence-based heuristic
       const logs7 = await this.getLast7DaysLogs(user_id);
       const adherence = this.calculateAdherence(logs7, currentTarget);
-      const adjustmentFactor = this.getAdjustmentFactor(adherence);
-      const rawAdjusted = Math.round(currentTarget * adjustmentFactor);
 
       // Apply weekly cap & clamps similar to above
       const dto = {
@@ -280,8 +307,14 @@ export class WeeklyAdaptiveService {
         gender: profile.gender || 'female',
         activity_level: profile.activity_level || 'sedentary',
         goal: profile.goal || 'maintain',
+        health_flags: profile.health_flags,
       } as any;
       const baseline = this.calorieTargetService.calculateTarget(dto);
+      const profileGoal = profile.goal || 'maintain';
+      const adjustmentFactor = baseline.effective_goal && baseline.effective_goal !== profileGoal
+        ? 1
+        : this.getAdjustmentFactor(adherence);
+      const rawAdjusted = Math.round(currentTarget * adjustmentFactor);
       const min_allowed = Math.max(baseline.bmr ? Math.round(baseline.bmr * 1.1) : 1200, profile.gender === 'female' ? 1200 : 1500);
       const min_by_deficit = Math.round((baseline.tdee || rawAdjusted) * (1 - this.MAX_DEFICIT_PCT));
       let proposed = Math.max(rawAdjusted, min_allowed, min_by_deficit);

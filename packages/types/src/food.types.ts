@@ -10,6 +10,7 @@ export interface Food {
   fat_g: number;
   fiber_g?: number;
   sugar_g?: number;
+  saturated_fat_g?: number;
   sodium_mg?: number;
   serving_size_g?: number;
   serving_description?: string;

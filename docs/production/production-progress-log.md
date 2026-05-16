@@ -3,6 +3,30 @@
 Use one new entry for each production readiness review or milestone.
 
 ## Review Entry
+- Timestamp: 2026-05-16T12:00:00Z
+- Scope: P1 health guardrails, nutrition targets, and global-first safety copy
+- Reviewer: Codex
+- Gate Status: CONDITIONAL NO-GO until external clinical review and staging QA are complete
+
+### Completed Actions
+- Added `health_flags` to user profile data model for pregnancy, breastfeeding, kidney disease, diabetes, eating-disorder history/risk, and weight-affecting medication.
+- Updated calorie target API to treat BMI as screening/risk, not diagnosis.
+- Added medical-review warnings and maintenance-only behavior for under-18, pregnancy/breastfeeding, and eating-disorder risk profiles.
+- Paused automatic weekly calorie adjustments when the profile requires medical review.
+- Added general nutrition targets to calorie target response: fiber, sodium, free/added sugar, and saturated fat.
+- Updated Profile UI with health-risk chips and visible safety warnings.
+- Updated Macros card with quality targets for fiber, sodium, free sugar, and saturated fat.
+- Added daily log totals and Today UI pills for actual fiber, sodium, total sugar, and saturated fat when logged food data includes those nutrients.
+- Added a Today safety prompt for incomplete profile setup and medical-review profiles.
+- Added migration `016_food_quality_nutrients.sql` for quality nutrient columns on food logs, foods, and saved meals.
+
+### Remaining Gates
+1. Clinical/nutrition expert review for all health copy and thresholds.
+2. Staging migration apply for `015_user_health_flags.sql` and `016_food_quality_nutrients.sql`.
+3. End-to-end QA for saving/reloading health flags on real Supabase.
+4. Product decision on whether to add disease-specific plans later or keep the app as wellness-only.
+
+## Review Entry
 - Timestamp: 2026-05-16T00:00:00Z
 - Scope: P0 trust, health-safety, build/deploy, and global-first alignment
 - Reviewer: Codex

@@ -41,6 +41,17 @@ export interface WeeklyAdaptiveResult {
   weight_logs?: number;
 }
 
+export interface NutritionTargets {
+  fiber_g_min: number;
+  sodium_mg_max: number;
+  free_sugar_g_max: number;
+  added_sugar_g_max: number;
+  saturated_fat_g_max: number;
+  free_sugar_pct_max: number;
+  saturated_fat_pct_max: number;
+  basis: string;
+}
+
 export interface CalorieTargetResponse {
   daily_calorie_target: number;
   bmr: number;
@@ -52,6 +63,7 @@ export interface CalorieTargetResponse {
   effective_goal?: string;
   recommendation_note: string;
   bmi_standard?: 'global_adult';
+  bmi_interpretation?: 'screening_risk_not_diagnosis';
   target_breakfast_cal: number;
   target_lunch_cal: number;
   target_dinner_cal: number;
@@ -66,6 +78,9 @@ export interface CalorieTargetResponse {
   is_estimate?: boolean;
   safety_warnings?: string[];
   macro_warnings?: string[];
+  health_flags?: string[];
+  medical_review_recommended?: boolean;
+  nutrition_targets?: NutritionTargets;
 }
 
 class CalorieTargetService {

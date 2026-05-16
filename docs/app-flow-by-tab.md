@@ -9,6 +9,8 @@ This document describes the current mobile app flow. The product is global-first
 Daily cockpit for the current day.
 
 - Shows calorie target, food calories, activity calories, net calories, macro progress, meals today, streak, and coaching snippets.
+- Shows daily fiber, sodium, total sugar, and saturated fat totals when logged food data includes those nutrients.
+- Shows a profile-safety prompt when age, body metrics, or health flags are missing, and a short medical-review reminder for risk flags.
 - Pull-to-refresh reloads daily log, activity logs, recommendations, gamification, subscription, and top insight.
 - Links to Progress, Insights, Achievements, Scan, Log, Coach, and Health Sync diagnostics.
 - Should stay action-focused: scan, log, review meals, and see one clear next step.
@@ -42,9 +44,11 @@ Behavioral and nutrition coaching surface.
 
 Settings and personalization hub.
 
-- Profile fields: name, weight, height, age, gender, goal, activity level, meal calorie targets, reminders, subscription, and feature access.
-- BMI and calorie guidance defaults to adult global cutoffs.
-- Under-18 users receive maintenance estimates only.
+- Profile fields: name, weight, height, age, gender, health flags, goal, activity level, meal calorie targets, reminders, subscription, and feature access.
+- BMI and calorie guidance defaults to adult global cutoffs and is labeled as screening/risk, not diagnosis.
+- Under-18 users, pregnancy/breastfeeding profiles, and eating-disorder risk profiles receive maintenance-only targets.
+- Kidney disease, diabetes, and weight-affecting medication flags trigger medical-review warnings and non-personalized macro caveats.
+- Macro output includes general quality targets for fiber, sodium, free/added sugar, and saturated fat.
 - Progress, Insights, and Achievements are linked from here as secondary screens.
 
 ## Secondary Screens

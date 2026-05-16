@@ -1,14 +1,15 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Image, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import Svg, { Circle } from 'react-native-svg';
-import { FoodLog, MealType } from '@calorie-ai/types';
+import { FoodLog, MealType, User } from '@calorie-ai/types';
 import { BodyText, Eyebrow, HeroTitle, ScreenShell, SurfaceCard } from '../../components/ui-shell';
 import { EmptyState } from '../../components/empty-state';
 import { theme } from '../../components/theme';
 import { useGamificationStore } from '../../store/gamification.store';
 import { useLogStore } from '../../store/log.store';
+import { apiClient } from '../../services/api';
 
 const mealIllustration = require('../../assets/images/vietnamese-meal.png') as number;
 const emptyMealIllustration = require('../../assets/images/empty-meal.png') as number;
@@ -50,7 +51,29 @@ function hasVeg(logs: FoodLog[]) {
   return logs.some((log) => vegWords.some((word) => `${log.name_vi ?? ''} ${log.name}`.toLowerCase().includes(word)));
 }
 
-function buildNutritionNudges(logs: FoodLog[], protein: number, fat: number, calories: number, target: number) {
+function buildNutritionTargets(target: number) {
+  return {
+    fiber_g_min: Math.round((target / 1000) * 14),
+    sodium_mg_max: 2300,
+    sugar_g_max: Math.round((target * 0.1) / 4),
+    saturated_fat_g_max: Math.round((target * 0.1) / 9),
+  };
+}
+
+function buildNutritionNudges(
+  logs: FoodLog[],
+  protein: number,
+  fat: number,
+  calories: number,
+  target: number,
+  quality: {
+    fiber_g: number;
+    sugar_g: number;
+    sodium_mg: number;
+    targets: ReturnType<typeof buildNutritionTargets>;
+    coverage_items: number;
+  },
+) {
   const fatCalories = fat * 9;
   const items: { title: string; body: string; tone: NudgeTone; icon: keyof typeof Ionicons.glyphMap }[] = [];
 
@@ -66,6 +89,18 @@ function buildNutritionNudges(logs: FoodLog[], protein: number, fat: number, cal
 
   if (calories > 0 && fatCalories / Math.max(calories, 1) > 0.38) {
     items.push({ title: 'Fat hơi lệch', body: 'Ưu tiên hấp, luộc hoặc nướng.', tone: 'warn', icon: 'flame' });
+  }
+
+  if (quality.coverage_items > 0 && quality.sodium_mg > quality.targets.sodium_mg_max) {
+    items.push({ title: 'Sodium cao', body: 'Bữa sau giảm đồ mặn/đồ đóng gói.', tone: 'warn', icon: 'water' });
+  }
+
+  if (quality.coverage_items > 0 && quality.sugar_g > quality.targets.sugar_g_max) {
+    items.push({ title: 'Đường hơi cao', body: 'Đổi sang nước lọc hoặc trái cây nguyên miếng.', tone: 'warn', icon: 'ice-cream' });
+  }
+
+  if (quality.coverage_items > 0 && calories > target * 0.45 && quality.fiber_g < quality.targets.fiber_g_min * 0.45) {
+    items.push({ title: 'Fiber còn thấp', body: 'Thêm rau, đậu hoặc trái cây ít ngọt.', tone: 'info', icon: 'leaf' });
   }
 
   if (target - calories > 350) {
@@ -116,11 +151,20 @@ function CaloriesRing({ consumed, burned, target }: { consumed: number; burned: 
 export default function DashboardScreen() {
   const { dailyLog, activityLogs, fetchDailyLog, fetchActivityLogs } = useLogStore();
   const { summary, fetchSummary } = useGamificationStore();
+  const [profileMeta, setProfileMeta] = useState<Pick<User, 'age' | 'height_cm' | 'weight_kg' | 'health_flags'> | null>(null);
 
   useEffect(() => {
     fetchDailyLog().catch(() => {});
     fetchActivityLogs().catch(() => {});
     fetchSummary().catch(() => {});
+    apiClient.get<User>('/user/profile').then((res) => {
+      setProfileMeta({
+        age: res.data.age,
+        height_cm: res.data.height_cm,
+        weight_kg: res.data.weight_kg,
+        health_flags: res.data.health_flags,
+      });
+    }).catch(() => {});
   }, [fetchActivityLogs, fetchDailyLog, fetchSummary]);
 
   const logs = dailyLog?.logs ?? [];
@@ -131,8 +175,63 @@ export default function DashboardScreen() {
   const protein = dailyLog?.total_protein_g ?? 0;
   const carbs = dailyLog?.total_carbs_g ?? 0;
   const fat = dailyLog?.total_fat_g ?? 0;
-  const nudges = useMemo(() => buildNutritionNudges(logs, protein, fat, consumed, target), [consumed, fat, logs, protein, target]);
+  const fiber = dailyLog?.total_fiber_g ?? 0;
+  const sugar = dailyLog?.total_sugar_g ?? 0;
+  const sodium = dailyLog?.total_sodium_mg ?? 0;
+  const saturatedFat = dailyLog?.total_saturated_fat_g ?? 0;
+  const qualityTargets = useMemo(() => buildNutritionTargets(target), [target]);
+  const qualityCoverageItems = dailyLog?.nutrition_quality_coverage
+    ? Math.max(
+        dailyLog.nutrition_quality_coverage.fiber_items,
+        dailyLog.nutrition_quality_coverage.sugar_items,
+        dailyLog.nutrition_quality_coverage.sodium_items,
+        dailyLog.nutrition_quality_coverage.saturated_fat_items,
+      )
+    : 0;
+  const nudges = useMemo(() => buildNutritionNudges(
+    logs,
+    protein,
+    fat,
+    consumed,
+    target,
+    {
+      fiber_g: fiber,
+      sugar_g: sugar,
+      sodium_mg: sodium,
+      targets: qualityTargets,
+      coverage_items: qualityCoverageItems,
+    },
+  ), [consumed, fat, fiber, logs, protein, qualityCoverageItems, qualityTargets, sodium, sugar, target]);
   const latestMeals = logs.slice(0, 4);
+  const safetyCard = useMemo(() => {
+    if (!profileMeta) return null;
+
+    const flagsKnown = Array.isArray(profileMeta.health_flags);
+    const flags = flagsKnown ? profileMeta.health_flags ?? [] : [];
+    const missingBasics = !profileMeta.age || !profileMeta.height_cm || !profileMeta.weight_kg;
+
+    if (missingBasics || !flagsKnown) {
+      return {
+        tone: 'setup' as const,
+        icon: 'shield-checkmark' as const,
+        title: 'Hoàn thiện hồ sơ an toàn',
+        body: 'Thêm tuổi, số đo và health flags để app giữ target bảo thủ khi cần.',
+        action: 'Mở Profile',
+      };
+    }
+
+    if ((profileMeta.age ?? 99) < 18 || flags.length > 0) {
+      return {
+        tone: 'review' as const,
+        icon: 'medical' as const,
+        title: 'Cần rà soát y tế',
+        body: 'Target đang ưu tiên an toàn. Hỏi bác sĩ/dietitian trước khi giảm hoặc tăng cân mạnh.',
+        action: 'Xem cảnh báo',
+      };
+    }
+
+    return null;
+  }, [profileMeta]);
 
   return (
     <ScreenShell contentStyle={styles.screen}>
@@ -172,6 +271,16 @@ export default function DashboardScreen() {
           <MacroPill label="Carbs" value={`${Math.round(carbs)}g`} color={theme.colors.accentCyan} />
           <MacroPill label="Fat" value={`${Math.round(fat)}g`} color={theme.colors.accentAmber} />
         </View>
+
+        <View style={styles.qualityRow}>
+          <QualityPill label="Fiber" value={`${Math.round(fiber)} / ${qualityTargets.fiber_g_min}g`} active={qualityCoverageItems > 0} />
+          <QualityPill label="Sodium" value={`${Math.round(sodium)} / ${qualityTargets.sodium_mg_max}mg`} active={qualityCoverageItems > 0} over={sodium > qualityTargets.sodium_mg_max} />
+          <QualityPill label="Sugar" value={`${Math.round(sugar)} / ${qualityTargets.sugar_g_max}g`} active={qualityCoverageItems > 0} over={sugar > qualityTargets.sugar_g_max} />
+          <QualityPill label="Sat fat" value={`${Math.round(saturatedFat)} / ${qualityTargets.saturated_fat_g_max}g`} active={qualityCoverageItems > 0} over={saturatedFat > qualityTargets.saturated_fat_g_max} />
+        </View>
+        {qualityCoverageItems === 0 && (
+          <Text style={styles.qualityCoverageNote}>Scan barcode hoặc chọn món từ database để thấy fiber, sodium và sugar chính xác hơn.</Text>
+        )}
       </SurfaceCard>
 
       <View style={styles.actionGrid}>
@@ -184,6 +293,24 @@ export default function DashboardScreen() {
           <Text style={styles.secondaryActionText}>Log thủ công</Text>
         </TouchableOpacity>
       </View>
+
+      {safetyCard && (
+        <SurfaceCard style={[styles.safetySetupCard, safetyCard.tone === 'review' && styles.medicalReviewCard]}>
+          <View style={styles.safetySetupHeader}>
+            <Ionicons
+              name={safetyCard.icon}
+              size={18}
+              color={safetyCard.tone === 'review' ? theme.colors.accentAmber : theme.colors.accentMint}
+            />
+            <Text style={styles.safetySetupTitle}>{safetyCard.title}</Text>
+          </View>
+          <Text style={styles.safetySetupBody}>{safetyCard.body}</Text>
+          <TouchableOpacity style={styles.safetySetupButton} onPress={() => router.push('/profile' as never)}>
+            <Text style={styles.safetySetupButtonText}>{safetyCard.action}</Text>
+            <Ionicons name="chevron-forward" size={15} color="#07111f" />
+          </TouchableOpacity>
+        </SurfaceCard>
+      )}
 
       <View style={styles.nudgeRow}>
         {nudges.map((nudge) => (
@@ -256,6 +383,15 @@ function MacroPill({ label, value, color }: { label: string; value: string; colo
       <View style={[styles.macroDot, { backgroundColor: color }]} />
       <Text style={styles.macroValue}>{value}</Text>
       <Text style={styles.macroLabel}>{label}</Text>
+    </View>
+  );
+}
+
+function QualityPill({ label, value, active, over }: { label: string; value: string; active: boolean; over?: boolean }) {
+  return (
+    <View style={[styles.qualityPill, !active && styles.qualityPillMuted, over && styles.qualityPillOver]}>
+      <Text style={styles.qualityLabel}>{label}</Text>
+      <Text style={styles.qualityValue}>{active ? value : '-'}</Text>
     </View>
   );
 }
@@ -404,10 +540,91 @@ const styles = StyleSheet.create({
     fontSize: 11,
     marginTop: 1,
   },
+  qualityRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 10,
+  },
+  qualityPill: {
+    minWidth: '47%',
+    flex: 1,
+    borderRadius: theme.radii.lg,
+    borderWidth: 1,
+    borderColor: '#2a3e34',
+    backgroundColor: '#13251f',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  qualityPillMuted: {
+    borderColor: '#263248',
+    backgroundColor: '#121b2d',
+  },
+  qualityPillOver: {
+    borderColor: '#7a4b22',
+    backgroundColor: '#2a2115',
+  },
+  qualityLabel: {
+    color: theme.colors.textMuted,
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  qualityValue: {
+    color: theme.colors.text,
+    fontSize: 13,
+    fontWeight: '900',
+    marginTop: 2,
+  },
+  qualityCoverageNote: {
+    color: theme.colors.textMuted,
+    fontSize: 11,
+    lineHeight: 16,
+    marginTop: 8,
+  },
   actionGrid: {
     flexDirection: 'row',
     gap: 10,
     marginBottom: 12,
+  },
+  safetySetupCard: {
+    gap: 9,
+    marginBottom: 12,
+    backgroundColor: '#10251f',
+    borderColor: '#2f5d42',
+  },
+  medicalReviewCard: {
+    backgroundColor: '#2a2315',
+    borderColor: '#5c4520',
+  },
+  safetySetupHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  safetySetupTitle: {
+    color: theme.colors.text,
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  safetySetupBody: {
+    color: theme.colors.textMuted,
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  safetySetupButton: {
+    alignSelf: 'flex-start',
+    minHeight: 34,
+    borderRadius: theme.radii.lg,
+    backgroundColor: theme.colors.accentMint,
+    paddingHorizontal: 11,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  safetySetupButtonText: {
+    color: '#07111f',
+    fontSize: 12,
+    fontWeight: '900',
   },
   primaryAction: {
     flex: 1.25,

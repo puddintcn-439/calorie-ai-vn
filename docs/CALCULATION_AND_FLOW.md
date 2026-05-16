@@ -1,92 +1,133 @@
-# Calculation and UX Flow — Calorie AI VN
+# Calculation and UX Flow
 
-This document specifies the core calculations, clamps, and recommended UX flows for calorie targeting, adaptive adjustments, and coaching recommendations.
+This document describes the current calorie target, macro target, safety guardrail, and adaptive adjustment behavior.
 
-## 1. Inputs (required)
-- `weight_kg`, `height_cm`, `age`, `sex` (male|female)
-- optional: `body_fat_pct`
-- `activity_level` (sedentary, lightly_active, moderately_active, active, very_active)
-- `goal` (lose_weight, maintain, gain_weight, gain_muscle, recomp)
-- `desired_change_kg` and `target_timeline_weeks` (optional)
+## Inputs
 
-## 2. Basal Metabolic Rate (BMR)
-- Use Katch–McArdle when `body_fat_pct` is present: $\mathrm{BMR} = 370 + 21.6 \times \mathrm{lean\_mass\_kg}$ where $\mathrm{lean\_mass\_kg} = weight\_kg \times (1 - body\_fat\_pct/100)$. 
-- Fallback Mifflin–St Jeor: $\mathrm{BMR} = 10 \times weight + 6.25 \times height - 5 \times age + (5\text{ if male }\,|\,-161\text{ if female})$.
+Required:
+- `weight_kg`, `height_cm`, `age`, `gender`
+- `activity_level`: `sedentary`, `light`, `moderate`, `active`, `very_active`
+- `goal`: `lose_weight`, `maintain`, `gain_muscle`
 
-## 3. TDEE
+Optional:
+- `body_fat_pct`
+- `health_flags`: `pregnant`, `breastfeeding`, `kidney_disease`, `diabetes`, `eating_disorder_history`, `weight_affecting_medication`
+
+## BMI
+
+- Use adult global BMI cutoffs for users 18+.
+- Display BMI as screening/risk, not diagnosis.
+- For users under 18, show a warning that adult BMI cutoffs are not diagnostic and clinician/growth-chart review is needed.
+
+## BMR
+
+- Prefer Katch-McArdle only when `body_fat_pct` is in a realistic range: 3-70%.
+- Otherwise use Mifflin-St Jeor.
+
+Mifflin-St Jeor:
+- Male: `10 * weight_kg + 6.25 * height_cm - 5 * age + 5`
+- Female: `10 * weight_kg + 6.25 * height_cm - 5 * age - 161`
+
+Katch-McArdle:
+- `lean_mass_kg = weight_kg * (1 - body_fat_pct / 100)`
+- `BMR = 370 + 21.6 * lean_mass_kg`
+
+## TDEE
+
 Activity factors:
-- sedentary: $1.2$  
-- lightly_active: $1.375$  
-- moderately_active: $1.55$  
-- active: $1.725$  
-- very_active: $1.9$
+- `sedentary`: 1.2
+- `light`: 1.375
+- `moderate`: 1.55
+- `active`: 1.725
+- `very_active`: 1.9
 
-Compute: $\mathrm{TDEE} = \mathrm{BMR} \times activityFactor$.
+`TDEE = BMR * activity_factor`
 
-## 4. Goal factor (nominal)
-- lose_weight: $0.8$  
-- maintain: $1.0$  
-- gain_weight / gain_muscle: $1.1$  
-- recomp: $0.92$ (approx)
+## Goal Adjustment
 
-Raw target: $\mathrm{rawTarget} = \mathrm{TDEE} \times goalFactor$.
+Default goal factors:
+- `lose_weight`: 0.8
+- `maintain`: 1.0
+- `gain_muscle`: 1.1
 
-## 5. Adaptive ActualTDEE (primary)
-Primary adaptive estimate: 
-$$\mathrm{ActualTDEE} = \overline{Calories}_{period} - \frac{7700 \times \Delta weight_{period}}{period\_days}$$
+Safety floors:
+- Do not allow deficit greater than 20% of TDEE.
+- Do not go below max of sex floor and `BMR * 1.1`.
+- Sex floors: female 1200 kcal/day, male 1500 kcal/day.
 
-Notes:
-- Use a smoothing window: $14$ days. Require at least `MIN_DAYS_FOR_ADAPTIVE = 14` days of logged calories/weights before applying adaptive change.
+Maintenance-only overrides:
+- Age under 18
+- Pregnancy
+- Breastfeeding
+- Eating-disorder history/risk
+- Underweight user requesting weight loss
 
-## 6. Safety clamps
-- `MAX_DEFICIT_PCT = 0.20` → minimum allowed target: $\max(1200, TDEE \times (1 - 0.20))$.
-- `WEEKLY_CHANGE_CAP = 150` kcal/week change in target (prevents large swings).
-- `MIN_CALORIES ≈ 1200` for adults unless clinical override.
+## Health Guardrails
 
-When computing new target from ActualTDEE: apply weekly cap and min_allowed clamp, and persist `clamp_reason` when hit.
+The app remains a wellness tool, not a medical treatment planner.
 
-## 7. Protein & Macros (recommendations)
-- Protein per goal (g/kg):
-  - lose: $1.6$–$2.2$ g/kg (use 1.6 as baseline)
-  - maintain: $1.6$ g/kg
-  - gain_muscle: $1.8$–$2.2$ g/kg
-  - gain_weight: $1.6$–$2.0$ g/kg
-  - recomp: $1.8$–$2.2$ g/kg
-- Fat: 20–35% of kcal. Carbs: remainder.
+Medical-review warnings are shown for:
+- Age under 18
+- Pregnancy or breastfeeding
+- Kidney disease
+- Diabetes
+- Eating-disorder history/risk
+- Medication that may affect weight
 
-## 8. Exercise calories
-- Use MET formula: $\mathrm{kcal} \approx MET \times weight\_{kg} \times duration\_{hours}$.
-- Steps heuristic: ~0.04 kcal/step (baseline at 65 kg); scale by weight where appropriate and expose per-user override.
+Automatic weekly target changes are paused when medical review is recommended.
 
-## 9. Recomposition and training model (UI & simulation)
-- Track strength sessions (sets/reps/weight) and training adherence (sessions completed / planned). 
-- Combine training adherence and protein adherence to estimate lean mass gains in simulation and to inform conservative/aggressive target suggestions.
+## Macros
 
-## 10. API contract (example)
-`GET /api/calorie-target/weekly-adaptive` → returns:
-```json
-{
-  "algorithm_version": "v1.1",
-  "actual_tdee": 2100,
-  "prev_target": 2300,
-  "new_target": 2150,
-  "clamp_reason": "weekly_change_cap",
-  "days_logged": 14,
-  "weight_logs": [{"date":"2026-05-01","weight_kg":95}]
-}
-```
+Protein:
+- `lose_weight`: 1.6 g/kg
+- `maintain`: 1.6 g/kg
+- `gain_muscle`: 1.9 g/kg
 
-## 11. UX flows (high level)
-- Onboarding collects inputs and sets realistic timeline. Show expected weekly Δ and probability band.
-- Dashboard shows `Why this target?` panel with `actual_tdee`, `clamp_reason`, `algorithm_version`, and a short explanation and links to details.
-- Adherence view: show week-by-week logged calories vs target, adherence %, and suggestions (add snacks, increase protein, completed training sessions).
-- Advanced: show raw vs clamped target with toggle and audit trail.
+Fat:
+- Baseline 25% of calories.
 
-## 12. Monitoring & Instrumentation
-- Log all adaptive decisions with `algorithm_version`, inputs, days_logged, and clamp_reason into `body_progress` / audit table. Use this to allow replays and simulations.
+Carbs:
+- Remaining calories after protein and fat.
+- Warn if carbs are below 45% of calories or below 130 g/day.
 
-## 13. Simulation harness
-- See `scripts/simulate_personas.js` for a 12-week simulator (used for QA). Expand to model protein and training adherence.
+Kidney disease and diabetes flags add warnings that protein, sodium, carb, and sugar targets are not individualized.
 
----
-Document created for dev + product reference. Adjust numbers after clinical review.
+## General Nutrition Quality Targets
+
+Computed from daily calorie target:
+- Fiber minimum: `14 g per 1000 kcal`
+- Sodium maximum: `2300 mg/day`
+- Free sugar maximum: `<10% kcal`
+- Added sugar maximum: `<10% kcal`
+- Saturated fat maximum: `<10% kcal`
+
+The app may receive only total sugar from barcode data, so UI must explain that free sugar/added sugar may not always be distinguishable.
+
+Daily log responses now return actual totals for:
+- `total_fiber_g`
+- `total_sugar_g`
+- `total_saturated_fat_g`
+- `total_sodium_mg`
+
+They also return `nutrition_quality_coverage` so the UI can avoid overclaiming precision when logged items do not include these nutrients. Barcode and food-database logs provide the strongest coverage; AI scan items only store these fields when the model/source supplies them.
+
+## Weekly Adaptive Adjustment
+
+Primary adaptive estimate:
+
+`ActualTDEE = average_calories - (7700 * weight_change_kg / period_days)`
+
+Current rules:
+- Smoothing window: 14 days.
+- Require enough calorie and weight logs before using ActualTDEE.
+- Weekly change cap: 150 kcal/week.
+- Apply the same floors and deficit limits as the base target.
+- Pause automatic adjustment when medical review is recommended.
+
+## UX Rules
+
+- Show "screening/risk", not diagnosis.
+- Explain when app changes the requested goal to maintenance.
+- Keep medical copy short and action-oriented.
+- Link future disease-specific plans to clinical review, not generic AI advice.
+- Surface profile safety setup on Today when age, body metrics, or health flags are missing.

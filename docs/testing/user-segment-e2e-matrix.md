@@ -115,13 +115,13 @@ Map 10 user segments → current app features + gaps + test scenarios
 |-----------|---------|
 | **Core Pain** | Generic app doesn't help, need disease-specific guidance |
 | **Key Features** | Diabetes guidance, PCOS macros, gout food warnings |
-| **Current App Support** | ❌ No health condition profiles, ❌ No warnings system |
-| **Gaps** | ❌ Health intake form, ❌ Personalized restrictions, ❌ Alerts for red foods |
+| **Current App Support** | ⚠️ Baseline health flags and warnings implemented in Profile; not disease-specific care |
+| **Gaps** | ❌ Personalized restrictions, ❌ medication/glucose-aware alerts, ❌ clinician-reviewed disease templates |
 
 ### E2E Test Scenario 5.1: "Diabetic user glucose awareness"
 ```
-❌ Not yet supported: User selects "Tiểu đường" in profile
-❌ App should then: Highlight carbs, flag sugar, suggest timing
+⚠️ Partially supported: User selects "Tiểu đường" in Profile and sees medical-review + carb/sugar caution
+❌ Still missing: Personalized carb timing, glucose context, medication-aware advice
 ```
 
 ---
@@ -174,14 +174,14 @@ Map 10 user segments → current app features + gaps + test scenarios
 |-----------|---------|
 | **Core Pain** | Nutrition labels confusing, don't know what's healthy |
 | **Key Features** | Barcode scan, health score, product comparison |
-| **Current App Support** | ✅ Barcode lookup exists with local DB first and Open Food Facts fallback |
-| **Gaps** | ⚠️ Needs staging coverage validation, health score formula, and sugar/sodium alerts |
+| **Current App Support** | ✅ Barcode lookup exists with local DB first and Open Food Facts fallback; Today tracks sugar/sodium when nutrient data exists |
+| **Gaps** | ⚠️ Needs staging coverage validation, health score formula, product comparison, and broader nutrient coverage |
 
 ### E2E Test Scenario 8.1: "Barcode scan in supermarket"
 ```
 1. User stands in cereal aisle, scans barcode
 2. App returns: product info + health rating
-✅ Implemented baseline: local barcode lookup + Open Food Facts fallback. Next validation: packaged-food coverage and serving-size QA.
+✅ Implemented baseline: local barcode lookup + Open Food Facts fallback, serving-size scaling, and daily sugar/sodium/fiber/saturated-fat totals when source data is available. Next validation: packaged-food coverage and serving-size QA.
 ```
 
 ---

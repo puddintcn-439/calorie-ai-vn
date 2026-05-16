@@ -2,6 +2,17 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { SurfaceCard } from './ui-shell';
 
+type NutritionTargets = {
+  fiber_g_min: number;
+  sodium_mg_max: number;
+  free_sugar_g_max: number;
+  added_sugar_g_max: number;
+  saturated_fat_g_max: number;
+  free_sugar_pct_max: number;
+  saturated_fat_pct_max: number;
+  basis: string;
+};
+
 type CalorieTargetResponse = {
   daily_calorie_target: number;
   bmr: number;
@@ -13,6 +24,7 @@ type CalorieTargetResponse = {
   effective_goal?: string;
   recommendation_note: string;
   bmi_standard?: 'global_adult';
+  bmi_interpretation?: 'screening_risk_not_diagnosis';
   target_breakfast_cal: number;
   target_lunch_cal: number;
   target_dinner_cal: number;
@@ -27,6 +39,8 @@ type CalorieTargetResponse = {
   is_estimate?: boolean;
   safety_warnings?: string[];
   macro_warnings?: string[];
+  medical_review_recommended?: boolean;
+  nutrition_targets?: NutritionTargets;
 };
 
 type Props = {
@@ -56,6 +70,19 @@ function computeMacros(daily: number, weightKg: number | undefined, goal?: strin
   return { protein_target_g, protein_g_per_kg, fat_pct, fat_g, carbs_g, carbs_pct };
 }
 
+function computeNutritionTargets(daily: number): NutritionTargets {
+  return {
+    fiber_g_min: Math.round((daily / 1000) * 14),
+    sodium_mg_max: 2300,
+    free_sugar_g_max: Math.round((daily * 0.1) / 4),
+    added_sugar_g_max: Math.round((daily * 0.1) / 4),
+    saturated_fat_g_max: Math.round((daily * 0.1) / 9),
+    free_sugar_pct_max: 10,
+    saturated_fat_pct_max: 10,
+    basis: 'Mục tiêu tổng quát: fiber 14 g/1000 kcal, sodium <2300 mg/ngày, đường tự do/added sugar <10% kcal, saturated fat <10% kcal.',
+  };
+}
+
 export default function MacrosCard({ target, daily_calorie_target, weight_kg, goal }: Props) {
   const daily = target?.daily_calorie_target ?? daily_calorie_target ?? 0;
 
@@ -79,15 +106,17 @@ export default function MacrosCard({ target, daily_calorie_target, weight_kg, go
   if (!daily) {
     return (
       <SurfaceCard style={styles.card}>
-        <Text style={styles.title}>🍽️ Phân bổ dinh dưỡng</Text>
+        <Text style={styles.title}>Phân bổ dinh dưỡng</Text>
         <Text style={styles.empty}>Chưa có mục tiêu calo để tính macros.</Text>
       </SurfaceCard>
     );
   }
 
+  const nutrition = target?.nutrition_targets ?? computeNutritionTargets(daily);
+
   return (
     <SurfaceCard style={styles.card}>
-      <Text style={styles.title}>🍽️ Phân bổ dinh dưỡng</Text>
+      <Text style={styles.title}>Phân bổ dinh dưỡng</Text>
       <View style={styles.row}>
         <View style={styles.col}>
           <Text style={styles.label}>Calo/ngày</Text>
@@ -95,20 +124,37 @@ export default function MacrosCard({ target, daily_calorie_target, weight_kg, go
         </View>
         <View style={styles.col}>
           <Text style={styles.label}>Protein</Text>
-          <Text style={styles.value}>{protein_target_g ?? '—'} g {protein_g_per_kg ? `(${protein_g_per_kg} g/kg)` : ''}</Text>
+          <Text style={styles.value}>{protein_target_g ?? '-'} g {protein_g_per_kg ? `(${protein_g_per_kg} g/kg)` : ''}</Text>
         </View>
       </View>
 
       <View style={styles.row}>
         <View style={styles.col}>
           <Text style={styles.label}>Chất béo</Text>
-          <Text style={styles.value}>{fat_pct ?? '—'}% · {fat_g ?? '—'} g</Text>
+          <Text style={styles.value}>{fat_pct ?? '-'}% · {fat_g ?? '-'} g</Text>
         </View>
         <View style={styles.col}>
           <Text style={styles.label}>Carbs</Text>
-          <Text style={styles.value}>{carbs_g ?? '—'} g · {carbs_pct ?? '—'}%</Text>
+          <Text style={styles.value}>{carbs_g ?? '-'} g · {carbs_pct ?? '-'}%</Text>
         </View>
       </View>
+
+      <View style={styles.qualityBlock}>
+        <Text style={styles.qualityTitle}>Mục tiêu chất lượng</Text>
+        <View style={styles.qualityGrid}>
+          <Metric label="Fiber" value={`>= ${nutrition.fiber_g_min} g`} tone="good" />
+          <Metric label="Sodium" value={`< ${nutrition.sodium_mg_max} mg`} tone="limit" />
+          <Metric label="Đường tự do" value={`< ${nutrition.free_sugar_g_max} g`} tone="limit" />
+          <Metric label="Sat fat" value={`< ${nutrition.saturated_fat_g_max} g`} tone="limit" />
+        </View>
+        <Text style={styles.qualityNote}>
+          Đường trên nhãn/barcode có thể là total sugar; app chưa luôn phân biệt được free sugar và added sugar.
+        </Text>
+      </View>
+
+      {!!target?.medical_review_recommended && (
+        <Text style={styles.warning}>Hồ sơ có yếu tố sức khỏe cần chuyên gia xem lại trước khi dùng mục tiêu này.</Text>
+      )}
       {!!target?.macro_warnings?.length && (
         <Text style={styles.warning}>{target.macro_warnings[0]}</Text>
       )}
@@ -116,13 +162,44 @@ export default function MacrosCard({ target, daily_calorie_target, weight_kg, go
   );
 }
 
+function Metric({ label, value, tone }: { label: string; value: string; tone: 'good' | 'limit' }) {
+  return (
+    <View style={[styles.metricPill, tone === 'good' ? styles.metricGood : styles.metricLimit]}>
+      <Text style={styles.metricLabel}>{label}</Text>
+      <Text style={styles.metricValue}>{value}</Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   card: { marginTop: 12, borderColor: '#243a59' },
   title: { color: '#eff6ff', fontWeight: '700', fontSize: 14, marginBottom: 8 },
-  row: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
+  row: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6, gap: 10 },
   col: { flex: 1 },
   label: { color: '#b8c8e8', fontSize: 12 },
   value: { color: '#eff6ff', fontSize: 14, fontWeight: '700' },
   empty: { color: '#7082a9', fontSize: 13 },
-  warning: { color: '#fcd34d', fontSize: 12, marginTop: 4, lineHeight: 17 },
+  qualityBlock: {
+    marginTop: 8,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#243a59',
+    gap: 8,
+  },
+  qualityTitle: { color: '#dbeafe', fontSize: 12, fontWeight: '800' },
+  qualityGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  metricPill: {
+    minWidth: 118,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 9,
+    paddingVertical: 8,
+    gap: 2,
+  },
+  metricGood: { backgroundColor: '#0f2f22', borderColor: '#22c55e66' },
+  metricLimit: { backgroundColor: '#172033', borderColor: '#3b82f666' },
+  metricLabel: { color: '#9fb1d1', fontSize: 11, fontWeight: '700' },
+  metricValue: { color: '#eff6ff', fontSize: 13, fontWeight: '800' },
+  qualityNote: { color: '#8ea2c8', fontSize: 11, lineHeight: 16 },
+  warning: { color: '#fcd34d', fontSize: 12, marginTop: 6, lineHeight: 17 },
 });

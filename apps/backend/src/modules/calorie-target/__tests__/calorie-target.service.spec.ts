@@ -153,6 +153,88 @@ describe('CalorieTargetService', () => {
       // TDEE = 1780 * 1.375 = 2447.5
       expect(result.tdee).toBe(2448);
     });
+
+    it('returns screening copy and general micronutrient targets', () => {
+      const dto: CalculateTargetDto = {
+        weight_kg: 70,
+        height_cm: 170,
+        age: 30,
+        gender: 'male',
+        activity_level: 'moderate',
+        goal: 'maintain',
+      };
+
+      const result = service.calculateTarget(dto);
+
+      expect(result.bmi_interpretation).toBe('screening_risk_not_diagnosis');
+      expect(result.safety_warnings?.[0]).toContain('screening');
+      expect(result.nutrition_targets).toMatchObject({
+        sodium_mg_max: 2300,
+        free_sugar_pct_max: 10,
+        saturated_fat_pct_max: 10,
+      });
+      expect(result.nutrition_targets?.fiber_g_min).toBe(
+        Math.round((result.daily_calorie_target / 1000) * 14),
+      );
+    });
+
+    it('forces maintenance and medical review for under-18 weight goals', () => {
+      const dto: CalculateTargetDto = {
+        weight_kg: 60,
+        height_cm: 170,
+        age: 16,
+        gender: 'female',
+        activity_level: 'moderate',
+        goal: 'lose_weight',
+      };
+
+      const result = service.calculateTarget(dto);
+
+      expect(result.effective_goal).toBe('maintain');
+      expect(result.medical_review_recommended).toBe(true);
+      expect(result.safety_warnings?.join(' ')).toContain('under 18');
+    });
+
+    it('forces maintenance for pregnancy, breastfeeding, and eating disorder flags', () => {
+      const dto: CalculateTargetDto = {
+        weight_kg: 72,
+        height_cm: 168,
+        age: 32,
+        gender: 'female',
+        activity_level: 'light',
+        goal: 'lose_weight',
+        health_flags: ['pregnant', 'breastfeeding', 'eating_disorder_history'],
+      };
+
+      const result = service.calculateTarget(dto);
+
+      expect(result.effective_goal).toBe('maintain');
+      expect(result.medical_review_recommended).toBe(true);
+      expect(result.health_flags).toEqual(['pregnant', 'breastfeeding', 'eating_disorder_history']);
+      expect(result.safety_warnings?.join(' ')).toContain('Pregnancy');
+      expect(result.safety_warnings?.join(' ')).toContain('disordered eating');
+    });
+
+    it('adds medical review warnings for kidney disease, diabetes, and weight-affecting medication', () => {
+      const dto: CalculateTargetDto = {
+        weight_kg: 82,
+        height_cm: 175,
+        age: 45,
+        gender: 'male',
+        activity_level: 'light',
+        goal: 'maintain',
+        health_flags: ['kidney_disease', 'diabetes', 'weight_affecting_medication'],
+      };
+
+      const result = service.calculateTarget(dto);
+
+      expect(result.medical_review_recommended).toBe(true);
+      expect(result.safety_warnings?.join(' ')).toContain('Kidney disease');
+      expect(result.safety_warnings?.join(' ')).toContain('Diabetes');
+      expect(result.safety_warnings?.join(' ')).toContain('medications');
+      expect(result.macro_warnings?.join(' ')).toContain('protein');
+      expect(result.macro_warnings?.join(' ')).toContain('carb');
+    });
   });
 
   describe('calculateAndUpdateProfile', () => {

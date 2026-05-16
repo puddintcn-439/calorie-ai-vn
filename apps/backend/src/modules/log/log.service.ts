@@ -51,6 +51,10 @@ export class LogService {
     const total_protein_g = foodLogs.reduce((s, l) => s + l.protein_g, 0);
     const total_carbs_g = foodLogs.reduce((s, l) => s + l.carbs_g, 0);
     const total_fat_g = foodLogs.reduce((s, l) => s + l.fat_g, 0);
+    const total_fiber_g = this.sumOptional(foodLogs, 'fiber_g');
+    const total_sugar_g = this.sumOptional(foodLogs, 'sugar_g');
+    const total_saturated_fat_g = this.sumOptional(foodLogs, 'saturated_fat_g');
+    const total_sodium_mg = this.sumOptional(foodLogs, 'sodium_mg');
 
     const { data: userRow } = await this.supabase.db
       .from('users')
@@ -67,9 +71,24 @@ export class LogService {
       total_protein_g,
       total_carbs_g,
       total_fat_g,
+      total_fiber_g,
+      total_sugar_g,
+      total_saturated_fat_g,
+      total_sodium_mg,
+      nutrition_quality_coverage: {
+        total_items: foodLogs.length,
+        fiber_items: foodLogs.filter((log) => log.fiber_g != null).length,
+        sugar_items: foodLogs.filter((log) => log.sugar_g != null).length,
+        saturated_fat_items: foodLogs.filter((log) => log.saturated_fat_g != null).length,
+        sodium_items: foodLogs.filter((log) => log.sodium_mg != null).length,
+      },
       target_calories,
       remaining_calories: target_calories - total_calories,
     };
+  }
+
+  private sumOptional(logs: FoodLog[], key: 'fiber_g' | 'sugar_g' | 'saturated_fat_g' | 'sodium_mg'): number {
+    return Number(logs.reduce((sum, log) => sum + Number(log[key] ?? 0), 0).toFixed(1));
   }
 
   async deleteLog(id: string, userId: string) {
@@ -102,10 +121,26 @@ export class LogService {
     const total_protein_g = items.reduce((s, i) => s + i.protein_g, 0);
     const total_carbs_g = items.reduce((s, i) => s + i.carbs_g, 0);
     const total_fat_g = items.reduce((s, i) => s + i.fat_g, 0);
+    const total_fiber_g = items.reduce((s, i) => s + Number(i.fiber_g ?? 0), 0);
+    const total_sugar_g = items.reduce((s, i) => s + Number(i.sugar_g ?? 0), 0);
+    const total_saturated_fat_g = items.reduce((s, i) => s + Number(i.saturated_fat_g ?? 0), 0);
+    const total_sodium_mg = items.reduce((s, i) => s + Number(i.sodium_mg ?? 0), 0);
 
     const { data, error } = await this.supabase.db
       .from('saved_meals')
-      .insert({ user_id: userId, name, items, total_calories, total_protein_g, total_carbs_g, total_fat_g })
+      .insert({
+        user_id: userId,
+        name,
+        items,
+        total_calories,
+        total_protein_g,
+        total_carbs_g,
+        total_fat_g,
+        total_fiber_g,
+        total_sugar_g,
+        total_saturated_fat_g,
+        total_sodium_mg,
+      })
       .select()
       .single();
 
@@ -136,6 +171,10 @@ export class LogService {
         protein_g: item.protein_g,
         carbs_g: item.carbs_g,
         fat_g: item.fat_g,
+        fiber_g: item.fiber_g,
+        sugar_g: item.sugar_g,
+        saturated_fat_g: item.saturated_fat_g,
+        sodium_mg: item.sodium_mg,
         estimated_grams: item.estimated_grams,
         unit: 'gram',
         source: 'quick_add',

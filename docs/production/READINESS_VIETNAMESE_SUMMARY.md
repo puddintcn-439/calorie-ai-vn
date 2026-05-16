@@ -27,13 +27,25 @@ Calorie AI đi theo hướng global-first: phục vụ nhiều thị trường, 
 - Under-18 và underweight weight-loss flows bị chặn về maintenance.
 - Deploy workflow không còn báo success nếu chưa có rollout thật.
 
+Đã được bổ sung trong P1:
+
+- Profile có health flags cho thai kỳ, cho con bú, bệnh thận, tiểu đường, rối loạn ăn uống và thuốc ảnh hưởng cân nặng.
+- BMI hiển thị theo hướng screening/risk, không phải chẩn đoán.
+- Under-18, thai kỳ/cho con bú và rối loạn ăn uống được ép về maintenance-only.
+- Kidney disease, diabetes và medication flags bật cảnh báo cần chuyên gia xem lại.
+- Weekly adaptive target tự dừng khi hồ sơ cần medical review.
+- Macro card có thêm mục tiêu fiber, sodium, free/added sugar và saturated fat.
+- Today hiển thị actual fiber, sodium, total sugar và saturated fat khi dữ liệu log có các trường này.
+- Today nhắc hoàn thiện hồ sơ an toàn hoặc xem cảnh báo y tế khi profile có risk flags.
+
 ## Blocker Trước Go-Live
 
 - Cần chạy EAS preview build thật và ghi lại build ID.
 - Cần cấu hình `PRODUCTION_DEPLOY_WEBHOOK_URL` và `PRODUCTION_ROLLBACK_WEBHOOK_URL`.
 - Cần validate food database với global staples, packaged foods và món Việt phổ biến.
 - Cần native QA cho HealthKit, Health Connect, barcode, receipt, and camera.
-- Cần cảnh báo y tế rõ trong onboarding/profile: app không thay thế bác sĩ, không dùng cho điều trị bệnh.
+- Cần clinical/nutrition review cho toàn bộ health copy và ngưỡng dinh dưỡng trước khi claim rộng.
+- Cần apply migration `015_user_health_flags.sql` và `016_food_quality_nutrients.sql` trên staging/prod.
 
 ## Không Nên Claim
 

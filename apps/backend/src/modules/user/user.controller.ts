@@ -1,9 +1,9 @@
 import { Controller, Get, Patch, Body, Request, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
-import { IsNumber, IsEnum, IsString, IsOptional, Min, Max } from 'class-validator';
+import { IsNumber, IsEnum, IsString, IsOptional, Min, Max, IsArray, IsIn } from 'class-validator';
 import { UserService } from './user.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { ActivityLevel, UserGoal } from '@calorie-ai/types';
+import { ActivityLevel, UserGoal, HealthFlag, HEALTH_FLAGS } from '@calorie-ai/types';
 
 class UpdateProfileDto {
   @IsString() @IsOptional() full_name?: string;
@@ -18,6 +18,7 @@ class UpdateProfileDto {
   @IsNumber() @Min(0) @IsOptional() target_lunch_cal?: number;
   @IsNumber() @Min(0) @IsOptional() target_dinner_cal?: number;
   @IsNumber() @Min(0) @IsOptional() target_snack_cal?: number;
+  @IsArray() @IsIn(HEALTH_FLAGS, { each: true }) @IsOptional() health_flags?: HealthFlag[];
 }
 
 @ApiTags('User')

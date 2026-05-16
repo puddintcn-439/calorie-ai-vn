@@ -5,7 +5,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useLogStore } from '../../store/log.store';
-import { FoodLog, MealType, SavedMeal, ActivityLog, ActivityType, ACTIVITY_LABELS, User, ActivityLevel, UserGoal, ACTIVITY_MET } from '@calorie-ai/types';
+import { FoodLog, MealType, SavedMeal, ActivityLog, ActivityType, ACTIVITY_LABELS, User, ActivityLevel, UserGoal, HealthFlag, ACTIVITY_MET } from '@calorie-ai/types';
 import { BodyText, Eyebrow, HeroTitle, ScreenShell, SurfaceCard } from '../../components/ui-shell';
 import { EmptyState } from '../../components/empty-state';
 import { apiClient } from '../../services/api';
@@ -20,6 +20,15 @@ const MEAL_LABELS: Record<MealType, string> = {
 
 type BodyStatus = 'underweight' | 'normal' | 'overweight' | 'obese';
 type WeightRecommendation = 'increase' | 'maintain' | 'decrease';
+
+const HEALTH_FLAGS: HealthFlag[] = [
+  'pregnant',
+  'breastfeeding',
+  'kidney_disease',
+  'diabetes',
+  'eating_disorder_history',
+  'weight_affecting_medication',
+];
 
 type ExerciseRoadmapItem = {
   id: string;
@@ -44,8 +53,8 @@ function inferBodyStatus(weightKg?: number, heightCm?: number): BodyStatus | nul
   const h = heightCm / 100;
   const bmi = weightKg / (h * h);
   if (bmi < 18.5) return 'underweight';
-  if (bmi < 23) return 'normal';
-  if (bmi < 25) return 'overweight';
+  if (bmi < 25) return 'normal';
+  if (bmi < 30) return 'overweight';
   return 'obese';
 }
 
@@ -53,6 +62,26 @@ function inferWeightRecommendation(bodyStatus: BodyStatus): WeightRecommendation
   if (bodyStatus === 'underweight') return 'increase';
   if (bodyStatus === 'normal') return 'maintain';
   return 'decrease';
+}
+
+function normaliseHealthFlags(flags: unknown): HealthFlag[] {
+  if (!Array.isArray(flags)) return [];
+  return [...new Set(flags.filter((flag): flag is HealthFlag => HEALTH_FLAGS.includes(flag as HealthFlag)))];
+}
+
+function getSafeRoadmapGoal(profile: Partial<User>, bodyStatus: BodyStatus): UserGoal {
+  const flags = normaliseHealthFlags(profile.health_flags);
+  if (
+    (profile.age && profile.age < 18)
+    || flags.includes('pregnant')
+    || flags.includes('breastfeeding')
+    || flags.includes('eating_disorder_history')
+    || (bodyStatus === 'underweight' && profile.goal === 'lose_weight')
+  ) {
+    return 'maintain';
+  }
+
+  return profile.goal ?? 'maintain';
 }
 
 import { estimateExerciseCalories as _estimateExerciseCalories } from '../../services/exercise.service';
@@ -146,10 +175,17 @@ export default function LogScreen() {
     return buildExerciseRoadmap(
       bodyStatus,
       profileMeta.activity_level,
-      profileMeta.goal,
+      getSafeRoadmapGoal(profileMeta, bodyStatus),
       profileMeta.weight_kg ?? 65,
     );
-  }, [profileMeta.weight_kg, profileMeta.height_cm, profileMeta.activity_level, profileMeta.goal]);
+  }, [
+    profileMeta.weight_kg,
+    profileMeta.height_cm,
+    profileMeta.activity_level,
+    profileMeta.goal,
+    profileMeta.age,
+    profileMeta.health_flags,
+  ]);
 
   const customRoadmapItems = useMemo(() => {
     return dailyRoadmap

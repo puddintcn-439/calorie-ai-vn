@@ -150,6 +150,10 @@ export default function ScanScreen() {
         protein_g: Number((old.protein_g * ratio).toFixed(1)),
         carbs_g: Number((old.carbs_g * ratio).toFixed(1)),
         fat_g: Number((old.fat_g * ratio).toFixed(1)),
+        fiber_g: old.fiber_g != null ? Number((old.fiber_g * ratio).toFixed(1)) : undefined,
+        sugar_g: old.sugar_g != null ? Number((old.sugar_g * ratio).toFixed(1)) : undefined,
+        saturated_fat_g: old.saturated_fat_g != null ? Number((old.saturated_fat_g * ratio).toFixed(1)) : undefined,
+        sodium_mg: old.sodium_mg != null ? Math.round(old.sodium_mg * ratio) : undefined,
       };
       telemetryService.emitPortionAdjustment(
         old.name_vi ?? old.name,
@@ -414,7 +418,20 @@ export default function ScanScreen() {
     if (!currentItems.length) return;
     try {
       for (const item of currentItems) {
-        await addLog({ name: item.name_vi ?? item.name, meal_type: selectedMeal, calories: item.calories, protein_g: item.protein_g, carbs_g: item.carbs_g, fat_g: item.fat_g, estimated_grams: item.estimated_grams, image_url: scannedImage ?? undefined });
+        await addLog({
+          name: item.name_vi ?? item.name,
+          meal_type: selectedMeal,
+          calories: item.calories,
+          protein_g: item.protein_g,
+          carbs_g: item.carbs_g,
+          fat_g: item.fat_g,
+          fiber_g: item.fiber_g,
+          sugar_g: item.sugar_g,
+          saturated_fat_g: item.saturated_fat_g,
+          sodium_mg: item.sodium_mg,
+          estimated_grams: item.estimated_grams,
+          image_url: scannedImage ?? undefined,
+        });
       }
       Alert.alert('✅ Đã lưu!', `${currentItems.length} món`, [{ text: 'OK', onPress: () => router.replace('/') }]);
     } catch { Alert.alert('Lỗi', 'Không thể lưu log'); }
@@ -426,7 +443,19 @@ export default function ScanScreen() {
       if (!name?.trim()) return;
       setIsSavingMeal(true);
       try {
-        await saveMeal(name.trim(), currentItems.map((i) => ({ name: i.name, name_vi: i.name_vi, calories: i.calories, protein_g: i.protein_g, carbs_g: i.carbs_g, fat_g: i.fat_g, estimated_grams: i.estimated_grams })));
+        await saveMeal(name.trim(), currentItems.map((i) => ({
+          name: i.name,
+          name_vi: i.name_vi,
+          calories: i.calories,
+          protein_g: i.protein_g,
+          carbs_g: i.carbs_g,
+          fat_g: i.fat_g,
+          fiber_g: i.fiber_g,
+          sugar_g: i.sugar_g,
+          saturated_fat_g: i.saturated_fat_g,
+          sodium_mg: i.sodium_mg,
+          estimated_grams: i.estimated_grams,
+        })));
         Alert.alert('✅ Đã lưu!', `"${name}" vào bộ sưu tập.`);
       } catch { Alert.alert('Lỗi', 'Không thể lưu bữa ăn.'); }
       finally { setIsSavingMeal(false); }
@@ -453,6 +482,10 @@ export default function ScanScreen() {
         protein_g: Number(((barcodeResult.protein_g ?? 0) * ratio).toFixed(1)),
         carbs_g: Number(((barcodeResult.carbs_g ?? 0) * ratio).toFixed(1)),
         fat_g: Number(((barcodeResult.fat_g ?? 0) * ratio).toFixed(1)),
+        fiber_g: barcodeResult.fiber_g != null ? Number((barcodeResult.fiber_g * ratio).toFixed(1)) : undefined,
+        sugar_g: barcodeResult.sugar_g != null ? Number((barcodeResult.sugar_g * ratio).toFixed(1)) : undefined,
+        saturated_fat_g: barcodeResult.saturated_fat_g != null ? Number((barcodeResult.saturated_fat_g * ratio).toFixed(1)) : undefined,
+        sodium_mg: barcodeResult.sodium_mg != null ? Math.round(barcodeResult.sodium_mg * ratio) : undefined,
         estimated_grams: grams,
       });
       Alert.alert('✅ Đã lưu!', undefined, [{ text: 'OK', onPress: () => router.replace('/') }]);
@@ -484,6 +517,10 @@ export default function ScanScreen() {
         protein_g: Number(((food.protein_g ?? 0) * ratio).toFixed(1)),
         carbs_g: Number(((food.carbs_g ?? 0) * ratio).toFixed(1)),
         fat_g: Number(((food.fat_g ?? 0) * ratio).toFixed(1)),
+        fiber_g: food.fiber_g != null ? Number((food.fiber_g * ratio).toFixed(1)) : undefined,
+        sugar_g: food.sugar_g != null ? Number((food.sugar_g * ratio).toFixed(1)) : undefined,
+        saturated_fat_g: food.saturated_fat_g != null ? Number((food.saturated_fat_g * ratio).toFixed(1)) : undefined,
+        sodium_mg: food.sodium_mg != null ? Math.round(food.sodium_mg * ratio) : undefined,
         estimated_grams: grams,
       });
       Alert.alert('✅ Đã lưu!', `${food.name_vi ?? food.name}`);

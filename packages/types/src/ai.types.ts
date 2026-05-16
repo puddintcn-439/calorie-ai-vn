@@ -41,6 +41,10 @@ export interface AIDetectedItem {
   protein_g: number;
   carbs_g: number;
   fat_g: number;
+  fiber_g?: number;
+  sugar_g?: number;
+  saturated_fat_g?: number;
+  sodium_mg?: number;
   confidence: number;        // 0–1
   matched_food_id?: string;  // Nếu match được trong DB
 }

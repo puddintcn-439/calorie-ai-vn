@@ -12,7 +12,7 @@ import { useReminderStore } from '../../store/reminder.store';
 import { useSubscriptionStore } from '../../store/subscription.store';
 import { useLogStore } from '../../store/log.store';
 import { apiClient } from '../../services/api';
-import { User, ActivityLevel, UserGoal, ReminderPreferences, ActivityType, ACTIVITY_MET, SUBSCRIPTION_TIERS, SubscriptionTier } from '@calorie-ai/types';
+import { User, ActivityLevel, UserGoal, HealthFlag, ReminderPreferences, ActivityType, ACTIVITY_MET, SUBSCRIPTION_TIERS, SubscriptionTier } from '@calorie-ai/types';
 import { BodyText, Eyebrow, HeroTitle, ScreenShell, SurfaceCard } from '../../components/ui-shell';
 import { UiButton } from '../../components/ui-button';
 import { UiChip } from '../../components/ui-chip';
@@ -33,6 +33,24 @@ const GOAL_LABELS: Record<UserGoal, string> = {
   gain_muscle: '💪 Tăng cơ',
 };
 
+const HEALTH_FLAG_LABELS: Record<HealthFlag, string> = {
+  pregnant: 'Thai kỳ',
+  breastfeeding: 'Cho con bú',
+  kidney_disease: 'Bệnh thận',
+  diabetes: 'Tiểu đường',
+  eating_disorder_history: 'Rối loạn ăn uống',
+  weight_affecting_medication: 'Thuốc ảnh hưởng cân nặng',
+};
+
+const HEALTH_FLAGS: HealthFlag[] = [
+  'pregnant',
+  'breastfeeding',
+  'kidney_disease',
+  'diabetes',
+  'eating_disorder_history',
+  'weight_affecting_medication',
+];
+
 type BodyStatus = 'underweight' | 'normal' | 'overweight' | 'obese';
 type WeightRecommendation = 'increase' | 'maintain' | 'decrease';
 
@@ -43,6 +61,8 @@ type CalorieAssessment = {
   recommended_goal: UserGoal;
   recommendation_note: string;
   safety_warnings: string[];
+  health_flags: HealthFlag[];
+  medical_review_recommended: boolean;
   target_weight_kg: number;
   weight_delta_kg: number;
   recommended_activity_level: ActivityLevel;
@@ -73,10 +93,10 @@ type ExerciseRoadmapItem = {
 };
 
 const BODY_STATUS_LABELS: Record<BodyStatus, string> = {
-  underweight: 'Gầy',
-  normal: 'Bình thường',
-  overweight: 'Thừa cân',
-  obese: 'Béo phì',
+  underweight: 'Risk: thấp cân',
+  normal: 'Risk thấp',
+  overweight: 'Risk tăng',
+  obese: 'Risk cao',
 };
 
 const WEIGHT_RECOMMENDATION_LABELS: Record<WeightRecommendation, string> = {
@@ -324,9 +344,26 @@ function buildExerciseRoadmap(
   }));
 }
 
+function normaliseHealthFlags(flags: unknown): HealthFlag[] {
+  if (!Array.isArray(flags)) return [];
+  return [...new Set(flags.filter((flag): flag is HealthFlag => HEALTH_FLAGS.includes(flag as HealthFlag)))];
+}
+
+function requiresMedicalReview(age: number | undefined, flags: HealthFlag[]): boolean {
+  return (!!age && age < 18) || flags.length > 0;
+}
+
+function forcesMaintenanceGoal(age: number | undefined, flags: HealthFlag[]): boolean {
+  return (!!age && age < 18)
+    || flags.includes('pregnant')
+    || flags.includes('breastfeeding')
+    || flags.includes('eating_disorder_history');
+}
+
 function buildInstantAssessment(profile: Partial<User>): InstantAssessmentResult {
   const weight = profile.weight_kg;
   const height = profile.height_cm;
+  const healthFlags = normaliseHealthFlags(profile.health_flags);
 
   if (!weight || !height || weight <= 0 || height <= 0) {
     return {
@@ -340,10 +377,26 @@ function buildInstantAssessment(profile: Partial<User>): InstantAssessmentResult
   const healthyMinWeight = round1(18.5 * heightM * heightM);
   const healthyMaxWeight = round1(24.9 * heightM * heightM);
   const safetyWarnings: string[] = [
-    'BMI and calorie targets are wellness estimates, not medical diagnosis.',
+    'BMI là chỉ số screening/risk và mục tiêu calo chỉ là ước tính wellness, không phải chẩn đoán.',
   ];
   if (profile.age && profile.age < 18) {
-    safetyWarnings.push('Under-18 users should use maintenance targets only and work with a qualified clinician or guardian.');
+    safetyWarnings.push('Người dưới 18 tuổi chỉ nên dùng mục tiêu duy trì và cần chuyên gia/người giám hộ theo dõi.');
+    safetyWarnings.push('Ngưỡng BMI người lớn không dùng để chẩn đoán cho trẻ vị thành niên.');
+  }
+  if (healthFlags.includes('pregnant') || healthFlags.includes('breastfeeding')) {
+    safetyWarnings.push('Thai kỳ/cho con bú cần mục tiêu năng lượng và vi chất riêng; app chỉ hiển thị ước tính duy trì tổng quát.');
+  }
+  if (healthFlags.includes('kidney_disease')) {
+    safetyWarnings.push('Bệnh thận có thể cần giới hạn protein, sodium, kali/phosphorus và dịch; hãy dùng mục tiêu theo bác sĩ.');
+  }
+  if (healthFlags.includes('diabetes')) {
+    safetyWarnings.push('Tiểu đường cần kế hoạch carb/đường gắn với thuốc và glucose; các ngưỡng trong app chỉ để theo dõi tổng quát.');
+  }
+  if (healthFlags.includes('eating_disorder_history')) {
+    safetyWarnings.push('Tiền sử/rủi ro rối loạn ăn uống: mục tiêu calo và cân nặng có thể gây hại nếu không có hỗ trợ chuyên môn.');
+  }
+  if (healthFlags.includes('weight_affecting_medication')) {
+    safetyWarnings.push('Một số thuốc ảnh hưởng cảm giác đói, giữ nước hoặc cân nặng; nên xác nhận mục tiêu với người kê đơn.');
   }
 
   let bodyStatus: BodyStatus;
@@ -396,11 +449,11 @@ function buildInstantAssessment(profile: Partial<User>): InstantAssessmentResult
       'Nên hướng đến mức vận động cao dần theo từng tuần, tăng từ nhẹ lên vừa rồi đến nhiều để an toàn.';
   }
 
-  if (profile.age && profile.age < 18) {
+  if (forcesMaintenanceGoal(profile.age, healthFlags)) {
     weightRecommendation = 'maintain';
     recommendedGoal = 'maintain';
     recommendationNote =
-      'Với người dưới 18 tuổi, app chỉ hiển thị ước tính duy trì. Mục tiêu giảm/tăng cân nên có chuyên gia y tế hoặc người giám hộ theo dõi.';
+      'Hồ sơ có yếu tố cần chuyên gia xem lại, nên app chỉ dùng mục tiêu duy trì. Mục tiêu giảm/tăng cân cần được cá nhân hóa bởi chuyên gia.';
   }
 
   const weightDeltaKg = round1(Math.abs(targetWeightKg - weight));
@@ -418,6 +471,8 @@ function buildInstantAssessment(profile: Partial<User>): InstantAssessmentResult
       recommended_goal: recommendedGoal,
       recommendation_note: recommendationNote,
       safety_warnings: safetyWarnings,
+      health_flags: healthFlags,
+      medical_review_recommended: requiresMedicalReview(profile.age, healthFlags),
       target_weight_kg: targetWeightKg,
       weight_delta_kg: weightDeltaKg,
       recommended_activity_level: recommendedActivityLevel,
@@ -465,7 +520,7 @@ function calculateInstantCalorieTargets(
   // Prefer Katch–McArdle if body fat is available on profile
   const bodyFat = (profile as any).body_fat_pct;
   let bmr: number;
-  if (typeof bodyFat === 'number' && bodyFat > 0 && bodyFat < 100) {
+  if (typeof bodyFat === 'number' && bodyFat >= 3 && bodyFat <= 70) {
     const lbm = weight * (1 - bodyFat / 100);
     bmr = 370 + 21.6 * lbm;
   } else {
@@ -521,10 +576,12 @@ export default function ProfileScreen() {
   const highlightLoopRef = React.useRef<Animated.CompositeAnimation | null>(null);
   const basicIncomplete = !profile.weight_kg || !profile.height_cm || !profile.age;
   const isDesktop = width >= 900;
+  const selectedHealthFlags = normaliseHealthFlags(profile.health_flags);
   const instantAssessment = useMemo(() => buildInstantAssessment(profile), [
     profile.weight_kg,
     profile.height_cm,
     profile.age,
+    profile.health_flags,
   ]);
   const assessmentTone = instantAssessment.assessment
     ? BODY_STATUS_TONES[instantAssessment.assessment.body_status]
@@ -649,7 +706,19 @@ export default function ProfileScreen() {
     profile.gender,
     profile.weight_kg,
     profile.height_cm,
+    profile.health_flags,
   ]);
+
+  const toggleHealthFlag = (flag: HealthFlag) => {
+    setProfile((prev) => {
+      const current = normaliseHealthFlags(prev.health_flags);
+      const nextFlags = current.includes(flag)
+        ? current.filter((item) => item !== flag)
+        : [...current, flag];
+
+      return { ...prev, health_flags: nextFlags };
+    });
+  };
 
   const handleSaveProfile = async () => {
     setIsSaving(true);
@@ -668,6 +737,7 @@ export default function ProfileScreen() {
         target_lunch_cal: profile.target_lunch_cal ? Number(profile.target_lunch_cal) : undefined,
         target_dinner_cal: profile.target_dinner_cal ? Number(profile.target_dinner_cal) : undefined,
         target_snack_cal: profile.target_snack_cal ? Number(profile.target_snack_cal) : undefined,
+        health_flags: selectedHealthFlags,
       });
       setProfile(profileRes.data);
 
@@ -806,6 +876,22 @@ export default function ProfileScreen() {
                   <UiChip key={g} label={g === 'male' ? '👨 Nam' : '👩 Nữ'} selected={profile.gender === g} onPress={() => setProfile((p) => ({ ...p, gender: g }))} />
                 ))}
               </View>
+
+              <Text style={styles.label}>Yếu tố sức khỏe cần lưu ý</Text>
+              <Text style={styles.helperText}>
+                Chọn nếu có. App sẽ hạ rủi ro bằng cảnh báo và không tự đưa mục tiêu weight-loss/gain cho các trường hợp nhạy cảm.
+              </Text>
+              <View style={styles.chipRow}>
+                {HEALTH_FLAGS.map((flag) => (
+                  <UiChip
+                    key={flag}
+                    label={HEALTH_FLAG_LABELS[flag]}
+                    selected={selectedHealthFlags.includes(flag)}
+                    onPress={() => toggleHealthFlag(flag)}
+                    style={styles.healthChip}
+                  />
+                ))}
+              </View>
             </>
           )}
         </SurfaceCard>
@@ -840,11 +926,11 @@ export default function ProfileScreen() {
                 >
                   <View style={styles.assessmentTopRow}>
                     <View>
-                      <Text style={[styles.assessmentBmiLabel, { color: assessmentTone?.accent }]}>BMI hiện tại</Text>
+                      <Text style={[styles.assessmentBmiLabel, { color: assessmentTone?.accent }]}>BMI screening</Text>
                       <Text style={[styles.assessmentBmiValue, { color: assessmentTone?.text }]}>{instantAssessment.assessment.bmi}</Text>
                     </View>
                     <View style={styles.assessmentMeta}>
-                      <Text style={styles.assessmentMetaLabel}>Thể trạng</Text>
+                      <Text style={styles.assessmentMetaLabel}>Mức risk</Text>
                       <Text style={[styles.assessmentMetaValue, { color: assessmentTone?.accent }]}> 
                         {BODY_STATUS_LABELS[instantAssessment.assessment.body_status]}
                       </Text>
@@ -874,6 +960,11 @@ export default function ProfileScreen() {
                   </Text>
 
                   <View style={styles.safetyNotice}>
+                    {instantAssessment.assessment.medical_review_recommended && (
+                      <Text style={styles.safetyNoticeText}>
+                        Nên có chuyên gia y tế/dinh dưỡng xem lại mục tiêu trước khi dùng lâu dài.
+                      </Text>
+                    )}
                     {instantAssessment.assessment.safety_warnings.map((warning, index) => (
                       <Text key={`safety-${index}`} style={styles.safetyNoticeText}>
                         {warning}
@@ -1408,6 +1499,7 @@ const styles = StyleSheet.create({
   },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 4 },
   activityChip: { marginBottom: 8 },
+  healthChip: { marginBottom: 6 },
   mealTargetRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',

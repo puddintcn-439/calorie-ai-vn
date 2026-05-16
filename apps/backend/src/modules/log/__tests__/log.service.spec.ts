@@ -56,8 +56,8 @@ describe('LogService.createLog', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 describe('LogService.getDailyLog', () => {
   const logs: FoodLog[] = [
-    { id: '1', user_id: 'u1', quantity: 1, calories: 400, protein_g: 20, carbs_g: 50, fat_g: 10, name: 'A', meal_type: 'lunch', estimated_grams: 300, unit: 'gram', source: 'ai_scan', logged_at: '2026-05-09T12:00:00Z', created_at: '2026-05-09T12:00:00Z' },
-    { id: '2', user_id: 'u1', quantity: 1, calories: 300, protein_g: 15, carbs_g: 35, fat_g: 8, name: 'B', meal_type: 'dinner', estimated_grams: 250, unit: 'gram', source: 'ai_scan', logged_at: '2026-05-09T19:00:00Z', created_at: '2026-05-09T19:00:00Z' },
+    { id: '1', user_id: 'u1', quantity: 1, calories: 400, protein_g: 20, carbs_g: 50, fat_g: 10, fiber_g: 7, sugar_g: 12, saturated_fat_g: 2, sodium_mg: 600, name: 'A', meal_type: 'lunch', estimated_grams: 300, unit: 'gram', source: 'ai_scan', logged_at: '2026-05-09T12:00:00Z', created_at: '2026-05-09T12:00:00Z' },
+    { id: '2', user_id: 'u1', quantity: 1, calories: 300, protein_g: 15, carbs_g: 35, fat_g: 8, fiber_g: 4, sugar_g: 8, saturated_fat_g: 3, sodium_mg: 500, name: 'B', meal_type: 'dinner', estimated_grams: 250, unit: 'gram', source: 'ai_scan', logged_at: '2026-05-09T19:00:00Z', created_at: '2026-05-09T19:00:00Z' },
   ];
 
   it('calculates totals correctly and uses user target', async () => {
@@ -88,6 +88,17 @@ describe('LogService.getDailyLog', () => {
     expect(daily.total_protein_g).toBe(35);
     expect(daily.total_carbs_g).toBe(85);
     expect(daily.total_fat_g).toBe(18);
+    expect(daily.total_fiber_g).toBe(11);
+    expect(daily.total_sugar_g).toBe(20);
+    expect(daily.total_saturated_fat_g).toBe(5);
+    expect(daily.total_sodium_mg).toBe(1100);
+    expect(daily.nutrition_quality_coverage).toEqual({
+      total_items: 2,
+      fiber_items: 2,
+      sugar_items: 2,
+      saturated_fat_items: 2,
+      sodium_items: 2,
+    });
     expect(daily.target_calories).toBe(2000);
     expect(daily.remaining_calories).toBe(1300);
     expect(daily.logs).toHaveLength(2);
@@ -187,8 +198,8 @@ describe('LogService.deleteLog', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 describe('LogService.createSavedMeal', () => {
   const items: SavedMealItem[] = [
-    { name: 'Rice', name_vi: 'Cơm', calories: 200, protein_g: 4, carbs_g: 44, fat_g: 1, estimated_grams: 150 },
-    { name: 'Chicken', name_vi: 'Gà', calories: 250, protein_g: 30, carbs_g: 0, fat_g: 10, estimated_grams: 120 },
+    { name: 'Rice', name_vi: 'Cơm', calories: 200, protein_g: 4, carbs_g: 44, fat_g: 1, fiber_g: 2, sugar_g: 1, saturated_fat_g: 0.2, sodium_mg: 5, estimated_grams: 150 },
+    { name: 'Chicken', name_vi: 'Gà', calories: 250, protein_g: 30, carbs_g: 0, fat_g: 10, fiber_g: 0, sugar_g: 0, saturated_fat_g: 3, sodium_mg: 90, estimated_grams: 120 },
   ];
 
   it('inserts with correct computed totals', async () => {
@@ -211,6 +222,10 @@ describe('LogService.createSavedMeal', () => {
       total_protein_g: 34,
       total_carbs_g: 44,
       total_fat_g: 11,
+      total_fiber_g: 2,
+      total_sugar_g: 1,
+      total_saturated_fat_g: 3.2,
+      total_sodium_mg: 95,
     });
     expect(result.id).toBe('sm1');
   });
@@ -259,6 +274,10 @@ describe('LogService.logSavedMeal', () => {
         protein_g: 4,
         carbs_g: 44,
         fat_g: 1,
+        fiber_g: 2,
+        sugar_g: 1,
+        saturated_fat_g: 0.2,
+        sodium_mg: 5,
         estimated_grams: 150,
       },
       {
@@ -268,6 +287,10 @@ describe('LogService.logSavedMeal', () => {
         protein_g: 30,
         carbs_g: 0,
         fat_g: 10,
+        fiber_g: 0,
+        sugar_g: 0,
+        saturated_fat_g: 3,
+        sodium_mg: 90,
         estimated_grams: 120,
       },
     ],
@@ -279,6 +302,7 @@ describe('LogService.logSavedMeal', () => {
       { id: 'l2', calories: 250 },
     ];
     let createIndex = 0;
+    const insertedLogs: Record<string, unknown>[] = [];
 
     const supabase = makeSupabase((table: string) => {
       if (table === 'saved_meals') {
@@ -292,7 +316,15 @@ describe('LogService.logSavedMeal', () => {
 
       if (table === 'food_logs') {
         return {
-          insert: jest.fn().mockReturnThis(),
+          insert: jest.fn().mockImplementation((row: Record<string, unknown>) => {
+            insertedLogs.push(row);
+            return {
+              select: jest.fn().mockReturnThis(),
+              single: jest.fn().mockImplementation(() =>
+                Promise.resolve({ data: createdLogs[createIndex++], error: null }),
+              ),
+            };
+          }),
           select: jest.fn().mockReturnThis(),
           single: jest.fn().mockImplementation(() =>
             Promise.resolve({ data: createdLogs[createIndex++], error: null }),
@@ -308,6 +340,8 @@ describe('LogService.logSavedMeal', () => {
 
     expect(result).toHaveLength(2);
     expect(result.map((x) => x.id)).toEqual(['l1', 'l2']);
+    expect(insertedLogs[0]).toMatchObject({ fiber_g: 2, sugar_g: 1, saturated_fat_g: 0.2, sodium_mg: 5 });
+    expect(insertedLogs[1]).toMatchObject({ fiber_g: 0, sugar_g: 0, saturated_fat_g: 3, sodium_mg: 90 });
   });
 
   it('throws when saved meal is missing', async () => {

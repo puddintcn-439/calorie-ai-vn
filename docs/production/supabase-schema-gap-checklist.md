@@ -28,6 +28,9 @@ The following tables exist in the repository migrations but are not visible in t
 - `user_coaching_insights` — migration: `supabase/migrations/012_coach_insights.sql`
 - `user_coaching_summaries` — migration: `supabase/migrations/012_coach_insights.sql`
 - `body_progress` — migration: `supabase/migrations/013_body_progress.sql`
+- `user_daily_roadmap` — migration: `supabase/migrations/014_user_daily_roadmap.sql`
+- `users.health_flags` column/constraint — migration: `supabase/migrations/015_user_health_flags.sql`
+- `foods.saturated_fat_g`, quality nutrient columns on `food_logs`, and saved-meal quality totals — migration: `supabase/migrations/016_food_quality_nutrients.sql`
 
 ## Existing Tables Already Present
 
@@ -48,6 +51,8 @@ If the missing tables are not migrated, the following features are incomplete or
 - Activity sync metadata
 - Behavioral coaching summaries and insights
 - Body progress tracking
+- Profile health guardrails and medical-review warnings
+- Today quality nutrient tracking for fiber, sodium, total sugar, and saturated fat
 
 ## Recommended Migration Order
 
@@ -69,10 +74,13 @@ Run in this order to minimize dependency issues:
 14. `011_user_context_events.sql`
 15. `012_coach_insights.sql`
 16. `013_body_progress.sql`
+17. `014_user_daily_roadmap.sql`
+18. `015_user_health_flags.sql`
+19. `016_food_quality_nutrients.sql`
 
 ## Verification Steps After Migration
 
-- Confirm the Supabase table list shows all 16 public tables.
+- Confirm the Supabase table list and `users` columns match the repository migrations.
 - Confirm RLS policies exist for user-owned data.
 - Confirm the backend health endpoint still passes DB checks.
 - Run backend tests against the migrated database.

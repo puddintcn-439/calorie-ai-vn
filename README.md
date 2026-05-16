@@ -133,10 +133,12 @@ docker compose up --build
 ## Health And Nutrition Guardrails
 
 - Calorie targets use Mifflin-St Jeor by default and Katch-McArdle only when body-fat percentage is realistic.
-- BMI classification defaults to adult global cutoffs.
+- BMI uses adult global cutoffs and is presented as screening/risk, not diagnosis.
 - Weight-loss targets are blocked for underweight users.
-- Users under 18 receive maintenance estimates only.
-- Targets include safety warnings and should not be treated as medical advice.
+- Users under 18, pregnancy/breastfeeding profiles, and eating-disorder risk profiles receive maintenance estimates only.
+- Kidney disease, diabetes, and weight-affecting medication flags trigger medical-review warnings.
+- Targets include general fiber, sodium, free/added sugar, and saturated-fat goals; they are not disease-specific medical advice.
+- Today tracks logged fiber, sodium, total sugar, and saturated fat when the food source provides those nutrients, with a coverage note when data is missing.
 
 ## Production Notes
 
@@ -149,6 +151,6 @@ docker compose up --build
 
 - Validate and seed food data across global staples, packaged foods, and Vietnamese dishes.
 - Add a real speech-to-text provider before presenting voice recording as automatic transcription.
-- Expand nutrition goals beyond calories/macros: fiber, sodium, sugar, saturated fat, and key micronutrients.
+- Expand actual intake tracking from fiber, sodium, total sugar, and saturated fat into broader micronutrients.
 - Add allergy/diet preference filters to recommendations.
 - Run native QA on HealthKit, Health Connect, barcode, receipt, and EAS preview builds.
