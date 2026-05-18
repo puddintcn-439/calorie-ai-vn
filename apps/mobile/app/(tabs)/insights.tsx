@@ -49,7 +49,7 @@ export default function InsightsScreen() {
       <ScreenShell>
         <View style={styles.centerContainer}>
           <ActivityIndicator size="large" color={theme.colors.accentMint} />
-          <Text style={styles.loadingText}>Đang tải dữ liệu tuần...</Text>
+          <Text style={styles.loadingText} i18nKey="screen.tabs.insights.text.001" />
         </View>
       </ScreenShell>
     );
@@ -59,9 +59,9 @@ export default function InsightsScreen() {
     return (
       <ScreenShell>
         <View style={styles.centerContainer}>
-          <Text style={styles.errorText}>Không thể tải thông tin tuần.</Text>
+          <Text style={styles.errorText} i18nKey="screen.tabs.insights.text.002" />
           <TouchableOpacity style={styles.retryButton} onPress={() => fetchWeeklyInsights()}>
-            <Text style={styles.retryButtonText}>Thử lại</Text>
+            <Text style={styles.retryButtonText} i18nKey="screen.tabs.insights.text.003" />
           </TouchableOpacity>
         </View>
       </ScreenShell>
@@ -81,31 +81,31 @@ export default function InsightsScreen() {
         {/* ─── Weekly Summary Cards ─── */}
         <View style={styles.summaryGrid}>
           <SurfaceCard style={styles.summaryCard}>
-            <Text style={styles.summaryLabel}>Calo trung bình/ngày</Text>
+            <Text style={styles.summaryLabel} i18nKey="screen.tabs.insights.text.004" />
             <Text style={styles.summaryValue}>{data.average_calories_per_day}</Text>
-            <Text style={styles.summaryUnit}>kcal</Text>
+            <Text style={styles.summaryUnit} i18nKey="screen.tabs.insights.text.005" />
           </SurfaceCard>
 
           <SurfaceCard style={styles.summaryCard}>
-            <Text style={styles.summaryLabel}>Độ tuân thủ</Text>
+            <Text style={styles.summaryLabel} i18nKey="screen.tabs.insights.text.006" />
             <Text style={styles.summaryValue}>{data.weekly_adherence_percentage}%</Text>
             {data.weekly_adherence_percentage >= 90 && data.weekly_adherence_percentage <= 110 ? (
-              <Text style={styles.summaryUnitGood}>✅ Tốt</Text>
+              <Text style={styles.summaryUnitGood} i18nKey="screen.tabs.insights.text.007" />
             ) : (
-              <Text style={styles.summaryUnit}>Mục tiêu: 100%</Text>
+              <Text style={styles.summaryUnit} i18nKey="screen.tabs.insights.text.008" />
             )}
           </SurfaceCard>
         </View>
 
         <View style={styles.summaryGrid}>
           <SurfaceCard style={styles.summaryCard}>
-            <Text style={styles.summaryLabel}>Ngày đạt mục tiêu</Text>
+            <Text style={styles.summaryLabel} i18nKey="screen.tabs.insights.text.009" />
             <Text style={styles.summaryValue}>{data.days_on_target}</Text>
-            <Text style={styles.summaryUnit}>/ 7 ngày</Text>
+            <Text style={styles.summaryUnit} i18nKey="screen.tabs.insights.text.010" />
           </SurfaceCard>
 
           <SurfaceCard style={styles.summaryCard}>
-            <Text style={styles.summaryLabel}>Xu hướng vs tuần trước</Text>
+            <Text style={styles.summaryLabel} i18nKey="screen.tabs.insights.text.011" />
             <Text style={[styles.summaryValue, data.trend_vs_last_week <= 0 ? styles.trendPositive : styles.trendNegative]}>
               {data.trend_vs_last_week > 0 ? '+' : ''}{data.trend_vs_last_week}%
             </Text>
@@ -116,7 +116,7 @@ export default function InsightsScreen() {
         </View>
 
         {/* ─── Daily Breakdown ─── */}
-        <Text style={styles.sectionTitle}>Chi tiết từng ngày</Text>
+        <Text style={styles.sectionTitle} i18nKey="screen.tabs.insights.text.012" />
         <View style={styles.dailyGrid}>
           {data.daily_insights.map((day, idx) => (
             <TouchableOpacity
@@ -158,26 +158,26 @@ export default function InsightsScreen() {
 
             <View style={styles.dayDetailContent}>
               <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Calorie</Text>
+                <Text style={styles.detailLabel} i18nKey="screen.tabs.insights.text.013" />
                 <Text style={styles.detailValue}>
                   {selectedDayData.calories} / {selectedDayData.calorie_target} kcal
                 </Text>
               </View>
 
               <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Độ tuân thủ</Text>
+                <Text style={styles.detailLabel} i18nKey="screen.tabs.insights.text.006" />
                 <Text style={[styles.detailValue, selectedDayData.adherence_percentage >= 90 && selectedDayData.adherence_percentage <= 110 ? styles.goodValue : styles.neutralValue]}>
                   {selectedDayData.adherence_percentage}%
                 </Text>
               </View>
 
               <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Số bữa ăn</Text>
+                <Text style={styles.detailLabel} i18nKey="screen.tabs.insights.text.014" />
                 <Text style={styles.detailValue}>{selectedDayData.meal_count}</Text>
               </View>
 
               <View style={styles.detailRow}>
-                <Text style={styles.detailLabel}>Macro (g)</Text>
+                <Text style={styles.detailLabel} i18nKey="screen.tabs.insights.text.015" />
                 <Text style={styles.detailValue}>
                   P: {Math.round(selectedDayData.protein_g)} | C: {Math.round(selectedDayData.carbs_g)} | F: {Math.round(selectedDayData.fat_g)}
                 </Text>
@@ -187,50 +187,50 @@ export default function InsightsScreen() {
         )}
 
         {/* ─── Macro Breakdown ─── */}
-        <Text style={styles.sectionTitle}>Macro - Tuần này</Text>
+        <Text style={styles.sectionTitle} i18nKey="screen.tabs.insights.text.016" />
         <SurfaceCard style={styles.macroCard}>
           <View style={styles.macroCircle}>
             <Text style={styles.macroPercentage}>{data.macro_breakdown.protein_percentage}%</Text>
-            <Text style={styles.macroLabel}>Protein</Text>
+            <Text style={styles.macroLabel} i18nKey="screen.tabs.insights.text.017" />
             <Text style={styles.macroValue}>{data.macro_breakdown.protein_grams}g</Text>
           </View>
 
           <View style={styles.macroCircle}>
             <Text style={styles.macroPercentage}>{data.macro_breakdown.carbs_percentage}%</Text>
-            <Text style={styles.macroLabel}>Carbs</Text>
+            <Text style={styles.macroLabel} i18nKey="screen.tabs.insights.text.018" />
             <Text style={styles.macroValue}>{data.macro_breakdown.carbs_grams}g</Text>
           </View>
 
           <View style={styles.macroCircle}>
             <Text style={styles.macroPercentage}>{data.macro_breakdown.fat_percentage}%</Text>
-            <Text style={styles.macroLabel}>Fat</Text>
+            <Text style={styles.macroLabel} i18nKey="screen.tabs.insights.text.019" />
             <Text style={styles.macroValue}>{data.macro_breakdown.fat_grams}g</Text>
           </View>
         </SurfaceCard>
 
         {/* ─── Meal Type Breakdown ─── */}
-        <Text style={styles.sectionTitle}>Phân bổ theo bữa</Text>
+        <Text style={styles.sectionTitle} i18nKey="screen.tabs.insights.text.020" />
         <SurfaceCard style={styles.mealBreakdownCard}>
           <MealBreakdownRow
-            label="🌅 Sáng"
+            label="screen.tabs.insights.label.001"
             calories={data.meal_breakdown.breakfast_calories}
             count={data.meal_breakdown.breakfast_count}
             total={data.weekly_calories_total}
           />
           <MealBreakdownRow
-            label="🌤️ Trưa"
+            label="screen.tabs.insights.label.002"
             calories={data.meal_breakdown.lunch_calories}
             count={data.meal_breakdown.lunch_count}
             total={data.weekly_calories_total}
           />
           <MealBreakdownRow
-            label="🌙 Tối"
+            label="screen.tabs.insights.label.003"
             calories={data.meal_breakdown.dinner_calories}
             count={data.meal_breakdown.dinner_count}
             total={data.weekly_calories_total}
           />
           <MealBreakdownRow
-            label="🍿 Vặt"
+            label="screen.tabs.insights.label.004"
             calories={data.meal_breakdown.snack_calories}
             count={data.meal_breakdown.snack_count}
             total={data.weekly_calories_total}
@@ -238,27 +238,27 @@ export default function InsightsScreen() {
         </SurfaceCard>
 
         {/* ─── Highlights ─── */}
-        <Text style={styles.sectionTitle}>Điểm nổi bật</Text>
+        <Text style={styles.sectionTitle} i18nKey="screen.tabs.insights.text.021" />
         <SurfaceCard style={styles.highlightCard}>
           <View style={styles.highlightRow}>
-            <Text style={styles.highlightLabel}>📈 Ngày nhiều calo nhất</Text>
+            <Text style={styles.highlightLabel} i18nKey="screen.tabs.insights.text.022" />
             <Text style={styles.highlightValue}>{data.best_day_calories} kcal</Text>
           </View>
           <View style={styles.highlightRow}>
-            <Text style={styles.highlightLabel}>📉 Ngày ít calo nhất</Text>
+            <Text style={styles.highlightLabel} i18nKey="screen.tabs.insights.text.023" />
             <Text style={styles.highlightValue}>{data.worst_day_calories} kcal</Text>
           </View>
           <View style={styles.highlightRow}>
-            <Text style={styles.highlightLabel}>🍽️ Tổng bữa ăn</Text>
+            <Text style={styles.highlightLabel} i18nKey="screen.tabs.insights.text.024" />
             <Text style={styles.highlightValue}>{data.total_meals_logged} bữa</Text>
           </View>
         </SurfaceCard>
 
         {/* ─── Weekly Plan Surface (Sprint 2) ─── */}
-        <Text style={styles.sectionTitle}>Gợi ý meal plan tuần</Text>
+        <Text style={styles.sectionTitle} i18nKey="screen.tabs.insights.text.025" />
         <SurfaceCard style={styles.planCard}>
           <View style={styles.planHeader}>
-            <Text style={styles.planTitle}>Khuyến nghị cá nhân hóa</Text>
+            <Text style={styles.planTitle} i18nKey="screen.tabs.insights.text.026" />
             {isLoadingRecommendations ? (
               <ActivityIndicator size="small" color={theme.colors.accentMint} />
             ) : null}
@@ -289,12 +289,12 @@ export default function InsightsScreen() {
               ))}
 
               <View style={styles.planSuggestionBox}>
-                <Text style={styles.planSuggestionTitle}>Gợi ý tuần</Text>
+                <Text style={styles.planSuggestionTitle} i18nKey="screen.tabs.insights.text.027" />
                 <Text style={styles.planSuggestionText}>{recommendations.weekly_insights.suggestion}</Text>
               </View>
             </>
           ) : (
-            <Text style={styles.planEmpty}>Chưa có dữ liệu recommendation cho tuần này.</Text>
+            <Text style={styles.planEmpty} i18nKey="screen.tabs.insights.text.028" />
           )}
         </SurfaceCard>
 

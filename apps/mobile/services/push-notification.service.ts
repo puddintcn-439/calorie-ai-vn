@@ -1,18 +1,33 @@
-import * as Notifications from 'expo-notifications';
+import type * as ExpoNotifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { apiClient } from './api';
 
-// Configure notification behavior
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
+type NotificationsModule = typeof ExpoNotifications;
+
+let notificationsModule: NotificationsModule | null | undefined;
+
+function getNotificationsModule(): NotificationsModule | null {
+  if (Platform.OS === 'web') {
+    return null;
+  }
+
+  if (notificationsModule === undefined) {
+    // Avoid loading expo-notifications on web; it registers unsupported web listeners at module load time.
+    notificationsModule = require('expo-notifications') as NotificationsModule;
+    notificationsModule.setNotificationHandler({
+      handleNotification: async () => ({
+        shouldShowAlert: true,
+        shouldPlaySound: true,
+        shouldSetBadge: true,
+        shouldShowBanner: true,
+        shouldShowList: true,
+      }),
+    });
+  }
+
+  return notificationsModule;
+}
 
 class PushNotificationService {
   private getExpoProjectId(): string | null {
@@ -26,8 +41,9 @@ class PushNotificationService {
    */
   async initializePushNotifications(): Promise<string | null> {
     try {
+      const Notifications = getNotificationsModule();
       // Web push needs VAPID setup; skip token registration on web to avoid noisy runtime errors.
-      if (Platform.OS === 'web') {
+      if (!Notifications) {
         return null;
       }
 
@@ -86,6 +102,11 @@ class PushNotificationService {
     data?: Record<string, any>;
   }) {
     try {
+      const Notifications = getNotificationsModule();
+      if (!Notifications) {
+        return;
+      }
+
       await Notifications.scheduleNotificationAsync({
         content: {
           title: options.title,
@@ -111,6 +132,11 @@ class PushNotificationService {
     data?: Record<string, any>;
   }) {
     try {
+      const Notifications = getNotificationsModule();
+      if (!Notifications) {
+        return;
+      }
+
       const [hours, minutes] = options.time.split(':').map(Number);
       const trigger = new Date();
       trigger.setHours(hours, minutes, 0);
@@ -152,6 +178,11 @@ class PushNotificationService {
     data?: Record<string, any>;
   }) {
     try {
+      const Notifications = getNotificationsModule();
+      if (!Notifications) {
+        return;
+      }
+
       const [hours, minutes] = options.time.split(':').map(Number);
 
       // Schedule daily notification
@@ -182,6 +213,11 @@ class PushNotificationService {
    */
   async cancelAllNotifications() {
     try {
+      const Notifications = getNotificationsModule();
+      if (!Notifications) {
+        return;
+      }
+
       await Notifications.cancelAllScheduledNotificationsAsync();
       console.log('[Push] Cancelled all notifications');
     } catch (error) {
@@ -192,7 +228,12 @@ class PushNotificationService {
   /**
    * Add notification response listener (when user taps notification)
    */
-  onNotificationResponse(callback: (response: Notifications.NotificationResponse) => void) {
+  onNotificationResponse(callback: (response: ExpoNotifications.NotificationResponse) => void) {
+    const Notifications = getNotificationsModule();
+    if (!Notifications) {
+      return { remove: () => {} };
+    }
+
     const subscription = Notifications.addNotificationResponseReceivedListener(callback);
     return subscription;
   }

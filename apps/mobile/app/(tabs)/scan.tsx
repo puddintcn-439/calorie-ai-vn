@@ -150,8 +150,8 @@ export default function ScanScreen() {
       setEditableItems([]);
       setScanNotice('AI đang bận do quota/rate limit. Vui lòng thử lại sau vài phút.');
       Alert.alert(
-        'AI đang bận',
-        'Hệ thống AI đang chạm giới hạn tạm thời (quota/rate limit). Vui lòng thử lại sau vài phút.',
+        'screen.tabs.scan.alert.001',
+        'screen.tabs.scan.alert.002',
       );
       return;
     }
@@ -271,7 +271,7 @@ export default function ScanScreen() {
       if (!voicePermissionGranted) {
         const granted = await requestMicPermission();
         if (!granted) {
-          Alert.alert('Lỗi', 'Cần quyền truy cập microphone để ghi âm');
+          Alert.alert('screen.tabs.scan.alert.003', 'screen.tabs.scan.alert.004');
           return;
         }
       }
@@ -300,7 +300,7 @@ export default function ScanScreen() {
       (window as any).__voiceRecordingInterval = durationInterval;
     } catch (error) {
       console.error('Lỗi bắt đầu ghi âm:', error);
-      Alert.alert('Lỗi', 'Không thể bắt đầu ghi âm');
+      Alert.alert('screen.tabs.scan.alert.005', 'screen.tabs.scan.alert.006');
     }
   };
 
@@ -322,20 +322,20 @@ export default function ScanScreen() {
       if (uri) {
         setVoiceRecordingNote(`Đã ghi âm ${recordingDuration}s. Bản hiện tại chưa tự chuyển giọng nói thành chữ, hãy nhập hoặc dán nội dung bữa ăn bên dưới để phân tích.`);
         Alert.alert(
-          'Đã ghi âm',
-          'Bản hiện tại chưa có speech-to-text tự động. Hãy nhập hoặc dán nội dung bữa ăn để AI phân tích.',
+          'screen.tabs.scan.alert.007',
+          'screen.tabs.scan.alert.008',
         );
       }
     } catch (error) {
       console.error('Lỗi dừng ghi âm:', error);
-      Alert.alert('Lỗi', 'Không thể dừng ghi âm');
+      Alert.alert('screen.tabs.scan.alert.009', 'screen.tabs.scan.alert.010');
       setIsRecording(false);
     }
   };
 
   const handleCameraCapture = async () => {
     const perm = await ImagePicker.requestCameraPermissionsAsync();
-    if (!perm.granted) { Alert.alert('Cần quyền truy cập camera'); return; }
+    if (!perm.granted) { Alert.alert('screen.tabs.scan.alert.011'); return; }
     const result = await ImagePicker.launchCameraAsync({ mediaTypes: IMAGE_MEDIA_TYPES, quality: 0.8 });
     if (!result.canceled) await runImageScan(result.assets[0].uri);
   };
@@ -362,7 +362,7 @@ export default function ScanScreen() {
     catch {
       void telemetryService.emitLogFailed('image', 'scan_api_error', Date.now() - startedAt);
       setScanNotice('Không thể phân tích ảnh lúc này. Vui lòng thử lại sau ít phút.');
-      Alert.alert('Lỗi', 'Không thể phân tích ảnh.');
+      Alert.alert('screen.tabs.scan.alert.012', 'screen.tabs.scan.alert.013');
     }
     finally { setIsScanning(false); }
   };
@@ -385,7 +385,7 @@ export default function ScanScreen() {
     catch {
       void telemetryService.emitLogFailed('text', 'scan_api_error', Date.now() - startedAt);
       setScanNotice('Không thể phân tích mô tả lúc này. Vui lòng thử lại sau ít phút.');
-      Alert.alert('Lỗi', 'Không thể phân tích.');
+      Alert.alert('screen.tabs.scan.alert.014', 'screen.tabs.scan.alert.015');
     }
     finally { setIsScanning(false); }
   };
@@ -415,7 +415,7 @@ export default function ScanScreen() {
     catch {
       void telemetryService.emitLogFailed('voice', 'scan_api_error', Date.now() - startedAt);
       setScanNotice('Không thể phân tích giọng nói lúc này. Vui lòng thử lại sau ít phút.');
-      Alert.alert('Lỗi', 'Không thể phân tích giọng nói.');
+      Alert.alert('screen.tabs.scan.alert.016', 'screen.tabs.scan.alert.017');
     }
     finally { setIsScanning(false); }
   };
@@ -442,14 +442,14 @@ export default function ScanScreen() {
     catch {
       void telemetryService.emitLogFailed('receipt', 'scan_api_error', Date.now() - startedAt);
       setScanNotice('Không thể phân tích hóa đơn lúc này. Vui lòng thử lại sau ít phút.');
-      Alert.alert('Lỗi', 'Không thể phân tích hóa đơn.');
+      Alert.alert('screen.tabs.scan.alert.018', 'screen.tabs.scan.alert.019');
     }
     finally { setIsReceiptScanning(false); }
   };
 
   const handleReceiptCapture = async () => {
     const perm = await ImagePicker.requestCameraPermissionsAsync();
-    if (!perm.granted) { Alert.alert('Cần quyền truy cập camera'); return; }
+    if (!perm.granted) { Alert.alert('screen.tabs.scan.alert.020'); return; }
     const result = await ImagePicker.launchCameraAsync({ mediaTypes: IMAGE_MEDIA_TYPES, quality: 0.8 });
     if (!result.canceled) await runReceiptScan(result.assets[0].uri);
   };
@@ -466,8 +466,8 @@ export default function ScanScreen() {
       const summary = currentItems.map((i) => `- ${i.name_vi ?? i.name}: ${i.calories}kcal, ${i.estimated_grams}g`).join('\n');
       const refined = await refineScan(summary, refineContext.trim(), scanResult.scan_id);
       if (refined.success && refined.items.length > 0) { applyScanResult(refined); setRefineContext(''); }
-      else Alert.alert('Không thể điều chỉnh', 'AI không hiểu thông tin bổ sung. Thử lại!');
-    } catch { Alert.alert('Lỗi', 'Không thể phân tích lại.'); }
+      else Alert.alert('screen.tabs.scan.alert.021', 'screen.tabs.scan.alert.022');
+    } catch { Alert.alert('screen.tabs.scan.alert.023', 'screen.tabs.scan.alert.024'); }
     finally { setIsRefining(false); }
   };
 
@@ -496,7 +496,7 @@ export default function ScanScreen() {
         icon: 'checkmark-circle',
       });
       setTimeout(() => router.replace('/'), 850);
-    } catch { Alert.alert('Lỗi', 'Không thể lưu log'); }
+    } catch { Alert.alert('screen.tabs.scan.alert.025', 'screen.tabs.scan.alert.026'); }
   };
 
   const handleSaveAsMeal = async () => {
@@ -523,7 +523,7 @@ export default function ScanScreen() {
           body: `"${name}" đã sẵn sàng để log nhanh.`,
           icon: 'bookmark',
         });
-      } catch { Alert.alert('Lỗi', 'Không thể lưu bữa ăn.'); }
+      } catch { Alert.alert('screen.tabs.scan.alert.027', 'screen.tabs.scan.alert.028'); }
       finally { setIsSavingMeal(false); }
     }, 'plain-text');
   };
@@ -532,7 +532,7 @@ export default function ScanScreen() {
     if (barcodeScanned) return;
     setBarcodeScanned(true); setIsScanning(true);
     try { setBarcodeResult((await apiClient.get(`/food/barcode/${barcode}`)).data); }
-    catch { Alert.alert('Không tìm thấy', 'Sản phẩm chưa có trong CSDL.'); setBarcodeScanned(false); }
+    catch { Alert.alert('screen.tabs.scan.alert.029', 'screen.tabs.scan.alert.030'); setBarcodeScanned(false); }
     finally { setIsScanning(false); }
   };
 
@@ -566,7 +566,7 @@ export default function ScanScreen() {
         icon: 'checkmark-circle',
       });
       setTimeout(() => router.replace('/'), 850);
-    } catch { Alert.alert('Lỗi', 'Không thể lưu log'); }
+    } catch { Alert.alert('screen.tabs.scan.alert.031', 'screen.tabs.scan.alert.032'); }
   };
 
   const handleSearchFoods = async () => {
@@ -577,7 +577,7 @@ export default function ScanScreen() {
       const res = await apiClient.get<Food[]>(`/food/search?q=${encodeURIComponent(q)}`);
       setSearchResults(res.data ?? []);
     } catch {
-      Alert.alert('Lỗi', 'Không thể tìm món ăn lúc này.');
+      Alert.alert('screen.tabs.scan.alert.033', 'screen.tabs.scan.alert.034');
     } finally {
       setIsSearching(false);
     }
@@ -606,7 +606,7 @@ export default function ScanScreen() {
         icon: 'checkmark-circle',
       });
     } catch {
-      Alert.alert('Lỗi', 'Không thể lưu món ăn tìm kiếm.');
+      Alert.alert('screen.tabs.scan.alert.035', 'screen.tabs.scan.alert.036');
     }
   };
 
@@ -616,9 +616,9 @@ export default function ScanScreen() {
     <ScreenShell>
         <VisualHeroCard
           imageSource={scanHeroIllustration}
-          eyebrow="Quét món"
-          title="Log món ăn nhanh hơn."
-          body="Chụp, nói hoặc nhập món Việt trong vài giây."
+          eyebrow="screen.tabs.scan.eyebrow.001"
+          title="screen.tabs.scan.title.001"
+          body="screen.tabs.scan.body.001"
         />
 
         {/* Mode Tabs */}
@@ -647,7 +647,7 @@ export default function ScanScreen() {
               motion="float"
               active={showMoreModes || SECONDARY_INPUT_MODES.includes(mode)}
             />
-            <Text style={[styles.modeTabText, (showMoreModes || SECONDARY_INPUT_MODES.includes(mode)) && styles.modeTabTextActive]}>Khác</Text>
+            <Text style={[styles.modeTabText, (showMoreModes || SECONDARY_INPUT_MODES.includes(mode)) && styles.modeTabTextActive]} i18nKey="screen.tabs.scan.text.001" />
           </TouchableOpacity>
         </View>
         {(showMoreModes || SECONDARY_INPUT_MODES.includes(mode)) && (
@@ -672,7 +672,7 @@ export default function ScanScreen() {
 
         {scanNotice ? (
           <SurfaceCard style={styles.scanNoticeCard}>
-            <Text style={styles.scanNoticeTitle}>⚠️ Tạm thời chưa có kết quả AI</Text>
+            <Text style={styles.scanNoticeTitle} i18nKey="screen.tabs.scan.text.002" />
             <Text style={styles.scanNoticeBody}>{scanNotice}</Text>
           </SurfaceCard>
         ) : null}
@@ -685,11 +685,11 @@ export default function ScanScreen() {
                 style={styles.textInput}
                 value={searchQuery}
                 onChangeText={setSearchQuery}
-                placeholder="VD: pho bo, bun cha, com ga"
+                placeholder="screen.tabs.scan.placeholder.001"
                 placeholderTextColor={theme.colors.textDisabled}
               />
               <TouchableOpacity style={styles.analyzeButton} onPress={handleSearchFoods}>
-                <Text style={styles.analyzeButtonText}>Tìm món</Text>
+                <Text style={styles.analyzeButtonText} i18nKey="screen.tabs.scan.text.003" />
               </TouchableOpacity>
             </View>
             <MealPicker selected={selectedMeal} onSelect={setSelectedMeal} />
@@ -697,7 +697,7 @@ export default function ScanScreen() {
             {isSearching ? (
               <View style={styles.scanningContainer}>
                 <ActivityIndicator size="large" color={theme.colors.success} />
-                <Text style={styles.scanningText}>Đang tìm trong cơ sở dữ liệu...</Text>
+                <Text style={styles.scanningText} i18nKey="screen.tabs.scan.text.004" />
               </View>
             ) : null}
 
@@ -710,7 +710,7 @@ export default function ScanScreen() {
                 <Text style={styles.resultDetail}>Khẩu phần mặc định: {food.serving_size_g ?? 100}g</Text>
                 <Text style={styles.resultMacros}>P: {food.protein_g ?? 0}g  C: {food.carbs_g ?? 0}g  F: {food.fat_g ?? 0}g</Text>
                 <TouchableOpacity style={styles.saveButton} onPress={() => handleLogSearchedFood(food)}>
-                  <Text style={styles.saveButtonText}>+ Log món này</Text>
+                  <Text style={styles.saveButtonText} i18nKey="screen.tabs.scan.text.005" />
                 </TouchableOpacity>
               </SurfaceCard>
             ))}
@@ -719,8 +719,8 @@ export default function ScanScreen() {
               <EmptyState
                 imageSource={scanHeroIllustration}
                 icon="🔎"
-                title="Chưa tìm thấy món phù hợp"
-                description="Thử tên món đơn giản hơn hoặc đổi sang từ khóa phổ biến."
+                title="screen.tabs.scan.title.002"
+                description="screen.tabs.scan.description.001"
               />
             ) : null}
           </View>
@@ -731,26 +731,26 @@ export default function ScanScreen() {
           <View style={styles.barcodeContainer}>
             {Platform.OS === 'web' || !CameraView ? (
               <SurfaceCard style={styles.manualBarcodeCard}>
-                <Text style={styles.manualBarcodeTitle}>Nhập mã vạch</Text>
-                <Text style={styles.manualBarcodeHint}>Bản web dùng nhập thủ công để tránh phụ thuộc camera/CDN. App native vẫn dùng camera để quét trực tiếp.</Text>
+                <Text style={styles.manualBarcodeTitle} i18nKey="screen.tabs.scan.text.006" />
+                <Text style={styles.manualBarcodeHint} i18nKey="screen.tabs.scan.text.007" />
                 <View style={styles.manualBarcodeRow}>
                   <TextInput
                     style={styles.manualBarcodeInput}
                     value={manualBarcode}
                     onChangeText={setManualBarcode}
-                    placeholder="VD: 893..."
+                    placeholder="screen.tabs.scan.placeholder.002"
                     placeholderTextColor={theme.colors.textDisabled}
                     keyboardType="numeric"
                   />
                   <TouchableOpacity style={styles.manualBarcodeButton} onPress={handleManualBarcodeLookup}>
-                    <Text style={styles.manualBarcodeButtonText}>Tra cứu</Text>
+                    <Text style={styles.manualBarcodeButtonText} i18nKey="screen.tabs.scan.text.008" />
                   </TouchableOpacity>
                 </View>
               </SurfaceCard>
             ) : !cameraPermission?.granted ? (
               <TouchableOpacity style={styles.captureButton} onPress={requestCameraPermission}>
                 <AnimatedIonicon name="barcode-outline" size={40} color={theme.colors.success} motion="pulse" />
-                <Text style={styles.captureText}>Cấp quyền Camera để quét barcode</Text>
+                <Text style={styles.captureText} i18nKey="screen.tabs.scan.text.009" />
               </TouchableOpacity>
             ) : (
               <>
@@ -760,10 +760,10 @@ export default function ScanScreen() {
                 {isScanning && (
                   <View style={styles.barcodeScanningOverlay}>
                     <ActivityIndicator color={theme.colors.success} />
-                    <Text style={styles.scanningText}>Đang tra cứu...</Text>
+                    <Text style={styles.scanningText} i18nKey="screen.tabs.scan.text.010" />
                   </View>
                 )}
-                <Text style={styles.barcodeHint}>Hướng camera vào mã vạch sản phẩm</Text>
+                <Text style={styles.barcodeHint} i18nKey="screen.tabs.scan.text.011" />
               </>
             )}
           </View>
@@ -780,7 +780,7 @@ export default function ScanScreen() {
                 const ratio = grams / 100;
                 return (
                   <>
-                    <Text style={styles.totalLabel}>Dinh dưỡng / khẩu phần</Text>
+                    <Text style={styles.totalLabel} i18nKey="screen.tabs.scan.text.012" />
                     <Text style={styles.totalCalorie}>{Math.round((barcodeResult.calories_per_100g ?? 0) * ratio)} kcal</Text>
                     <Text style={styles.totalMacros}>
                       P: {Number(((barcodeResult.protein_g ?? 0) * ratio).toFixed(1))}g  C: {Number(((barcodeResult.carbs_g ?? 0) * ratio).toFixed(1))}g  F: {Number(((barcodeResult.fat_g ?? 0) * ratio).toFixed(1))}g
@@ -791,10 +791,10 @@ export default function ScanScreen() {
             </SurfaceCard>
             <MealPicker selected={selectedMeal} onSelect={setSelectedMeal} />
             <TouchableOpacity style={styles.saveButton} onPress={handleLogBarcode}>
-              <Text style={styles.saveButtonText}>✅ Lưu vào nhật ký</Text>
+              <Text style={styles.saveButtonText} i18nKey="screen.tabs.scan.text.013" />
             </TouchableOpacity>
             <TouchableOpacity style={styles.secondaryButton} onPress={() => { setBarcodeScanned(false); setBarcodeResult(null); }}>
-              <Text style={styles.secondaryButtonText}>🔄 Quét lại</Text>
+              <Text style={styles.secondaryButtonText} i18nKey="screen.tabs.scan.text.014" />
             </TouchableOpacity>
           </View>
         )}
@@ -803,13 +803,13 @@ export default function ScanScreen() {
         {mode === 'camera' && (
           <TouchableOpacity style={styles.captureButton} onPress={handleCameraCapture}>
             <AnimatedIonicon name="camera" size={40} color={theme.colors.success} motion="pulse" />
-            <Text style={styles.captureText}>Chụp ảnh đồ ăn</Text>
+            <Text style={styles.captureText} i18nKey="screen.tabs.scan.text.015" />
           </TouchableOpacity>
         )}
         {mode === 'gallery' && (
           <TouchableOpacity style={styles.captureButton} onPress={handleGalleryPick}>
             <AnimatedIonicon name="images" size={40} color={theme.colors.success} motion="float" />
-            <Text style={styles.captureText}>Chọn từ thư viện</Text>
+            <Text style={styles.captureText} i18nKey="screen.tabs.scan.text.016" />
           </TouchableOpacity>
         )}
 
@@ -817,10 +817,10 @@ export default function ScanScreen() {
         {mode === 'text' && (
           <View style={styles.textInputContainer}>
             <TextInput style={styles.textInput} value={textInput} onChangeText={setTextInput}
-              placeholder="VD: 1 tô phở bò đặc biệt, 1 ly cà phê sữa..."
+              placeholder="screen.tabs.scan.placeholder.003"
               placeholderTextColor={theme.colors.textDisabled} multiline />
             <TouchableOpacity style={styles.analyzeButton} onPress={handleTextScan}>
-              <Text style={styles.analyzeButtonText}>Phân tích</Text>
+              <Text style={styles.analyzeButtonText} i18nKey="screen.tabs.scan.text.017" />
             </TouchableOpacity>
           </View>
         )}
@@ -848,7 +848,7 @@ export default function ScanScreen() {
                   onPress={stopVoiceRecording}
                 >
                   <AnimatedIonicon name="stop" size={32} color={theme.colors.text} motion="pulse" />
-                  <Text style={styles.stopRecordingText}>Dừng ghi âm</Text>
+                  <Text style={styles.stopRecordingText} i18nKey="screen.tabs.scan.text.018" />
                 </TouchableOpacity>
               </View>
             )}
@@ -859,7 +859,7 @@ export default function ScanScreen() {
 
             {voiceTranscript ? (
               <View style={styles.transcriptContainer}>
-                <Text style={styles.transcriptLabel}>📝 Nội dung bữa ăn</Text>
+                <Text style={styles.transcriptLabel} i18nKey="screen.tabs.scan.text.019" />
                 <TextInput
                   style={styles.textInput}
                   value={voiceTranscript}
@@ -871,7 +871,7 @@ export default function ScanScreen() {
               </View>
             ) : (
               <View style={styles.transcriptContainer}>
-                <Text style={styles.transcriptLabel}>📝 Nhập lời mô tả bữa ăn</Text>
+                <Text style={styles.transcriptLabel} i18nKey="screen.tabs.scan.text.020" />
                 <TextInput
                   style={styles.textInput}
                   value={voiceTranscript}
@@ -903,14 +903,14 @@ export default function ScanScreen() {
             <MealPicker selected={selectedMeal} onSelect={setSelectedMeal} />
             <TouchableOpacity style={styles.captureButton} onPress={handleReceiptCapture}>
               <AnimatedIonicon name="camera" size={40} color={theme.colors.success} motion="pulse" />
-              <Text style={styles.captureText}>Chụp hóa đơn</Text>
+              <Text style={styles.captureText} i18nKey="screen.tabs.scan.text.021" />
             </TouchableOpacity>
             <TouchableOpacity style={styles.secondaryButton} onPress={handleReceiptPick}>
-              <Text style={styles.secondaryButtonText}>🖼 Chọn hóa đơn từ thư viện</Text>
+              <Text style={styles.secondaryButtonText} i18nKey="screen.tabs.scan.text.022" />
             </TouchableOpacity>
             {lastReceiptUri ? (
               <TouchableOpacity style={styles.secondaryButton} onPress={() => runReceiptScan(lastReceiptUri)}>
-                <Text style={styles.secondaryButtonText}>🔁 Phân tích lại hóa đơn gần nhất</Text>
+                <Text style={styles.secondaryButtonText} i18nKey="screen.tabs.scan.text.023" />
               </TouchableOpacity>
             ) : null}
           </View>
@@ -934,7 +934,7 @@ export default function ScanScreen() {
           <View>
             {scanResult.ai_confidence < 0.6 && (
               <SurfaceCard style={styles.lowConfidenceBanner}>
-                <Text style={styles.lowConfidenceTitle}>⚠️ AI chưa chắc chắn</Text>
+                <Text style={styles.lowConfidenceTitle} i18nKey="screen.tabs.scan.text.024" />
                 <Text style={styles.lowConfidenceBody}>
                   Độ tin cậy tổng thể {Math.round(scanResult.ai_confidence * 100)}%. Kiểm tra kỹ từng món và điều chỉnh nếu cần trước khi lưu.
                 </Text>
@@ -956,33 +956,33 @@ export default function ScanScreen() {
             ))}
             {scanResult.unresolved_items?.length ? (
               <SurfaceCard style={styles.lowConfidenceBanner}>
-                <Text style={styles.lowConfidenceTitle}>🧾 Mục chưa rõ từ hóa đơn</Text>
+                <Text style={styles.lowConfidenceTitle} i18nKey="screen.tabs.scan.text.025" />
                 <Text style={styles.lowConfidenceBody}>
                   {scanResult.unresolved_items.slice(0, 5).map((item) => item.raw_text).join(', ')}
                 </Text>
               </SurfaceCard>
             ) : null}
             <SurfaceCard style={styles.totalCard}>
-              <Text style={styles.totalLabel}>Tổng cộng</Text>
+              <Text style={styles.totalLabel} i18nKey="screen.tabs.scan.text.026" />
               <Text style={styles.totalCalorie}>{Math.round(totalCalories)} kcal</Text>
               <Text style={styles.totalRange}>Khoảng: {formatCalorieRange(totalCaloriesMin, totalCaloriesMax)}</Text>
               <Text style={styles.totalMacros}>P: {Math.round(totalProtein)}g  C: {Math.round(totalCarbs)}g  F: {Math.round(totalFat)}g</Text>
             </SurfaceCard>
             <TouchableOpacity style={styles.saveButton} onPress={handleSaveLog}>
-              <Text style={styles.saveButtonText}>✅ Lưu vào nhật ký</Text>
+              <Text style={styles.saveButtonText} i18nKey="screen.tabs.scan.text.013" />
             </TouchableOpacity>
             <TouchableOpacity style={[styles.secondaryButton, isSavingMeal && styles.buttonDisabled]} onPress={handleSaveAsMeal} disabled={isSavingMeal}>
-              <Text style={styles.secondaryButtonText}>💾 Lưu vào bộ sưu tập</Text>
+              <Text style={styles.secondaryButtonText} i18nKey="screen.tabs.scan.text.027" />
             </TouchableOpacity>
             {/* Refine */}
             <SurfaceCard style={styles.refineContainer}>
-              <Text style={styles.refineTitle}>🔄 Điều chỉnh kết quả</Text>
-              <Text style={styles.refineHint}>AI ước lượng sai? Nhập thêm thông tin:</Text>
+              <Text style={styles.refineTitle} i18nKey="screen.tabs.scan.text.028" />
+              <Text style={styles.refineHint} i18nKey="screen.tabs.scan.text.029" />
               <TextInput style={styles.refineInput} value={refineContext} onChangeText={setRefineContext}
                 placeholder='VD: "Thực ra là 2 phần", "Thêm 1 quả trứng"' placeholderTextColor={theme.colors.textDisabled} multiline />
               <TouchableOpacity style={[styles.refineButton, (!refineContext.trim() || isRefining) && styles.buttonDisabled]}
                 onPress={handleRefineScan} disabled={!refineContext.trim() || isRefining}>
-                {isRefining ? <ActivityIndicator size="small" color={theme.colors.text} /> : <Text style={styles.refineButtonText}>Phân tích lại</Text>}
+                {isRefining ? <ActivityIndicator size="small" color={theme.colors.text} /> : <Text style={styles.refineButtonText} i18nKey="screen.tabs.scan.text.030" />}
               </TouchableOpacity>
             </SurfaceCard>
           </View>
@@ -992,8 +992,8 @@ export default function ScanScreen() {
           <EmptyState
             imageSource={scanHeroIllustration}
             icon="🤖"
-            title="AI chưa nhận ra món ăn"
-            description="Thử chụp rõ hơn, thêm mô tả bằng chữ hoặc dùng phần điều chỉnh để AI hiểu đúng hơn."
+            title="screen.tabs.scan.title.003"
+            description="screen.tabs.scan.description.002"
           />
         )}
         <RewardToast reward={reward} onHide={() => setReward(null)} />
@@ -1048,7 +1048,7 @@ function ContextPicker({ activeContexts, onToggle }: { activeContexts: ContextMo
 
   return (
     <View style={styles.contextPickerContainer}>
-      <Text style={styles.contextPickerLabel}>Hôm nay bạn đang:</Text>
+      <Text style={styles.contextPickerLabel} i18nKey="screen.tabs.scan.text.031" />
       <View style={styles.contextPicker}>
         {displayContexts.map((mode) => (
           <TouchableOpacity
@@ -1098,7 +1098,7 @@ function ScanResultItem({
           ● {Math.round(item.confidence * 100)}% {confidenceLabel}
         </Text>
         <TouchableOpacity onPress={onRemove} style={styles.removeBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-          <Text style={styles.removeBtnText}>✕ Xóa</Text>
+          <Text style={styles.removeBtnText} i18nKey="screen.tabs.scan.text.032" />
         </TouchableOpacity>
       </View>
 
@@ -1139,10 +1139,10 @@ function ScanResultItem({
       <Text style={styles.resultMacros}>P: {Math.round(item.protein_g)}g  C: {Math.round(item.carbs_g)}g  F: {Math.round(item.fat_g)}g</Text>
       <View style={styles.adjustRow}>
         <TouchableOpacity style={styles.adjustBtn} onPress={onDecrease}>
-          <Text style={styles.adjustBtnText}>-25g</Text>
+          <Text style={styles.adjustBtnText} i18nKey="screen.tabs.scan.text.033" />
         </TouchableOpacity>
         <TouchableOpacity style={styles.adjustBtn} onPress={onIncrease}>
-          <Text style={styles.adjustBtnText}>+25g</Text>
+          <Text style={styles.adjustBtnText} i18nKey="screen.tabs.scan.text.034" />
         </TouchableOpacity>
       </View>
     </SurfaceCard>

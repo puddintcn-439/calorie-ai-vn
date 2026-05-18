@@ -1,6 +1,6 @@
 import React, { ReactNode } from 'react';
 import { Text as NativeText, TextProps } from 'react-native';
-import { useI18n } from './i18n';
+import { I18nKey, useI18n } from './i18n';
 
 function translateNode(node: ReactNode, tx: (source: string) => string): ReactNode {
   if (typeof node === 'string') return tx(node);
@@ -8,7 +8,13 @@ function translateNode(node: ReactNode, tx: (source: string) => string): ReactNo
   return node;
 }
 
-export function Text({ children, ...props }: TextProps) {
-  const { tx } = useI18n();
-  return <NativeText {...props}>{translateNode(children, tx)}</NativeText>;
+type I18nTextProps = TextProps & {
+  i18nKey?: I18nKey;
+  values?: Record<string, string | number | null | undefined>;
+};
+
+export function Text({ children, i18nKey, values, ...props }: I18nTextProps) {
+  const { t, tx } = useI18n();
+  const content = i18nKey ? t(i18nKey, values) : translateNode(children, tx);
+  return <NativeText {...props}>{content}</NativeText>;
 }

@@ -21,6 +21,7 @@ import {
 import { getLocalDateYmd } from '../services/date';
 import { Text } from '../components/i18n-text';
 import { Alert } from '../components/i18n-alert';
+import { useI18n } from '../components/i18n';
 
 function getTodayDateString() {
   return getLocalDateYmd();
@@ -28,6 +29,7 @@ function getTodayDateString() {
 
 export default function HealthSyncScreen() {
   useAppTheme();
+  const { t } = useI18n();
   const { syncActivity } = useLogStore();
   const [isLoadingInfo, setIsLoadingInfo] = useState(true);
   const [isLoadingDiagnostics, setIsLoadingDiagnostics] = useState(true);
@@ -62,7 +64,7 @@ export default function HealthSyncScreen() {
     try {
       await activitySyncService.openProviderSettings();
     } catch (error: any) {
-      Alert.alert('Không mở được', error?.message ?? 'Vui lòng thử lại sau.');
+      Alert.alert('screen.healthSync.alert.001', error?.message ?? 'screen.healthSync.alert.002');
     }
   };
 
@@ -70,7 +72,7 @@ export default function HealthSyncScreen() {
     try {
       await activitySyncService.openSupportUrl();
     } catch (error: any) {
-      Alert.alert('Không mở được link', error?.message ?? 'Vui lòng thử lại sau.');
+      Alert.alert('screen.healthSync.alert.003', error?.message ?? 'screen.healthSync.alert.004');
     }
   };
 
@@ -82,7 +84,7 @@ export default function HealthSyncScreen() {
       setDiagnostics(details);
       setPhoneCheckInfo(info);
     } catch (error: any) {
-      Alert.alert('Không tải lại được', error?.message ?? 'Vui lòng thử lại sau.');
+      Alert.alert('screen.healthSync.alert.005', error?.message ?? 'screen.healthSync.alert.006');
     } finally {
       setIsLoadingDiagnostics(false);
     }
@@ -97,7 +99,7 @@ export default function HealthSyncScreen() {
       </BodyText>
 
       <SurfaceCard style={styles.linkCard}>
-        <Text style={styles.sectionLabel}>Link để test trên phone</Text>
+        <Text style={styles.sectionLabel} i18nKey="screen.healthSync.text.001" />
         <Text style={styles.linkValue}>{HEALTH_SYNC_SCREEN_LINK}</Text>
         <Text style={styles.helperText}>
           Dùng link này sau khi cài dev build hoặc internal build. Route này không phụ thuộc tab, nên test nhanh hơn.
@@ -107,11 +109,11 @@ export default function HealthSyncScreen() {
       <SurfaceCard style={styles.statusCard}>
         <View style={styles.statusHeader}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.statusTitle}>Chẩn đoán thiết bị</Text>
+            <Text style={styles.statusTitle} i18nKey="screen.healthSync.text.002" />
             <Text style={styles.statusSubtitle}>Nền tảng hiện tại: {Platform.OS}</Text>
           </View>
           <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-            <Text style={styles.backButtonText}>Quay lại</Text>
+            <Text style={styles.backButtonText} i18nKey="screen.healthSync.text.003" />
           </TouchableOpacity>
         </View>
 
@@ -134,24 +136,24 @@ export default function HealthSyncScreen() {
             </View>
           </>
         ) : (
-          <Text style={styles.statusDetail}>Không đọc được thông tin Health Sync trên thiết bị hiện tại.</Text>
+          <Text style={styles.statusDetail} i18nKey="screen.healthSync.text.004" />
         )}
       </SurfaceCard>
 
       <SurfaceCard style={styles.stepsCard}>
-        <Text style={styles.sectionTitle}>Checklist test trên phone</Text>
-        <Text style={styles.checkItem}>1. Cài dev build hoặc internal build của app.</Text>
+        <Text style={styles.sectionTitle} i18nKey="screen.healthSync.text.005" />
+        <Text style={styles.checkItem} i18nKey="screen.healthSync.text.006" />
         <Text style={styles.checkItem}>2. Mở link {HEALTH_SYNC_SCREEN_LINK} trên phone.</Text>
-        <Text style={styles.checkItem}>3. Mở Health Connect / Apple Health và cấp quyền đọc steps, distance, calories.</Text>
-        <Text style={styles.checkItem}>4. Quay lại trang này và bấm đồng bộ.</Text>
-        <Text style={styles.checkItem}>5. Xác nhận calories burned và imported count được cập nhật.</Text>
+        <Text style={styles.checkItem} i18nKey="screen.healthSync.text.007" />
+        <Text style={styles.checkItem} i18nKey="screen.healthSync.text.008" />
+        <Text style={styles.checkItem} i18nKey="screen.healthSync.text.009" />
       </SurfaceCard>
 
       <SurfaceCard style={styles.stepsCard}>
         <View style={styles.statusHeader}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.sectionTitle}>Diagnostics chi tiết</Text>
-            <Text style={styles.statusSubtitle}>Đọc trực tiếp readiness, quyền và dữ liệu hôm nay.</Text>
+            <Text style={styles.sectionTitle} i18nKey="screen.healthSync.text.010" />
+            <Text style={styles.statusSubtitle} i18nKey="screen.healthSync.text.011" />
           </View>
           <TouchableOpacity style={styles.backButton} onPress={handleRefreshDiagnostics}>
             <Text style={styles.backButtonText}>{isLoadingDiagnostics ? 'Đang tải...' : 'Tải lại'}</Text>
@@ -159,7 +161,7 @@ export default function HealthSyncScreen() {
         </View>
 
         <UiInput
-          label="Ngày cần kiểm tra (YYYY-MM-DD)"
+          label="screen.healthSync.label.001"
           value={selectedDate}
           onChangeText={setSelectedDate}
           autoCapitalize="none"
@@ -185,19 +187,19 @@ export default function HealthSyncScreen() {
             ) : null}
 
             <View style={styles.notesBox}>
-              <Text style={styles.resultTitle}>Ghi chú chẩn đoán</Text>
+              <Text style={styles.resultTitle} i18nKey="screen.healthSync.text.012" />
               {diagnostics.notes.map((note) => (
                 <Text key={note} style={styles.noteLine}>{note}</Text>
               ))}
             </View>
           </>
         ) : (
-          <Text style={styles.statusDetail}>Không lấy được diagnostics trên thiết bị hiện tại.</Text>
+          <Text style={styles.statusDetail} i18nKey="screen.healthSync.text.013" />
         )}
       </SurfaceCard>
 
       <SurfaceCard style={styles.syncCard}>
-        <Text style={styles.sectionTitle}>Chạy thử đồng bộ</Text>
+        <Text style={styles.sectionTitle} i18nKey="screen.healthSync.text.014" />
         <TouchableOpacity
           style={[styles.primaryButton, isSyncing && styles.disabledButton]}
           onPress={async () => {
@@ -208,11 +210,11 @@ export default function HealthSyncScreen() {
               setLastSyncResult(result);
               setDiagnostics(refreshedDiagnostics);
               Alert.alert(
-                'Đồng bộ thành công',
-                `Đã nhập ${result.imported_count} hoạt động và ${result.total_calories_burned} kcal tiêu hao.`,
+                'screen.healthSync.alert.007',
+                t('screen.healthSync.alert.syncSuccessBody', { count: result.imported_count, calories: result.total_calories_burned }),
               );
             } catch (error: any) {
-              Alert.alert('Không thể đồng bộ', error?.message ?? 'Vui lòng thử lại trên phone native.');
+              Alert.alert('screen.healthSync.alert.008', error?.message ?? 'screen.healthSync.alert.009');
             } finally {
               setIsSyncing(false);
             }
@@ -224,7 +226,7 @@ export default function HealthSyncScreen() {
 
         {lastSyncResult && (
           <View style={styles.resultBox}>
-            <Text style={styles.resultTitle}>Kết quả lần gần nhất</Text>
+            <Text style={styles.resultTitle} i18nKey="screen.healthSync.text.015" />
             <Text style={styles.resultLine}>Source: {lastSyncResult.source}</Text>
             <Text style={styles.resultLine}>Imported: {lastSyncResult.imported_count}</Text>
             <Text style={styles.resultLine}>Skipped: {lastSyncResult.skipped_count}</Text>

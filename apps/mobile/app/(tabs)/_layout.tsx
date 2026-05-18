@@ -26,6 +26,8 @@ function TabIcon({ name, color, size, focused }: { name: TabIconName; color: str
 export default function TabsLayout() {
   const { width } = useWindowDimensions();
   const isCompact = width < 480;
+  const isDesktop = width >= 900;
+  const desktopTabWidth = Math.min(720, width - 64);
   const { colors } = useAppTheme();
   const { t } = useI18n();
 
@@ -35,12 +37,13 @@ export default function TabsLayout() {
         headerShown: false,
         tabBarStyle: {
           position: 'absolute',
-          left: isCompact ? 20 : 10,
-          right: isCompact ? 20 : 10,
-          bottom: isCompact ? 12 : 10,
-          height: isCompact ? 68 : 74,
-          paddingTop: isCompact ? 6 : 7,
-          paddingHorizontal: isCompact ? 4 : 6,
+          left: isDesktop ? Math.max(32, (width - desktopTabWidth) / 2) : isCompact ? 20 : 10,
+          right: isDesktop ? 'auto' : isCompact ? 20 : 10,
+          bottom: isDesktop ? 18 : isCompact ? 12 : 10,
+          width: isDesktop ? desktopTabWidth : undefined,
+          height: isDesktop ? 64 : isCompact ? 68 : 74,
+          paddingTop: isDesktop ? 5 : isCompact ? 6 : 7,
+          paddingHorizontal: isDesktop ? 10 : isCompact ? 4 : 6,
           backgroundColor: colors.tabBar,
           borderColor: colors.border,
           borderWidth: 1,
@@ -58,7 +61,7 @@ export default function TabsLayout() {
         tabBarLabelStyle: {
           fontSize: isCompact ? 9 : 10,
           fontWeight: '800',
-          paddingBottom: 3,
+          paddingBottom: isDesktop ? 1 : 3,
         },
         tabBarActiveTintColor: colors.accentMint,
         tabBarInactiveTintColor: colors.textMuted,

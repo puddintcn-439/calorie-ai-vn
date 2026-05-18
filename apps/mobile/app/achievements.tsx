@@ -27,7 +27,7 @@ export default function AchievementsScreen() {
       </BodyText>
 
       <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-        <Text style={styles.backButtonText}>← Quay lại dashboard</Text>
+        <Text style={styles.backButtonText} i18nKey="screen.achievements.text.001" />
       </TouchableOpacity>
 
       {summary && (
@@ -35,7 +35,7 @@ export default function AchievementsScreen() {
           <SurfaceCard style={styles.overviewCard}>
             <View style={styles.overviewHeader}>
               <View>
-                <Text style={styles.overviewTitle}>Chuỗi hiện tại</Text>
+                <Text style={styles.overviewTitle} i18nKey="screen.achievements.text.002" />
                 <Text style={styles.overviewSubtitle}>
                   {summary.current_streak > 0
                     ? `Bạn đang giữ ${summary.current_streak} ngày liên tiếp.`
@@ -46,9 +46,9 @@ export default function AchievementsScreen() {
             </View>
 
             <View style={styles.metricsRow}>
-              <MetricCard value={summary.longest_streak} label="Best streak" />
-              <MetricCard value={summary.active_days_last_30} label="Ngày active / 30" />
-              <MetricCard value={summary.total_activity_logs} label="Activity logs" />
+              <MetricCard value={summary.longest_streak} label="screen.achievements.label.001" />
+              <MetricCard value={summary.active_days_last_30} label="screen.achievements.label.002" />
+              <MetricCard value={summary.total_activity_logs} label="screen.achievements.label.003" />
             </View>
 
             {summary.next_streak_milestone && (
@@ -58,7 +58,7 @@ export default function AchievementsScreen() {
             )}
           </SurfaceCard>
 
-          <Text style={styles.sectionTitle}>Tất cả badges</Text>
+          <Text style={styles.sectionTitle} i18nKey="screen.achievements.text.003" />
           <View style={styles.badgesList}>
             {summary.badges.map((badge) => (
               <SurfaceCard key={badge.id} style={[styles.badgeCard, badge.unlocked ? styles.badgeUnlocked : styles.badgeLocked]}>
@@ -78,8 +78,8 @@ export default function AchievementsScreen() {
 
       {!summary && !isLoading && (
         <SurfaceCard>
-          <Text style={styles.emptyTitle}>Chưa có dữ liệu thành tích</Text>
-          <Text style={styles.emptyText}>Hãy bắt đầu log bữa ăn hoặc hoạt động để hệ thống mở khóa streak và badges.</Text>
+          <Text style={styles.emptyTitle} i18nKey="screen.achievements.text.004" />
+          <Text style={styles.emptyText} i18nKey="screen.achievements.text.005" />
         </SurfaceCard>
       )}
     </ScreenShell>

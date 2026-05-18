@@ -265,7 +265,7 @@ export default function CoachScreen() {
         <Text style={styles.insightAction}>💡 {localizeInsightText(insight.action_suggestion)}</Text>
       )}
       <UiButton
-        label="Tôi đã hiểu"
+        label="screen.tabs.coach.label.001"
         onPress={() => handleAcknowledgeInsight(insight.id)}
         style={styles.acknowledgeButton}
       />
@@ -280,26 +280,26 @@ export default function CoachScreen() {
       >
         <VisualHeroCard
           imageSource={coachHeroIllustration}
-          eyebrow="AI Coach"
-          title="Gợi ý riêng cho bạn hôm nay"
-          body="Coach dùng dữ liệu ăn uống và mục tiêu của bạn để đưa ra gợi ý cá nhân hóa."
+          eyebrow="screen.tabs.coach.eyebrow.001"
+          title="screen.tabs.coach.title.001"
+          body="screen.tabs.coach.body.001"
         />
 
         {/* Weekly Summary */}
         {summary && (
           <SurfaceCard style={styles.summaryCard}>
-            <Text style={styles.summaryTitle}>📊 Tóm tắt tuần này</Text>
+            <Text style={styles.summaryTitle} i18nKey="screen.tabs.coach.text.001" />
             <View style={styles.summaryGrid}>
               <View style={styles.summaryItem}>
-                <Text style={styles.summaryLabel}>Tuân thủ</Text>
+                <Text style={styles.summaryLabel} i18nKey="screen.tabs.coach.text.002" />
                 <Text style={styles.summaryValue}>{summary.adherence_percentage}%</Text>
               </View>
               <View style={styles.summaryItem}>
-                <Text style={styles.summaryLabel}>Ghi chép</Text>
+                <Text style={styles.summaryLabel} i18nKey="screen.tabs.coach.text.003" />
                 <Text style={styles.summaryValue}>{summary.logs_count}</Text>
               </View>
               <View style={styles.summaryItem}>
-                <Text style={styles.summaryLabel}>Trung bình</Text>
+                <Text style={styles.summaryLabel} i18nKey="screen.tabs.coach.text.004" />
                 <Text style={styles.summaryValue}>
                   {Math.round(summary.average_daily_calories)}
                 </Text>
@@ -316,7 +316,7 @@ export default function CoachScreen() {
           </View>
         ) : insights.length > 0 ? (
           <View style={styles.insightsContainer}>
-            <Text style={styles.insightsTitle}>Những gợi ý cho bạn:</Text>
+            <Text style={styles.insightsTitle} i18nKey="screen.tabs.coach.text.005" />
             {insights.map((insight) => renderInsightCard(insight))}
           </View>
         ) : (
@@ -329,7 +329,7 @@ export default function CoachScreen() {
 
         {/* Context Card */}
         <SurfaceCard style={styles.contextCard}>
-          <Text style={styles.contextTitle}>Hôm nay của bạn</Text>
+          <Text style={styles.contextTitle} i18nKey="screen.tabs.coach.text.006" />
           <Text style={styles.contextLine}>Đã ăn: {context.today_calories} kcal</Text>
           <Text style={styles.contextLine}>Mục tiêu: {context.target_calories} kcal</Text>
           <Text style={styles.contextLine}>
@@ -356,14 +356,14 @@ export default function CoachScreen() {
         {/* Input Area */}
         <SurfaceCard style={styles.inputCard}>
           <UiInput
-            label="Đặt câu hỏi"
+            label="screen.tabs.coach.label.002"
             value={input}
             onChangeText={setInput}
-            placeholder="VD: Tôi còn 400 kcal thì nên ăn gì tối nay?"
+            placeholder="screen.tabs.coach.placeholder.001"
             multiline
             style={styles.input}
           />
-          <UiButton label="Gửi cho Coach" onPress={handleSend} loading={loading} />
+          <UiButton label="screen.tabs.coach.label.003" onPress={handleSend} loading={loading} />
           {loading ? <ActivityIndicator color={theme.colors.accentMint} style={styles.loading} /> : null}
         </SurfaceCard>
       </ScrollView>

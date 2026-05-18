@@ -103,16 +103,16 @@ export default function StrengthLogScreen() {
 
   const handleSavePreset = async (name: string) => {
     if (!name || name.trim().length === 0) {
-      Alert.alert('Thiếu tên bài tập');
+      Alert.alert('screen.tabs.strength.alert.001');
       return;
     }
     try {
       await savePresetService(name.trim());
       const presets = await loadPresets();
       setPresetsState(presets);
-      Alert.alert('Đã lưu mẫu');
+      Alert.alert('screen.tabs.strength.alert.002');
     } catch (err) {
-      Alert.alert('Không lưu được mẫu', 'Vui lòng thử lại sau.');
+      Alert.alert('screen.tabs.strength.alert.003', 'screen.tabs.strength.alert.004');
     }
   };
 
@@ -127,10 +127,10 @@ export default function StrengthLogScreen() {
   };
 
   const submit = async () => {
-    if (exercises.length === 0) return Alert.alert('Vui lòng thêm ít nhất 1 bài tập');
+    if (exercises.length === 0) return Alert.alert('screen.tabs.strength.alert.005');
     for (const exercise of exercises) {
-      if (!exercise.name || exercise.name.trim().length === 0) return Alert.alert('Vui lòng đặt tên cho tất cả bài tập');
-      if (!exercise.sets || exercise.sets.length === 0) return Alert.alert('Mỗi bài tập cần ít nhất 1 set');
+      if (!exercise.name || exercise.name.trim().length === 0) return Alert.alert('screen.tabs.strength.alert.006');
+      if (!exercise.sets || exercise.sets.length === 0) return Alert.alert('screen.tabs.strength.alert.007');
     }
 
     setSaving(true);
@@ -145,11 +145,11 @@ export default function StrengthLogScreen() {
           notes: exercise.notes,
         })),
       } as any);
-      Alert.alert('Đã lưu', 'Buổi tập đã được ghi lại.');
+      Alert.alert('screen.tabs.strength.alert.008', 'screen.tabs.strength.alert.009');
       setExercises([defaultExercise('')]);
       setSessionNotes('');
     } catch (err) {
-      Alert.alert('Không lưu được buổi tập', 'Vui lòng thử lại sau.');
+      Alert.alert('screen.tabs.strength.alert.010', 'screen.tabs.strength.alert.011');
     } finally {
       setSaving(false);
     }
@@ -164,22 +164,22 @@ export default function StrengthLogScreen() {
       <View style={styles.statsGrid}>
         <View style={styles.statTile}>
           <Text style={styles.statValue}>{stats.exercises}</Text>
-          <Text style={styles.statLabel}>bài tập</Text>
+          <Text style={styles.statLabel} i18nKey="screen.tabs.strength.text.001" />
         </View>
         <View style={styles.statTile}>
           <Text style={styles.statValue}>{stats.totalSets}</Text>
-          <Text style={styles.statLabel}>sets</Text>
+          <Text style={styles.statLabel} i18nKey="screen.tabs.strength.text.002" />
         </View>
         <View style={styles.statTileWide}>
           <Text style={styles.statValue}>{Math.round(stats.totalVolume).toLocaleString('vi-VN')} kg</Text>
-          <Text style={styles.statLabel}>tổng volume</Text>
+          <Text style={styles.statLabel} i18nKey="screen.tabs.strength.text.003" />
         </View>
       </View>
 
       <SurfaceCard style={styles.formCard}>
         <View style={styles.sectionHeader}>
           <View>
-            <Text style={styles.sectionTitle}>Ghi chú buổi tập</Text>
+            <Text style={styles.sectionTitle} i18nKey="screen.tabs.strength.text.004" />
             <Text style={styles.sectionMeta}>Ước tính {stats.duration} phút</Text>
           </View>
           <View style={styles.headerIcon}>
@@ -190,12 +190,12 @@ export default function StrengthLogScreen() {
         <UiInput
           value={sessionNotes}
           onChangeText={setSessionNotes}
-          placeholder="Ghi chú buổi tập..."
+          placeholder="screen.tabs.strength.placeholder.001"
           multiline
           style={styles.notesInput}
         />
 
-        <Text style={styles.fieldLabel}>Mẫu bài tập</Text>
+        <Text style={styles.fieldLabel} i18nKey="screen.tabs.strength.text.005" />
         <View style={styles.presetsRow}>
           {presetsState.map((preset) => (
             <View key={preset} style={styles.presetPill}>
@@ -234,19 +234,19 @@ export default function StrengthLogScreen() {
               keyboardType="number-pad"
               value={exercise.repsInput}
               onChangeText={(value) => setExerciseInput(exercise.id, value, exercise.weightInput)}
-              placeholder="Reps"
+              placeholder="screen.tabs.strength.placeholder.002"
               containerStyle={styles.compactInput}
             />
             <UiInput
               keyboardType="decimal-pad"
               value={exercise.weightInput}
               onChangeText={(value) => setExerciseInput(exercise.id, exercise.repsInput, value)}
-              placeholder="Kg"
+              placeholder="screen.tabs.strength.placeholder.003"
               containerStyle={styles.compactInput}
             />
             <Pressable onPress={() => addSetToExercise(exercise.id)} style={styles.addSetButton}>
               <Ionicons name="add" size={18} color={theme.colors.textOnAccent} />
-              <Text style={styles.addSetText}>Thêm set</Text>
+              <Text style={styles.addSetText} i18nKey="screen.tabs.strength.text.006" />
             </Pressable>
           </View>
 
@@ -268,20 +268,20 @@ export default function StrengthLogScreen() {
           <UiInput
             value={exercise.notes}
             onChangeText={(value) => updateExerciseNotes(exercise.id, value)}
-            placeholder="Ghi chú bài tập..."
+            placeholder="screen.tabs.strength.placeholder.004"
             multiline
             style={styles.exerciseNotesInput}
           />
 
           <View style={styles.exerciseActions}>
-            <UiButton label="Lưu mẫu" onPress={() => handleSavePreset(exercise.name)} variant="secondary" style={styles.actionButton} />
+            <UiButton label="screen.tabs.strength.label.001" onPress={() => handleSavePreset(exercise.name)} variant="secondary" style={styles.actionButton} />
           </View>
         </SurfaceCard>
       ))}
 
       <View style={styles.footerActions}>
-        <UiButton label="Thêm bài tập" onPress={() => addExercise()} variant="secondary" style={styles.footerButton} />
-        <UiButton label="Lưu buổi tập" onPress={submit} loading={saving} style={styles.footerButton} />
+        <UiButton label="screen.tabs.strength.label.002" onPress={() => addExercise()} variant="secondary" style={styles.footerButton} />
+        <UiButton label="screen.tabs.strength.label.003" onPress={submit} loading={saving} style={styles.footerButton} />
       </View>
     </ScreenShell>
   );

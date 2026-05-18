@@ -89,7 +89,7 @@ export function RewardToast({
 
   return (
     <Modal visible={visible} transparent animationType="none" statusBarTranslucent>
-      <View pointerEvents="none" style={styles.overlay}>
+      <View style={[styles.overlay, styles.pointerEventsNone]}>
         <Animated.View
           style={[
             styles.card,
@@ -129,6 +129,9 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     paddingHorizontal: 18,
     paddingBottom: 102,
+  },
+  pointerEventsNone: {
+    pointerEvents: 'none',
   },
   card: {
     alignSelf: 'center',

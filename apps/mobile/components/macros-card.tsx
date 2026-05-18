@@ -112,8 +112,8 @@ export default function MacrosCard({ target, daily_calorie_target, weight_kg, go
   if (!daily) {
     return (
       <SurfaceCard style={[styles.card, { borderColor: colors.borderInfo }]}>
-        <Text style={[styles.title, { color: colors.text }]}>Phân bổ dinh dưỡng</Text>
-        <Text style={[styles.empty, { color: colors.textMuted }]}>Chưa có mục tiêu calo để tính macros.</Text>
+        <Text style={[styles.title, { color: colors.text }]} i18nKey="screen.components.macrosCard.text.001" />
+        <Text style={[styles.empty, { color: colors.textMuted }]} i18nKey="screen.components.macrosCard.text.002" />
       </SurfaceCard>
     );
   }
@@ -122,14 +122,14 @@ export default function MacrosCard({ target, daily_calorie_target, weight_kg, go
 
   return (
     <SurfaceCard style={[styles.card, { borderColor: colors.borderInfo }]}>
-      <Text style={[styles.title, { color: colors.text }]}>Phân bổ dinh dưỡng</Text>
+      <Text style={[styles.title, { color: colors.text }]} i18nKey="screen.components.macrosCard.text.001" />
       <View style={styles.row}>
         <View style={styles.col}>
-          <Text style={[styles.label, { color: colors.textSoft }]}>Calo/ngày</Text>
+          <Text style={[styles.label, { color: colors.textSoft }]} i18nKey="screen.components.macrosCard.text.003" />
           <Text style={[styles.value, { color: colors.text }]}>{daily} kcal</Text>
         </View>
         <View style={styles.col}>
-          <Text style={[styles.label, { color: colors.textSoft }]}>Protein</Text>
+          <Text style={[styles.label, { color: colors.textSoft }]} i18nKey="screen.components.macrosCard.text.004" />
           <Text style={[styles.value, { color: colors.text }]}>
             {protein_target_g ?? '-'} g {protein_g_per_kg ? `(${protein_g_per_kg} g/kg)` : ''}
           </Text>
@@ -138,22 +138,22 @@ export default function MacrosCard({ target, daily_calorie_target, weight_kg, go
 
       <View style={styles.row}>
         <View style={styles.col}>
-          <Text style={[styles.label, { color: colors.textSoft }]}>Chất béo</Text>
+          <Text style={[styles.label, { color: colors.textSoft }]} i18nKey="screen.components.macrosCard.text.005" />
           <Text style={[styles.value, { color: colors.text }]}>{fat_pct ?? '-'}% · {fat_g ?? '-'} g</Text>
         </View>
         <View style={styles.col}>
-          <Text style={[styles.label, { color: colors.textSoft }]}>Carbs</Text>
+          <Text style={[styles.label, { color: colors.textSoft }]} i18nKey="screen.components.macrosCard.text.006" />
           <Text style={[styles.value, { color: colors.text }]}>{carbs_g ?? '-'} g · {carbs_pct ?? '-'}%</Text>
         </View>
       </View>
 
       <View style={[styles.qualityBlock, { borderTopColor: colors.borderSubtle }]}>
-        <Text style={[styles.qualityTitle, { color: colors.text }]}>Mục tiêu chất lượng</Text>
+        <Text style={[styles.qualityTitle, { color: colors.text }]} i18nKey="screen.components.macrosCard.text.007" />
         <View style={styles.qualityGrid}>
-          <Metric label="Fiber" value={`>= ${nutrition.fiber_g_min} g`} tone="good" />
-          <Metric label="Sodium" value={`< ${nutrition.sodium_mg_max} mg`} tone="limit" />
-          <Metric label="Đường tự do" value={`< ${nutrition.free_sugar_g_max} g`} tone="limit" />
-          <Metric label="Béo bão hòa" value={`< ${nutrition.saturated_fat_g_max} g`} tone="limit" />
+          <Metric label="screen.components.macrosCard.label.001" value={`>= ${nutrition.fiber_g_min} g`} tone="good" />
+          <Metric label="screen.components.macrosCard.label.002" value={`< ${nutrition.sodium_mg_max} mg`} tone="limit" />
+          <Metric label="screen.components.macrosCard.label.003" value={`< ${nutrition.free_sugar_g_max} g`} tone="limit" />
+          <Metric label="screen.components.macrosCard.label.004" value={`< ${nutrition.saturated_fat_g_max} g`} tone="limit" />
         </View>
         <Text style={[styles.qualityNote, { color: colors.textMuted }]}>
           Đường trên nhãn/barcode có thể là total sugar; app chưa luôn phân biệt được free sugar và added sugar.

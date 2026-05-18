@@ -63,11 +63,14 @@ export function ScreenShell({
     >
       <SafeAreaView style={styles.safeArea}>
         {scroll ? (
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={[styles.scrollContent, isDesktop && styles.scrollContentDesktop]}
+          >
             {content}
           </ScrollView>
         ) : (
-          <View style={styles.noScrollContent}>{content}</View>
+          <View style={[styles.noScrollContent, isDesktop && styles.noScrollContentDesktop]}>{content}</View>
         )}
       </SafeAreaView>
     </LinearGradient>
@@ -144,8 +147,10 @@ export function BodyText({ children, style }: { children: ReactNode; style?: Sty
 const styles = StyleSheet.create({
   gradient: { flex: 1 },
   safeArea: { flex: 1 },
-  scrollContent: { padding: 16, paddingBottom: 128 },
-  noScrollContent: { flex: 1, paddingHorizontal: 20 },
+  scrollContent: { padding: 16, paddingBottom: 176 },
+  scrollContentDesktop: { paddingBottom: 150 },
+  noScrollContent: { flex: 1, paddingHorizontal: 20, paddingBottom: 112 },
+  noScrollContentDesktop: { paddingBottom: 96 },
   inner: {
     width: '100%',
     maxWidth: 1080,

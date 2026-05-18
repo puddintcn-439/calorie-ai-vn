@@ -55,7 +55,7 @@ export default function AdherenceCard() {
   if (!summary) {
     return (
       <SurfaceCard style={[styles.card, { borderColor: colors.borderInfo }]}>
-        <Text style={[styles.title, { color: colors.text }]}>📈 Tuân thủ tuần</Text>
+        <Text style={[styles.title, { color: colors.text }]} i18nKey="screen.components.adherenceCard.text.001" />
         <Text style={[styles.empty, { color: colors.textMuted }]}>
           Chưa có dữ liệu tuần này. Ghi nhật ký ăn uống để nhận phân tích.
         </Text>
@@ -65,14 +65,14 @@ export default function AdherenceCard() {
 
   return (
     <SurfaceCard style={[styles.card, { borderColor: colors.borderInfo }]}>
-      <Text style={[styles.title, { color: colors.text }]}>📈 Tuân thủ tuần</Text>
+      <Text style={[styles.title, { color: colors.text }]} i18nKey="screen.components.adherenceCard.text.001" />
       <View style={styles.row}>
         <View style={styles.col}>
-          <Text style={[styles.label, { color: colors.textSoft }]}>Tuân thủ</Text>
+          <Text style={[styles.label, { color: colors.textSoft }]} i18nKey="screen.components.adherenceCard.text.002" />
           <Text style={[styles.value, { color: colors.accentMint }]}>{summary.adherence_percentage}%</Text>
         </View>
         <View style={styles.col}>
-          <Text style={[styles.label, { color: colors.textSoft }]}>Ghi chép</Text>
+          <Text style={[styles.label, { color: colors.textSoft }]} i18nKey="screen.components.adherenceCard.text.003" />
           <Text style={[styles.value, { color: colors.accentMint }]}>{summary.logs_count}</Text>
         </View>
       </View>
@@ -87,7 +87,7 @@ export default function AdherenceCard() {
         <Text style={[styles.action, { color: colors.textSoft }]}>{summary.recommended_action}</Text>
       ) : null}
 
-      <UiButton label="Mở Coach" onPress={() => router.push('/(tabs)/coach')} style={{ marginTop: 10 }} />
+      <UiButton label="screen.components.adherenceCard.label.001" onPress={() => router.push('/(tabs)/coach')} style={{ marginTop: 10 }} />
     </SurfaceCard>
   );
 }

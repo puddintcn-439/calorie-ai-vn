@@ -96,7 +96,7 @@ export default function BodyProgressScreen() {
       const res = await calorieTargetService.getWeeklyAdjustmentPreview();
       setPreview(res);
     } catch (error) {
-      Alert.alert('Lỗi', 'Không thể lấy dữ liệu điều chỉnh.');
+      Alert.alert('screen.tabs.progress.alert.001', 'screen.tabs.progress.alert.002');
     } finally {
       setPreviewLoading(false);
     }
@@ -115,23 +115,23 @@ export default function BodyProgressScreen() {
   };
 
   const handleApplyAdjustment = () => {
-    if (!preview) return Alert.alert('Không có dữ liệu', 'Chưa có kết quả để áp dụng.');
+    if (!preview) return Alert.alert('screen.tabs.progress.alert.003', 'screen.tabs.progress.alert.004');
     Alert.alert(
-      'Áp dụng điều chỉnh',
+      'screen.tabs.progress.alert.005',
       `Áp dụng mục tiêu mới ${preview.adjusted_daily_target} kcal/ngày?`,
       [
-        { text: 'Huỷ', style: 'cancel' },
+        { text: 'screen.tabs.progress.alert.006', style: 'cancel' },
         {
-          text: 'Áp dụng',
+          text: 'screen.tabs.progress.alert.007',
           onPress: async () => {
             setSaving(true);
             try {
               const res = await calorieTargetService.applyWeeklyAdjustment();
-              Alert.alert('Đã áp dụng', 'Mục tiêu đã được cập nhật.');
+              Alert.alert('screen.tabs.progress.alert.008', 'screen.tabs.progress.alert.009');
               setPreview(res);
               loadData();
             } catch (err) {
-              Alert.alert('Lỗi', 'Không thể áp dụng điều chỉnh.');
+              Alert.alert('screen.tabs.progress.alert.010', 'screen.tabs.progress.alert.011');
             } finally {
               setSaving(false);
             }
@@ -148,7 +148,7 @@ export default function BodyProgressScreen() {
 
   const handleSave = async () => {
     if (!weightKg && !waistCm) {
-      Alert.alert('Thiếu thông tin', 'Nhập ít nhất cân nặng hoặc vòng eo.');
+      Alert.alert('screen.tabs.progress.alert.012', 'screen.tabs.progress.alert.013');
       return;
     }
 
@@ -165,11 +165,11 @@ export default function BodyProgressScreen() {
       if (note.trim()) dto.note = note.trim();
 
       await apiClient.post('/body-progress', dto);
-      Alert.alert('✅ Đã lưu', 'Số liệu hôm nay đã được ghi lại.');
+      Alert.alert('screen.tabs.progress.alert.014', 'screen.tabs.progress.alert.015');
       setShowForm(false);
       loadData();
     } catch (error) {
-      Alert.alert('Lỗi', 'Không thể lưu. Vui lòng thử lại.');
+      Alert.alert('screen.tabs.progress.alert.016', 'screen.tabs.progress.alert.017');
     } finally {
       setSaving(false);
     }
@@ -177,19 +177,19 @@ export default function BodyProgressScreen() {
 
   const handleDeleteEntry = (entry: BodyProgressEntry) => {
     Alert.alert(
-      'Xoá mục nhập',
+      'screen.tabs.progress.alert.018',
       `Xoá số liệu ngày ${entry.recorded_at}?`,
       [
-        { text: 'Huỷ', style: 'cancel' },
+        { text: 'screen.tabs.progress.alert.019', style: 'cancel' },
         {
-          text: 'Xoá',
+          text: 'screen.tabs.progress.alert.020',
           style: 'destructive',
           onPress: async () => {
             try {
               await apiClient.delete(`/body-progress/${entry.id}`);
               loadData();
             } catch {
-              Alert.alert('Lỗi', 'Không thể xoá.');
+              Alert.alert('screen.tabs.progress.alert.021', 'screen.tabs.progress.alert.022');
             }
           },
         },
@@ -224,24 +224,24 @@ export default function BodyProgressScreen() {
         {/* ── Trend Summary ── */}
         {trend && trend.days_tracked > 0 && (
           <SurfaceCard style={styles.trendCard}>
-            <Text style={styles.trendTitle}>📊 Tổng quan tiến trình</Text>
+            <Text style={styles.trendTitle} i18nKey="screen.tabs.progress.text.001" />
             <View style={styles.trendGrid}>
               <View style={styles.trendItem}>
-                <Text style={styles.trendLabel}>Cân nặng HT</Text>
+                <Text style={styles.trendLabel} i18nKey="screen.tabs.progress.text.002" />
                 <Text style={styles.trendValue}>
                   {latest?.weight_kg != null ? `${latest.weight_kg} kg` : '—'}
                 </Text>
                 <DeltaBadge value={trend.weight_change_7d} unit="kg" lowerIsBetter />
               </View>
               <View style={styles.trendItem}>
-                <Text style={styles.trendLabel}>Vòng eo HT</Text>
+                <Text style={styles.trendLabel} i18nKey="screen.tabs.progress.text.003" />
                 <Text style={styles.trendValue}>
                   {latest?.waist_cm != null ? `${latest.waist_cm} cm` : '—'}
                 </Text>
                 <DeltaBadge value={trend.waist_change_cm} unit="cm" lowerIsBetter />
               </View>
               <View style={styles.trendItem}>
-                <Text style={styles.trendLabel}>Ngày ghi</Text>
+                <Text style={styles.trendLabel} i18nKey="screen.tabs.progress.text.004" />
                 <Text style={styles.trendValue}>{trend.days_tracked}</Text>
               </View>
             </View>
@@ -258,7 +258,7 @@ export default function BodyProgressScreen() {
 
         {/* ── Why This Target (Preview) ── */}
         <SurfaceCard style={styles.previewCard}>
-          <Text style={styles.trendTitle}>❓ Tại sao mục tiêu này?</Text>
+          <Text style={styles.trendTitle} i18nKey="screen.tabs.progress.text.005" />
           <BodyText style={{ marginTop: 6 }}>Tính toán điều chỉnh dựa trên nhật ký ăn uống và cân nặng. Xem trước điều chỉnh tuần này và lý do (ActualTDEE, clamp).</BodyText>
           <View style={{ marginTop: 10 }}>
             <UiButton label={preview ? 'Làm mới' : 'Xem lý do'} onPress={fetchPreview} loading={previewLoading} />
@@ -270,7 +270,7 @@ export default function BodyProgressScreen() {
                 <Text style={styles.previewRow}>Mục tiêu hiện tại: {preview.original_daily_target} kcal</Text>
                 <Text style={styles.previewRow}>Mục tiêu đề xuất: {preview.adjusted_daily_target} kcal ({preview.adjustment_percentage}%)</Text>
                 <Text style={[styles.previewRow, { marginTop: 6 }]}>{preview.recommendation}</Text>
-                <UiButton label="Áp dụng điều chỉnh" onPress={handleApplyAdjustment} loading={saving} style={{ marginTop: 8 }} />
+                <UiButton label="screen.tabs.progress.label.001" onPress={handleApplyAdjustment} loading={saving} style={{ marginTop: 8 }} />
               </View>
             )}
             {myTarget && <MacrosCard target={myTarget} />}
@@ -294,24 +294,24 @@ export default function BodyProgressScreen() {
 
             <View style={styles.formRow}>
               <View style={styles.formField}>
-                <Text style={styles.fieldLabel}>Cân nặng (kg)</Text>
+                <Text style={styles.fieldLabel} i18nKey="screen.tabs.progress.text.006" />
                 <TextInput
                   style={styles.textInput}
                   value={weightKg}
                   onChangeText={setWeightKg}
                   keyboardType="decimal-pad"
-                  placeholder="VD: 65.5"
+                  placeholder="screen.tabs.progress.placeholder.001"
                   placeholderTextColor={theme.colors.textMuted}
                 />
               </View>
               <View style={styles.formField}>
-                <Text style={styles.fieldLabel}>Vòng eo (cm)</Text>
+                <Text style={styles.fieldLabel} i18nKey="screen.tabs.progress.text.007" />
                 <TextInput
                   style={styles.textInput}
                   value={waistCm}
                   onChangeText={setWaistCm}
                   keyboardType="decimal-pad"
-                  placeholder="VD: 78"
+                  placeholder="screen.tabs.progress.placeholder.002"
                   placeholderTextColor={theme.colors.textMuted}
                 />
               </View>
@@ -319,30 +319,30 @@ export default function BodyProgressScreen() {
 
             <View style={styles.formRow}>
               <View style={styles.formField}>
-                <Text style={styles.fieldLabel}>Vòng hông (cm)</Text>
+                <Text style={styles.fieldLabel} i18nKey="screen.tabs.progress.text.008" />
                 <TextInput
                   style={styles.textInput}
                   value={hipCm}
                   onChangeText={setHipCm}
                   keyboardType="decimal-pad"
-                  placeholder="VD: 92"
+                  placeholder="screen.tabs.progress.placeholder.003"
                   placeholderTextColor={theme.colors.textMuted}
                 />
               </View>
               <View style={styles.formField}>
-                <Text style={styles.fieldLabel}>Mỡ cơ thể (%)</Text>
+                <Text style={styles.fieldLabel} i18nKey="screen.tabs.progress.text.009" />
                 <TextInput
                   style={styles.textInput}
                   value={bodyFatPct}
                   onChangeText={setBodyFatPct}
                   keyboardType="decimal-pad"
-                  placeholder="VD: 22.5"
+                  placeholder="screen.tabs.progress.placeholder.004"
                   placeholderTextColor={theme.colors.textMuted}
                 />
               </View>
             </View>
 
-            <Text style={styles.fieldLabel}>Mức năng lượng hôm nay</Text>
+            <Text style={styles.fieldLabel} i18nKey="screen.tabs.progress.text.010" />
             <View style={styles.energyRow}>
               {([1, 2, 3, 4, 5] as const).map((level) => (
                 <TouchableOpacity
@@ -355,18 +355,18 @@ export default function BodyProgressScreen() {
               ))}
             </View>
 
-            <Text style={styles.fieldLabel}>Ghi chú (tuỳ chọn)</Text>
+            <Text style={styles.fieldLabel} i18nKey="screen.tabs.progress.text.011" />
             <TextInput
               style={[styles.textInput, styles.noteInput]}
               value={note}
               onChangeText={setNote}
-              placeholder="VD: Ngủ tốt, đi gym buổi sáng..."
+              placeholder="screen.tabs.progress.placeholder.005"
               placeholderTextColor={theme.colors.textMuted}
               multiline
             />
 
             <UiButton
-              label="Lưu hôm nay"
+              label="screen.tabs.progress.label.002"
               onPress={handleSave}
               loading={saving}
               style={styles.saveButton}

@@ -14,9 +14,11 @@ import { SUBSCRIPTION_TIERS, SubscriptionTier } from '@calorie-ai/types';
 import { createThemedStyles, theme, useAppTheme } from '../components/theme';
 import { Text } from '../components/i18n-text';
 import { Alert } from '../components/i18n-alert';
+import { useI18n } from '../components/i18n';
 
 export default function PaywallScreen() {
   useAppTheme();
+  const { t } = useI18n();
   const router = useRouter();
   const { subscription, isLoading, error, changeTier } = useSubscriptionStore();
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
@@ -31,10 +33,10 @@ export default function PaywallScreen() {
   const handleChangeTier = async (tier: SubscriptionTier) => {
     try {
       await changeTier(tier);
-      Alert.alert('Đã cập nhật', `Bạn đang dùng gói ${SUBSCRIPTION_TIERS[tier].name}.`);
+      Alert.alert('screen.paywall.alert.001', t('screen.paywall.alert.updatedBody', { tier: SUBSCRIPTION_TIERS[tier].name }));
       router.back();
     } catch (err: any) {
-      Alert.alert('Không cập nhật được', err?.response?.data?.message ?? err?.message ?? 'Vui lòng thử lại sau');
+      Alert.alert('screen.paywall.alert.002', err?.response?.data?.message ?? err?.message ?? 'screen.paywall.alert.003');
     }
   };
 
@@ -54,8 +56,8 @@ export default function PaywallScreen() {
       <View style={styles.contentInner}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.title}>Nâng cấp trải nghiệm theo dõi</Text>
-        <Text style={styles.subtitle}>Log nhanh hơn, nhận insight rõ hơn và đồng bộ sức khỏe khi bạn cần.</Text>
+        <Text style={styles.title} i18nKey="screen.paywall.text.001" />
+        <Text style={styles.subtitle} i18nKey="screen.paywall.text.002" />
       </View>
 
       {/* Billing Toggle */}
@@ -75,7 +77,7 @@ export default function PaywallScreen() {
           <Text style={[styles.billingText, billingCycle === 'yearly' && styles.activeText]}>
             Hàng năm
           </Text>
-          <Text style={styles.savingsBadge}>Tiết kiệm 33%</Text>
+          <Text style={styles.savingsBadge} i18nKey="screen.paywall.text.003" />
         </TouchableOpacity>
       </View>
 
@@ -107,7 +109,7 @@ export default function PaywallScreen() {
             >
               {isPopular && (
                 <View style={styles.popularBadge}>
-                  <Text style={styles.popularBadgeText}>Phổ biến nhất</Text>
+                  <Text style={styles.popularBadgeText} i18nKey="screen.paywall.text.004" />
                 </View>
               )}
 
@@ -179,18 +181,18 @@ export default function PaywallScreen() {
 
       {/* FAQ Section */}
       <View style={styles.faqSection}>
-        <Text style={styles.faqTitle}>Câu hỏi thường gặp</Text>
+        <Text style={styles.faqTitle} i18nKey="screen.paywall.text.005" />
         <View style={styles.faqItem}>
-          <Text style={styles.faqQuestion}>Có thể hủy bất kỳ lúc nào không?</Text>
-          <Text style={styles.faqAnswer}>Có, bạn có thể hủy gói của mình bất kỳ lúc nào từ cài đặt.</Text>
+          <Text style={styles.faqQuestion} i18nKey="screen.paywall.text.006" />
+          <Text style={styles.faqAnswer} i18nKey="screen.paywall.text.007" />
         </View>
         <View style={styles.faqItem}>
-          <Text style={styles.faqQuestion}>Có thử nghiệm miễn phí không?</Text>
-          <Text style={styles.faqAnswer}>Bạn có thể sử dụng bản miễn phí với các tính năng cơ bản.</Text>
+          <Text style={styles.faqQuestion} i18nKey="screen.paywall.text.008" />
+          <Text style={styles.faqAnswer} i18nKey="screen.paywall.text.009" />
         </View>
         <View style={styles.faqItem}>
-          <Text style={styles.faqQuestion}>Thanh toán an toàn như thế nào?</Text>
-          <Text style={styles.faqAnswer}>Chúng tôi sử dụng Stripe để xử lý thanh toán một cách an toàn.</Text>
+          <Text style={styles.faqQuestion} i18nKey="screen.paywall.text.010" />
+          <Text style={styles.faqAnswer} i18nKey="screen.paywall.text.011" />
         </View>
       </View>
 
@@ -204,7 +206,7 @@ export default function PaywallScreen() {
       {/* Footer */}
       <View style={styles.footer}>
         <TouchableOpacity onPress={() => router.back()}>
-          <Text style={styles.footerLink}>Quay lại</Text>
+          <Text style={styles.footerLink} i18nKey="screen.paywall.text.012" />
         </TouchableOpacity>
       </View>
       </View>

@@ -18,14 +18,15 @@ import { apiClient } from '../../services/api';
 import { VisualHeroCard } from '../../components/visual-hero-card';
 import { AnimatedIonicon } from '../../components/animated-icon';
 import { RewardToast, RewardToastData } from '../../components/reward-toast';
+import { useI18n } from '../../components/i18n';
 
 const logHeroIllustration = require('../../assets/images/log-hero.png') as number;
 
 const MEAL_LABELS: Record<MealType, string> = {
-  breakfast: '🌅 Bữa sáng',
-  lunch: '☀️ Bữa trưa',
-  dinner: '🌙 Bữa tối',
-  snack: '🍎 Ăn vặt',
+  breakfast: 'screen.tabs.log.meal.breakfast',
+  lunch: 'screen.tabs.log.meal.lunch',
+  dinner: 'screen.tabs.log.meal.dinner',
+  snack: 'screen.tabs.log.meal.snack',
 };
 
 type BodyStatus = 'underweight' | 'normal' | 'overweight' | 'obese';
@@ -151,6 +152,7 @@ function buildExerciseRoadmap(
 
 export default function LogScreen() {
   useAppTheme();
+  const { t, tx } = useI18n();
   const { dailyLog, savedMeals, activityLogs, activityPreferences, isLoading, fetchDailyLog, fetchSavedMeals, fetchActivityLogs, fetchActivityPreferences, removeLog, logSavedMeal, deleteSavedMeal, addActivity, deleteActivity } = useLogStore();
   const [perMealTargets, setPerMealTargets] = useState<Record<MealType, number>>({
     breakfast: 400, lunch: 600, dinner: 600, snack: 200,
@@ -233,20 +235,20 @@ export default function LogScreen() {
 
   const handleQuickLog = (meal: SavedMeal) => {
     Alert.alert(
-      `Log "${meal.name}"`,
-      `${meal.total_calories} kcal · Vào bữa nào?`,
+      t('screen.tabs.log.alert.quickLogTitle', { name: meal.name }),
+      t('screen.tabs.log.alert.quickLogMealPrompt', { calories: meal.total_calories }),
       (['breakfast', 'lunch', 'dinner', 'snack'] as MealType[]).map((m) => ({
-        text: MEAL_LABELS[m],
+        text: tx(MEAL_LABELS[m]),
         onPress: async () => {
           try {
             await logSavedMeal(meal.id, m);
             setReward({
-              title: 'Đã log nhanh',
-              body: `${meal.name} · ${MEAL_LABELS[m]}`,
+              title: 'screen.tabs.log.alert.006',
+              body: t('screen.tabs.log.reward.quickMealBody', { name: meal.name, meal: tx(MEAL_LABELS[m]) }),
               icon: 'checkmark-circle',
             });
           } catch {
-            Alert.alert('Lỗi', 'Không thể log bữa ăn.');
+            Alert.alert('screen.tabs.log.alert.008', 'screen.tabs.log.alert.009');
           }
         },
       })),
@@ -254,43 +256,43 @@ export default function LogScreen() {
   };
 
   const handleDeleteSaved = (meal: SavedMeal) => {
-    Alert.alert('Xoá bộ sưu tập', `Xoá "${meal.name}"?`, [
-      { text: 'Huỷ', style: 'cancel' },
-      { text: 'Xoá', style: 'destructive', onPress: () => deleteSavedMeal(meal.id) },
+    Alert.alert('screen.tabs.log.alert.010', t('screen.tabs.log.alert.deleteSavedBody', { name: meal.name }), [
+      { text: 'screen.tabs.log.alert.012', style: 'cancel' },
+      { text: 'screen.tabs.log.alert.013', style: 'destructive', onPress: () => deleteSavedMeal(meal.id) },
     ]);
   };
 
   const submitQuickActivity = async (activityType: ActivityType, minsRaw?: string | number | null) => {
     const mins = Number(minsRaw);
     if (!Number.isFinite(mins) || mins <= 0) {
-      Alert.alert('Thiếu dữ liệu', 'Vui lòng nhập số phút hợp lệ.');
+      Alert.alert('screen.tabs.log.alert.014', 'screen.tabs.log.alert.015');
       return;
     }
 
     try {
       await addActivity({ activity_type: activityType, duration_min: Math.round(mins) });
       setReward({
-        title: 'Đã log hoạt động',
-        body: `${ACTIVITY_LABELS[activityType]} · ${Math.round(mins)} phút`,
+        title: 'screen.tabs.log.reward.activityTitle',
+        body: t('screen.tabs.log.reward.activityBody', { activity: ACTIVITY_LABELS[activityType], minutes: Math.round(mins) }),
         icon: 'checkmark-circle',
       });
     } catch {
-      Alert.alert('Lỗi', 'Không thể ghi hoạt động');
+      Alert.alert('screen.tabs.log.alert.016', 'screen.tabs.log.alert.017');
     }
   };
 
   const openRoadmapQuickAdd = () => {
     if (unfinishedRoadmap.length === 0) {
-      Alert.alert('Lộ trình đã hoàn thành', 'Bạn đã tick hết bài trong lộ trình hôm nay.');
+      Alert.alert('screen.tabs.log.alert.018', 'screen.tabs.log.alert.019');
       return;
     }
 
-    Alert.alert('📋 Thêm từ lộ trình', 'Chọn bài tập để thêm vào mục Hoạt động:', [
+    Alert.alert('screen.tabs.log.alert.020', 'screen.tabs.log.alert.021', [
       ...unfinishedRoadmap.slice(0, 3).map((task) => ({
         text: `${task.title} (${task.duration_min}p · ${task.estimated_kcal} kcal)`,
         onPress: () => void handleToggleRoadmapTask(task),
       })),
-      { text: 'Huỷ', style: 'cancel' },
+      { text: 'screen.tabs.log.alert.022', style: 'cancel' },
     ]);
   };
 
@@ -313,11 +315,11 @@ export default function LogScreen() {
       return;
     }
 
-    Alert.alert('➕ Thêm hoạt động', 'Bạn muốn thêm theo cách nào?', [
-      { text: 'Theo lộ trình', onPress: openRoadmapQuickAdd },
-      { text: 'Thủ công', onPress: openManualAddActivity },
-      { text: 'Tập tạ', onPress: () => router.push('/strength') },
-      { text: 'Huỷ', style: 'cancel' },
+    Alert.alert('screen.tabs.log.alert.023', 'screen.tabs.log.alert.024', [
+      { text: 'screen.tabs.log.alert.025', onPress: openRoadmapQuickAdd },
+      { text: 'screen.tabs.log.alert.026', onPress: openManualAddActivity },
+      { text: 'screen.tabs.log.alert.027', onPress: () => router.push('/strength') },
+      { text: 'screen.tabs.log.alert.029', style: 'cancel' },
     ]);
   };
 
@@ -349,7 +351,7 @@ export default function LogScreen() {
         });
       }
     } catch {
-      Alert.alert('Lỗi', 'Không thể cập nhật lộ trình tập lúc này.');
+      Alert.alert('screen.tabs.log.alert.030', 'screen.tabs.log.alert.031');
     } finally {
       setProcessingRoadmapId(null);
     }
@@ -370,7 +372,7 @@ export default function LogScreen() {
         <View style={styles.catalogOverlay}>
           <View style={styles.catalogSheet}>
             <View style={styles.catalogHeader}>
-              <Text style={styles.catalogTitle}>🏋️ Chọn hoạt động</Text>
+              <Text style={styles.catalogTitle} i18nKey="screen.tabs.log.text.001" />
               <TouchableOpacity onPress={() => setCatalogVisible(false)}>
                 <Ionicons name="close" size={22} color={theme.colors.textMuted} />
               </TouchableOpacity>
@@ -402,10 +404,10 @@ export default function LogScreen() {
               <View>
                 <TouchableOpacity style={styles.catalogBack} onPress={() => setCatalogSelectedType(null)}>
                   <Ionicons name="arrow-back" size={16} color={theme.colors.accentMint} />
-                  <Text style={styles.catalogBackText}>Chọn lại loại bài</Text>
+                  <Text style={styles.catalogBackText} i18nKey="screen.tabs.log.text.002" />
                 </TouchableOpacity>
                 <Text style={styles.catalogSelectedLabel}>{ACTIVITY_LABELS[catalogSelectedType]}</Text>
-                <Text style={styles.catalogHint}>Chọn thời gian tập:</Text>
+                <Text style={styles.catalogHint} i18nKey="screen.tabs.log.text.003" />
                 <View style={styles.durationRow}>
                   {([15, 30, 45, 60] as const).map((d) => {
                     const kcal = estimateExerciseCalories(catalogSelectedType, d, userWeight);
@@ -434,37 +436,37 @@ export default function LogScreen() {
 
       <VisualHeroCard
         imageSource={logHeroIllustration}
-        eyebrow="Nhật ký"
-        title="Nhật ký hôm nay"
-        body="Bữa ăn, món đã lưu và vận động trong một luồng."
+        eyebrow="screen.tabs.log.eyebrow.001"
+        title="screen.tabs.log.title.001"
+        body="screen.tabs.log.body.001"
       />
 
       {isLoading && <ActivityIndicator color={theme.colors.success} style={{ marginTop: 40 }} />}
 
       <SurfaceCard style={styles.logSummaryCard}>
         <View style={styles.logSummaryItem}>
-          <Text style={styles.logSummaryLabel}>Đã nạp</Text>
+          <Text style={styles.logSummaryLabel} i18nKey="screen.tabs.log.text.004" />
           <Text style={styles.logSummaryValue}>{loggedCalories}</Text>
-          <Text style={styles.logSummaryUnit}>kcal</Text>
+          <Text style={styles.logSummaryUnit} i18nKey="screen.tabs.log.text.005" />
         </View>
         <View style={styles.logSummaryDivider} />
         <View style={styles.logSummaryItem}>
-          <Text style={styles.logSummaryLabel}>Net</Text>
+          <Text style={styles.logSummaryLabel} i18nKey="screen.tabs.log.text.006" />
           <Text style={[styles.logSummaryValue, netCalories > targetCalories && styles.logSummaryValueWarn]}>{netCalories}</Text>
           <Text style={styles.logSummaryUnit}>/{targetCalories}</Text>
         </View>
         <View style={styles.logSummaryDivider} />
         <View style={styles.logSummaryItem}>
-          <Text style={styles.logSummaryLabel}>Vận động</Text>
+          <Text style={styles.logSummaryLabel} i18nKey="screen.tabs.log.text.007" />
           <Text style={styles.logSummaryValueBurned}>-{burnedCalories}</Text>
-          <Text style={styles.logSummaryUnit}>kcal</Text>
+          <Text style={styles.logSummaryUnit} i18nKey="screen.tabs.log.text.005" />
         </View>
       </SurfaceCard>
 
         {/* ---- Saved Meals Quick Log ---- */}
         {savedMeals.length > 0 && (
           <View style={styles.savedSection}>
-            <Text style={styles.savedTitle}>⚡ Log nhanh</Text>
+            <Text style={styles.savedTitle} i18nKey="screen.tabs.log.text.008" />
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.savedList}>
               {savedMeals.map((meal) => (
                 <TouchableOpacity key={meal.id} style={styles.savedCard} onPress={() => handleQuickLog(meal)}>
@@ -521,8 +523,8 @@ export default function LogScreen() {
                 <EmptyState
                   imageSource={logHeroIllustration}
                   icon="🥢"
-                  title="Chưa có món nào"
-                  description="Bạn có thể scan đồ ăn mới hoặc log nhanh từ bộ sưu tập ở phía trên."
+                  title="screen.tabs.log.title.002"
+                  description="screen.tabs.log.description.001"
                   variant="compact"
                   style={styles.emptyStateCard}
                 />
@@ -534,7 +536,7 @@ export default function LogScreen() {
         {/* ---- Activity Section ---- */}
         <SurfaceCard style={styles.activitySection}>
           <View style={styles.activityHeader}>
-            <Text style={styles.activityTitle}>🏃 Hoạt động đã hoàn thành</Text>
+            <Text style={styles.activityTitle} i18nKey="screen.tabs.log.text.009" />
             <TouchableOpacity style={styles.addActivityBtn} onPress={handleAddActivity}>
               <AnimatedIonicon name="add" size={18} color={theme.colors.textOnAccent} motion="pulse" />
             </TouchableOpacity>
@@ -542,8 +544,8 @@ export default function LogScreen() {
           {activityLogs.length === 0 ? (
             <EmptyState
               icon="🏃"
-              title="Chưa có hoạt động"
-              description="Thêm vận động để app tính calories burned và net calories chính xác hơn."
+              title="screen.tabs.log.title.003"
+              description="screen.tabs.log.description.002"
               variant="compact"
               style={styles.emptyStateCard}
             />
@@ -554,7 +556,7 @@ export default function LogScreen() {
                   <Text style={styles.activityName}>{ACTIVITY_LABELS[act.activity_type] ?? act.activity_type}</Text>
                   <Text style={styles.activityDetail}>{act.duration_min} phút · -{act.calories_burned} kcal</Text>
                   {parseRoadmapNote(act.notes) ? (
-                    <Text style={styles.activityRoadmapBadge}>Liên kết lộ trình</Text>
+                    <Text style={styles.activityRoadmapBadge} i18nKey="screen.tabs.log.text.010" />
                   ) : null}
                 </View>
                 <TouchableOpacity onPress={() => deleteActivity(act.id)}>

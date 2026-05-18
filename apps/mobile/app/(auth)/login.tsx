@@ -1,14 +1,11 @@
 import React, { useState } from 'react';
-import {
-  View,
-  StyleSheet
-} from 'react-native';
+import { View } from 'react-native';
 import { router } from 'expo-router';
 import { useAuthStore } from '../../store/auth.store';
 import { BodyText, Eyebrow, HeroTitle, ScreenShell, SurfaceCard } from '../../components/ui-shell';
 import { UiButton } from '../../components/ui-button';
 import { UiInput } from '../../components/ui-input';
-import { createThemedStyles, theme, useAppTheme } from '../../components/theme';
+import { createThemedStyles, useAppTheme } from '../../components/theme';
 import { Text } from '../../components/i18n-text';
 import { Alert } from '../../components/i18n-alert';
 
@@ -25,7 +22,7 @@ export default function LoginScreen() {
     try {
       await login(email, password);
     } catch (e: any) {
-      Alert.alert('Lỗi', e?.response?.data?.message ?? 'Đăng nhập thất bại');
+      Alert.alert('common.error', e?.response?.data?.message ?? 'auth.login.failed');
     } finally {
       setLoading(false);
     }
@@ -34,39 +31,37 @@ export default function LoginScreen() {
   return (
     <ScreenShell scroll={false} contentStyle={styles.centeredContent}>
       <View style={styles.heroBlock}>
-        <Eyebrow>Vietnamese AI Nutrition</Eyebrow>
-        <HeroTitle>Đẹp dáng và tự tin hơn, theo cách nhẹ nhàng mỗi ngày.</HeroTitle>
-        <BodyText>
-          Không cần hoàn hảo. Chỉ cần bắt đầu lại hôm nay với vài thao tác nhanh, app sẽ đồng hành và nhắc bạn đi đúng hướng.
-        </BodyText>
+        <Eyebrow>auth.login.eyebrow</Eyebrow>
+        <HeroTitle>auth.login.title</HeroTitle>
+        <BodyText>auth.login.body</BodyText>
         <View style={styles.badgeRow}>
-          <View style={styles.badge}><Text style={styles.badgeText}>Scan ảnh</Text></View>
-          <View style={styles.badge}><Text style={styles.badgeText}>Món Việt</Text></View>
-          <View style={styles.badge}><Text style={styles.badgeText}>AI Coach</Text></View>
+          <View style={styles.badge}><Text style={styles.badgeText} i18nKey="auth.login.photoScan" /></View>
+          <View style={styles.badge}><Text style={styles.badgeText} i18nKey="auth.login.vietnameseFood" /></View>
+          <View style={styles.badge}><Text style={styles.badgeText} i18nKey="auth.login.aiCoach" /></View>
         </View>
       </View>
 
       <SurfaceCard style={styles.formCard}>
-        <Text style={styles.sectionTitle}>Đăng nhập</Text>
-        <Text style={styles.subtitle}>Quay lại hành trình tự tin hơn mỗi ngày.</Text>
+        <Text style={styles.sectionTitle} i18nKey="auth.login.formTitle" />
+        <Text style={styles.subtitle} i18nKey="auth.login.subtitle" />
 
         <UiInput
           value={email}
           onChangeText={setEmail}
-          placeholder="Email"
+          placeholder="auth.email.placeholder"
           keyboardType="email-address"
           autoCapitalize="none"
         />
         <UiInput
           value={password}
           onChangeText={setPassword}
-          placeholder="Mật khẩu"
+          placeholder="auth.password.placeholder"
           secureTextEntry
         />
 
-        <UiButton label="Đăng nhập" onPress={handleLogin} loading={loading} style={styles.submitBtn} />
+        <UiButton label="auth.login.submit" onPress={handleLogin} loading={loading} style={styles.submitBtn} />
 
-        <UiButton label="Chưa có tài khoản? Tạo tài khoản" onPress={() => router.push('/(auth)/register')} variant="ghost" />
+        <UiButton label="auth.login.createAccount" onPress={() => router.push('/(auth)/register')} variant="ghost" />
       </SurfaceCard>
     </ScreenShell>
   );
@@ -83,5 +78,3 @@ const styles = createThemedStyles((colors, radii) => ({
   subtitle: { color: colors.textMuted, marginBottom: 20, fontSize: 14, lineHeight: 21 },
   submitBtn: { marginBottom: 8, marginTop: 4 },
 }));
-
-

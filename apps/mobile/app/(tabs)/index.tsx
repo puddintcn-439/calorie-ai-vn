@@ -22,6 +22,7 @@ import { AnimatedIonicon } from '../../components/animated-icon';
 import { RewardToast, RewardToastData } from '../../components/reward-toast';
 import { Text } from '../../components/i18n-text';
 import { Alert } from '../../components/i18n-alert';
+import { useI18n } from '../../components/i18n';
 
 const mealIllustration = require('../../assets/images/vietnamese-meal.png') as number;
 const todayHeroIllustration = require('../../assets/images/today-hero.png') as number;
@@ -277,13 +278,12 @@ function CaloriesRing({ consumed, burned, target }: { consumed: number; burned: 
           strokeLinecap="round"
           strokeDasharray={`${circumference} ${circumference}`}
           strokeDashoffset={circumference * (1 - progress)}
-          rotation="-90"
-          origin={`${size / 2}, ${size / 2}`}
+          transform={`rotate(-90 ${size / 2} ${size / 2})`}
         />
       </Svg>
       <View style={styles.ringCenter}>
         <Text style={styles.ringValue}>{formatNumber(net)}</Text>
-        <Text style={styles.ringLabel}>net kcal</Text>
+        <Text style={styles.ringLabel} i18nKey="screen.tabs.index.text.001" />
         <Text style={[styles.ringRemain, remaining < 0 && styles.ringRemainOver]}>
           {remaining >= 0 ? `còn ${formatNumber(remaining)}` : `dư ${formatNumber(Math.abs(remaining))}`}
         </Text>
@@ -507,6 +507,7 @@ function buildMovementPlan(
 
 export default function DashboardScreen() {
   useAppTheme();
+  const { t } = useI18n();
   const {
     dailyLog,
     activityLogs,
@@ -691,9 +692,9 @@ export default function DashboardScreen() {
       ]);
       const savedTarget = res.data.daily_calorie_target ?? target;
       const planWarnings = res.data.goal_plan?.warnings?.[0];
-      Alert.alert('Đã lưu', `Mục tiêu an toàn: ${formatNumber(savedTarget)} kcal/ngày.${planWarnings ? `\n${planWarnings}` : ''}`);
+      Alert.alert('screen.tabs.index.alert.001', t('screen.tabs.index.alert.savedTargetBody', { target: formatNumber(savedTarget), warnings: planWarnings ? `\n${planWarnings}` : '' }));
     } catch (e: any) {
-      Alert.alert('Lỗi', e?.response?.data?.message ?? 'Không thể lưu mục tiêu.');
+      Alert.alert('screen.tabs.index.alert.002', e?.response?.data?.message ?? 'screen.tabs.index.alert.003');
     } finally {
       setIsApplyingTarget(false);
     }
@@ -717,12 +718,12 @@ export default function DashboardScreen() {
         fetchSummary().catch(() => {}),
       ]);
       setReward({
-        title: 'Đã log vận động',
-        body: `${movementPlan.title} · -${formatNumber(movementPlan.estimated_kcal)} kcal`,
+        title: 'screen.tabs.index.reward.movementTitle',
+        body: t('screen.tabs.index.reward.movementBody', { title: movementPlan.title, calories: formatNumber(movementPlan.estimated_kcal) }),
         icon: 'checkmark-circle',
       });
     } catch {
-      Alert.alert('Lỗi', 'Không thể ghi hoạt động lúc này.');
+      Alert.alert('screen.tabs.index.alert.004', 'screen.tabs.index.alert.005');
     } finally {
       setIsLoggingMovement(false);
     }
@@ -858,11 +859,11 @@ export default function DashboardScreen() {
       <View style={styles.actionGrid}>
         <TouchableOpacity style={styles.primaryAction} onPress={() => router.push('/scan' as never)}>
           <AnimatedIonicon name="camera" size={20} color={theme.colors.textOnAccent} motion="pulse" />
-          <Text style={styles.primaryActionText}>Scan bữa ăn</Text>
+          <Text style={styles.primaryActionText} i18nKey="screen.tabs.index.text.002" />
         </TouchableOpacity>
         <TouchableOpacity style={styles.secondaryAction} onPress={() => router.push('/log' as never)}>
           <AnimatedIonicon name="create-outline" size={18} color={theme.colors.accentMint} motion="float" />
-          <Text style={styles.secondaryActionText}>Log thủ công</Text>
+          <Text style={styles.secondaryActionText} i18nKey="screen.tabs.index.text.003" />
         </TouchableOpacity>
       </View>
 
@@ -871,24 +872,24 @@ export default function DashboardScreen() {
           <CaloriesRing consumed={consumed} burned={burned} target={target} />
           <View style={styles.cockpitSide}>
             <View style={styles.targetRow}>
-              <Text style={styles.targetLabel}>Mục tiêu</Text>
+              <Text style={styles.targetLabel} i18nKey="screen.tabs.index.text.004" />
               <Text style={styles.targetValue}>{formatNumber(target)} kcal</Text>
             </View>
             <View style={styles.targetRow}>
-              <Text style={styles.targetLabel}>Đã nạp</Text>
+              <Text style={styles.targetLabel} i18nKey="screen.tabs.index.text.005" />
               <Text style={styles.targetValue}>{formatNumber(consumed)}</Text>
             </View>
             <View style={styles.targetRow}>
-              <Text style={styles.targetLabel}>Đã đốt</Text>
+              <Text style={styles.targetLabel} i18nKey="screen.tabs.index.text.006" />
               <Text style={styles.targetValueBurned}>-{formatNumber(burned)}</Text>
             </View>
           </View>
         </View>
 
         <View style={styles.macroRow}>
-          <MacroPill label="Protein" value={`${Math.round(protein)}g`} color={theme.colors.accentCoral} />
-          <MacroPill label="Tinh bột" value={`${Math.round(carbs)}g`} color={theme.colors.accentCyan} />
-          <MacroPill label="Béo" value={`${Math.round(fat)}g`} color={theme.colors.accentAmber} />
+          <MacroPill label="screen.tabs.index.label.001" value={`${Math.round(protein)}g`} color={theme.colors.accentCoral} />
+          <MacroPill label="screen.tabs.index.label.002" value={`${Math.round(carbs)}g`} color={theme.colors.accentCyan} />
+          <MacroPill label="screen.tabs.index.label.003" value={`${Math.round(fat)}g`} color={theme.colors.accentAmber} />
         </View>
 
         <View style={styles.focusStrip}>
@@ -898,20 +899,20 @@ export default function DashboardScreen() {
         </View>
 
         <View style={styles.qualityRow}>
-          <QualityPill label="Chất xơ" value={`${Math.round(fiber)} / ${qualityTargets.fiber_g_min}g`} active={qualityCoverageItems > 0} />
-          <QualityPill label="Muối" value={`${Math.round(sodium)} / ${qualityTargets.sodium_mg_max}mg`} active={qualityCoverageItems > 0} over={sodium > qualityTargets.sodium_mg_max} />
-          <QualityPill label="Đường" value={`${Math.round(sugar)} / ${qualityTargets.sugar_g_max}g`} active={qualityCoverageItems > 0} over={sugar > qualityTargets.sugar_g_max} />
-          <QualityPill label="Béo bão hòa" value={`${Math.round(saturatedFat)} / ${qualityTargets.saturated_fat_g_max}g`} active={qualityCoverageItems > 0} over={saturatedFat > qualityTargets.saturated_fat_g_max} />
+          <QualityPill label="screen.tabs.index.label.004" value={`${Math.round(fiber)} / ${qualityTargets.fiber_g_min}g`} active={qualityCoverageItems > 0} />
+          <QualityPill label="screen.tabs.index.label.005" value={`${Math.round(sodium)} / ${qualityTargets.sodium_mg_max}mg`} active={qualityCoverageItems > 0} over={sodium > qualityTargets.sodium_mg_max} />
+          <QualityPill label="screen.tabs.index.label.006" value={`${Math.round(sugar)} / ${qualityTargets.sugar_g_max}g`} active={qualityCoverageItems > 0} over={sugar > qualityTargets.sugar_g_max} />
+          <QualityPill label="screen.tabs.index.label.007" value={`${Math.round(saturatedFat)} / ${qualityTargets.saturated_fat_g_max}g`} active={qualityCoverageItems > 0} over={saturatedFat > qualityTargets.saturated_fat_g_max} />
         </View>
         {qualityCoverageItems === 0 && (
-          <Text style={styles.qualityCoverageNote}>Scan barcode hoặc chọn món từ database để thấy fiber, sodium và sugar chính xác hơn.</Text>
+          <Text style={styles.qualityCoverageNote} i18nKey="screen.tabs.index.text.007" />
         )}
       </SurfaceCard>
 
       <SurfaceCard style={styles.goalPlanCard}>
         <View style={styles.goalPlanHeader}>
           <View style={styles.goalPlanHeaderCopy}>
-            <Text style={styles.goalPlanEyebrow}>Mục tiêu calo</Text>
+            <Text style={styles.goalPlanEyebrow} i18nKey="screen.tabs.index.text.008" />
             <Text style={styles.goalPlanTitle}>Mục tiêu hôm nay {formatNumber(target)} kcal</Text>
           </View>
           {activeGoalPlan?.safety_status && (
@@ -943,10 +944,10 @@ export default function DashboardScreen() {
                 )}
               </View>
             ) : (
-              <Text style={styles.goalPlanBody}>Chưa có kế hoạch cá nhân. Chọn một nhịp thay đổi cân nặng để backend tính mục tiêu an toàn.</Text>
+              <Text style={styles.goalPlanBody} i18nKey="screen.tabs.index.text.009" />
             )}
 
-            <Text style={styles.goalPlanSubhead}>Chọn nhịp mới</Text>
+            <Text style={styles.goalPlanSubhead} i18nKey="screen.tabs.index.text.010" />
             <View style={styles.goalOptionsRow}>
               {QUICK_GOAL_OPTIONS.map((opt) => {
                 const selected = selectedGoal === opt.key;
@@ -976,10 +977,10 @@ export default function DashboardScreen() {
               </TouchableOpacity>
             </View>
 
-            <Text style={styles.goalPlanFootnote}>1 kg ≈ 7700 kcal là quy đổi tham khảo; backend vẫn chặn mục tiêu quá mạnh hoặc profile cần maintenance.</Text>
+            <Text style={styles.goalPlanFootnote} i18nKey="screen.tabs.index.text.011" />
           </>
         ) : (
-          <Text style={styles.goalPlanBody}>Hoàn thiện hồ sơ để nhận gợi ý calo an toàn.</Text>
+          <Text style={styles.goalPlanBody} i18nKey="screen.tabs.index.text.012" />
         )}
       </SurfaceCard>
 
@@ -997,7 +998,7 @@ export default function DashboardScreen() {
               color={movementPlan?.tone === 'caution' || movementPlan?.tone === 'surplus' ? theme.colors.accentAmber : theme.colors.accentMint}
               motion="float"
             />
-            <Text style={styles.movementTitle}>Vận động hôm nay</Text>
+            <Text style={styles.movementTitle} i18nKey="screen.tabs.index.text.013" />
           </View>
           {movementPlan && (
             <View style={styles.movementSourcePill}>
@@ -1009,7 +1010,7 @@ export default function DashboardScreen() {
         {movementPlan ? (
           <>
             <View style={styles.movementNextAction}>
-              <Text style={styles.movementActionLabel}>Việc nên làm tiếp theo</Text>
+              <Text style={styles.movementActionLabel} i18nKey="screen.tabs.index.text.014" />
               <Text style={styles.movementPlanTitle}>{movementPlan.title}</Text>
               <View style={styles.movementMetaRow}>
                 <View style={styles.movementMetaPill}>
@@ -1027,7 +1028,7 @@ export default function DashboardScreen() {
             <Text style={styles.movementPlanDetail}>{movementPlan.detail}</Text>
 
             <View style={styles.movementProgressHeader}>
-              <Text style={styles.movementProgressLabel}>Vận động nền hôm nay</Text>
+              <Text style={styles.movementProgressLabel} i18nKey="screen.tabs.index.text.015" />
               <Text style={styles.movementMetric}>{activityMinutes}/{movementPlan.daily_minutes_target} phút</Text>
             </View>
             <View style={styles.movementProgressBar}>
@@ -1045,19 +1046,19 @@ export default function DashboardScreen() {
               </TouchableOpacity>
               <TouchableOpacity style={styles.movementSecondaryButton} onPress={() => router.push('/profile' as never)}>
                 <Ionicons name="options-outline" size={15} color={theme.colors.accentMint} />
-                <Text style={styles.movementSecondaryText}>Sửa lộ trình</Text>
+                <Text style={styles.movementSecondaryText} i18nKey="screen.tabs.index.text.016" />
               </TouchableOpacity>
               <TouchableOpacity style={styles.movementSecondaryButton} onPress={() => router.push('/log' as never)}>
                 <Ionicons name="create-outline" size={15} color={theme.colors.accentMint} />
-                <Text style={styles.movementSecondaryText}>Log thủ công</Text>
+                <Text style={styles.movementSecondaryText} i18nKey="screen.tabs.index.text.003" />
               </TouchableOpacity>
             </View>
           </>
         ) : (
           <View style={styles.movementBodyRow}>
-            <Text style={styles.movementPlanDetail}>Thêm cân nặng và mức vận động trong Profile để app gợi ý bài phù hợp.</Text>
+            <Text style={styles.movementPlanDetail} i18nKey="screen.tabs.index.text.017" />
             <TouchableOpacity style={styles.movementLogButton} onPress={() => router.push('/profile' as never)}>
-              <Text style={styles.movementLogText}>Mở Profile</Text>
+              <Text style={styles.movementLogText} i18nKey="screen.tabs.index.text.018" />
             </TouchableOpacity>
           </View>
         )}
@@ -1096,9 +1097,9 @@ export default function DashboardScreen() {
       )}
 
       <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>Bữa ăn hôm nay</Text>
+        <Text style={styles.sectionTitle} i18nKey="screen.tabs.index.text.019" />
         <TouchableOpacity onPress={() => router.push('/log' as never)}>
-          <Text style={styles.sectionLink}>Xem nhật ký</Text>
+          <Text style={styles.sectionLink} i18nKey="screen.tabs.index.text.020" />
         </TouchableOpacity>
       </View>
 
@@ -1123,7 +1124,7 @@ export default function DashboardScreen() {
                       {mealLogs.map((log) => log.name_vi ?? log.name).join(', ')}
                     </Text>
                   ) : (
-                    <Text style={styles.mealItemsMuted}>Chưa log</Text>
+                    <Text style={styles.mealItemsMuted} i18nKey="screen.tabs.index.text.021" />
                   )}
                 </View>
               </SurfaceCard>
@@ -1134,15 +1135,15 @@ export default function DashboardScreen() {
         <EmptyState
           imageSource={todayHeroIllustration}
           icon="🍚"
-          title="Chưa có bữa nào hôm nay"
-          description="Scan món Việt đầu tiên hoặc log nhanh từ nhật ký."
+          title="screen.tabs.index.title.001"
+          description="screen.tabs.index.description.001"
         />
       )}
 
       <View style={styles.quickLinks}>
-        <QuickLink icon="body" label="Cơ thể" onPress={() => router.push('/progress' as never)} />
-        <QuickLink icon="stats-chart" label="Insight" onPress={() => router.push('/insights' as never)} />
-        <QuickLink icon="ribbon" label="Thành tích" onPress={() => router.push('/achievements' as never)} />
+        <QuickLink icon="body" label="screen.tabs.index.label.008" onPress={() => router.push('/progress' as never)} />
+        <QuickLink icon="stats-chart" label="screen.tabs.index.label.009" onPress={() => router.push('/insights' as never)} />
+        <QuickLink icon="ribbon" label="screen.tabs.index.label.010" onPress={() => router.push('/achievements' as never)} />
       </View>
       <RewardToast reward={reward} onHide={() => setReward(null)} />
     </ScreenShell>
@@ -1299,9 +1300,10 @@ const styles = createThemedStyles((colors, radii) => ({
     fontWeight: '900',
   },
   cockpitCard: {
-    marginBottom: 12,
-    backgroundColor: colors.surfaceSuccess,
-    borderColor: colors.borderSuccess,
+    marginBottom: 16,
+    backgroundColor: colors.surface,
+    borderColor: colors.borderStrong,
+    padding: 18,
   },
   cockpitMain: {
     flexDirection: 'row',
@@ -1347,11 +1349,11 @@ const styles = createThemedStyles((colors, radii) => ({
   },
   targetRow: {
     borderRadius: radii.lg,
-    backgroundColor: colors.surfaceSuccess,
+    backgroundColor: colors.surfaceAlt,
     borderWidth: 1,
-    borderColor: colors.borderSuccess,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    borderColor: colors.border,
+    paddingHorizontal: 13,
+    paddingVertical: 11,
   },
   targetLabel: {
     color: colors.textMuted,
@@ -1373,15 +1375,15 @@ const styles = createThemedStyles((colors, radii) => ({
   macroRow: {
     flexDirection: 'row',
     gap: 8,
-    marginTop: 14,
+    marginTop: 16,
   },
   macroPill: {
     flex: 1,
     minHeight: 58,
     borderRadius: radii.lg,
-    backgroundColor: colors.surfaceSuccess,
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: colors.borderSuccess,
+    borderColor: colors.border,
     padding: 10,
   },
   macroDot: {
@@ -1404,7 +1406,7 @@ const styles = createThemedStyles((colors, radii) => ({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
-    marginTop: 12,
+    marginTop: 14,
   },
   focusPill: {
     flex: 1,
@@ -1475,8 +1477,8 @@ const styles = createThemedStyles((colors, radii) => ({
     flex: 1,
     borderRadius: radii.lg,
     borderWidth: 1,
-    borderColor: colors.borderSuccess,
-    backgroundColor: colors.surfaceSuccess,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceMuted,
     paddingHorizontal: 10,
     paddingVertical: 8,
   },

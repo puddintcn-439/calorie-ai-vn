@@ -634,6 +634,7 @@ export default function ProfileScreen() {
   const [reward, setReward] = useState<RewardToastData | null>(null);
   const highlightAnim = React.useRef(new Animated.Value(0)).current;
   const highlightLoopRef = React.useRef<Animated.CompositeAnimation | null>(null);
+  const useNativeHighlightDriver = Platform.OS !== 'web';
   const basicIncomplete = !profile.weight_kg || !profile.height_cm || !profile.age;
   const isDesktop = width >= 900;
   const selectedHealthFlags = normaliseHealthFlags(profile.health_flags);
@@ -798,8 +799,8 @@ export default function ProfileScreen() {
       if (!highlightLoopRef.current) {
         highlightLoopRef.current = Animated.loop(
           Animated.sequence([
-            Animated.timing(highlightAnim, { toValue: 1, duration: 700, useNativeDriver: true }),
-            Animated.timing(highlightAnim, { toValue: 0, duration: 700, useNativeDriver: true }),
+            Animated.timing(highlightAnim, { toValue: 1, duration: 700, useNativeDriver: useNativeHighlightDriver }),
+            Animated.timing(highlightAnim, { toValue: 0, duration: 700, useNativeDriver: useNativeHighlightDriver }),
           ]),
         );
         highlightLoopRef.current.start();
@@ -809,7 +810,7 @@ export default function ProfileScreen() {
       highlightLoopRef.current = null;
       highlightAnim.setValue(0);
     }
-  }, [basicIncomplete, basicCollapsed]);
+  }, [basicIncomplete, basicCollapsed, highlightAnim, useNativeHighlightDriver]);
 
   useEffect(() => {
     const assessment = instantAssessment.assessment;
@@ -937,12 +938,12 @@ export default function ProfileScreen() {
       ]);
 
       setReward({
-        title: 'Đã lưu hồ sơ',
-        body: 'Mục tiêu, nhắc nhở và lộ trình đã được cập nhật.',
+        title: 'reward.profileSaved.title',
+        body: 'reward.profileSaved.body',
         icon: 'checkmark-circle',
       });
     } catch (e: any) {
-      Alert.alert('Lỗi', e?.response?.data?.message ?? 'Không thể lưu.');
+      Alert.alert('common.error', e?.response?.data?.message ?? 'profile.save.failed');
     } finally {
       setIsSaving(false);
     }
@@ -973,8 +974,8 @@ export default function ProfileScreen() {
     ));
     if (duplicate) {
       Alert.alert(
-        'Hoạt động đã có',
-        'Bài này đã nằm trong lộ trình. Hãy dùng nút Sửa trên bài đó nếu muốn đổi thời gian.',
+        'profile.roadmap.duplicateTitle',
+        'profile.roadmap.duplicateBody',
       );
       return;
     }
@@ -1008,12 +1009,12 @@ export default function ProfileScreen() {
       setRoadmapCatalogType(null);
       setRoadmapCatalogDuration(30);
       setReward({
-        title: editingRoadmapTask ? 'Đã sửa lộ trình' : 'Đã thêm bài tập',
+        title: editingRoadmapTask ? 'profile.roadmap.editSaved' : 'profile.roadmap.exerciseAdded',
         body: `${activityLabel} · ${durationMin} phút`,
         icon: 'walk',
       });
     } catch (error: any) {
-      Alert.alert('Không thể lưu bài tập', error?.response?.data?.message ?? 'Vui lòng thử lại.');
+      Alert.alert('profile.roadmap.saveExerciseFailed', error?.response?.data?.message ?? 'common.tryAgain');
     }
   };
 
@@ -1034,28 +1035,28 @@ export default function ProfileScreen() {
         fetchDailyLog().catch(() => {}),
       ]);
       setReward({
-        title: 'Đã xóa bài tập',
+        title: 'profile.roadmap.exerciseDeleted',
         body: task.title,
         icon: 'trash-outline',
       });
     } catch (error: any) {
-      Alert.alert('Không thể xóa bài tập', error?.response?.data?.message ?? 'Vui lòng thử lại.');
+      Alert.alert('profile.roadmap.deleteExerciseFailed', error?.response?.data?.message ?? 'common.tryAgain');
     }
   };
 
   const handleRemoveRoadmapTask = (task: ExerciseRoadmapItem) => {
     if (Platform.OS === 'web') {
-      const confirmed = globalThis.confirm?.(`Xóa "${task.title}" khỏi lộ trình?`) ?? false;
+      const confirmed = globalThis.confirm?.(t('profile.roadmap.deleteConfirm', { title: task.title })) ?? false;
       if (confirmed) {
         void removeRoadmapTask(task);
       }
       return;
     }
 
-    Alert.alert('Xóa bài tập', `Xóa "${task.title}" khỏi lộ trình?`, [
-      { text: 'Hủy', style: 'cancel' },
+    Alert.alert('profile.roadmap.deleteTitle', t('profile.roadmap.deleteConfirm', { title: task.title }), [
+      { text: 'common.cancel', style: 'cancel' },
       {
-        text: 'Xóa',
+        text: 'common.delete',
         style: 'destructive',
         onPress: () => void removeRoadmapTask(task),
       },
@@ -1064,16 +1065,16 @@ export default function ProfileScreen() {
 
   const handleLogout = () => {
     if (Platform.OS === 'web') {
-      const confirmed = globalThis.confirm?.('Bạn có chắc muốn đăng xuất?') ?? true;
+      const confirmed = globalThis.confirm?.(t('profile.logout.confirmMessage')) ?? true;
       if (confirmed) {
         void logout();
       }
       return;
     }
 
-    Alert.alert('Đăng xuất', 'Bạn có chắc muốn đăng xuất?', [
-      { text: 'Huỷ', style: 'cancel' },
-      { text: 'Đăng xuất', style: 'destructive', onPress: () => void logout() },
+    Alert.alert('profile.logout.confirmTitle', 'profile.logout.confirmMessage', [
+      { text: 'common.cancel', style: 'cancel' },
+      { text: 'profile.logout', style: 'destructive', onPress: () => void logout() },
     ]);
   };
 
@@ -1084,9 +1085,9 @@ export default function ProfileScreen() {
 
     try {
       await changeTier(tier);
-      Alert.alert('Đã cập nhật gói', `User hiện đang ở gói ${SUBSCRIPTION_TIERS[tier].name}.`);
+      Alert.alert('profile.subscription.updated', t('profile.subscription.updatedBody', { tier: SUBSCRIPTION_TIERS[tier].name }));
     } catch (error: any) {
-      Alert.alert('Không thể cập nhật gói', error?.response?.data?.message ?? error?.message ?? 'Vui lòng thử lại.');
+      Alert.alert('profile.subscription.updateFailed', error?.response?.data?.message ?? error?.message ?? 'common.tryAgain');
     }
   };
 
@@ -1145,10 +1146,10 @@ export default function ProfileScreen() {
               <View>
                 <TouchableOpacity style={styles.catalogBack} onPress={() => setRoadmapCatalogType(null)}>
                   <MaterialIcons name="arrow-back" size={16} color={theme.colors.accentMint} />
-                  <Text style={styles.catalogBackText}>Chọn lại bài</Text>
+                  <Text style={styles.catalogBackText} i18nKey="screen.tabs.profile.text.001" />
                 </TouchableOpacity>
                 <Text style={styles.catalogSelectedLabel}>{EXERCISE_ACTIVITY_LABELS[roadmapCatalogType]}</Text>
-                <Text style={styles.catalogHint}>Chọn thời gian tập:</Text>
+                <Text style={styles.catalogHint} i18nKey="screen.tabs.profile.text.002" />
                 <View style={styles.durationRow}>
                   {([15, 30, 45, 60] as const).map((duration) => {
                     const kcal = estimateExerciseCalories(roadmapCatalogType, duration, userWeight);
@@ -1175,26 +1176,26 @@ export default function ProfileScreen() {
         </View>
       </Modal>
 
-      <ScrollView showsVerticalScrollIndicator={false}>
+      <View>
         <VisualHeroCard
           imageSource={profileHeroIllustration}
-          eyebrow="Hồ sơ cá nhân"
-          title="Thiết lập hồ sơ để AI tính mục tiêu hợp lý hơn."
-          body="Cập nhật chỉ số, mục tiêu, lộ trình vận động và nhắc nhở."
+          eyebrow={t('profile.hero.eyebrow')}
+          title={t('profile.hero.title')}
+          body={t('profile.hero.body')}
         />
 
         <View style={styles.profileShortcutRow}>
           <TouchableOpacity style={styles.profileShortcut} onPress={() => router.push('/progress' as never)}>
             <AnimatedMaterialIcon name="monitor-weight" size={18} color={theme.colors.accentCyan} motion="float" />
-            <Text style={styles.profileShortcutText}>Cơ thể</Text>
+            <Text style={styles.profileShortcutText} i18nKey="profile.shortcut.body" />
           </TouchableOpacity>
           <TouchableOpacity style={styles.profileShortcut} onPress={() => router.push('/insights' as never)}>
             <AnimatedMaterialIcon name="insights" size={18} color={theme.colors.accentCyan} motion="pulse" />
-            <Text style={styles.profileShortcutText}>Insight</Text>
+            <Text style={styles.profileShortcutText} i18nKey="profile.shortcut.insights" />
           </TouchableOpacity>
           <TouchableOpacity style={styles.profileShortcut} onPress={() => router.push('/achievements' as never)}>
             <AnimatedMaterialIcon name="emoji-events" size={18} color={theme.colors.accentAmber} motion="float" />
-            <Text style={styles.profileShortcutText}>Thành tích</Text>
+            <Text style={styles.profileShortcutText} i18nKey="profile.shortcut.achievements" />
           </TouchableOpacity>
         </View>
 
@@ -1217,19 +1218,11 @@ export default function ProfileScreen() {
           </View>
         </SurfaceCard>
 
-        <View style={[styles.profileActionBar, isDesktop && styles.profileActionBarDesktop]}>
-          <UiButton label="Lưu hồ sơ" onPress={handleSaveProfile} loading={isSaving} style={styles.profileSaveButton} />
-          <TouchableOpacity style={styles.profileLogoutButton} onPress={handleLogout}>
-            <MaterialIcons name="logout" size={16} color={theme.colors.danger} />
-            <Text style={styles.profileLogoutText}>Đăng xuất</Text>
-          </TouchableOpacity>
-        </View>
-
         <SurfaceCard style={styles.setupCard}>
           <View style={styles.setupHeader}>
             <View>
-              <Text style={styles.setupEyebrow}>Thiết lập nhanh</Text>
-              <Text style={styles.setupTitle}>{completedSetupCount}/{setupSteps.length} mục đã sẵn sàng</Text>
+              <Text style={styles.setupEyebrow} i18nKey="profile.setup.eyebrow" />
+              <Text style={styles.setupTitle} i18nKey="profile.setup.title" values={{ completed: completedSetupCount, total: setupSteps.length }} />
             </View>
             <View style={styles.setupPercentPill}>
               <Text style={styles.setupPercentText}>{setupProgressPct}%</Text>
@@ -1251,13 +1244,21 @@ export default function ProfileScreen() {
               </TouchableOpacity>
             ))}
           </View>
+          <View style={styles.setupActionRow}>
+            <UiButton
+              label={isSaving ? 'profile.setup.saving' : 'profile.setup.save'}
+              onPress={handleSaveProfile}
+              loading={isSaving}
+              style={[styles.profileSaveButton, isDesktop && styles.setupSaveButtonDesktop]}
+            />
+          </View>
         </SurfaceCard>
 
         <SurfaceCard style={[styles.sectionCard, basicCollapsed && styles.sectionCardCompact]}>
-          <Animated.View pointerEvents="none" style={[styles.highlightOverlay, { opacity: highlightAnim }]} />
+          <Animated.View style={[styles.highlightOverlay, styles.pointerEventsNone, { opacity: highlightAnim }]} />
           <TouchableOpacity onPress={() => setBasicCollapsed((s) => !s)} activeOpacity={0.8} style={styles.sectionHeaderRow}>
             <View>
-              <Text style={styles.sectionTitle}>Thiết lập thông tin thể trạng</Text>
+              <Text style={styles.sectionTitle} i18nKey="screen.tabs.profile.text.003" />
               {basicCollapsed && (
                 <Text style={styles.sectionSubtitle}>
                   {profile.weight_kg ? `${profile.weight_kg} kg · ${profile.height_cm ?? '--'} cm · ${profile.age ?? '--'} tuổi` : 'Chưa thiết lập'}
@@ -1270,20 +1271,20 @@ export default function ProfileScreen() {
           {!basicCollapsed && (
             <>
               <View style={[styles.metricsGrid, isDesktop && styles.metricsGridDesktop]}>
-                <Field label="Họ và tên" value={profile.full_name ?? ''} onChangeText={(v) => setProfile((p) => ({ ...p, full_name: v }))} placeholder="Nguyễn Văn A" fullWidth />
-                <Field label="Cân nặng (kg)" value={String(profile.weight_kg ?? '')} onChangeText={(v) => setProfile((p) => ({ ...p, weight_kg: Number(v) || undefined }))} keyboardType="numeric" placeholder="65" />
-                <Field label="Chiều cao (cm)" value={String(profile.height_cm ?? '')} onChangeText={(v) => setProfile((p) => ({ ...p, height_cm: Number(v) || undefined }))} keyboardType="numeric" placeholder="170" />
-                <Field label="Tuổi" value={String(profile.age ?? '')} onChangeText={(v) => setProfile((p) => ({ ...p, age: Number(v) || undefined }))} keyboardType="numeric" placeholder="25" />
+                <Field label="screen.tabs.profile.label.001" value={profile.full_name ?? ''} onChangeText={(v) => setProfile((p) => ({ ...p, full_name: v }))} placeholder="screen.tabs.profile.placeholder.001" fullWidth />
+                <Field label="screen.tabs.profile.label.002" value={String(profile.weight_kg ?? '')} onChangeText={(v) => setProfile((p) => ({ ...p, weight_kg: Number(v) || undefined }))} keyboardType="numeric" placeholder="65" />
+                <Field label="screen.tabs.profile.label.003" value={String(profile.height_cm ?? '')} onChangeText={(v) => setProfile((p) => ({ ...p, height_cm: Number(v) || undefined }))} keyboardType="numeric" placeholder="170" />
+                <Field label="screen.tabs.profile.label.004" value={String(profile.age ?? '')} onChangeText={(v) => setProfile((p) => ({ ...p, age: Number(v) || undefined }))} keyboardType="numeric" placeholder="25" />
               </View>
 
-              <Text style={styles.label}>Giới tính</Text>
+              <Text style={styles.label} i18nKey="screen.tabs.profile.text.004" />
               <View style={styles.chipRow}>
                 {(['male', 'female'] as const).map((g) => (
                   <UiChip key={g} label={g === 'male' ? '👨 Nam' : '👩 Nữ'} selected={profile.gender === g} onPress={() => setProfile((p) => ({ ...p, gender: g }))} />
                 ))}
               </View>
 
-              <Text style={styles.label}>Yếu tố sức khỏe cần lưu ý</Text>
+              <Text style={styles.label} i18nKey="screen.tabs.profile.text.005" />
               <Text style={styles.helperText}>
                 Chọn nếu có. App sẽ hạ rủi ro bằng cảnh báo và không tự đưa mục tiêu weight-loss/gain cho các trường hợp nhạy cảm.
               </Text>
@@ -1305,7 +1306,7 @@ export default function ProfileScreen() {
         <SurfaceCard style={[styles.sectionCard, assessmentCollapsed && styles.sectionCardCompact]}>
           <TouchableOpacity onPress={() => setAssessmentCollapsed((s) => !s)} activeOpacity={0.8} style={styles.sectionHeaderRow}>
             <View>
-              <Text style={styles.sectionTitle}>🩺 Đánh giá BMI & thể trạng</Text>
+              <Text style={styles.sectionTitle} i18nKey="screen.tabs.profile.text.006" />
               {assessmentCollapsed && (
                 <Text style={styles.sectionSubtitle}>
                   {instantAssessment.assessment
@@ -1332,11 +1333,11 @@ export default function ProfileScreen() {
                 >
                   <View style={styles.assessmentTopRow}>
                     <View>
-                      <Text style={[styles.assessmentBmiLabel, { color: assessmentTone?.accent }]}>Sàng lọc BMI</Text>
+                      <Text style={[styles.assessmentBmiLabel, { color: assessmentTone?.accent }]} i18nKey="screen.tabs.profile.text.007" />
                       <Text style={[styles.assessmentBmiValue, { color: assessmentTone?.text }]}>{instantAssessment.assessment.bmi}</Text>
                     </View>
                     <View style={styles.assessmentMeta}>
-                      <Text style={styles.assessmentMetaLabel}>Mức rủi ro</Text>
+                      <Text style={styles.assessmentMetaLabel} i18nKey="screen.tabs.profile.text.008" />
                       <Text style={[styles.assessmentMetaValue, { color: assessmentTone?.accent }]}> 
                         {BODY_STATUS_LABELS[instantAssessment.assessment.body_status]}
                       </Text>
@@ -1389,7 +1390,7 @@ export default function ProfileScreen() {
                   </Text>
 
                   <View style={styles.exerciseListWrap}>
-                    <Text style={[styles.exerciseListTitle, { color: assessmentTone?.accent }]}>Bài tập gợi ý:</Text>
+                    <Text style={[styles.exerciseListTitle, { color: assessmentTone?.accent }]} i18nKey="screen.tabs.profile.text.009" />
                     {instantAssessment.assessment.exercise_plan.map((item, index) => (
                       <Text key={`exercise-${index}`} style={[styles.exerciseListItem, { color: assessmentTone?.text }]}> 
                         {index + 1}. {item}
@@ -1411,22 +1412,22 @@ export default function ProfileScreen() {
         <View style={[styles.summaryRow, isDesktop && styles.summaryRowDesktop]}>
           <SurfaceCard style={styles.summaryCard}>
             <Text style={styles.summaryValue}>{profile.daily_calorie_target ?? '--'}</Text>
-            <Text style={styles.summaryLabel}>Kcal mỗi ngày</Text>
+            <Text style={styles.summaryLabel} i18nKey="screen.tabs.profile.text.010" />
           </SurfaceCard>
           <SurfaceCard style={styles.summaryCard}>
             <Text style={styles.summaryValue}>{profile.goal ? GOAL_LABELS[profile.goal] : '--'}</Text>
-            <Text style={styles.summaryLabel}>Mục tiêu hiện tại</Text>
+            <Text style={styles.summaryLabel} i18nKey="screen.tabs.profile.text.011" />
           </SurfaceCard>
           <SurfaceCard style={styles.summaryCard}>
             <Text style={styles.summaryValue}>{profile.activity_level ? ACTIVITY_LABELS[profile.activity_level] : '--'}</Text>
-            <Text style={styles.summaryLabel}>Mức vận động</Text>
+            <Text style={styles.summaryLabel} i18nKey="screen.tabs.profile.text.012" />
           </SurfaceCard>
         </View>
 
       <SurfaceCard style={[styles.sectionCard, goalCollapsed && styles.sectionCardCompact]}>
         <TouchableOpacity onPress={() => setGoalCollapsed((s) => !s)} activeOpacity={0.8} style={styles.sectionHeaderRow}>
           <View>
-            <Text style={styles.sectionTitle}>Phong cách mục tiêu</Text>
+            <Text style={styles.sectionTitle} i18nKey="screen.tabs.profile.text.013" />
             {goalCollapsed && (
               <Text style={styles.sectionSubtitle}>{profile.goal ? GOAL_LABELS[profile.goal] : 'Chưa chọn'} · {profile.activity_level ? ACTIVITY_LABELS[profile.activity_level] : '...'}</Text>
             )}
@@ -1436,16 +1437,16 @@ export default function ProfileScreen() {
 
         {!goalCollapsed && (
           <>
-            <Text style={styles.helperText}>Chọn kết quả bạn đang muốn đạt được và mức vận động thực tế mỗi tuần.</Text>
+            <Text style={styles.helperText} i18nKey="screen.tabs.profile.text.014" />
 
-            <Text style={styles.label}>Mục tiêu</Text>
+            <Text style={styles.label} i18nKey="screen.tabs.profile.text.015" />
             <View style={styles.chipRow}>
               {(Object.keys(GOAL_LABELS) as UserGoal[]).map((g) => (
                 <UiChip key={g} label={GOAL_LABELS[g]} selected={profile.goal === g} onPress={() => setProfile((p) => ({ ...p, goal: g }))} />
               ))}
             </View>
 
-            <Text style={styles.label}>Mức độ vận động</Text>
+            <Text style={styles.label} i18nKey="screen.tabs.profile.text.016" />
             <View style={styles.chipRow}>
               {(Object.keys(ACTIVITY_LABELS) as ActivityLevel[]).map((a) => (
                 <UiChip key={a} label={ACTIVITY_LABELS[a]} selected={profile.activity_level === a} onPress={() => setProfile((p) => ({ ...p, activity_level: a }))} style={styles.activityChip} />
@@ -1454,17 +1455,17 @@ export default function ProfileScreen() {
 
             <View style={[styles.goalPlanningGrid, isDesktop && styles.goalPlanningGridDesktop]}>
               <View style={styles.goalPlanPanel}>
-                <Text style={styles.label}>Kế hoạch cá nhân</Text>
+                <Text style={styles.label} i18nKey="screen.tabs.profile.text.017" />
                 <View style={styles.goalPlanRow}>
-                  <UiInput label="Kg cần thay đổi" value={String(goalPlanTargetKg ?? '')} onChangeText={(v) => setGoalPlanTargetKg(Number(v) || undefined)} keyboardType="numeric" style={{ flex: 1 }} />
-                  <UiInput label="Thời gian (tuần)" value={String(goalPlanDurationWeeks ?? '')} onChangeText={(v) => setGoalPlanDurationWeeks(Number(v) || undefined)} keyboardType="numeric" style={{ width: 140 }} />
+                  <UiInput label="screen.tabs.profile.label.005" value={String(goalPlanTargetKg ?? '')} onChangeText={(v) => setGoalPlanTargetKg(Number(v) || undefined)} keyboardType="numeric" style={{ flex: 1 }} />
+                  <UiInput label="screen.tabs.profile.label.006" value={String(goalPlanDurationWeeks ?? '')} onChangeText={(v) => setGoalPlanDurationWeeks(Number(v) || undefined)} keyboardType="numeric" style={{ width: 140 }} />
                 </View>
                 <View style={styles.chipRow}>
-                  <UiChip label="Giảm" selected={goalPlanDirection === 'loss'} onPress={() => setGoalPlanDirection('loss')} />
-                  <UiChip label="Giữ" selected={goalPlanDirection === 'maintain'} onPress={() => setGoalPlanDirection('maintain')} />
-                  <UiChip label="Tăng" selected={goalPlanDirection === 'gain'} onPress={() => setGoalPlanDirection('gain')} />
+                  <UiChip label="screen.tabs.profile.label.007" selected={goalPlanDirection === 'loss'} onPress={() => setGoalPlanDirection('loss')} />
+                  <UiChip label="screen.tabs.profile.label.008" selected={goalPlanDirection === 'maintain'} onPress={() => setGoalPlanDirection('maintain')} />
+                  <UiChip label="screen.tabs.profile.label.009" selected={goalPlanDirection === 'gain'} onPress={() => setGoalPlanDirection('gain')} />
                 </View>
-                <Text style={styles.helperText}>Nhập kế hoạch cá nhân (ví dụ: giảm 3kg trong 8 tuần). Backend sẽ tự clamp nếu tốc độ quá mạnh hoặc hồ sơ cần maintenance.</Text>
+                <Text style={styles.helperText} i18nKey="screen.tabs.profile.text.018" />
                 {activeGoalPlan?.computed_daily_calorie_target && (
                   <View style={styles.goalPlanStatusBox}>
                     <Text style={styles.goalPlanStatusTitle}>
@@ -1479,17 +1480,17 @@ export default function ProfileScreen() {
                   </View>
                 )}
                 {activeGoalPlan && (
-                  <UiButton label="Xóa kế hoạch cá nhân" variant="ghost" onPress={clearGoalPlan} style={styles.clearGoalPlanButton} />
+                  <UiButton label="screen.tabs.profile.label.010" variant="ghost" onPress={clearGoalPlan} style={styles.clearGoalPlanButton} />
                 )}
               </View>
 
               <View style={styles.roadmapPanel}>
                 <View style={styles.roadmapHeader}>
                   <View style={styles.roadmapPanelTitleRow}>
-                    <Text style={styles.label}>Lộ trình vận động</Text>
+                    <Text style={styles.label} i18nKey="screen.tabs.profile.text.019" />
                     <TouchableOpacity style={styles.roadmapAddBtn} onPress={openAddRoadmapExercise}>
                       <MaterialIcons name="add" size={15} color={theme.colors.textOnAccent} />
-                      <Text style={styles.roadmapAddBtnText}>Thêm bài</Text>
+                      <Text style={styles.roadmapAddBtnText} i18nKey="screen.tabs.profile.text.020" />
                     </TouchableOpacity>
                   </View>
                   <Text style={styles.roadmapSummary}>
@@ -1498,11 +1499,11 @@ export default function ProfileScreen() {
                       : 'Chưa có bài tập ưu tiên.'}
                   </Text>
                 </View>
-                <Text style={styles.helperText}>Đây là nơi chính để chọn môn/bài người dùng muốn tập hoặc có thể chơi. Tab Log chỉ ghi hoạt động đã hoàn thành.</Text>
+                <Text style={styles.helperText} i18nKey="screen.tabs.profile.text.021" />
 
                 {roadmap.length === 0 ? (
                   <View style={styles.roadmapEmptyBox}>
-                    <Text style={styles.roadmapEmptyText}>Thêm các môn hoặc bài người dùng muốn tập. Today sẽ ưu tiên các bài này khi đề xuất hoạt động đốt calo.</Text>
+                    <Text style={styles.roadmapEmptyText} i18nKey="screen.tabs.profile.text.022" />
                   </View>
                 ) : (
                   <View style={styles.roadmapWrap}>
@@ -1530,14 +1531,14 @@ export default function ProfileScreen() {
                                   onPress={() => openEditRoadmapExercise(item)}
                                 >
                                   <MaterialIcons name="edit" size={13} color={theme.colors.accentCyan} />
-                                  <Text style={styles.roadmapActionText}>Sửa</Text>
+                                  <Text style={styles.roadmapActionText} i18nKey="screen.tabs.profile.text.023" />
                                 </TouchableOpacity>
                                 <TouchableOpacity
                                   style={[styles.roadmapActionBtn, styles.roadmapDeleteBtn]}
                                   onPress={() => handleRemoveRoadmapTask(item)}
                                 >
                                   <MaterialIcons name="delete-outline" size={13} color={theme.colors.danger} />
-                                  <Text style={styles.roadmapDeleteText}>Xóa</Text>
+                                  <Text style={styles.roadmapDeleteText} i18nKey="screen.tabs.profile.text.024" />
                                 </TouchableOpacity>
                               </View>
                             </View>
@@ -1556,7 +1557,7 @@ export default function ProfileScreen() {
       <SurfaceCard style={[styles.sectionCard, calorieCollapsed && styles.sectionCardCompact]}>
         <TouchableOpacity onPress={() => setCalorieCollapsed((s) => !s)} activeOpacity={0.8} style={styles.sectionHeaderRow}>
           <View>
-            <Text style={styles.sectionTitle}>🎯 Mục tiêu calo</Text>
+            <Text style={styles.sectionTitle} i18nKey="screen.tabs.profile.text.025" />
             {calorieCollapsed && (
               <Text style={styles.sectionSubtitle}>{profile.daily_calorie_target ? `${profile.daily_calorie_target} kcal/ngày` : 'Chưa đặt'}</Text>
             )}
@@ -1566,13 +1567,13 @@ export default function ProfileScreen() {
 
         {!calorieCollapsed && (
           <>
-            <Text style={styles.helperText}>Phân bổ mức calo theo từng bữa để app hiển thị tiến độ rõ hơn trong nhật ký.</Text>
-            <Field label="Tổng calo/ngày" value={String(profile.daily_calorie_target ?? '')} onChangeText={(v) => setProfile((p) => ({ ...p, daily_calorie_target: Number(v) || undefined }))} keyboardType="numeric" placeholder="1800" fullWidth />
+            <Text style={styles.helperText} i18nKey="screen.tabs.profile.text.026" />
+            <Field label="screen.tabs.profile.label.011" value={String(profile.daily_calorie_target ?? '')} onChangeText={(v) => setProfile((p) => ({ ...p, daily_calorie_target: Number(v) || undefined }))} keyboardType="numeric" placeholder="1800" fullWidth />
             <View style={[styles.mealTargetRow, isDesktop && styles.mealTargetRowDesktop]}>
-              <MealTargetField label="🌅 Sáng" value={String(profile.target_breakfast_cal ?? '')} onChangeText={(v) => setProfile((p) => ({ ...p, target_breakfast_cal: Number(v) || undefined }))} />
-              <MealTargetField label="☀️ Trưa" value={String(profile.target_lunch_cal ?? '')} onChangeText={(v) => setProfile((p) => ({ ...p, target_lunch_cal: Number(v) || undefined }))} />
-              <MealTargetField label="🌙 Tối" value={String(profile.target_dinner_cal ?? '')} onChangeText={(v) => setProfile((p) => ({ ...p, target_dinner_cal: Number(v) || undefined }))} />
-              <MealTargetField label="🍎 Vặt" value={String(profile.target_snack_cal ?? '')} onChangeText={(v) => setProfile((p) => ({ ...p, target_snack_cal: Number(v) || undefined }))} />
+              <MealTargetField label="screen.tabs.profile.label.012" value={String(profile.target_breakfast_cal ?? '')} onChangeText={(v) => setProfile((p) => ({ ...p, target_breakfast_cal: Number(v) || undefined }))} />
+              <MealTargetField label="screen.tabs.profile.label.013" value={String(profile.target_lunch_cal ?? '')} onChangeText={(v) => setProfile((p) => ({ ...p, target_lunch_cal: Number(v) || undefined }))} />
+              <MealTargetField label="screen.tabs.profile.label.014" value={String(profile.target_dinner_cal ?? '')} onChangeText={(v) => setProfile((p) => ({ ...p, target_dinner_cal: Number(v) || undefined }))} />
+              <MealTargetField label="screen.tabs.profile.label.015" value={String(profile.target_snack_cal ?? '')} onChangeText={(v) => setProfile((p) => ({ ...p, target_snack_cal: Number(v) || undefined }))} />
             </View>
             <MacrosCard daily_calorie_target={profile.daily_calorie_target} weight_kg={profile.weight_kg} goal={profile.goal} />
           </>
@@ -1583,7 +1584,7 @@ export default function ProfileScreen() {
         <View style={styles.sectionHeaderRow}>
           <TouchableOpacity onPress={() => setNotificationsCollapsed((s) => !s)} activeOpacity={0.8} style={{ flex: 1 }}>
             <View>
-              <Text style={styles.sectionTitle}>🔔 Nhận thông báo</Text>
+              <Text style={styles.sectionTitle} i18nKey="screen.tabs.profile.text.027" />
               {notificationsCollapsed && (
                 <Text style={styles.sectionSubtitle}>{(reminders.allow_push_notifications ?? true) ? 'Bật' : 'Tắt'}</Text>
               )}
@@ -1604,10 +1605,10 @@ export default function ProfileScreen() {
 
         {!notificationsCollapsed && (
           <>
-            <Text style={styles.helperText}>Bật thông báo mealtime để nhận nhắc nhở ăn và cập nhật tiến độ.</Text>
+            <Text style={styles.helperText} i18nKey="screen.tabs.profile.text.028" />
 
             <View style={styles.switchRow}>
-              <Text style={styles.switchLabel}>Cho phép thông báo push</Text>
+              <Text style={styles.switchLabel} i18nKey="screen.tabs.profile.text.029" />
               <Switch
                 value={reminders.allow_push_notifications ?? true}
                 onValueChange={(v) => setReminders((r) => ({ ...r, allow_push_notifications: v }))}
@@ -1616,7 +1617,7 @@ export default function ProfileScreen() {
               />
             </View>
 
-            <Text style={styles.label}>Phong cách nhắc nhở</Text>
+            <Text style={styles.label} i18nKey="screen.tabs.profile.text.030" />
             <View style={styles.chipRow}>
               {(['encouraging', 'neutral', 'warning'] as const).map((style) => (
                 <UiChip
@@ -1665,7 +1666,7 @@ export default function ProfileScreen() {
             />
 
             <View style={styles.previewSection}>
-              <Text style={styles.label}>Xem trước nudge theo bữa</Text>
+              <Text style={styles.label} i18nKey="screen.tabs.profile.text.031" />
               <View style={styles.chipRow}>
                 {([
                   ['breakfast', '🌅 Sáng'],
@@ -1705,7 +1706,7 @@ export default function ProfileScreen() {
       </SurfaceCard>
 
       <SurfaceCard style={styles.sectionCard}>
-        <Text style={styles.sectionTitle}>💎 Gói dịch vụ</Text>
+        <Text style={styles.sectionTitle} i18nKey="screen.tabs.profile.text.032" />
         <View style={styles.subscriptionCard}>
           <View style={styles.subscriptionHeader}>
             <View>
@@ -1760,7 +1761,7 @@ export default function ProfileScreen() {
 
           {features && (
             <View style={styles.featuresPreview}>
-              <Text style={styles.featuresLabel}>Các tính năng:</Text>
+              <Text style={styles.featuresLabel} i18nKey="screen.tabs.profile.text.033" />
               <View style={styles.featureGrid}>
                 {[
                   { name: 'ai_coach', label: 'AI Coach' },
@@ -1785,7 +1786,14 @@ export default function ProfileScreen() {
         </View>
       </SurfaceCard>
 
-      </ScrollView>
+        <View style={styles.logoutFooter}>
+          <TouchableOpacity style={styles.profileLogoutButton} onPress={handleLogout}>
+            <MaterialIcons name="logout" size={16} color={theme.colors.danger} />
+            <Text style={styles.profileLogoutText} i18nKey="profile.logout" />
+          </TouchableOpacity>
+        </View>
+
+      </View>
       <RewardToast reward={reward} onHide={() => setReward(null)} />
     </ScreenShell>
   );
@@ -1856,7 +1864,7 @@ function ReminderTimePickerRow({
       {enabled && (
         <View style={styles.reminderTimeInputs}>
           <View style={styles.timeInputGroup}>
-            <Text style={styles.timeInputLabel}>Giờ</Text>
+            <Text style={styles.timeInputLabel} i18nKey="screen.tabs.profile.text.034" />
             <UiInput
               value={String(hours).padStart(2, '0')}
               onChangeText={(v) => {
@@ -1864,7 +1872,7 @@ function ReminderTimePickerRow({
                 handleTimeSelect(h, minutes);
               }}
               keyboardType="number-pad"
-              placeholder="HH"
+              placeholder="screen.tabs.profile.placeholder.hour"
               maxLength={2}
               containerStyle={{ marginBottom: 0 }}
               style={styles.timeInput}
@@ -1874,7 +1882,7 @@ function ReminderTimePickerRow({
           <Text style={styles.timeSeparator}>:</Text>
 
           <View style={styles.timeInputGroup}>
-            <Text style={styles.timeInputLabel}>Phút</Text>
+            <Text style={styles.timeInputLabel} i18nKey="screen.tabs.profile.text.035" />
             <UiInput
               value={String(minutes).padStart(2, '0')}
               onChangeText={(v) => {
@@ -1882,7 +1890,7 @@ function ReminderTimePickerRow({
                 handleTimeSelect(hours, m);
               }}
               keyboardType="number-pad"
-              placeholder="MM"
+              placeholder="screen.tabs.profile.placeholder.minute"
               maxLength={2}
               containerStyle={{ marginBottom: 0 }}
               style={styles.timeInput}
@@ -1942,28 +1950,29 @@ const styles = createThemedStyles((colors, radii) => ({
     height: 1,
     backgroundColor: colors.borderSubtle,
   },
-  profileActionBar: {
-    minHeight: 52,
-    marginBottom: 14,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-    padding: 8,
+  setupActionRow: {
+    marginTop: 14,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: colors.borderSuccess,
     flexDirection: 'row',
     alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: 8,
+    justifyContent: 'flex-end',
   },
-  profileActionBarDesktop: {
-    maxWidth: 520,
-    alignSelf: 'flex-end',
+  setupSaveButtonDesktop: {
+    maxWidth: 220,
   },
   profileSaveButton: {
     flex: 1,
   },
+  logoutFooter: {
+    alignItems: 'flex-end',
+    marginTop: 2,
+    marginBottom: 18,
+  },
   profileLogoutButton: {
     minHeight: 40,
+    minWidth: 128,
     borderRadius: radii.lg,
     borderWidth: 1,
     borderColor: colors.borderDanger,
@@ -2195,6 +2204,7 @@ const styles = createThemedStyles((colors, radii) => ({
   assessmentHint: { color: colors.info, fontSize: 13, lineHeight: 19, marginTop: 10 },
   sectionCard: { marginBottom: 14 },
   highlightOverlay: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, borderRadius: 12, backgroundColor: colors.surfaceWarning },
+  pointerEventsNone: { pointerEvents: 'none' },
   sectionCardCompact: { paddingVertical: 8, paddingHorizontal: 12 },
   sectionHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   sectionSubtitle: { color: colors.textMuted, fontSize: 13, marginTop: 2 },
