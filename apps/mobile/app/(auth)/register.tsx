@@ -1,14 +1,19 @@
 import React, { useState } from 'react';
 import {
-  View, Text, StyleSheet, Alert,
+  View,
+  StyleSheet
 } from 'react-native';
 import { router } from 'expo-router';
 import { useAuthStore } from '../../store/auth.store';
 import { BodyText, Eyebrow, HeroTitle, ScreenShell, SurfaceCard } from '../../components/ui-shell';
 import { UiButton } from '../../components/ui-button';
 import { UiInput } from '../../components/ui-input';
+import { createThemedStyles, theme, useAppTheme } from '../../components/theme';
+import { Text } from '../../components/i18n-text';
+import { Alert } from '../../components/i18n-alert';
 
 export default function RegisterScreen() {
+  useAppTheme();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
@@ -68,11 +73,12 @@ export default function RegisterScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createThemedStyles((colors, radii) => ({
   centeredContent: { flex: 1, justifyContent: 'center', maxWidth: 560, alignSelf: 'center', width: '100%' },
   heroBlock: { marginBottom: 18, paddingHorizontal: 4 },
   formCard: { width: '100%', padding: 20 },
-  sectionTitle: { color: '#eff6ff', fontSize: 24, fontWeight: '800', marginBottom: 6 },
-  subtitle: { color: '#94a3b8', marginBottom: 20, fontSize: 14, lineHeight: 21 },
+  sectionTitle: { color: colors.text, fontSize: 24, fontWeight: '800', marginBottom: 6 },
+  subtitle: { color: colors.textMuted, marginBottom: 20, fontSize: 14, lineHeight: 21 },
   submitBtn: { marginBottom: 8, marginTop: 4 },
-});
+}));
+

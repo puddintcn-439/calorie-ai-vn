@@ -1,11 +1,11 @@
 import { Module } from '@nestjs/common';
 import { LogController } from './log.controller';
 import { LogService } from './log.service';
-import { RoadmapController } from './roadmap.controller';
+import { ActivityPreferenceController, RoadmapController } from './roadmap.controller';
 import { RoadmapService } from './roadmap.service';
 
 @Module({
-  controllers: [LogController, RoadmapController],
+  controllers: [LogController, RoadmapController, ActivityPreferenceController],
   providers: [LogService, RoadmapService],
 })
 export class LogModule {}

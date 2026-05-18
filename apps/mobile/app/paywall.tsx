@@ -1,21 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import {
   View,
-  Text,
   ScrollView,
   StyleSheet,
   TouchableOpacity,
   ActivityIndicator,
-  Alert,
-  useWindowDimensions,
+  useWindowDimensions
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useSubscriptionStore } from '../store/subscription.store';
 import { SUBSCRIPTION_TIERS, SubscriptionTier } from '@calorie-ai/types';
-import { theme } from '../components/theme';
+import { createThemedStyles, theme, useAppTheme } from '../components/theme';
+import { Text } from '../components/i18n-text';
+import { Alert } from '../components/i18n-alert';
 
 export default function PaywallScreen() {
+  useAppTheme();
   const router = useRouter();
   const { subscription, isLoading, error, changeTier } = useSubscriptionStore();
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
@@ -195,7 +196,7 @@ export default function PaywallScreen() {
 
       {error && (
         <View style={styles.errorBanner}>
-          <MaterialIcons name="error" size={20} color="#dc2626" />
+          <MaterialIcons name="error" size={20} color={theme.colors.danger} />
           <Text style={styles.errorText}>{error}</Text>
         </View>
       )}
@@ -211,10 +212,10 @@ export default function PaywallScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createThemedStyles((colors, radii) => ({
   container: {
     flex: 1,
-    backgroundColor: theme.colors.bgBottom,
+    backgroundColor: colors.bgBottom,
   },
   content: {
     paddingHorizontal: 16,
@@ -232,48 +233,48 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 28,
     fontWeight: '800',
-    color: theme.colors.text,
+    color: colors.text,
     marginBottom: 8,
     textAlign: 'center',
   },
   subtitle: {
     fontSize: 14,
     lineHeight: 21,
-    color: theme.colors.textSoft,
+    color: colors.textSoft,
     textAlign: 'center',
     maxWidth: 560,
   },
   billingToggle: {
     flexDirection: 'row',
-    backgroundColor: theme.colors.surfaceAlt,
-    borderRadius: theme.radii.lg,
+    backgroundColor: colors.surfaceAlt,
+    borderRadius: radii.lg,
     padding: 4,
     marginBottom: 24,
     borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderColor: colors.border,
   },
   billingOption: {
     flex: 1,
     paddingVertical: 12,
     paddingHorizontal: 16,
-    borderRadius: theme.radii.lg,
+    borderRadius: radii.lg,
     alignItems: 'center',
     justifyContent: 'center',
   },
   activeOption: {
-    backgroundColor: theme.colors.surfaceWarm,
+    backgroundColor: colors.surfaceWarm,
   },
   billingText: {
     fontSize: 14,
     fontWeight: '600',
-    color: theme.colors.textMuted,
+    color: colors.textMuted,
   },
   activeText: {
-    color: theme.colors.text,
+    color: colors.text,
   },
   savingsBadge: {
     fontSize: 12,
-    color: theme.colors.accentMint,
+    color: colors.accentMint,
     fontWeight: '600',
     marginTop: 4,
   },
@@ -291,11 +292,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   tierCard: {
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.radii.xl,
+    backgroundColor: colors.surface,
+    borderRadius: radii.xl,
     padding: 20,
     borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderColor: colors.border,
   },
   tierCardWide: {
     flex: 1,
@@ -308,36 +309,36 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   currentTierCard: {
-    backgroundColor: '#142438',
-    borderColor: theme.colors.accentCyan,
+    backgroundColor: colors.surfaceAlt,
+    borderColor: colors.accentCyan,
   },
   popularTierCard: {
-    borderColor: theme.colors.accentCoral,
-    backgroundColor: '#251b18',
+    borderColor: colors.accentCoral,
+    backgroundColor: colors.surfaceWarning,
   },
   popularBadge: {
     position: 'absolute',
     top: -12,
     left: 20,
-    backgroundColor: theme.colors.accentCoral,
+    backgroundColor: colors.accentCoral,
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: theme.radii.lg,
+    borderRadius: radii.lg,
   },
   popularBadgeText: {
-    color: '#111827',
+    color: colors.textOnAccent,
     fontSize: 12,
     fontWeight: '700',
   },
   tierName: {
     fontSize: 20,
     fontWeight: '800',
-    color: theme.colors.text,
+    color: colors.text,
     marginBottom: 4,
   },
   tierDescription: {
     fontSize: 14,
-    color: theme.colors.textSoft,
+    color: colors.textSoft,
     marginBottom: 16,
   },
   priceContainer: {
@@ -348,11 +349,11 @@ const styles = StyleSheet.create({
   price: {
     fontSize: 32,
     fontWeight: '700',
-    color: theme.colors.text,
+    color: colors.text,
   },
   billingPeriod: {
     fontSize: 14,
-    color: theme.colors.textMuted,
+    color: colors.textMuted,
     marginLeft: 4,
   },
   featuresList: {
@@ -366,30 +367,30 @@ const styles = StyleSheet.create({
   },
   featureText: {
     fontSize: 14,
-    color: theme.colors.textSoft,
+    color: colors.textSoft,
     fontWeight: '500',
   },
   featureDisabled: {
-    color: '#536174',
+    color: colors.textMuted,
   },
   actionButton: {
-    backgroundColor: theme.colors.accentMint,
+    backgroundColor: colors.accentMint,
     paddingVertical: 14,
     paddingHorizontal: 16,
-    borderRadius: theme.radii.lg,
+    borderRadius: radii.lg,
     alignItems: 'center',
     justifyContent: 'center',
   },
   currentButton: {
-    backgroundColor: theme.colors.surfaceAlt,
+    backgroundColor: colors.surfaceAlt,
   },
   actionButtonText: {
-    color: '#07131d',
+    color: colors.textOnAccent,
     fontSize: 16,
     fontWeight: '600',
   },
   currentButtonText: {
-    color: theme.colors.textMuted,
+    color: colors.textMuted,
   },
   faqSection: {
     marginBottom: 24,
@@ -397,29 +398,29 @@ const styles = StyleSheet.create({
   faqTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: theme.colors.text,
+    color: colors.text,
     marginBottom: 16,
   },
   faqItem: {
     marginBottom: 16,
     paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
+    borderBottomColor: colors.border,
   },
   faqQuestion: {
     fontSize: 14,
     fontWeight: '600',
-    color: theme.colors.text,
+    color: colors.text,
     marginBottom: 6,
   },
   faqAnswer: {
     fontSize: 13,
-    color: theme.colors.textSoft,
+    color: colors.textSoft,
     lineHeight: 20,
   },
   errorBanner: {
-    backgroundColor: '#2c1117',
-    borderRadius: theme.radii.lg,
+    backgroundColor: colors.surfaceDanger,
+    borderRadius: radii.lg,
     padding: 12,
     marginBottom: 16,
     flexDirection: 'row',
@@ -429,18 +430,20 @@ const styles = StyleSheet.create({
   errorText: {
     flex: 1,
     fontSize: 14,
-    color: theme.colors.danger,
+    color: colors.danger,
     fontWeight: '500',
   },
   footer: {
     alignItems: 'center',
     paddingTop: 16,
     borderTopWidth: 1,
-    borderTopColor: theme.colors.border,
+    borderTopColor: colors.border,
   },
   footerLink: {
     fontSize: 14,
-    color: theme.colors.accentMint,
+    color: colors.accentMint,
     fontWeight: '600',
   },
-});
+}));
+
+

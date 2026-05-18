@@ -114,4 +114,109 @@ describe('UserService.updateProfile', () => {
     const service = new UserService({ db } as unknown as SupabaseService);
     await expect(service.updateProfile('u1', {})).rejects.toThrow('update failed');
   });
+
+  it('computes and persists a safe goal plan target', async () => {
+    const existing = {
+      id: 'u1',
+      email: 'a@b.com',
+      weight_kg: 80,
+      height_cm: 175,
+      age: 32,
+      gender: 'male',
+      activity_level: 'moderate',
+      goal: 'maintain',
+      health_flags: [],
+    };
+    let captured: Record<string, unknown> | null = null;
+    const chain = {
+      select: jest.fn().mockReturnThis(),
+      eq: jest.fn().mockReturnThis(),
+      update: jest.fn().mockImplementation((row: Record<string, unknown>) => {
+        captured = row;
+        return chain;
+      }),
+      maybeSingle: jest.fn()
+        .mockResolvedValueOnce({ data: existing, error: null })
+        .mockImplementation(() => Promise.resolve({ data: { ...existing, ...captured }, error: null })),
+    };
+    const db = makeDb(() => chain);
+    const service = new UserService({ db } as unknown as SupabaseService);
+
+    const result = await service.updateProfile('u1', {
+      goal_plan: { target_kg: 2, duration_weeks: 4, direction: 'loss' },
+    });
+
+    expect(result.daily_calorie_target).toBeGreaterThan(0);
+    expect(result.goal).toBe('lose_weight');
+    expect(result.goal_plan?.computed_daily_calorie_target).toBe(result.daily_calorie_target);
+    expect(result.goal_plan?.weekly_rate_kg).toBe(0.5);
+    expect(result.target_breakfast_cal).toBe(Math.round((result.daily_calorie_target ?? 0) * 0.25));
+  });
+
+  it('forces weight-change goal plans to maintenance for minors', async () => {
+    const existing = {
+      id: 'u1',
+      email: 'a@b.com',
+      weight_kg: 60,
+      height_cm: 170,
+      age: 16,
+      gender: 'female',
+      activity_level: 'light',
+      goal: 'lose_weight',
+      health_flags: [],
+    };
+    let captured: Record<string, unknown> | null = null;
+    const chain = {
+      select: jest.fn().mockReturnThis(),
+      eq: jest.fn().mockReturnThis(),
+      update: jest.fn().mockImplementation((row: Record<string, unknown>) => {
+        captured = row;
+        return chain;
+      }),
+      maybeSingle: jest.fn()
+        .mockResolvedValueOnce({ data: existing, error: null })
+        .mockImplementation(() => Promise.resolve({ data: { ...existing, ...captured }, error: null })),
+    };
+    const db = makeDb(() => chain);
+    const service = new UserService({ db } as unknown as SupabaseService);
+
+    const result = await service.updateProfile('u1', {
+      goal_plan: { target_kg: 4, duration_weeks: 4, direction: 'loss' },
+    });
+
+    expect(result.goal).toBe('maintain');
+    expect(result.goal_plan?.safety_status).toBe('maintenance_only');
+    expect(result.goal_plan?.warnings?.[0]).toMatch(/maintenance/i);
+  });
+
+  it('clears goal plan when null is provided', async () => {
+    const existing = {
+      id: 'u1',
+      email: 'a@b.com',
+      weight_kg: 80,
+      height_cm: 175,
+      age: 32,
+      gender: 'male',
+      activity_level: 'moderate',
+      goal_plan: { target_kg: 2, duration_weeks: 4, direction: 'loss' },
+    };
+    let captured: Record<string, unknown> | null = null;
+    const chain = {
+      select: jest.fn().mockReturnThis(),
+      eq: jest.fn().mockReturnThis(),
+      update: jest.fn().mockImplementation((row: Record<string, unknown>) => {
+        captured = row;
+        return chain;
+      }),
+      maybeSingle: jest.fn()
+        .mockResolvedValueOnce({ data: existing, error: null })
+        .mockImplementation(() => Promise.resolve({ data: { ...existing, ...captured }, error: null })),
+    };
+    const db = makeDb(() => chain);
+    const service = new UserService({ db } as unknown as SupabaseService);
+
+    const result = await service.updateProfile('u1', { goal_plan: null });
+
+    expect(result.goal_plan).toBeNull();
+  });
 });

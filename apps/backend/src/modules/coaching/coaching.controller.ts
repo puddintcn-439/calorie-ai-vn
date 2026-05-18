@@ -42,7 +42,7 @@ export class CoachingController {
       return [];
     }
 
-    return insights || [];
+    return this.coaching.dedupeInsights(insights || []);
   }
 
   @Post('insights/:insightId/acknowledge')
@@ -53,14 +53,34 @@ export class CoachingController {
   ): Promise<{ acknowledged: boolean }> {
     const userId = req.user.id ?? req.user.sub;
 
-    const { error } = await this.supabase.db
+    const { data: targetInsight } = await this.supabase.db
+      .from('user_coaching_insights')
+      .select('title, description, action_suggestion')
+      .eq('id', parseInt(insightId))
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    let updateQuery = this.supabase.db
       .from('user_coaching_insights')
       .update({
         is_acknowledged: true,
         acknowledged_at: new Date().toISOString(),
       })
-      .eq('id', parseInt(insightId))
       .eq('user_id', userId);
+
+    if (targetInsight) {
+      updateQuery = updateQuery
+        .eq('title', targetInsight.title)
+        .eq('description', targetInsight.description);
+
+      updateQuery = targetInsight.action_suggestion
+        ? updateQuery.eq('action_suggestion', targetInsight.action_suggestion)
+        : updateQuery.is('action_suggestion', null);
+    } else {
+      updateQuery = updateQuery.eq('id', parseInt(insightId));
+    }
+
+    const { error } = await updateQuery;
 
     if (error) {
       console.error('Failed to acknowledge insight:', error);
@@ -104,6 +124,21 @@ export class CoachingController {
 
       // Store insights
       for (const insight of insights) {
+        let existingQuery = this.supabase.db
+          .from('user_coaching_insights')
+          .select('id')
+          .eq('user_id', userId)
+          .eq('title', insight.title)
+          .eq('description', insight.description)
+          .eq('is_acknowledged', false);
+
+        existingQuery = insight.action_suggestion
+          ? existingQuery.eq('action_suggestion', insight.action_suggestion)
+          : existingQuery.is('action_suggestion', null);
+
+        const { data: existing } = await existingQuery.maybeSingle();
+        if (existing) continue;
+
         const { error } = await this.supabase.db
           .from('user_coaching_insights')
           .insert({

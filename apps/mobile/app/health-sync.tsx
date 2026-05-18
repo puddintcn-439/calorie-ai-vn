@@ -1,17 +1,16 @@
 import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Platform,
   StyleSheet,
-  Text,
   TouchableOpacity,
-  View,
+  View
 } from 'react-native';
 import { router } from 'expo-router';
 import { ActivitySyncResult } from '@calorie-ai/types';
 import { BodyText, Eyebrow, HeroTitle, ScreenShell, SurfaceCard } from '../components/ui-shell';
 import { UiInput } from '../components/ui-input';
+import { createThemedStyles, theme, useAppTheme } from '../components/theme';
 import { useLogStore } from '../store/log.store';
 import {
   activitySyncService,
@@ -20,12 +19,15 @@ import {
   HEALTH_SYNC_SCREEN_LINK,
 } from '../services/activity-sync.service';
 import { getLocalDateYmd } from '../services/date';
+import { Text } from '../components/i18n-text';
+import { Alert } from '../components/i18n-alert';
 
 function getTodayDateString() {
   return getLocalDateYmd();
 }
 
 export default function HealthSyncScreen() {
+  useAppTheme();
   const { syncActivity } = useLogStore();
   const [isLoadingInfo, setIsLoadingInfo] = useState(true);
   const [isLoadingDiagnostics, setIsLoadingDiagnostics] = useState(true);
@@ -114,7 +116,7 @@ export default function HealthSyncScreen() {
         </View>
 
         {isLoadingInfo ? (
-          <ActivityIndicator color="#6ee7b7" style={styles.loader} />
+          <ActivityIndicator color={theme.colors.accentMint} style={styles.loader} />
         ) : phoneCheckInfo ? (
           <>
             <View style={styles.pillRow}>
@@ -166,7 +168,7 @@ export default function HealthSyncScreen() {
         />
 
         {isLoadingDiagnostics ? (
-          <ActivityIndicator color="#6ee7b7" style={styles.loader} />
+          <ActivityIndicator color={theme.colors.accentMint} style={styles.loader} />
         ) : diagnostics ? (
           <>
             <Text style={styles.diagLine}>Availability: {diagnostics.availability}</Text>
@@ -234,18 +236,18 @@ export default function HealthSyncScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createThemedStyles((colors, radii) => ({
   heroBody: {
     marginBottom: 16,
     maxWidth: 760,
   },
   linkCard: {
     marginBottom: 14,
-    borderColor: '#14532d',
-    backgroundColor: '#0d2019',
+    borderColor: colors.borderSuccess,
+    backgroundColor: colors.surfaceSuccess,
   },
   sectionLabel: {
-    color: '#6ee7b7',
+    color: colors.accentMint,
     fontSize: 11,
     fontWeight: '800',
     textTransform: 'uppercase',
@@ -253,13 +255,13 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   linkValue: {
-    color: '#eff6ff',
+    color: colors.text,
     fontSize: 18,
     fontWeight: '800',
     marginBottom: 8,
   },
   helperText: {
-    color: '#b8c8e8',
+    color: colors.textSoft,
     fontSize: 13,
     lineHeight: 19,
   },
@@ -274,25 +276,25 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   statusTitle: {
-    color: '#eff6ff',
+    color: colors.text,
     fontSize: 16,
     fontWeight: '800',
   },
   statusSubtitle: {
-    color: '#9fb1d1',
+    color: colors.textMuted,
     fontSize: 12,
     marginTop: 4,
   },
   backButton: {
-    backgroundColor: '#122041',
+    backgroundColor: colors.surfaceAlt,
     borderRadius: 12,
     paddingHorizontal: 12,
     paddingVertical: 9,
     borderWidth: 1,
-    borderColor: '#223a70',
+    borderColor: colors.border,
   },
   backButtonText: {
-    color: '#dbeafe',
+    color: colors.textSoft,
     fontSize: 12,
     fontWeight: '700',
   },
@@ -306,8 +308,8 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   providerPill: {
-    color: '#eff6ff',
-    backgroundColor: '#1d4ed8',
+    color: colors.text,
+    backgroundColor: colors.info,
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 999,
@@ -315,8 +317,8 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   statusPill: {
-    color: '#07111f',
-    backgroundColor: '#6ee7b7',
+    color: colors.textOnAccent,
+    backgroundColor: colors.accentMint,
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 999,
@@ -324,7 +326,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   statusDetail: {
-    color: '#cbd5e1',
+    color: colors.textSoft,
     fontSize: 13,
     lineHeight: 20,
   },
@@ -335,28 +337,28 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   primaryButton: {
-    backgroundColor: '#60a5fa',
+    backgroundColor: colors.info,
     borderRadius: 14,
     paddingHorizontal: 16,
     paddingVertical: 13,
     alignItems: 'center',
   },
   primaryButtonText: {
-    color: '#07111f',
+    color: colors.textOnAccent,
     fontSize: 13,
     fontWeight: '800',
   },
   secondaryButton: {
-    backgroundColor: '#122041',
+    backgroundColor: colors.surfaceAlt,
     borderRadius: 14,
     paddingHorizontal: 16,
     paddingVertical: 13,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: colors.borderStrong,
   },
   secondaryButtonText: {
-    color: '#dbeafe',
+    color: colors.textSoft,
     fontSize: 13,
     fontWeight: '700',
   },
@@ -364,13 +366,13 @@ const styles = StyleSheet.create({
     marginBottom: 14,
   },
   sectionTitle: {
-    color: '#eff6ff',
+    color: colors.text,
     fontSize: 15,
     fontWeight: '800',
     marginBottom: 10,
   },
   checkItem: {
-    color: '#cbd5e1',
+    color: colors.textSoft,
     fontSize: 13,
     lineHeight: 20,
     marginBottom: 6,
@@ -384,24 +386,24 @@ const styles = StyleSheet.create({
   resultBox: {
     marginTop: 14,
     borderRadius: 14,
-    backgroundColor: '#122041',
+    backgroundColor: colors.surfaceAlt,
     borderWidth: 1,
-    borderColor: '#223a70',
+    borderColor: colors.border,
     padding: 12,
   },
   resultTitle: {
-    color: '#eff6ff',
+    color: colors.text,
     fontSize: 13,
     fontWeight: '800',
     marginBottom: 8,
   },
   resultLine: {
-    color: '#b8c8e8',
+    color: colors.textSoft,
     fontSize: 12,
     marginBottom: 4,
   },
   diagLine: {
-    color: '#cbd5e1',
+    color: colors.textSoft,
     fontSize: 13,
     lineHeight: 19,
     marginBottom: 6,
@@ -409,15 +411,17 @@ const styles = StyleSheet.create({
   notesBox: {
     marginTop: 14,
     borderRadius: 14,
-    backgroundColor: '#0f1b3b',
+    backgroundColor: colors.surfaceAlt,
     borderWidth: 1,
-    borderColor: '#223a70',
+    borderColor: colors.border,
     padding: 12,
   },
   noteLine: {
-    color: '#b8c8e8',
+    color: colors.textSoft,
     fontSize: 12,
     lineHeight: 18,
     marginBottom: 6,
   },
-});
+}));
+
+

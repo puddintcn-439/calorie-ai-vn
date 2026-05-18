@@ -31,6 +31,8 @@ The following tables exist in the repository migrations but are not visible in t
 - `user_daily_roadmap` — migration: `supabase/migrations/014_user_daily_roadmap.sql`
 - `users.health_flags` column/constraint — migration: `supabase/migrations/015_user_health_flags.sql`
 - `foods.saturated_fat_g`, quality nutrient columns on `food_logs`, and saved-meal quality totals — migration: `supabase/migrations/016_food_quality_nutrients.sql`
+- `users.goal_plan` JSONB column/constraint — migration: `supabase/migrations/017_add_goal_plan_to_users.sql`
+- `user_activity_preferences` — migration: `supabase/migrations/018_user_activity_preferences.sql`
 
 ## Existing Tables Already Present
 
@@ -53,6 +55,8 @@ If the missing tables are not migrated, the following features are incomplete or
 - Body progress tracking
 - Profile health guardrails and medical-review warnings
 - Today quality nutrient tracking for fiber, sodium, total sugar, and saturated fat
+- Backend-clamped personal goal plans
+- Profile activity preferences, Today movement recommendations, and Log quick completion from the user's preferred activities
 
 ## Recommended Migration Order
 
@@ -77,6 +81,8 @@ Run in this order to minimize dependency issues:
 17. `014_user_daily_roadmap.sql`
 18. `015_user_health_flags.sql`
 19. `016_food_quality_nutrients.sql`
+20. `017_add_goal_plan_to_users.sql`
+21. `018_user_activity_preferences.sql`
 
 ## Verification Steps After Migration
 

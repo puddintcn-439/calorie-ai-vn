@@ -1,4 +1,19 @@
-import { DailyLog, FoodLog, MealType, SavedMeal, ActivityLog, CreateActivityLogDto, ActivitySyncResult, DailyRoadmapItem, CreateDailyRoadmapItemDto, UpdateDailyRoadmapItemDto, DailyRoadmapSyncDto } from '@calorie-ai/types';
+import {
+  DailyLog,
+  FoodLog,
+  MealType,
+  SavedMeal,
+  ActivityLog,
+  CreateActivityLogDto,
+  ActivitySyncResult,
+  DailyRoadmapItem,
+  CreateDailyRoadmapItemDto,
+  UpdateDailyRoadmapItemDto,
+  DailyRoadmapSyncDto,
+  ActivityPreference,
+  CreateActivityPreferenceDto,
+  UpdateActivityPreferenceDto,
+} from '@calorie-ai/types';
 import { apiClient } from '../services/api';
 import { activitySyncService } from '../services/activity-sync.service';
 import { getLocalDateYmd, getLocalTimezoneOffsetMinutes } from '../services/date';
@@ -10,6 +25,7 @@ interface LogState {
   savedMeals: SavedMeal[];
   activityLogs: ActivityLog[];
   dailyRoadmap: DailyRoadmapItem[];
+  activityPreferences: ActivityPreference[];
   isLoading: boolean;
   fetchDailyLog: (date?: string) => Promise<void>;
   fetchSavedMeals: () => Promise<void>;
@@ -27,6 +43,10 @@ interface LogState {
   updateRoadmapItem: (itemId: string, dto: UpdateDailyRoadmapItemDto) => Promise<void>;
   deleteRoadmapItem: (itemId: string) => Promise<void>;
   syncRoadmapBatch: (dto: DailyRoadmapSyncDto) => Promise<void>;
+  fetchActivityPreferences: () => Promise<void>;
+  addActivityPreference: (dto: CreateActivityPreferenceDto) => Promise<ActivityPreference>;
+  updateActivityPreference: (preferenceId: string, dto: UpdateActivityPreferenceDto) => Promise<void>;
+  deleteActivityPreference: (preferenceId: string) => Promise<void>;
 }
 
 export const useLogStore = create<LogState>((set, get) => ({
@@ -34,6 +54,7 @@ export const useLogStore = create<LogState>((set, get) => ({
   savedMeals: [],
   activityLogs: [],
   dailyRoadmap: [],
+  activityPreferences: [],
   isLoading: false,
 
   fetchDailyLog: async (date) => {
@@ -137,6 +158,32 @@ export const useLogStore = create<LogState>((set, get) => ({
   syncRoadmapBatch: async (dto) => {
     await apiClient.post('/roadmap/sync/daily', dto);
     await get().fetchDailyRoadmap(dto.logged_date);
+  },
+
+  fetchActivityPreferences: async () => {
+    try {
+      const res = await apiClient.get('/activity-preferences');
+      set({ activityPreferences: res.data });
+    } catch (error) {
+      console.warn('Failed to fetch activity preferences:', error);
+      set({ activityPreferences: [] });
+    }
+  },
+
+  addActivityPreference: async (dto) => {
+    const res = await apiClient.post('/activity-preferences', dto);
+    await get().fetchActivityPreferences();
+    return res.data;
+  },
+
+  updateActivityPreference: async (preferenceId, dto) => {
+    await apiClient.put(`/activity-preferences/${preferenceId}`, dto);
+    await get().fetchActivityPreferences();
+  },
+
+  deleteActivityPreference: async (preferenceId) => {
+    await apiClient.delete(`/activity-preferences/${preferenceId}`);
+    await get().fetchActivityPreferences();
   },
 }));
 

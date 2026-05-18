@@ -1,6 +1,11 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import {
+  StyleSheet,
+  View
+} from 'react-native';
 import { SurfaceCard } from './ui-shell';
+import { useAppTheme } from './theme';
+import { Text } from './i18n-text';
 
 type NutritionTargets = {
   fiber_g_min: number;
@@ -84,6 +89,7 @@ function computeNutritionTargets(daily: number): NutritionTargets {
 }
 
 export default function MacrosCard({ target, daily_calorie_target, weight_kg, goal }: Props) {
+  const { colors } = useAppTheme();
   const daily = target?.daily_calorie_target ?? daily_calorie_target ?? 0;
 
   let protein_target_g = target?.protein_target_g ?? null;
@@ -105,9 +111,9 @@ export default function MacrosCard({ target, daily_calorie_target, weight_kg, go
 
   if (!daily) {
     return (
-      <SurfaceCard style={styles.card}>
-        <Text style={styles.title}>Phân bổ dinh dưỡng</Text>
-        <Text style={styles.empty}>Chưa có mục tiêu calo để tính macros.</Text>
+      <SurfaceCard style={[styles.card, { borderColor: colors.borderInfo }]}>
+        <Text style={[styles.title, { color: colors.text }]}>Phân bổ dinh dưỡng</Text>
+        <Text style={[styles.empty, { color: colors.textMuted }]}>Chưa có mục tiêu calo để tính macros.</Text>
       </SurfaceCard>
     );
   }
@@ -115,78 +121,86 @@ export default function MacrosCard({ target, daily_calorie_target, weight_kg, go
   const nutrition = target?.nutrition_targets ?? computeNutritionTargets(daily);
 
   return (
-    <SurfaceCard style={styles.card}>
-      <Text style={styles.title}>Phân bổ dinh dưỡng</Text>
+    <SurfaceCard style={[styles.card, { borderColor: colors.borderInfo }]}>
+      <Text style={[styles.title, { color: colors.text }]}>Phân bổ dinh dưỡng</Text>
       <View style={styles.row}>
         <View style={styles.col}>
-          <Text style={styles.label}>Calo/ngày</Text>
-          <Text style={styles.value}>{daily} kcal</Text>
+          <Text style={[styles.label, { color: colors.textSoft }]}>Calo/ngày</Text>
+          <Text style={[styles.value, { color: colors.text }]}>{daily} kcal</Text>
         </View>
         <View style={styles.col}>
-          <Text style={styles.label}>Protein</Text>
-          <Text style={styles.value}>{protein_target_g ?? '-'} g {protein_g_per_kg ? `(${protein_g_per_kg} g/kg)` : ''}</Text>
+          <Text style={[styles.label, { color: colors.textSoft }]}>Protein</Text>
+          <Text style={[styles.value, { color: colors.text }]}>
+            {protein_target_g ?? '-'} g {protein_g_per_kg ? `(${protein_g_per_kg} g/kg)` : ''}
+          </Text>
         </View>
       </View>
 
       <View style={styles.row}>
         <View style={styles.col}>
-          <Text style={styles.label}>Chất béo</Text>
-          <Text style={styles.value}>{fat_pct ?? '-'}% · {fat_g ?? '-'} g</Text>
+          <Text style={[styles.label, { color: colors.textSoft }]}>Chất béo</Text>
+          <Text style={[styles.value, { color: colors.text }]}>{fat_pct ?? '-'}% · {fat_g ?? '-'} g</Text>
         </View>
         <View style={styles.col}>
-          <Text style={styles.label}>Carbs</Text>
-          <Text style={styles.value}>{carbs_g ?? '-'} g · {carbs_pct ?? '-'}%</Text>
+          <Text style={[styles.label, { color: colors.textSoft }]}>Carbs</Text>
+          <Text style={[styles.value, { color: colors.text }]}>{carbs_g ?? '-'} g · {carbs_pct ?? '-'}%</Text>
         </View>
       </View>
 
-      <View style={styles.qualityBlock}>
-        <Text style={styles.qualityTitle}>Mục tiêu chất lượng</Text>
+      <View style={[styles.qualityBlock, { borderTopColor: colors.borderSubtle }]}>
+        <Text style={[styles.qualityTitle, { color: colors.text }]}>Mục tiêu chất lượng</Text>
         <View style={styles.qualityGrid}>
           <Metric label="Fiber" value={`>= ${nutrition.fiber_g_min} g`} tone="good" />
           <Metric label="Sodium" value={`< ${nutrition.sodium_mg_max} mg`} tone="limit" />
           <Metric label="Đường tự do" value={`< ${nutrition.free_sugar_g_max} g`} tone="limit" />
-          <Metric label="Sat fat" value={`< ${nutrition.saturated_fat_g_max} g`} tone="limit" />
+          <Metric label="Béo bão hòa" value={`< ${nutrition.saturated_fat_g_max} g`} tone="limit" />
         </View>
-        <Text style={styles.qualityNote}>
+        <Text style={[styles.qualityNote, { color: colors.textMuted }]}>
           Đường trên nhãn/barcode có thể là total sugar; app chưa luôn phân biệt được free sugar và added sugar.
         </Text>
       </View>
 
       {!!target?.medical_review_recommended && (
-        <Text style={styles.warning}>Hồ sơ có yếu tố sức khỏe cần chuyên gia xem lại trước khi dùng mục tiêu này.</Text>
+        <Text style={[styles.warning, { color: colors.warning }]}>
+          Hồ sơ có yếu tố sức khỏe cần chuyên gia xem lại trước khi dùng mục tiêu này.
+        </Text>
       )}
       {!!target?.macro_warnings?.length && (
-        <Text style={styles.warning}>{target.macro_warnings[0]}</Text>
+        <Text style={[styles.warning, { color: colors.warning }]}>{target.macro_warnings[0]}</Text>
       )}
     </SurfaceCard>
   );
 }
 
 function Metric({ label, value, tone }: { label: string; value: string; tone: 'good' | 'limit' }) {
+  const { colors } = useAppTheme();
+  const toneStyle = tone === 'good'
+    ? { backgroundColor: colors.surfaceSuccess, borderColor: colors.borderSuccess }
+    : { backgroundColor: colors.surfaceInfo, borderColor: colors.borderInfo };
+
   return (
-    <View style={[styles.metricPill, tone === 'good' ? styles.metricGood : styles.metricLimit]}>
-      <Text style={styles.metricLabel}>{label}</Text>
-      <Text style={styles.metricValue}>{value}</Text>
+    <View style={[styles.metricPill, toneStyle]}>
+      <Text style={[styles.metricLabel, { color: colors.textMuted }]}>{label}</Text>
+      <Text style={[styles.metricValue, { color: colors.text }]}>{value}</Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  card: { marginTop: 12, borderColor: '#243a59' },
-  title: { color: '#eff6ff', fontWeight: '700', fontSize: 14, marginBottom: 8 },
+  card: { marginTop: 12 },
+  title: { fontWeight: '700', fontSize: 14, marginBottom: 8 },
   row: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6, gap: 10 },
   col: { flex: 1 },
-  label: { color: '#b8c8e8', fontSize: 12 },
-  value: { color: '#eff6ff', fontSize: 14, fontWeight: '700' },
-  empty: { color: '#7082a9', fontSize: 13 },
+  label: { fontSize: 12 },
+  value: { fontSize: 14, fontWeight: '700' },
+  empty: { fontSize: 13 },
   qualityBlock: {
     marginTop: 8,
     paddingTop: 10,
     borderTopWidth: 1,
-    borderTopColor: '#243a59',
     gap: 8,
   },
-  qualityTitle: { color: '#dbeafe', fontSize: 12, fontWeight: '800' },
+  qualityTitle: { fontSize: 12, fontWeight: '800' },
   qualityGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   metricPill: {
     minWidth: 118,
@@ -196,10 +210,8 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     gap: 2,
   },
-  metricGood: { backgroundColor: '#0f2f22', borderColor: '#22c55e66' },
-  metricLimit: { backgroundColor: '#172033', borderColor: '#3b82f666' },
-  metricLabel: { color: '#9fb1d1', fontSize: 11, fontWeight: '700' },
-  metricValue: { color: '#eff6ff', fontSize: 13, fontWeight: '800' },
-  qualityNote: { color: '#8ea2c8', fontSize: 11, lineHeight: 16 },
-  warning: { color: '#fcd34d', fontSize: 12, marginTop: 6, lineHeight: 17 },
+  metricLabel: { fontSize: 11, fontWeight: '700' },
+  metricValue: { fontSize: 13, fontWeight: '800' },
+  qualityNote: { fontSize: 11, lineHeight: 16 },
+  warning: { fontSize: 12, marginTop: 6, lineHeight: 17 },
 });

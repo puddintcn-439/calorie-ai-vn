@@ -11,6 +11,9 @@ Daily cockpit for the current day.
 - Shows calorie target, food calories, activity calories, net calories, macro progress, meals today, streak, and coaching snippets.
 - Shows daily fiber, sodium, total sugar, and saturated fat totals when logged food data includes those nutrients.
 - Shows a profile-safety prompt when age, body metrics, or health flags are missing, and a short medical-review reminder for risk flags.
+- Offers quick goal-plan presets that save through backend safety clamps instead of directly overriding calories.
+- Recommends one movement action based on today's net calories, goal plan, health flags, and the user's Profile activity preferences.
+- Completing the Today movement recommendation writes an activity log, so burned calories and Log history stay consistent.
 - Pull-to-refresh reloads daily log, activity logs, recommendations, gamification, subscription, and top insight.
 - Links to Progress, Insights, Achievements, Scan, Log, Coach, and Health Sync diagnostics.
 - Should stay action-focused: scan, log, review meals, and see one clear next step.
@@ -30,7 +33,8 @@ Daily journal for food and activity.
 
 - Shows meal-grouped food logs, saved meals, activity logs, and quick activity creation.
 - Food logs affect daily intake; activity logs affect net calories in Today.
-- Roadmap tasks can be completed into activity logs so exercise calories are tracked consistently.
+- The add-activity flow can log manually, open Strength, or complete a Profile activity preference through "Theo lộ trình".
+- Log does not manage the activity roadmap; Profile is the source of truth for the user's preferred activities.
 
 ### Coach
 
@@ -44,12 +48,14 @@ Behavioral and nutrition coaching surface.
 
 Settings and personalization hub.
 
-- Profile fields: name, weight, height, age, gender, health flags, goal, activity level, meal calorie targets, reminders, subscription, and feature access.
+- Profile fields: name, weight, height, age, gender, health flags, goal, goal plan, activity level, meal calorie targets, reminders, subscription, and feature access.
 - BMI and calorie guidance defaults to adult global cutoffs and is labeled as screening/risk, not diagnosis.
 - Under-18 users, pregnancy/breastfeeding profiles, and eating-disorder risk profiles receive maintenance-only targets.
 - Kidney disease, diabetes, and weight-affecting medication flags trigger medical-review warnings and non-personalized macro caveats.
 - Macro output includes general quality targets for fiber, sodium, free/added sugar, and saturated fat.
+- Activity preferences can be added, edited, and deleted here; Today uses them for movement recommendations and Log uses them for quick completion.
 - Progress, Insights, and Achievements are linked from here as secondary screens.
+- Goal plans show the computed calorie target, weekly rate, safety status, and any backend adjustment warning.
 
 ## Secondary Screens
 
@@ -61,7 +67,7 @@ Settings and personalization hub.
 
 ## Data Flow
 
-- `useLogStore` owns daily food logs, saved meals, activity logs, and daily roadmap actions.
+- `useLogStore` owns daily food logs, saved meals, activity logs, daily roadmap compatibility actions, and persistent activity preferences.
 - `useCalorieTargetStore` owns recommendations and weekly adaptive target preview/apply.
 - `useSubscriptionStore` owns feature gating.
 - `useGamificationStore` owns streak and achievement summary.
@@ -76,5 +82,6 @@ Settings and personalization hub.
 - Text/voice transcript parsing does not use fake placeholder transcripts.
 - Profile warns that calorie/BMI outputs are estimates and not medical advice.
 - Under-18 and underweight weight-loss flows are blocked to maintenance.
+- Profile activity preferences appear in Today recommendations and completed Today activities appear in Log.
 - Health Sync is tested on real iOS/Android preview builds.
 - Food search returns global staples and localized dishes.

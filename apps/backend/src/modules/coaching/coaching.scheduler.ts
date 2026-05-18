@@ -71,16 +71,21 @@ export class CoachingSchedulerService {
           const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
 
           for (const insight of insights) {
-            // Skip if same insight type already exists and is not expired
-            const { data: existing } = await this.supabase.db
+            // Skip if the same insight content already exists and is not expired.
+            let existingQuery = this.supabase.db
               .from('user_coaching_insights')
               .select('id')
               .eq('user_id', userId)
-              .eq('insight_type', insight.insight_type)
               .eq('title', insight.title)
+              .eq('description', insight.description)
               .eq('is_acknowledged', false)
-              .gt('expires_at', new Date().toISOString())
-              .maybeSingle();
+              .gt('expires_at', new Date().toISOString());
+
+            existingQuery = insight.action_suggestion
+              ? existingQuery.eq('action_suggestion', insight.action_suggestion)
+              : existingQuery.is('action_suggestion', null);
+
+            const { data: existing } = await existingQuery.maybeSingle();
 
             if (existing) continue;
 

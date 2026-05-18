@@ -98,7 +98,40 @@ export class CoachingService {
       if (insight) insights.push(insight);
     }
 
-    return insights;
+    return this.dedupeInsights(insights);
+  }
+
+  dedupeInsights(insights: CoachingInsight[]): CoachingInsight[] {
+    const byContent = new Map<string, CoachingInsight>();
+
+    for (const insight of insights) {
+      const key = this.getInsightContentKey(insight);
+      const existing = byContent.get(key);
+
+      if (!existing) {
+        byContent.set(key, insight);
+        continue;
+      }
+
+      const existingScore = existing.impact_score ?? 0;
+      const nextScore = insight.impact_score ?? 0;
+      const existingDate = Date.parse(existing.created_at ?? '') || 0;
+      const nextDate = Date.parse(insight.created_at ?? '') || 0;
+
+      if (nextScore > existingScore || (nextScore === existingScore && nextDate > existingDate)) {
+        byContent.set(key, insight);
+      }
+    }
+
+    return [...byContent.values()];
+  }
+
+  getInsightContentKey(insight: Pick<CoachingInsight, 'title' | 'description' | 'action_suggestion'>): string {
+    return [
+      insight.title,
+      insight.description,
+      insight.action_suggestion ?? '',
+    ].map((value) => String(value).trim().toLowerCase()).join('|');
   }
 
   /**
@@ -355,59 +388,59 @@ export class CoachingService {
   private createInsightFromPattern(pattern: BehavioralPattern, userId: string): CoachingInsight {
     const insights: Record<PatternType, { title: string; description: string; action: string; emoji: string }> = {
       [PatternType.SKIPPED_MEALS]: {
-        title: '⏭️ Skipping Meals',
-        description: 'You skipped meals multiple times this week. This can lead to overeating later.',
-        action: 'Try eating something small every 4-5 hours to maintain stable energy levels.',
+        title: '⏭️ Bỏ bữa nhiều lần',
+        description: 'Tuần này bạn bỏ bữa vài lần. Điều này dễ làm bạn đói quá mức và ăn bù về sau.',
+        action: 'Chuẩn bị một bữa nhỏ mỗi 4-5 giờ để giữ năng lượng ổn định.',
         emoji: '⏭️',
       },
       [PatternType.BINGE_EPISODES]: {
-        title: '🍽️ Binge Eating Pattern',
-        description: 'Your data shows several high-calorie days. These spikes make it hard to hit your goals.',
-        action: 'Identify triggers (stress, time, emotions) and plan alternatives for next time.',
+        title: '🍽️ Ngày ăn vượt nhiều',
+        description: 'Dữ liệu có vài ngày calo tăng vọt, khiến mục tiêu tuần khó ổn định.',
+        action: 'Ghi lại bối cảnh như stress, thiếu ngủ hoặc tiệc để chuẩn bị phương án nhẹ hơn lần sau.',
         emoji: '🍽️',
       },
       [PatternType.NIGHT_EATING]: {
-        title: '🌙 Late-Night Eating',
-        description: 'Most of your calories come from late evening. This can disrupt sleep and metabolism.',
-        action: 'Try a 2-hour eating cutoff before bed. Have herbal tea instead if needed.',
+        title: '🌙 Ăn muộn buổi tối',
+        description: 'Phần lớn calo đang rơi vào cuối ngày, có thể ảnh hưởng giấc ngủ và cảm giác đói hôm sau.',
+        action: 'Thử chốt bữa trước giờ ngủ khoảng 2 tiếng; nếu đói hãy chọn đồ nhẹ giàu protein.',
         emoji: '🌙',
       },
       [PatternType.WEEKEND_VARIANCE]: {
-        title: '📅 Weekend Inconsistency',
-        description: 'Your weekend eating differs significantly from weekdays, making consistency hard.',
-        action: 'Plan weekend meals in advance to reduce variance and maintain progress.',
+        title: '📅 Cuối tuần lệch nhịp',
+        description: 'Cách ăn cuối tuần khác khá nhiều so với ngày thường, làm tiến độ khó đều.',
+        action: 'Chọn trước 1-2 bữa chính cuối tuần để vẫn linh hoạt mà không lệch quá xa.',
         emoji: '📅',
       },
       [PatternType.EMOTIONAL_TRIGGER]: {
-        title: '💭 Emotional Eating',
-        description: 'Your eating patterns suggest emotional triggers may be influencing your food choices.',
-        action: 'Track your mood when logging food. Look for patterns between emotions and eating.',
+        title: '💭 Ăn theo cảm xúc',
+        description: 'Mẫu ăn uống cho thấy cảm xúc có thể đang ảnh hưởng đến lựa chọn món.',
+        action: 'Khi log bữa, thêm một ghi chú ngắn về tâm trạng để nhận ra trigger.',
         emoji: '💭',
       },
       [PatternType.INCONSISTENT_LOGGING]: {
-        title: '📝 Logging Gaps',
-        description: 'You logged only a few days this week. Consistent logging = accurate tracking.',
-        action: 'Set a daily reminder to log after each meal. Even rough estimates help!',
+        title: '📝 Ghi chép chưa đều',
+        description: 'Tuần này bạn chỉ log vài ngày. Log đều giúp app tính mục tiêu và gợi ý chính xác hơn.',
+        action: 'Đặt nhắc nhở sau mỗi bữa. Ước lượng nhanh vẫn hữu ích hơn bỏ trống.',
         emoji: '📝',
       },
       [PatternType.STRESS_EATING]: {
-        title: '😰 Stress Eating',
-        description: 'On high-stress days, your calorie intake increases significantly.',
-        action: 'Practice stress management: exercise, meditation, or talking to someone before eating.',
+        title: '😰 Ăn khi căng thẳng',
+        description: 'Những ngày stress cao, lượng calo của bạn có xu hướng tăng rõ.',
+        action: 'Trước khi ăn thêm, thử đi bộ 5-10 phút hoặc uống nước rồi quyết định lại.',
         emoji: '😰',
       },
       [PatternType.TIMING_PREFERENCE]: {
-        title: '⏰ Timing Preference',
-        description: 'You prefer eating at a specific time, which is actually helpful for consistency!',
-        action: 'Keep this routine - consistency is a sign of good habits forming.',
+        title: '⏰ Khung giờ ăn ổn định',
+        description: 'Bạn có xu hướng ăn vào khung giờ khá ổn định, đây là nền tốt để duy trì thói quen.',
+        action: 'Giữ nhịp này và chuẩn bị sẵn bữa phù hợp trước khung giờ quen thuộc.',
         emoji: '⏰',
       },
     };
 
     const info = insights[pattern.pattern_type] || {
-      title: 'Pattern Detected',
-      description: 'A behavioral pattern was detected in your eating habits.',
-      action: 'Review your recent logs to understand this pattern better.',
+      title: 'Phát hiện mẫu hành vi',
+      description: 'App phát hiện một mẫu đáng chú ý trong dữ liệu ăn uống gần đây.',
+      action: 'Xem lại nhật ký vài ngày gần nhất để hiểu điều gì đang lặp lại.',
       emoji: '🔍',
     };
 
@@ -428,20 +461,20 @@ export class CoachingService {
 
   private generateRecommendation(pattern: PatternType | undefined, adherence: number): string {
     if (!pattern) {
-      if (adherence >= 80) return '🎉 Amazing consistency! Keep up this excellent work.';
-      if (adherence >= 60) return '👍 Good progress! Try to log a bit more consistently.';
-      return '📈 You\'re on the right track. Consistent logging will help you see patterns.';
+      if (adherence >= 80) return '🎉 Tuần này rất đều. Giữ nhịp hiện tại là đủ tốt.';
+      if (adherence >= 60) return '👍 Tiến độ ổn. Log đều hơn một chút sẽ giúp gợi ý chính xác hơn.';
+      return '📈 Bạn đang đi đúng hướng. Hãy ưu tiên log đều trước khi tối ưu sâu.';
     }
 
     const recommendations: Record<PatternType, string> = {
-      [PatternType.SKIPPED_MEALS]: 'Focus on eating smaller, frequent meals to avoid binge episodes.',
-      [PatternType.BINGE_EPISODES]: 'Identify and avoid triggers. Plan meals in advance.',
-      [PatternType.NIGHT_EATING]: 'Set a 2-hour eating cutoff before bed to improve sleep and metabolism.',
-      [PatternType.WEEKEND_VARIANCE]: 'Plan weekend meals to match weekday consistency.',
-      [PatternType.STRESS_EATING]: 'Use stress management techniques before reaching for food.',
-      [PatternType.EMOTIONAL_TRIGGER]: 'Journal your emotions when eating to identify triggers.',
-      [PatternType.INCONSISTENT_LOGGING]: 'Log meals right after eating for accuracy. Set daily reminders.',
-      [PatternType.TIMING_PREFERENCE]: 'Use your natural eating time to your advantage for consistency.',
+      [PatternType.SKIPPED_MEALS]: 'Ưu tiên bữa nhỏ đều hơn để tránh đói quá mức vào cuối ngày.',
+      [PatternType.BINGE_EPISODES]: 'Nhận diện trigger và chuẩn bị trước bữa thay thế dễ kiểm soát hơn.',
+      [PatternType.NIGHT_EATING]: 'Thử chốt bữa trước giờ ngủ khoảng 2 tiếng để ngủ tốt hơn.',
+      [PatternType.WEEKEND_VARIANCE]: 'Lên trước vài lựa chọn cuối tuần để vẫn vui mà không lệch quá xa.',
+      [PatternType.STRESS_EATING]: 'Dùng một hành động giảm stress ngắn trước khi quyết định ăn thêm.',
+      [PatternType.EMOTIONAL_TRIGGER]: 'Ghi chú cảm xúc khi log bữa để nhận ra trigger lặp lại.',
+      [PatternType.INCONSISTENT_LOGGING]: 'Log ngay sau bữa, kể cả ước lượng nhanh, để dữ liệu không bị rỗng.',
+      [PatternType.TIMING_PREFERENCE]: 'Tận dụng khung giờ ăn tự nhiên để duy trì nhịp ổn định.',
     };
 
     return recommendations[pattern];

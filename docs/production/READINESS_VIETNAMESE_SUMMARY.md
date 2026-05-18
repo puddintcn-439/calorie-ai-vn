@@ -37,6 +37,8 @@ Calorie AI đi theo hướng global-first: phục vụ nhiều thị trường, 
 - Macro card có thêm mục tiêu fiber, sodium, free/added sugar và saturated fat.
 - Today hiển thị actual fiber, sodium, total sugar và saturated fat khi dữ liệu log có các trường này.
 - Today nhắc hoàn thiện hồ sơ an toàn hoặc xem cảnh báo y tế khi profile có risk flags.
+- Goal plan cá nhân được tính lại ở backend, có clamp an toàn và lưu `safety_status`/warnings.
+- Profile là nơi cấu hình các hoạt động người dùng muốn/có thể tập; Today dùng dữ liệu này để đề xuất vận động và khi hoàn thành sẽ ghi vào Log.
 
 ## Blocker Trước Go-Live
 
@@ -45,7 +47,7 @@ Calorie AI đi theo hướng global-first: phục vụ nhiều thị trường, 
 - Cần validate food database với global staples, packaged foods và món Việt phổ biến.
 - Cần native QA cho HealthKit, Health Connect, barcode, receipt, and camera.
 - Cần clinical/nutrition review cho toàn bộ health copy và ngưỡng dinh dưỡng trước khi claim rộng.
-- Cần apply migration `015_user_health_flags.sql` và `016_food_quality_nutrients.sql` trên staging/prod.
+- Cần apply migration `015_user_health_flags.sql`, `016_food_quality_nutrients.sql`, `017_add_goal_plan_to_users.sql` và `018_user_activity_preferences.sql` trên staging/prod.
 
 ## Không Nên Claim
 

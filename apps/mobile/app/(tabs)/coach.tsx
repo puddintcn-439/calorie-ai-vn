@@ -1,25 +1,110 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   StyleSheet,
-  Text,
   View,
   ScrollView,
   RefreshControl,
-  FlatList,
+  FlatList
 } from 'react-native';
-import { BodyText, Eyebrow, HeroTitle, ScreenShell, SurfaceCard } from '../../components/ui-shell';
+import { useFocusEffect } from 'expo-router';
+import { ScreenShell, SurfaceCard } from '../../components/ui-shell';
 import { UiButton } from '../../components/ui-button';
 import { UiInput } from '../../components/ui-input';
 import { askCoach } from '../../services/ai.service';
 import { useLogStore } from '../../store/log.store';
 import { CoachingInsight, CoachingSummary } from '@calorie-ai/types';
 import { apiClient } from '../../services/api';
+import { VisualHeroCard } from '../../components/visual-hero-card';
+import { createThemedStyles, theme, useAppTheme } from '../../components/theme';
+import { Text } from '../../components/i18n-text';
+
+const coachHeroIllustration = require('../../assets/images/coach-hero.png') as number;
 
 interface ChatMessage {
   id: string;
   role: 'user' | 'coach';
   text: string;
+}
+
+function getInsightContentKey(insight: Pick<CoachingInsight, 'title' | 'description' | 'action_suggestion'>): string {
+  return [
+    insight.title,
+    insight.description,
+    insight.action_suggestion ?? '',
+  ].map((value) => String(value).trim().toLowerCase()).join('|');
+}
+
+function dedupeInsights(items: CoachingInsight[]) {
+  const byContent = new Map<string, CoachingInsight>();
+
+  for (const item of items) {
+    const key = getInsightContentKey(item);
+    const existing = byContent.get(key);
+
+    if (!existing) {
+      byContent.set(key, item);
+      continue;
+    }
+
+    const existingScore = existing.impact_score ?? 0;
+    const itemScore = item.impact_score ?? 0;
+    const existingDate = Date.parse(existing.created_at ?? '') || 0;
+    const itemDate = Date.parse(item.created_at ?? '') || 0;
+
+    if (itemScore > existingScore || (itemScore === existingScore && itemDate > existingDate)) {
+      byContent.set(key, item);
+    }
+  }
+
+  return [...byContent.values()];
+}
+
+const INSIGHT_TYPE_LABELS: Record<string, string> = {
+  pattern_alert: 'Mẫu hành vi',
+  recommendation: 'Gợi ý',
+  achievement: 'Tiến bộ',
+  warning: 'Cần chú ý',
+  prediction: 'Dự báo',
+};
+
+const INSIGHT_TEXT_TRANSLATIONS: Record<string, string> = {
+  '⏭️ Skipping Meals': '⏭️ Bỏ bữa nhiều lần',
+  'You skipped meals multiple times this week. This can lead to overeating later.': 'Tuần này bạn bỏ bữa vài lần. Điều này dễ làm bạn đói quá mức và ăn bù về sau.',
+  'Try eating something small every 4-5 hours to maintain stable energy levels.': 'Chuẩn bị một bữa nhỏ mỗi 4-5 giờ để giữ năng lượng ổn định.',
+  '🍽️ Binge Eating Pattern': '🍽️ Ngày ăn vượt nhiều',
+  'Your data shows several high-calorie days. These spikes make it hard to hit your goals.': 'Dữ liệu có vài ngày calo tăng vọt, khiến mục tiêu tuần khó ổn định.',
+  'Identify triggers (stress, time, emotions) and plan alternatives for next time.': 'Ghi lại bối cảnh như stress, thiếu ngủ hoặc tiệc để chuẩn bị phương án nhẹ hơn lần sau.',
+  '🌙 Late-Night Eating': '🌙 Ăn muộn buổi tối',
+  'Most of your calories come from late evening. This can disrupt sleep and metabolism.': 'Phần lớn calo đang rơi vào cuối ngày, có thể ảnh hưởng giấc ngủ và cảm giác đói hôm sau.',
+  'Try a 2-hour eating cutoff before bed. Have herbal tea instead if needed.': 'Thử chốt bữa trước giờ ngủ khoảng 2 tiếng; nếu đói hãy chọn đồ nhẹ giàu protein.',
+  '📅 Weekend Inconsistency': '📅 Cuối tuần lệch nhịp',
+  'Your weekend eating differs significantly from weekdays, making consistency hard.': 'Cách ăn cuối tuần khác khá nhiều so với ngày thường, làm tiến độ khó đều.',
+  'Plan weekend meals in advance to reduce variance and maintain progress.': 'Chọn trước 1-2 bữa chính cuối tuần để vẫn linh hoạt mà không lệch quá xa.',
+  '💭 Emotional Eating': '💭 Ăn theo cảm xúc',
+  'Your eating patterns suggest emotional triggers may be influencing your food choices.': 'Mẫu ăn uống cho thấy cảm xúc có thể đang ảnh hưởng đến lựa chọn món.',
+  'Track your mood when logging food. Look for patterns between emotions and eating.': 'Khi log bữa, thêm một ghi chú ngắn về tâm trạng để nhận ra trigger.',
+  '📝 Logging Gaps': '📝 Ghi chép chưa đều',
+  'You logged only a few days this week. Consistent logging = accurate tracking.': 'Tuần này bạn chỉ log vài ngày. Log đều giúp app tính mục tiêu và gợi ý chính xác hơn.',
+  'Set a daily reminder to log after each meal. Even rough estimates help!': 'Đặt nhắc nhở sau mỗi bữa. Ước lượng nhanh vẫn hữu ích hơn bỏ trống.',
+  '😰 Stress Eating': '😰 Ăn khi căng thẳng',
+  'On high-stress days, your calorie intake increases significantly.': 'Những ngày stress cao, lượng calo của bạn có xu hướng tăng rõ.',
+  'Practice stress management: exercise, meditation, or talking to someone before eating.': 'Trước khi ăn thêm, thử đi bộ 5-10 phút hoặc uống nước rồi quyết định lại.',
+  '⏰ Timing Preference': '⏰ Khung giờ ăn ổn định',
+  'You prefer eating at a specific time, which is actually helpful for consistency!': 'Bạn có xu hướng ăn vào khung giờ khá ổn định, đây là nền tốt để duy trì thói quen.',
+  'Keep this routine - consistency is a sign of good habits forming.': 'Giữ nhịp này và chuẩn bị sẵn bữa phù hợp trước khung giờ quen thuộc.',
+  '🎉 Amazing consistency! Keep up this excellent work.': '🎉 Tuần này rất đều. Giữ nhịp hiện tại là đủ tốt.',
+  '👍 Good progress! Try to log a bit more consistently.': '👍 Tiến độ ổn. Log đều hơn một chút sẽ giúp gợi ý chính xác hơn.',
+  '📈 You\'re on the right track. Consistent logging will help you see patterns.': '📈 Bạn đang đi đúng hướng. Hãy ưu tiên log đều trước khi tối ưu sâu.',
+};
+
+function getInsightTypeLabel(type: string) {
+  return INSIGHT_TYPE_LABELS[type] ?? 'Gợi ý';
+}
+
+function localizeInsightText(text?: string | null) {
+  if (!text) return '';
+  return INSIGHT_TEXT_TRANSLATIONS[text] ?? text;
 }
 
 function getCoachErrorMessage(error: unknown): string {
@@ -54,6 +139,7 @@ function getCoachErrorMessage(error: unknown): string {
 }
 
 export default function CoachScreen() {
+  useAppTheme();
   const { dailyLog, fetchDailyLog } = useLogStore();
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -69,26 +155,36 @@ export default function CoachScreen() {
     },
   ]);
 
-  useEffect(() => {
-    fetchDailyLog().catch(() => {});
-    loadInsights();
-  }, []);
-
-  const loadInsights = async () => {
+  const loadInsights = useCallback(async () => {
     try {
       setLoadingInsights(true);
       const [insightsRes, summaryRes] = await Promise.all([
         apiClient.get('/coaching/insights'),
         apiClient.get('/coaching/weekly-summary'),
       ]);
-      setInsights(insightsRes.data || []);
+      setInsights(dedupeInsights(insightsRes.data || []));
       setSummary(summaryRes.data || null);
     } catch (error) {
       console.error('Failed to load insights:', error);
     } finally {
       setLoadingInsights(false);
     }
-  };
+  }, []);
+
+  const refreshCoachData = useCallback(() => {
+    fetchDailyLog().catch(() => {});
+    loadInsights().catch(() => {});
+  }, [fetchDailyLog, loadInsights]);
+
+  useEffect(() => {
+    refreshCoachData();
+  }, [refreshCoachData]);
+
+  useFocusEffect(
+    useCallback(() => {
+      refreshCoachData();
+    }, [refreshCoachData]),
+  );
 
   const onRefresh = async () => {
     setRefreshing(true);
@@ -145,7 +241,11 @@ export default function CoachScreen() {
   const handleAcknowledgeInsight = async (insightId: number) => {
     try {
       await apiClient.post(`/coaching/insights/${insightId}/acknowledge`);
-      setInsights((prev) => prev.filter((i) => i.id !== insightId));
+      const acknowledged = insights.find((insight) => insight.id === insightId);
+      const acknowledgedKey = acknowledged ? getInsightContentKey(acknowledged) : null;
+      setInsights((prev) => prev.filter((insight) => (
+        insight.id !== insightId && (!acknowledgedKey || getInsightContentKey(insight) !== acknowledgedKey)
+      )));
     } catch (error) {
       console.error('Failed to acknowledge insight:', error);
     }
@@ -156,13 +256,13 @@ export default function CoachScreen() {
       <View style={styles.insightHeader}>
         <Text style={styles.insightEmoji}>{insight.emoji || '💡'}</Text>
         <View style={styles.insightTitleContainer}>
-          <Text style={styles.insightTitle}>{insight.title}</Text>
-          <Text style={styles.insightType}>{insight.insight_type}</Text>
+          <Text style={styles.insightTitle}>{localizeInsightText(insight.title)}</Text>
+          <Text style={styles.insightType}>{getInsightTypeLabel(insight.insight_type)}</Text>
         </View>
       </View>
-      <Text style={styles.insightDescription}>{insight.description}</Text>
+      <Text style={styles.insightDescription}>{localizeInsightText(insight.description)}</Text>
       {insight.action_suggestion && (
-        <Text style={styles.insightAction}>💡 {insight.action_suggestion}</Text>
+        <Text style={styles.insightAction}>💡 {localizeInsightText(insight.action_suggestion)}</Text>
       )}
       <UiButton
         label="Tôi đã hiểu"
@@ -178,11 +278,12 @@ export default function CoachScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
-        <Eyebrow>AI Coach</Eyebrow>
-        <HeroTitle>Gợi ý riêng cho bạn hôm nay</HeroTitle>
-        <BodyText style={styles.heroBody}>
-          Coach sử dụng dữ liệu ăn uống và mục tiêu của bạn để cung cấp gợi ý cá nhân hóa.
-        </BodyText>
+        <VisualHeroCard
+          imageSource={coachHeroIllustration}
+          eyebrow="AI Coach"
+          title="Gợi ý riêng cho bạn hôm nay"
+          body="Coach dùng dữ liệu ăn uống và mục tiêu của bạn để đưa ra gợi ý cá nhân hóa."
+        />
 
         {/* Weekly Summary */}
         {summary && (
@@ -204,14 +305,14 @@ export default function CoachScreen() {
                 </Text>
               </View>
             </View>
-            <Text style={styles.summaryRecommendation}>{summary.recommended_action}</Text>
+            <Text style={styles.summaryRecommendation}>{localizeInsightText(summary.recommended_action)}</Text>
           </SurfaceCard>
         )}
 
         {/* Insights List */}
         {loadingInsights ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator color="#6ee7b7" size="large" />
+            <ActivityIndicator color={theme.colors.accentMint} size="large" />
           </View>
         ) : insights.length > 0 ? (
           <View style={styles.insightsContainer}>
@@ -263,25 +364,25 @@ export default function CoachScreen() {
             style={styles.input}
           />
           <UiButton label="Gửi cho Coach" onPress={handleSend} loading={loading} />
-          {loading ? <ActivityIndicator color="#6ee7b7" style={styles.loading} /> : null}
+          {loading ? <ActivityIndicator color={theme.colors.accentMint} style={styles.loading} /> : null}
         </SurfaceCard>
       </ScrollView>
     </ScreenShell>
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createThemedStyles((colors, radii) => ({
   heroBody: {
     marginBottom: 14,
     maxWidth: 720,
   },
   summaryCard: {
     marginBottom: 12,
-    borderColor: '#27426f',
-    backgroundColor: '#0f1c38',
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceAlt,
   },
   summaryTitle: {
-    color: '#eff6ff',
+    color: colors.text,
     fontSize: 15,
     fontWeight: '800',
     marginBottom: 10,
@@ -295,17 +396,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   summaryLabel: {
-    color: '#b8c8e8',
+    color: colors.textSoft,
     fontSize: 12,
     marginBottom: 4,
   },
   summaryValue: {
-    color: '#6ee7b7',
+    color: colors.accentMint,
     fontSize: 18,
     fontWeight: '700',
   },
   summaryRecommendation: {
-    color: '#ecf2ff',
+    color: colors.textSoft,
     fontSize: 13,
     lineHeight: 19,
     fontStyle: 'italic',
@@ -314,14 +415,14 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   insightsTitle: {
-    color: '#eff6ff',
+    color: colors.text,
     fontSize: 14,
     fontWeight: '700',
     marginBottom: 10,
   },
   insightCard: {
-    backgroundColor: '#0f1c38',
-    borderColor: '#6ee7b7',
+    backgroundColor: colors.surfaceAlt,
+    borderColor: colors.accentMint,
     borderWidth: 1,
     borderRadius: 12,
     padding: 12,
@@ -340,28 +441,28 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   insightTitle: {
-    color: '#eff6ff',
+    color: colors.text,
     fontSize: 14,
     fontWeight: '700',
   },
   insightType: {
-    color: '#6ee7b7',
+    color: colors.accentMint,
     fontSize: 11,
     fontWeight: '600',
     marginTop: 2,
   },
   insightDescription: {
-    color: '#b8c8e8',
+    color: colors.textSoft,
     fontSize: 13,
     lineHeight: 19,
     marginBottom: 8,
   },
   insightAction: {
-    color: '#ecf2ff',
+    color: colors.textSoft,
     fontSize: 12,
     lineHeight: 18,
     marginBottom: 10,
-    backgroundColor: 'rgba(110, 231, 183, 0.1)',
+    backgroundColor: colors.surfaceSuccess,
     padding: 8,
     borderRadius: 8,
   },
@@ -370,11 +471,11 @@ const styles = StyleSheet.create({
   },
   noInsightsCard: {
     marginBottom: 12,
-    borderColor: '#27426f',
-    backgroundColor: '#0f2d2a',
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceSuccess,
   },
   noInsightsText: {
-    color: '#6ee7b7',
+    color: colors.accentMint,
     fontSize: 14,
     textAlign: 'center',
     fontWeight: '600',
@@ -387,16 +488,16 @@ const styles = StyleSheet.create({
   },
   contextCard: {
     marginBottom: 12,
-    borderColor: '#27426f',
+    borderColor: colors.border,
   },
   contextTitle: {
-    color: '#eff6ff',
+    color: colors.text,
     fontSize: 15,
     fontWeight: '800',
     marginBottom: 8,
   },
   contextLine: {
-    color: '#b8c8e8',
+    color: colors.textSoft,
     fontSize: 13,
     marginBottom: 4,
   },
@@ -408,15 +509,15 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   userCard: {
-    borderColor: '#6ee7b7',
-    backgroundColor: '#0f2d2a',
+    borderColor: colors.accentMint,
+    backgroundColor: colors.surfaceSuccess,
   },
   coachCard: {
-    borderColor: '#2b3f6f',
-    backgroundColor: '#101a37',
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceAlt,
   },
   roleLabel: {
-    color: '#93c5fd',
+    color: colors.info,
     fontSize: 11,
     fontWeight: '700',
     marginBottom: 6,
@@ -424,7 +525,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.6,
   },
   messageText: {
-    color: '#ecf2ff',
+    color: colors.textSoft,
     fontSize: 14,
     lineHeight: 21,
   },
@@ -438,4 +539,6 @@ const styles = StyleSheet.create({
   loading: {
     marginTop: 10,
   },
-});
+}));
+
+

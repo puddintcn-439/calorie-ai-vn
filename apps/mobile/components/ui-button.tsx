@@ -5,11 +5,12 @@ import {
   Platform,
   Pressable,
   StyleSheet,
-  Text,
   ViewStyle,
   StyleProp,
 } from 'react-native';
-import { theme } from './theme';
+import { useAppTheme } from './theme';
+import { useI18n } from './i18n';
+import { Text } from './i18n-text';
 
 type Variant = 'primary' | 'secondary' | 'danger' | 'ghost';
 
@@ -32,6 +33,8 @@ export function UiButton({
 }: UiButtonProps) {
   const scale = useRef(new Animated.Value(1)).current;
   const useNativeDriver = Platform.OS !== 'web';
+  const { colors, radii } = useAppTheme();
+  const { tx } = useI18n();
 
   const handlePressIn = () => {
     Animated.spring(scale, {
@@ -51,14 +54,43 @@ export function UiButton({
     }).start();
   };
 
+  const variantStyle = {
+    primary: {
+      backgroundColor: colors.accentMint,
+      borderWidth: 1,
+      borderColor: colors.borderSuccess,
+    },
+    secondary: {
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.accentMint,
+    },
+    danger: {
+      backgroundColor: colors.surfaceDanger,
+      borderWidth: 1,
+      borderColor: colors.borderDanger,
+    },
+    ghost: {
+      backgroundColor: 'transparent',
+    },
+  } satisfies Record<Variant, ViewStyle>;
+
+  const variantTextStyle = {
+    primary: { color: colors.textOnAccent },
+    secondary: { color: colors.accentMint },
+    danger: { color: colors.danger },
+    ghost: { color: colors.accentCyan, fontWeight: '600' as const, fontSize: 14 },
+  } satisfies Record<Variant, object>;
+
   const containerStyle = [
     styles.base,
-    styles[variant],
+    { borderRadius: radii.lg },
+    variantStyle[variant],
     (disabled || loading) && styles.disabled,
     style,
   ];
 
-  const textStyle = [styles.baseText, styles[`${variant}Text` as keyof typeof styles]];
+  const textStyle = [styles.baseText, variantTextStyle[variant]];
 
   return (
     <Animated.View style={{ transform: [{ scale }] }}>
@@ -70,9 +102,9 @@ export function UiButton({
         disabled={disabled || loading}
       >
         {loading ? (
-          <ActivityIndicator color={variant === 'primary' ? '#07111f' : theme.colors.accentMint} />
+          <ActivityIndicator color={variant === 'primary' ? colors.textOnAccent : colors.accentMint} />
         ) : (
-          <Text style={textStyle}>{label}</Text>
+          <Text style={textStyle}>{tx(label)}</Text>
         )}
       </Pressable>
     </Animated.View>
@@ -81,29 +113,10 @@ export function UiButton({
 
 const styles = StyleSheet.create({
   base: {
-    borderRadius: theme.radii.lg,
     paddingVertical: 14,
     paddingHorizontal: 20,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  primary: {
-    backgroundColor: theme.colors.accentMint,
-    borderWidth: 1,
-    borderColor: '#84e4b5',
-  },
-  secondary: {
-    backgroundColor: 'transparent',
-    borderWidth: 1,
-    borderColor: theme.colors.accentMint,
-  },
-  danger: {
-    backgroundColor: '#1a0a0a',
-    borderWidth: 1,
-    borderColor: theme.colors.danger,
-  },
-  ghost: {
-    backgroundColor: 'transparent',
   },
   disabled: {
     opacity: 0.5,
@@ -111,19 +124,5 @@ const styles = StyleSheet.create({
   baseText: {
     fontSize: 15,
     fontWeight: '800',
-  },
-  primaryText: {
-    color: '#07111f',
-  },
-  secondaryText: {
-    color: theme.colors.accentMint,
-  },
-  dangerText: {
-    color: theme.colors.danger,
-  },
-  ghostText: {
-    color: theme.colors.accentCyan,
-    fontWeight: '600',
-    fontSize: 14,
   },
 });

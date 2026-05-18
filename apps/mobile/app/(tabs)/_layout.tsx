@@ -1,101 +1,137 @@
+import type { ComponentProps } from 'react';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { Platform } from 'react-native';
-import { theme } from '../../components/theme';
+import { Platform, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { useAppTheme } from '../../components/theme';
+import { AnimatedIonicon } from '../../components/animated-icon';
+import { useI18n } from '../../components/i18n';
+
+type TabIconName = ComponentProps<typeof Ionicons>['name'];
+
+function TabIcon({ name, color, size, focused }: { name: TabIconName; color: string; size: number; focused: boolean }) {
+  const { colors } = useAppTheme();
+  return (
+    <View style={[styles.tabIconWrap, focused && { backgroundColor: colors.accentMint }]}>
+      <AnimatedIonicon
+        name={name}
+        size={Math.max(18, size - 2)}
+        color={focused ? colors.textOnAccent : color}
+        motion="float"
+        active={focused}
+      />
+    </View>
+  );
+}
 
 export default function TabsLayout() {
+  const { width } = useWindowDimensions();
+  const isCompact = width < 480;
+  const { colors } = useAppTheme();
+  const { t } = useI18n();
+
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
         tabBarStyle: {
           position: 'absolute',
-          left: 10,
-          right: 10,
-          bottom: 10,
-          height: 70,
-          paddingTop: 8,
-          backgroundColor: '#101b29f4',
-          borderTopColor: theme.colors.border,
-          borderTopWidth: 1,
+          left: isCompact ? 20 : 10,
+          right: isCompact ? 20 : 10,
+          bottom: isCompact ? 12 : 10,
+          height: isCompact ? 68 : 74,
+          paddingTop: isCompact ? 6 : 7,
+          paddingHorizontal: isCompact ? 4 : 6,
+          backgroundColor: colors.tabBar,
+          borderColor: colors.border,
+          borderWidth: 1,
           borderRadius: 8,
           ...(Platform.OS === 'web'
-            ? { boxShadow: '0px 8px 14px rgba(2, 6, 23, 0.22)' }
+            ? { boxShadow: `0px 12px 24px ${colors.shadow}2f` }
             : {
-                shadowColor: '#020617',
+                shadowColor: colors.shadow,
                 shadowOpacity: 0.18,
-                shadowRadius: 12,
-                shadowOffset: { width: 0, height: 8 },
+                shadowRadius: 16,
+                shadowOffset: { width: 0, height: 10 },
               }),
           elevation: 6,
         },
         tabBarLabelStyle: {
-          fontSize: 10,
-          fontWeight: '700',
-          paddingBottom: 4,
+          fontSize: isCompact ? 9 : 10,
+          fontWeight: '800',
+          paddingBottom: 3,
         },
-        tabBarActiveTintColor: theme.colors.accentMint,
-        tabBarInactiveTintColor: theme.colors.textMuted,
+        tabBarActiveTintColor: colors.accentMint,
+        tabBarInactiveTintColor: colors.textMuted,
       }}
     >
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Hôm nay',
-          tabBarIcon: ({ color, size }) => <Ionicons name="home" size={size} color={color} />,
+          title: t('tabs.today'),
+          tabBarIcon: ({ color, size, focused }) => <TabIcon name="home" size={size} color={color} focused={focused} />,
         }}
       />
       <Tabs.Screen
         name="scan"
         options={{
-          title: 'Scan',
-          tabBarIcon: ({ color, size }) => <Ionicons name="camera" size={size} color={color} />,
+          title: t('tabs.scan'),
+          tabBarIcon: ({ color, size, focused }) => <TabIcon name="camera" size={size} color={color} focused={focused} />,
         }}
       />
       <Tabs.Screen
         name="log"
         options={{
-          title: 'Log',
-          tabBarIcon: ({ color, size }) => <Ionicons name="list" size={size} color={color} />,
+          title: t('tabs.log'),
+          tabBarIcon: ({ color, size, focused }) => <TabIcon name="list" size={size} color={color} focused={focused} />,
         }}
       />
       <Tabs.Screen
         name="coach"
         options={{
-          title: 'Coach',
-          tabBarIcon: ({ color, size }) => <Ionicons name="chatbubbles" size={size} color={color} />,
+          title: t('tabs.coach'),
+          tabBarIcon: ({ color, size, focused }) => <TabIcon name="chatbubbles" size={size} color={color} focused={focused} />,
         }}
       />
       <Tabs.Screen
         name="progress"
         options={{
           href: null,
-          title: 'Cơ thể',
-          tabBarIcon: ({ color, size }) => <Ionicons name="body" size={size} color={color} />,
+          title: t('tabs.body'),
+          tabBarIcon: ({ color, size, focused }) => <TabIcon name="body" size={size} color={color} focused={focused} />,
         }}
       />
       <Tabs.Screen
         name="insights"
         options={{
           href: null,
-          title: 'Insight',
-          tabBarIcon: ({ color, size }) => <Ionicons name="stats-chart" size={size} color={color} />,
+          title: t('tabs.insights'),
+          tabBarIcon: ({ color, size, focused }) => <TabIcon name="stats-chart" size={size} color={color} focused={focused} />,
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
-          title: 'Hồ sơ',
-          tabBarIcon: ({ color, size }) => <Ionicons name="person" size={size} color={color} />,
+          title: t('tabs.profile'),
+          tabBarIcon: ({ color, size, focused }) => <TabIcon name="person" size={size} color={color} focused={focused} />,
         }}
       />
       <Tabs.Screen
         name="strength"
         options={{
           href: null,
-          title: 'Tập tạ',
+          title: t('tabs.strength'),
         }}
       />
     </Tabs>
   );
 }
+
+const styles = StyleSheet.create({
+  tabIconWrap: {
+    width: 32,
+    height: 28,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+});

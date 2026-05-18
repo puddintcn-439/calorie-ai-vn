@@ -1,15 +1,25 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert, Modal,
+  View,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  ActivityIndicator,
+  Modal
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useLogStore } from '../../store/log.store';
-import { FoodLog, MealType, SavedMeal, ActivityLog, ActivityType, ACTIVITY_LABELS, User, ActivityLevel, UserGoal, HealthFlag, ACTIVITY_MET } from '@calorie-ai/types';
-import { BodyText, Eyebrow, HeroTitle, ScreenShell, SurfaceCard } from '../../components/ui-shell';
+import { FoodLog, MealType, SavedMeal, ActivityLog, ActivityType, ACTIVITY_LABELS, User, ActivityLevel, UserGoal, HealthFlag } from '@calorie-ai/types';
+import { ScreenShell, SurfaceCard } from '../../components/ui-shell';
 import { EmptyState } from '../../components/empty-state';
+import { createThemedStyles, theme, useAppTheme } from '../../components/theme';
 import { apiClient } from '../../services/api';
-import { getLocalDateYmd } from '../../services/date';
+import { VisualHeroCard } from '../../components/visual-hero-card';
+import { AnimatedIonicon } from '../../components/animated-icon';
+import { RewardToast, RewardToastData } from '../../components/reward-toast';
+
+const logHeroIllustration = require('../../assets/images/log-hero.png') as number;
 
 const MEAL_LABELS: Record<MealType, string> = {
   breakfast: '🌅 Bữa sáng',
@@ -85,6 +95,8 @@ function getSafeRoadmapGoal(profile: Partial<User>, bodyStatus: BodyStatus): Use
 }
 
 import { estimateExerciseCalories as _estimateExerciseCalories } from '../../services/exercise.service';
+import { Text } from '../../components/i18n-text';
+import { Alert } from '../../components/i18n-alert';
 
 function estimateExerciseCalories(activityType: ActivityType, durationMin: number, weightKg: number): number {
   return _estimateExerciseCalories(activityType, durationMin, weightKg);
@@ -138,23 +150,23 @@ function buildExerciseRoadmap(
 }
 
 export default function LogScreen() {
-  const { dailyLog, savedMeals, activityLogs, dailyRoadmap, isLoading, fetchDailyLog, fetchSavedMeals, fetchActivityLogs, fetchDailyRoadmap, removeLog, logSavedMeal, deleteSavedMeal, addActivity, deleteActivity, addRoadmapItem, deleteRoadmapItem } = useLogStore();
+  useAppTheme();
+  const { dailyLog, savedMeals, activityLogs, activityPreferences, isLoading, fetchDailyLog, fetchSavedMeals, fetchActivityLogs, fetchActivityPreferences, removeLog, logSavedMeal, deleteSavedMeal, addActivity, deleteActivity } = useLogStore();
   const [perMealTargets, setPerMealTargets] = useState<Record<MealType, number>>({
     breakfast: 400, lunch: 600, dinner: 600, snack: 200,
   });
   const [profileMeta, setProfileMeta] = useState<Partial<User>>({});
   const [processingRoadmapId, setProcessingRoadmapId] = useState<string | null>(null);
   const [catalogVisible, setCatalogVisible] = useState(false);
-  const [catalogMode, setCatalogMode] = useState<'activity' | 'roadmap'>('activity');
   const [catalogSelectedType, setCatalogSelectedType] = useState<ActivityType | null>(null);
   const [catalogDuration, setCatalogDuration] = useState<15 | 30 | 45 | 60>(30);
-  const [removedRoadmapTaskIds, setRemovedRoadmapTaskIds] = useState<string[]>([]);
+  const [reward, setReward] = useState<RewardToastData | null>(null);
 
-  useEffect(() => {
+  const loadLogData = useCallback(() => {
     fetchDailyLog().catch(() => {});
     fetchSavedMeals().catch(() => {});
     fetchActivityLogs().catch(() => {});
-    fetchDailyRoadmap().catch(() => {});
+    fetchActivityPreferences().catch(() => {});
     apiClient.get('/user/profile').then((res) => {
       const u = res.data as User;
       setProfileMeta(u);
@@ -165,56 +177,29 @@ export default function LogScreen() {
         snack: u.target_snack_cal ?? 200,
       });
     }).catch(() => {});
-  }, []);
+  }, [fetchActivityLogs, fetchActivityPreferences, fetchDailyLog, fetchSavedMeals]);
 
-  const baseRoadmap = useMemo(() => {
-    const bodyStatus = inferBodyStatus(profileMeta.weight_kg, profileMeta.height_cm);
-    if (!bodyStatus || !profileMeta.activity_level || !profileMeta.goal) {
-      return [];
-    }
-    return buildExerciseRoadmap(
-      bodyStatus,
-      profileMeta.activity_level,
-      getSafeRoadmapGoal(profileMeta, bodyStatus),
-      profileMeta.weight_kg ?? 65,
-    );
-  }, [
-    profileMeta.weight_kg,
-    profileMeta.height_cm,
-    profileMeta.activity_level,
-    profileMeta.goal,
-    profileMeta.age,
-    profileMeta.health_flags,
-  ]);
+  useEffect(() => {
+    loadLogData();
+  }, [loadLogData]);
 
-  const customRoadmapItems = useMemo(() => {
-    return dailyRoadmap
-      .filter((item) => item.is_custom && !item.task_id.startsWith('removed:'))
-      .map((item) => ({
-        id: item.id,
-        title: item.task_title,
-        detail: `${item.duration_min} phút · ~${item.estimated_kcal} kcal`,
-        activity_type: item.activity_type as ActivityType,
-        duration_min: item.duration_min,
-        estimated_kcal: item.estimated_kcal,
-        is_custom: true,
-      }));
-  }, [dailyRoadmap]);
-
-  const removedBaseRoadmapTaskIds = useMemo(() => {
-    return new Set(
-      dailyRoadmap
-        .filter((item) => item.is_custom && item.task_id.startsWith('removed:'))
-        .map((item) => item.task_id.replace('removed:', '')),
-    );
-  }, [dailyRoadmap]);
+  useFocusEffect(
+    useCallback(() => {
+      loadLogData();
+    }, [loadLogData]),
+  );
 
   const roadmap = useMemo(
-    () => [
-      ...baseRoadmap.filter((item) => !removedRoadmapTaskIds.includes(item.id) && !removedBaseRoadmapTaskIds.has(item.id)),
-      ...customRoadmapItems,
-    ],
-    [baseRoadmap, customRoadmapItems, removedRoadmapTaskIds, removedBaseRoadmapTaskIds],
+    () => activityPreferences.map((item) => ({
+      id: item.id,
+      title: item.title,
+      detail: `${item.duration_min} phút · ~${estimateExerciseCalories(item.activity_type as ActivityType, item.duration_min, profileMeta.weight_kg ?? 65)} kcal`,
+      activity_type: item.activity_type as ActivityType,
+      duration_min: item.duration_min,
+      estimated_kcal: estimateExerciseCalories(item.activity_type as ActivityType, item.duration_min, profileMeta.weight_kg ?? 65),
+      is_custom: true,
+    })),
+    [activityPreferences, profileMeta.weight_kg],
   );
 
   const roadmapActivityByTaskId = useMemo(() => {
@@ -232,11 +217,6 @@ export default function LogScreen() {
     [roadmap, roadmapActivityByTaskId],
   );
 
-  const completedRoadmapKcal = useMemo(
-    () => roadmap.reduce((sum, item) => sum + (roadmapActivityByTaskId[item.id] ? item.estimated_kcal : 0), 0),
-    [roadmap, roadmapActivityByTaskId],
-  );
-
   const logsSource: FoodLog[] = dailyLog?.logs ?? [];
   const logsByMeal = logsSource.reduce<Record<MealType, FoodLog[]>>(
     (acc, log) => {
@@ -246,6 +226,10 @@ export default function LogScreen() {
     },
     {} as Record<MealType, FoodLog[]>,
   );
+  const loggedCalories = dailyLog?.total_calories ?? 0;
+  const targetCalories = dailyLog?.target_calories ?? Object.values(perMealTargets).reduce((sum, value) => sum + value, 0);
+  const burnedCalories = activityLogs.reduce((sum, item) => sum + item.calories_burned, 0);
+  const netCalories = loggedCalories - burnedCalories;
 
   const handleQuickLog = (meal: SavedMeal) => {
     Alert.alert(
@@ -256,7 +240,11 @@ export default function LogScreen() {
         onPress: async () => {
           try {
             await logSavedMeal(meal.id, m);
-            Alert.alert('✅', `Đã log "${meal.name}" vào ${MEAL_LABELS[m]}`);
+            setReward({
+              title: 'Đã log nhanh',
+              body: `${meal.name} · ${MEAL_LABELS[m]}`,
+              icon: 'checkmark-circle',
+            });
           } catch {
             Alert.alert('Lỗi', 'Không thể log bữa ăn.');
           }
@@ -281,6 +269,11 @@ export default function LogScreen() {
 
     try {
       await addActivity({ activity_type: activityType, duration_min: Math.round(mins) });
+      setReward({
+        title: 'Đã log hoạt động',
+        body: `${ACTIVITY_LABELS[activityType]} · ${Math.round(mins)} phút`,
+        icon: 'checkmark-circle',
+      });
     } catch {
       Alert.alert('Lỗi', 'Không thể ghi hoạt động');
     }
@@ -302,14 +295,6 @@ export default function LogScreen() {
   };
 
   const openManualAddActivity = () => {
-    setCatalogMode('activity');
-    setCatalogSelectedType(null);
-    setCatalogDuration(30);
-    setCatalogVisible(true);
-  };
-
-  const openAddRoadmapExercise = () => {
-    setCatalogMode('roadmap');
     setCatalogSelectedType(null);
     setCatalogDuration(30);
     setCatalogVisible(true);
@@ -318,20 +303,6 @@ export default function LogScreen() {
   const handleCatalogConfirm = async () => {
     if (!catalogSelectedType) return;
     setCatalogVisible(false);
-
-    if (catalogMode === 'roadmap') {
-      const activityLabel = ACTIVITY_LABELS[catalogSelectedType] ?? catalogSelectedType;
-      await addRoadmapItem({
-        logged_date: getLocalDateYmd(),
-        task_id: `custom-${Date.now()}`,
-        task_title: `${activityLabel} tự chọn`,
-        activity_type: catalogSelectedType,
-        duration_min: catalogDuration,
-        estimated_kcal: estimateExerciseCalories(catalogSelectedType, catalogDuration, userWeight),
-        is_custom: true,
-      });
-      return;
-    }
 
     await submitQuickActivity(catalogSelectedType, catalogDuration);
   };
@@ -359,7 +330,11 @@ export default function LogScreen() {
 
       if (existing) {
         await deleteActivity(existing.id);
-        Alert.alert('Đã bỏ hoàn thành', `Đã trừ ${task.estimated_kcal} kcal của "${task.title}".`);
+        setReward({
+          title: 'Đã bỏ hoàn thành',
+          body: `${task.title} · -${task.estimated_kcal} kcal khỏi nhật ký`,
+          icon: 'remove-circle',
+        });
       } else {
         await addActivity({
           activity_type: task.activity_type,
@@ -367,48 +342,17 @@ export default function LogScreen() {
           calories_burned: task.estimated_kcal,
           notes: `ROADMAP_TASK:${task.id}|${task.title}`,
         });
-        Alert.alert('Đã cập nhật calo đốt', `+${task.estimated_kcal} kcal từ "${task.title}".`);
+        setReward({
+          title: 'Đã cập nhật calo đốt',
+          body: `${task.title} · +${task.estimated_kcal} kcal`,
+          icon: 'flame',
+        });
       }
     } catch {
       Alert.alert('Lỗi', 'Không thể cập nhật lộ trình tập lúc này.');
     } finally {
       setProcessingRoadmapId(null);
     }
-  };
-
-  const handleRemoveRoadmapTask = (task: ExerciseRoadmapItem) => {
-    Alert.alert('Xóa bài tập', `Xóa "${task.title}" khỏi lộ trình?`, [
-      { text: 'Huỷ', style: 'cancel' },
-      {
-        text: 'Xóa',
-        style: 'destructive',
-        onPress: () => {
-          const linked = roadmapActivityByTaskId[task.id];
-          if (linked) {
-            void deleteActivity(linked.id);
-          }
-
-          if (task.is_custom) {
-            void deleteRoadmapItem(task.id);
-            return;
-          }
-
-          if (!removedBaseRoadmapTaskIds.has(task.id)) {
-            void addRoadmapItem({
-              logged_date: getLocalDateYmd(),
-              task_id: `removed:${task.id}`,
-              task_title: `Removed:${task.title}`,
-              activity_type: task.activity_type,
-              duration_min: 0,
-              estimated_kcal: 0,
-              is_custom: true,
-            });
-          }
-
-          setRemovedRoadmapTaskIds((prev) => (prev.includes(task.id) ? prev : [...prev, task.id]));
-        },
-      },
-    ]);
   };
 
   const catalogTypes = Object.keys(ACTIVITY_LABELS) as ActivityType[];
@@ -426,18 +370,16 @@ export default function LogScreen() {
         <View style={styles.catalogOverlay}>
           <View style={styles.catalogSheet}>
             <View style={styles.catalogHeader}>
-              <Text style={styles.catalogTitle}>{catalogMode === 'roadmap' ? '🧩 Thêm bài vào lộ trình' : '🏋️ Chọn bài tập'}</Text>
+              <Text style={styles.catalogTitle}>🏋️ Chọn hoạt động</Text>
               <TouchableOpacity onPress={() => setCatalogVisible(false)}>
-                <Ionicons name="close" size={22} color="#9fb1d1" />
+                <Ionicons name="close" size={22} color={theme.colors.textMuted} />
               </TouchableOpacity>
             </View>
 
             {catalogSelectedType === null ? (
               <ScrollView showsVerticalScrollIndicator={false}>
                 <Text style={styles.catalogHint}>
-                  {catalogMode === 'roadmap'
-                    ? `Chọn bài để thêm vào lộ trình cá nhân (${userWeight} kg)`
-                    : `Chọn loại hoạt động — calo tính theo cân nặng của bạn (${userWeight} kg)`}
+                  Chọn loại hoạt động đã hoàn thành. Muốn sửa lộ trình thì vào Profile.
                 </Text>
                 {catalogTypes.map((type) => {
                   const kcal30 = estimateExerciseCalories(type, 30, userWeight);
@@ -451,7 +393,7 @@ export default function LogScreen() {
                         <Text style={styles.catalogItemName}>{ACTIVITY_LABELS[type]}</Text>
                         <Text style={styles.catalogItemKcal}>~{kcal30} kcal / 30 phút</Text>
                       </View>
-                      <Ionicons name="chevron-forward" size={16} color="#5f76a6" />
+                      <Ionicons name="chevron-forward" size={16} color={theme.colors.textMuted} />
                     </TouchableOpacity>
                   );
                 })}
@@ -459,7 +401,7 @@ export default function LogScreen() {
             ) : (
               <View>
                 <TouchableOpacity style={styles.catalogBack} onPress={() => setCatalogSelectedType(null)}>
-                  <Ionicons name="arrow-back" size={16} color="#6ee7b7" />
+                  <Ionicons name="arrow-back" size={16} color={theme.colors.accentMint} />
                   <Text style={styles.catalogBackText}>Chọn lại loại bài</Text>
                 </TouchableOpacity>
                 <Text style={styles.catalogSelectedLabel}>{ACTIVITY_LABELS[catalogSelectedType]}</Text>
@@ -481,7 +423,7 @@ export default function LogScreen() {
                 </View>
                 <TouchableOpacity style={styles.catalogConfirmBtn} onPress={() => void handleCatalogConfirm()}>
                   <Text style={styles.catalogConfirmText}>
-                    {catalogMode === 'roadmap' ? 'Thêm vào lộ trình' : 'Thêm'} {ACTIVITY_LABELS[catalogSelectedType]} · {catalogDuration} phút · ~{estimateExerciseCalories(catalogSelectedType, catalogDuration, userWeight)} kcal
+                    Thêm {ACTIVITY_LABELS[catalogSelectedType]} · {catalogDuration} phút · ~{estimateExerciseCalories(catalogSelectedType, catalogDuration, userWeight)} kcal
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -490,11 +432,34 @@ export default function LogScreen() {
         </View>
       </Modal>
 
-      <Eyebrow>Timeline</Eyebrow>
-      <HeroTitle>Nhật ký hôm nay</HeroTitle>
-      <BodyText style={styles.heroBody}>Bữa ăn, món đã lưu và vận động trong một luồng.</BodyText>
+      <VisualHeroCard
+        imageSource={logHeroIllustration}
+        eyebrow="Nhật ký"
+        title="Nhật ký hôm nay"
+        body="Bữa ăn, món đã lưu và vận động trong một luồng."
+      />
 
-      {isLoading && <ActivityIndicator color="#4ade80" style={{ marginTop: 40 }} />}
+      {isLoading && <ActivityIndicator color={theme.colors.success} style={{ marginTop: 40 }} />}
+
+      <SurfaceCard style={styles.logSummaryCard}>
+        <View style={styles.logSummaryItem}>
+          <Text style={styles.logSummaryLabel}>Đã nạp</Text>
+          <Text style={styles.logSummaryValue}>{loggedCalories}</Text>
+          <Text style={styles.logSummaryUnit}>kcal</Text>
+        </View>
+        <View style={styles.logSummaryDivider} />
+        <View style={styles.logSummaryItem}>
+          <Text style={styles.logSummaryLabel}>Net</Text>
+          <Text style={[styles.logSummaryValue, netCalories > targetCalories && styles.logSummaryValueWarn]}>{netCalories}</Text>
+          <Text style={styles.logSummaryUnit}>/{targetCalories}</Text>
+        </View>
+        <View style={styles.logSummaryDivider} />
+        <View style={styles.logSummaryItem}>
+          <Text style={styles.logSummaryLabel}>Vận động</Text>
+          <Text style={styles.logSummaryValueBurned}>-{burnedCalories}</Text>
+          <Text style={styles.logSummaryUnit}>kcal</Text>
+        </View>
+      </SurfaceCard>
 
         {/* ---- Saved Meals Quick Log ---- */}
         {savedMeals.length > 0 && (
@@ -507,7 +472,7 @@ export default function LogScreen() {
                   <Text style={styles.savedCalorie}>{meal.total_calories} kcal</Text>
                   <Text style={styles.savedMacro}>P:{Math.round(meal.total_protein_g)} C:{Math.round(meal.total_carbs_g)} F:{Math.round(meal.total_fat_g)}</Text>
                   <TouchableOpacity style={styles.savedDelete} onPress={() => handleDeleteSaved(meal)}>
-                    <Ionicons name="close-circle" size={16} color="#6b7280" />
+                    <Ionicons name="close-circle" size={16} color={theme.colors.textDisabled} />
                   </TouchableOpacity>
                 </TouchableOpacity>
               ))}
@@ -532,7 +497,7 @@ export default function LogScreen() {
                 <View style={styles.mealProgressBar}>
                   <View style={[styles.mealProgressFill, {
                     width: `${Math.min(total / perMealTargets[meal] * 100, 100)}%` as any,
-                    backgroundColor: total > perMealTargets[meal] ? '#ef4444' : '#4ade80',
+                    backgroundColor: total > perMealTargets[meal] ? theme.colors.danger : theme.colors.success,
                   }]} />
                 </View>
               )}
@@ -547,16 +512,18 @@ export default function LogScreen() {
                   <View style={styles.logRight}>
                     <Text style={styles.logCalorie}>{log.calories} kcal</Text>
                     <TouchableOpacity onPress={() => removeLog(log.id)}>
-                      <Ionicons name="trash-outline" size={18} color="#ef4444" />
+                      <Ionicons name="trash-outline" size={18} color={theme.colors.danger} />
                     </TouchableOpacity>
                   </View>
                 </View>
               ))}
               {logs.length === 0 && (
                 <EmptyState
+                  imageSource={logHeroIllustration}
                   icon="🥢"
                   title="Chưa có món nào"
                   description="Bạn có thể scan đồ ăn mới hoặc log nhanh từ bộ sưu tập ở phía trên."
+                  variant="compact"
                   style={styles.emptyStateCard}
                 />
               )}
@@ -569,7 +536,7 @@ export default function LogScreen() {
           <View style={styles.activityHeader}>
             <Text style={styles.activityTitle}>🏃 Hoạt động đã hoàn thành</Text>
             <TouchableOpacity style={styles.addActivityBtn} onPress={handleAddActivity}>
-              <Ionicons name="add" size={18} color="#0f0f1a" />
+              <AnimatedIonicon name="add" size={18} color={theme.colors.textOnAccent} motion="pulse" />
             </TouchableOpacity>
           </View>
           {activityLogs.length === 0 ? (
@@ -577,6 +544,7 @@ export default function LogScreen() {
               icon="🏃"
               title="Chưa có hoạt động"
               description="Thêm vận động để app tính calories burned và net calories chính xác hơn."
+              variant="compact"
               style={styles.emptyStateCard}
             />
           ) : (
@@ -590,7 +558,7 @@ export default function LogScreen() {
                   ) : null}
                 </View>
                 <TouchableOpacity onPress={() => deleteActivity(act.id)}>
-                  <Ionicons name="trash-outline" size={18} color="#ef4444" />
+                  <Ionicons name="trash-outline" size={18} color={theme.colors.danger} />
                 </TouchableOpacity>
               </View>
             ))
@@ -601,133 +569,116 @@ export default function LogScreen() {
             </Text>
           )}
         </SurfaceCard>
+        <RewardToast reward={reward} onHide={() => setReward(null)} />
     </ScreenShell>
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createThemedStyles((colors, radii) => ({
   heroBody: { marginBottom: 18, maxWidth: 700 },
   savedSection: { marginBottom: 16 },
-  savedTitle: { color: '#eff6ff', fontWeight: '700', fontSize: 15, marginBottom: 10 },
+  savedTitle: { color: colors.text, fontWeight: '800', fontSize: 15, marginBottom: 10 },
   savedList: { gap: 10, paddingRight: 16 },
-  savedCard: { backgroundColor: '#0f1b3b', borderRadius: 18, padding: 14, width: 160, position: 'relative', borderWidth: 1, borderColor: '#21376b' },
-  savedName: { color: '#fff', fontWeight: '700', fontSize: 13, marginBottom: 6, paddingRight: 16 },
-  savedCalorie: { color: '#6ee7b7', fontWeight: '800', fontSize: 18, marginBottom: 4 },
-  savedMacro: { color: '#8ca0c3', fontSize: 11 },
+  savedCard: { backgroundColor: colors.surfaceLifted, borderRadius: 8, padding: 14, width: 160, position: 'relative', borderWidth: 1, borderColor: colors.border },
+  savedName: { color: colors.text, fontWeight: '700', fontSize: 13, marginBottom: 6, paddingRight: 16 },
+  savedCalorie: { color: colors.accentMint, fontWeight: '800', fontSize: 18, marginBottom: 4 },
+  savedMacro: { color: colors.textMuted, fontSize: 11 },
   savedDelete: { position: 'absolute', top: 8, right: 8 },
+  logSummaryCard: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    justifyContent: 'space-between',
+    gap: 10,
+    marginTop: 14,
+    marginBottom: 16,
+    backgroundColor: colors.surfaceLifted,
+  },
+  logSummaryItem: {
+    flex: 1,
+    minWidth: 0,
+  },
+  logSummaryDivider: {
+    width: 1,
+    backgroundColor: colors.border,
+  },
+  logSummaryLabel: {
+    color: colors.textMuted,
+    fontSize: 11,
+    fontWeight: '800',
+    marginBottom: 4,
+  },
+  logSummaryValue: {
+    color: colors.text,
+    fontSize: 20,
+    fontWeight: '900',
+  },
+  logSummaryValueWarn: {
+    color: colors.accentAmber,
+  },
+  logSummaryValueBurned: {
+    color: colors.accentMint,
+    fontSize: 20,
+    fontWeight: '900',
+  },
+  logSummaryUnit: {
+    color: colors.textMuted,
+    fontSize: 11,
+    marginTop: 1,
+  },
   mealSection: { marginBottom: 12 },
   mealHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8, alignItems: 'center' },
   mealHeaderRight: { flexDirection: 'row', alignItems: 'baseline', gap: 2 },
-  mealLabel: { color: '#eff6ff', fontWeight: '700', fontSize: 15 },
-  mealTotal: { color: '#6ee7b7', fontWeight: '800' },
-  mealTarget: { color: '#7f91b5', fontSize: 12 },
-  mealProgressBar: { height: 6, backgroundColor: '#213055', borderRadius: 999, marginBottom: 10, overflow: 'hidden' },
+  mealLabel: { color: colors.text, fontWeight: '700', fontSize: 15 },
+  mealTotal: { color: colors.accentMint, fontWeight: '800' },
+  mealTarget: { color: colors.textMuted, fontSize: 12 },
+  mealProgressBar: { height: 6, backgroundColor: colors.border, borderRadius: 999, marginBottom: 10, overflow: 'hidden' },
   mealProgressFill: { height: '100%', borderRadius: 2 },
-  logRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10, borderTopWidth: 1, borderTopColor: '#213055' },
+  logRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10, borderTopWidth: 1, borderTopColor: colors.border },
   logInfo: { flex: 1 },
-  logName: { color: '#fff', fontSize: 14, fontWeight: '600' },
-  logDetail: { color: '#8ca0c3', fontSize: 12, marginTop: 2 },
+  logName: { color: colors.text, fontSize: 14, fontWeight: '600' },
+  logDetail: { color: colors.textMuted, fontSize: 12, marginTop: 2 },
   logRight: { alignItems: 'flex-end', gap: 4 },
-  logCalorie: { color: '#6ee7b7', fontWeight: '700' },
+  logCalorie: { color: colors.accentMint, fontWeight: '700' },
   emptyStateCard: { marginTop: 8 },
-  roadmapSection: { marginBottom: 14, marginTop: 2 },
-  roadmapHeader: { marginBottom: 10 },
-  roadmapHeaderTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
-  roadmapTitle: { color: '#dbeafe', fontWeight: '800', fontSize: 15, marginBottom: 4 },
-  roadmapAddBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: '#6ee7b7',
-    borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  roadmapAddBtnText: { color: '#0b1020', fontSize: 12, fontWeight: '800' },
-  roadmapSummary: { color: '#8ca0c3', fontSize: 12, fontWeight: '700' },
-  roadmapItem: {
-    borderWidth: 1,
-    borderColor: '#2a3d73',
-    borderRadius: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 9,
-    marginTop: 8,
-    backgroundColor: '#111b38',
-  },
-  roadmapItemCompleted: {
-    borderColor: '#6ee7b7',
-    backgroundColor: '#123329',
-  },
-  roadmapLeft: { flexDirection: 'row', gap: 10 },
-  roadmapCheckbox: {
-    width: 20,
-    height: 20,
-    borderRadius: 5,
-    borderWidth: 1.5,
-    borderColor: '#5f76a6',
-    marginTop: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  roadmapCheckboxCompleted: {
-    borderColor: '#6ee7b7',
-    backgroundColor: '#6ee7b7',
-  },
-  roadmapItemTitle: { color: '#eff6ff', fontSize: 13, fontWeight: '700' },
-  roadmapItemDetail: { color: '#9fb1d1', fontSize: 12, lineHeight: 17, marginTop: 2 },
-  roadmapItemMeta: { color: '#6ee7b7', fontSize: 12, fontWeight: '700', marginTop: 4 },
-  roadmapCta: { color: '#9dd6b4', fontSize: 11, fontWeight: '700', marginTop: 6 },
-  roadmapRemoveBtn: {
-    marginTop: 6,
-    alignSelf: 'flex-start',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: '#7f1d1d',
-    backgroundColor: '#2c1117',
-  },
-  roadmapRemoveText: { color: '#fda4af', fontSize: 11, fontWeight: '700' },
   activitySection: { marginBottom: 20, marginTop: 4 },
   activityHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
-  activityTitle: { color: '#eff6ff', fontWeight: '700', fontSize: 15 },
-  addActivityBtn: { backgroundColor: '#6ee7b7', borderRadius: 16, width: 30, height: 30, justifyContent: 'center', alignItems: 'center' },
-  activityRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderTopWidth: 1, borderTopColor: '#213055' },
-  activityName: { color: '#fff', fontWeight: '600', fontSize: 14 },
-  activityDetail: { color: '#9fb1d1', fontSize: 12, marginTop: 2 },
+  activityTitle: { color: colors.text, fontWeight: '700', fontSize: 15 },
+  addActivityBtn: { backgroundColor: colors.accentMint, borderRadius: 16, width: 30, height: 30, justifyContent: 'center', alignItems: 'center' },
+  activityRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderTopWidth: 1, borderTopColor: colors.border },
+  activityName: { color: colors.text, fontWeight: '600', fontSize: 14 },
+  activityDetail: { color: colors.textMuted, fontSize: 12, marginTop: 2 },
   activityRoadmapBadge: {
     marginTop: 5,
     alignSelf: 'flex-start',
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 999,
-    backgroundColor: '#173f30',
-    color: '#86efac',
+    backgroundColor: colors.surfaceSuccess,
+    color: colors.success,
     fontSize: 11,
     fontWeight: '700',
   },
-  activityBurned: { color: '#fbbf24', fontWeight: '700', fontSize: 13, marginTop: 8, textAlign: 'right' },
+  activityBurned: { color: colors.warning, fontWeight: '700', fontSize: 13, marginTop: 8, textAlign: 'right' },
   // Exercise catalog modal
-  catalogOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'flex-end' },
-  catalogSheet: { backgroundColor: '#0d1530', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, maxHeight: '85%' },
+  catalogOverlay: { flex: 1, backgroundColor: colors.overlay, justifyContent: 'flex-end' },
+  catalogSheet: { backgroundColor: colors.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, maxHeight: '85%' },
   catalogHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  catalogTitle: { color: '#eff6ff', fontWeight: '800', fontSize: 18 },
-  catalogHint: { color: '#7f91b5', fontSize: 12, marginBottom: 12 },
-  catalogItem: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#111b38', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, marginBottom: 8, borderWidth: 1, borderColor: '#21376b' },
-  catalogItemName: { color: '#eff6ff', fontWeight: '700', fontSize: 14, marginBottom: 2 },
-  catalogItemKcal: { color: '#6ee7b7', fontSize: 12, fontWeight: '700' },
+  catalogTitle: { color: colors.text, fontWeight: '800', fontSize: 18 },
+  catalogHint: { color: colors.textMuted, fontSize: 12, marginBottom: 12 },
+  catalogItem: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surfaceAlt, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, marginBottom: 8, borderWidth: 1, borderColor: colors.border },
+  catalogItemName: { color: colors.text, fontWeight: '700', fontSize: 14, marginBottom: 2 },
+  catalogItemKcal: { color: colors.accentMint, fontSize: 12, fontWeight: '700' },
   catalogBack: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 14 },
-  catalogBackText: { color: '#6ee7b7', fontSize: 13, fontWeight: '700' },
-  catalogSelectedLabel: { color: '#eff6ff', fontSize: 20, fontWeight: '800', marginBottom: 6 },
+  catalogBackText: { color: colors.accentMint, fontSize: 13, fontWeight: '700' },
+  catalogSelectedLabel: { color: colors.text, fontSize: 20, fontWeight: '800', marginBottom: 6 },
   durationRow: { flexDirection: 'row', gap: 10, marginBottom: 20, flexWrap: 'wrap' },
-  durationBtn: { flex: 1, minWidth: 70, backgroundColor: '#111b38', borderWidth: 1.5, borderColor: '#2a3d73', borderRadius: 12, paddingVertical: 12, alignItems: 'center' },
-  durationBtnActive: { borderColor: '#6ee7b7', backgroundColor: '#123329' },
-  durationBtnMin: { color: '#eff6ff', fontWeight: '700', fontSize: 14 },
-  durationBtnKcal: { color: '#8ca0c3', fontSize: 11, marginTop: 2 },
-  durationBtnTextActive: { color: '#6ee7b7' },
-  catalogConfirmBtn: { backgroundColor: '#6ee7b7', borderRadius: 16, paddingVertical: 14, alignItems: 'center' },
-  catalogConfirmText: { color: '#0b1020', fontWeight: '800', fontSize: 14 },
-});
+  durationBtn: { flex: 1, minWidth: 70, backgroundColor: colors.surfaceAlt, borderWidth: 1.5, borderColor: colors.border, borderRadius: 12, paddingVertical: 12, alignItems: 'center' },
+  durationBtnActive: { borderColor: colors.accentMint, backgroundColor: colors.surfaceSuccess },
+  durationBtnMin: { color: colors.text, fontWeight: '700', fontSize: 14 },
+  durationBtnKcal: { color: colors.textMuted, fontSize: 11, marginTop: 2 },
+  durationBtnTextActive: { color: colors.accentMint },
+  catalogConfirmBtn: { backgroundColor: colors.accentMint, borderRadius: 16, paddingVertical: 14, alignItems: 'center' },
+  catalogConfirmText: { color: colors.textOnAccent, fontWeight: '800', fontSize: 14 },
+}));
+
+

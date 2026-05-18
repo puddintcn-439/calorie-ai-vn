@@ -1,17 +1,26 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  ActivityIndicator, Alert, Dimensions,
+  View,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  ActivityIndicator,
+  Dimensions
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from 'expo-router';
 import { WeeklyInsights } from '@calorie-ai/types';
 import { useInsightsStore } from '../../store/insights.store';
 import { useCalorieTargetStore } from '../../store/calorie-target.store';
 import { BodyText, Eyebrow, HeroTitle, ScreenShell, SurfaceCard } from '../../components/ui-shell';
+import { createThemedStyles, theme, useAppTheme } from '../../components/theme';
+import { Text } from '../../components/i18n-text';
+import { Alert } from '../../components/i18n-alert';
 
 const screenWidth = Dimensions.get('window').width;
 
 export default function InsightsScreen() {
+  useAppTheme();
   const { weeklyInsights, isLoading, fetchWeeklyInsights } = useInsightsStore();
   const {
     recommendations,
@@ -20,16 +29,26 @@ export default function InsightsScreen() {
   } = useCalorieTargetStore();
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
 
-  useEffect(() => {
+  const loadInsightsData = useCallback(() => {
     fetchWeeklyInsights();
     fetchRecommendations().catch(() => {});
-  }, []);
+  }, [fetchRecommendations, fetchWeeklyInsights]);
+
+  useEffect(() => {
+    loadInsightsData();
+  }, [loadInsightsData]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadInsightsData();
+    }, [loadInsightsData]),
+  );
 
   if (isLoading) {
     return (
       <ScreenShell>
         <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color="#6ee7b7" />
+          <ActivityIndicator size="large" color={theme.colors.accentMint} />
           <Text style={styles.loadingText}>Đang tải dữ liệu tuần...</Text>
         </View>
       </ScreenShell>
@@ -133,7 +152,7 @@ export default function InsightsScreen() {
                 {selectedDayData.day_name}, {selectedDayData.date}
               </Text>
               <TouchableOpacity onPress={() => setSelectedDay(null)}>
-                <Ionicons name="close" size={24} color="#9fb1d1" />
+                <Ionicons name="close" size={24} color={theme.colors.textMuted} />
               </TouchableOpacity>
             </View>
 
@@ -241,7 +260,7 @@ export default function InsightsScreen() {
           <View style={styles.planHeader}>
             <Text style={styles.planTitle}>Khuyến nghị cá nhân hóa</Text>
             {isLoadingRecommendations ? (
-              <ActivityIndicator size="small" color="#6ee7b7" />
+              <ActivityIndicator size="small" color={theme.colors.accentMint} />
             ) : null}
           </View>
 
@@ -311,71 +330,71 @@ function MealBreakdownRow({
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createThemedStyles((colors, radii) => ({
   centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', minHeight: 200 },
-  loadingText: { color: '#9fb1d1', marginTop: 12, fontSize: 14 },
-  errorText: { color: '#ef4444', fontSize: 14, marginBottom: 12 },
-  retryButton: { backgroundColor: '#6ee7b7', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 8 },
-  retryButtonText: { color: '#07111f', fontWeight: '600', fontSize: 14 },
+  loadingText: { color: colors.textMuted, marginTop: 12, fontSize: 14 },
+  errorText: { color: colors.danger, fontSize: 14, marginBottom: 12 },
+  retryButton: { backgroundColor: colors.accentMint, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 8 },
+  retryButtonText: { color: colors.textOnAccent, fontWeight: '600', fontSize: 14 },
 
-  periodText: { marginBottom: 18, color: '#9fb1d1', fontSize: 14 },
+  periodText: { marginBottom: 18, color: colors.textMuted, fontSize: 14 },
 
   summaryGrid: { flexDirection: 'row', gap: 12, marginBottom: 16 },
   summaryCard: { flex: 1, alignItems: 'center', padding: 16 },
-  summaryLabel: { color: '#9fb1d1', fontSize: 12, marginBottom: 8 },
-  summaryValue: { color: '#6ee7b7', fontSize: 26, fontWeight: '800' },
-  summaryUnit: { color: '#8194ba', fontSize: 11, marginTop: 4 },
-  summaryUnitGood: { color: '#4ade80', fontSize: 11, marginTop: 4, fontWeight: '600' },
-  trendPositive: { color: '#4ade80' },
-  trendNegative: { color: '#ef4444' },
+  summaryLabel: { color: colors.textMuted, fontSize: 12, marginBottom: 8 },
+  summaryValue: { color: colors.accentMint, fontSize: 26, fontWeight: '800' },
+  summaryUnit: { color: colors.textMuted, fontSize: 11, marginTop: 4 },
+  summaryUnitGood: { color: colors.success, fontSize: 11, marginTop: 4, fontWeight: '600' },
+  trendPositive: { color: colors.success },
+  trendNegative: { color: colors.danger },
 
-  sectionTitle: { fontSize: 16, fontWeight: '700', color: '#eff6ff', marginTop: 20, marginBottom: 12 },
+  sectionTitle: { fontSize: 16, fontWeight: '700', color: colors.text, marginTop: 20, marginBottom: 12 },
 
   dailyGrid: { flexDirection: 'row', gap: 8, marginBottom: 16, flexWrap: 'wrap' },
-  dayCard: { flex: 1, minWidth: 70, backgroundColor: '#0f1b3b', borderRadius: 12, padding: 12, alignItems: 'center', borderWidth: 1, borderColor: '#203463' },
-  dayCardActive: { backgroundColor: '#1a2f5c', borderColor: '#6ee7b7' },
-  dayCardGood: { borderColor: '#4ade80' },
-  dayName: { color: '#9fb1d1', fontSize: 13, fontWeight: '600' },
-  dayDate: { color: '#8194ba', fontSize: 12, marginTop: 2 },
-  adherenceBar: { width: '100%', height: 4, backgroundColor: '#0b1330', borderRadius: 2, marginVertical: 6, overflow: 'hidden' },
-  adherenceFill: { height: '100%', backgroundColor: '#6ee7b7' },
-  dayCalories: { color: '#6ee7b7', fontSize: 12, fontWeight: '700' },
-  noData: { color: '#555', fontSize: 12 },
+  dayCard: { flex: 1, minWidth: 70, backgroundColor: colors.surfaceAlt, borderRadius: 12, padding: 12, alignItems: 'center', borderWidth: 1, borderColor: colors.border },
+  dayCardActive: { backgroundColor: colors.surfaceInfo, borderColor: colors.accentMint },
+  dayCardGood: { borderColor: colors.success },
+  dayName: { color: colors.textMuted, fontSize: 13, fontWeight: '600' },
+  dayDate: { color: colors.textMuted, fontSize: 12, marginTop: 2 },
+  adherenceBar: { width: '100%', height: 4, backgroundColor: colors.surfacePressed, borderRadius: 2, marginVertical: 6, overflow: 'hidden' },
+  adherenceFill: { height: '100%', backgroundColor: colors.accentMint },
+  dayCalories: { color: colors.accentMint, fontSize: 12, fontWeight: '700' },
+  noData: { color: colors.textDisabled, fontSize: 12 },
 
   dayDetailCard: { marginBottom: 16 },
-  dayDetailHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, borderBottomWidth: 1, borderBottomColor: '#203463', paddingBottom: 12 },
-  dayDetailTitle: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  dayDetailHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, borderBottomWidth: 1, borderBottomColor: colors.border, paddingBottom: 12 },
+  dayDetailTitle: { color: colors.text, fontSize: 16, fontWeight: '700' },
   dayDetailContent: { gap: 8 },
   detailRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 6 },
-  detailLabel: { color: '#9fb1d1', fontSize: 13 },
-  detailValue: { color: '#bfdbfe', fontSize: 13, fontWeight: '600' },
-  goodValue: { color: '#4ade80' },
-  neutralValue: { color: '#fbbf24' },
+  detailLabel: { color: colors.textMuted, fontSize: 13 },
+  detailValue: { color: colors.textSoft, fontSize: 13, fontWeight: '600' },
+  goodValue: { color: colors.success },
+  neutralValue: { color: colors.warning },
 
   macroCard: { gap: 16, marginBottom: 16 },
   macroCircle: { alignItems: 'center' },
-  macroPercentage: { color: '#6ee7b7', fontSize: 24, fontWeight: '800' },
-  macroLabel: { color: '#9fb1d1', fontSize: 12, marginTop: 2 },
-  macroValue: { color: '#bfdbfe', fontSize: 11, marginTop: 2 },
+  macroPercentage: { color: colors.accentMint, fontSize: 24, fontWeight: '800' },
+  macroLabel: { color: colors.textMuted, fontSize: 12, marginTop: 2 },
+  macroValue: { color: colors.textSoft, fontSize: 11, marginTop: 2 },
 
   mealBreakdownCard: { gap: 12, marginBottom: 16 },
   breakdownRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   breakdownLeft: { flex: 0.25 },
-  breakdownLabel: { color: '#fff', fontSize: 13, fontWeight: '600' },
-  breakdownMeta: { color: '#8194ba', fontSize: 11, marginTop: 2 },
-  breakdownBar: { flex: 1, height: 6, backgroundColor: '#0b1330', borderRadius: 3, overflow: 'hidden' },
-  breakdownFill: { height: '100%', backgroundColor: '#7dd3fc' },
-  breakdownValue: { flex: 0.2, color: '#bfdbfe', fontSize: 12, fontWeight: '600', textAlign: 'right' },
+  breakdownLabel: { color: colors.text, fontSize: 13, fontWeight: '600' },
+  breakdownMeta: { color: colors.textMuted, fontSize: 11, marginTop: 2 },
+  breakdownBar: { flex: 1, height: 6, backgroundColor: colors.surfacePressed, borderRadius: 3, overflow: 'hidden' },
+  breakdownFill: { height: '100%', backgroundColor: colors.info },
+  breakdownValue: { flex: 0.2, color: colors.textSoft, fontSize: 12, fontWeight: '600', textAlign: 'right' },
 
   highlightCard: { gap: 12, marginBottom: 16 },
   highlightRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8 },
-  highlightLabel: { color: '#9fb1d1', fontSize: 13 },
-  highlightValue: { color: '#6ee7b7', fontSize: 14, fontWeight: '700' },
+  highlightLabel: { color: colors.textMuted, fontSize: 13 },
+  highlightValue: { color: colors.accentMint, fontSize: 14, fontWeight: '700' },
 
   planCard: { gap: 10, marginBottom: 12 },
   planHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  planTitle: { color: '#eff6ff', fontSize: 15, fontWeight: '700' },
-  planMeta: { color: '#9fb1d1', fontSize: 12, lineHeight: 18 },
+  planTitle: { color: colors.text, fontSize: 15, fontWeight: '700' },
+  planMeta: { color: colors.textMuted, fontSize: 12, lineHeight: 18 },
   planMealRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -383,16 +402,18 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: '#1d2d53',
+    borderBottomColor: colors.borderSubtle,
   },
   planMealLeft: { flex: 1 },
-  planMealLabel: { color: '#dbeafe', fontSize: 13, fontWeight: '700' },
-  planMealTip: { color: '#8ea3cb', fontSize: 12, marginTop: 3, lineHeight: 17 },
-  planMealCal: { color: '#6ee7b7', fontSize: 12, fontWeight: '800' },
-  planSuggestionBox: { marginTop: 6, backgroundColor: '#122041', borderRadius: 10, padding: 10, borderWidth: 1, borderColor: '#223a70' },
-  planSuggestionTitle: { color: '#c4b5fd', fontSize: 12, fontWeight: '700', marginBottom: 4 },
-  planSuggestionText: { color: '#d7e3fa', fontSize: 12, lineHeight: 18 },
-  planEmpty: { color: '#8ea3cb', fontSize: 12 },
+  planMealLabel: { color: colors.textSoft, fontSize: 13, fontWeight: '700' },
+  planMealTip: { color: colors.textMuted, fontSize: 12, marginTop: 3, lineHeight: 17 },
+  planMealCal: { color: colors.accentMint, fontSize: 12, fontWeight: '800' },
+  planSuggestionBox: { marginTop: 6, backgroundColor: colors.surfaceAlt, borderRadius: 10, padding: 10, borderWidth: 1, borderColor: colors.border },
+  planSuggestionTitle: { color: colors.accentPlum, fontSize: 12, fontWeight: '700', marginBottom: 4 },
+  planSuggestionText: { color: colors.textSoft, fontSize: 12, lineHeight: 18 },
+  planEmpty: { color: colors.textMuted, fontSize: 12 },
 
   bottomPadding: { height: 40 },
-});
+}));
+
+

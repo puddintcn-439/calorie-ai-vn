@@ -1,14 +1,19 @@
 import React, { useState } from 'react';
 import {
-  View, Text, StyleSheet, Alert,
+  View,
+  StyleSheet
 } from 'react-native';
 import { router } from 'expo-router';
 import { useAuthStore } from '../../store/auth.store';
 import { BodyText, Eyebrow, HeroTitle, ScreenShell, SurfaceCard } from '../../components/ui-shell';
 import { UiButton } from '../../components/ui-button';
 import { UiInput } from '../../components/ui-input';
+import { createThemedStyles, theme, useAppTheme } from '../../components/theme';
+import { Text } from '../../components/i18n-text';
+import { Alert } from '../../components/i18n-alert';
 
 export default function LoginScreen() {
+  useAppTheme();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -67,14 +72,16 @@ export default function LoginScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createThemedStyles((colors, radii) => ({
   centeredContent: { flex: 1, justifyContent: 'center', maxWidth: 560, alignSelf: 'center', width: '100%' },
   heroBlock: { marginBottom: 18, paddingHorizontal: 4 },
   badgeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 16 },
-  badge: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 18, backgroundColor: '#122041', borderWidth: 1, borderColor: '#233a71' },
-  badgeText: { color: '#d7e5ff', fontSize: 12, fontWeight: '700' },
+  badge: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 18, backgroundColor: colors.surfaceAlt, borderWidth: 1, borderColor: colors.border },
+  badgeText: { color: colors.textSoft, fontSize: 12, fontWeight: '700' },
   formCard: { width: '100%', padding: 20 },
-  sectionTitle: { color: '#eff6ff', fontSize: 24, fontWeight: '800', marginBottom: 6 },
-  subtitle: { color: '#94a3b8', marginBottom: 20, fontSize: 14, lineHeight: 21 },
+  sectionTitle: { color: colors.text, fontSize: 24, fontWeight: '800', marginBottom: 6 },
+  subtitle: { color: colors.textMuted, marginBottom: 20, fontSize: 14, lineHeight: 21 },
   submitBtn: { marginBottom: 8, marginTop: 4 },
-});
+}));
+
+

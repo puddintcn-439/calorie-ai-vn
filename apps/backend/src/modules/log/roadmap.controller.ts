@@ -17,6 +17,9 @@ import {
   CreateDailyRoadmapItemDto,
   UpdateDailyRoadmapItemDto,
   DailyRoadmapSyncDto,
+  ActivityPreference,
+  CreateActivityPreferenceDto,
+  UpdateActivityPreferenceDto,
 } from '@calorie-ai/types';
 
 @UseGuards(JwtAuthGuard)
@@ -103,6 +106,76 @@ export class RoadmapController {
       if (error?.code === 'PGRST116') {
         throw new BadRequestException(
           'Roadmap feature is being initialized. Please try again shortly.',
+        );
+      }
+      throw error;
+    }
+  }
+}
+
+@UseGuards(JwtAuthGuard)
+@Controller('activity-preferences')
+export class ActivityPreferenceController {
+  constructor(private roadmapService: RoadmapService) {}
+
+  @Get()
+  async list(@Request() req: any): Promise<ActivityPreference[]> {
+    try {
+      return await this.roadmapService.getActivityPreferences(req.user.id);
+    } catch (error: any) {
+      if (error?.code === 'PGRST116') {
+        return [];
+      }
+      throw error;
+    }
+  }
+
+  @Post()
+  async create(
+    @Request() req: any,
+    @Body() dto: CreateActivityPreferenceDto,
+  ): Promise<ActivityPreference> {
+    try {
+      return await this.roadmapService.createActivityPreference(req.user.id, dto);
+    } catch (error: any) {
+      if (error?.code === 'PGRST116') {
+        throw new BadRequestException(
+          'Activity preference feature is being initialized. Please refresh the app and try again shortly.',
+        );
+      }
+      throw error;
+    }
+  }
+
+  @Put('/:preferenceId')
+  async update(
+    @Request() req: any,
+    @Param('preferenceId') preferenceId: string,
+    @Body() dto: UpdateActivityPreferenceDto,
+  ): Promise<ActivityPreference> {
+    try {
+      return await this.roadmapService.updateActivityPreference(req.user.id, preferenceId, dto);
+    } catch (error: any) {
+      if (error?.code === 'PGRST116') {
+        throw new BadRequestException(
+          'Activity preference feature is being initialized. Please try again shortly.',
+        );
+      }
+      throw error;
+    }
+  }
+
+  @Delete('/:preferenceId')
+  async delete(
+    @Request() req: any,
+    @Param('preferenceId') preferenceId: string,
+  ): Promise<void> {
+    try {
+      return await this.roadmapService.deleteActivityPreference(req.user.id, preferenceId);
+    } catch (error: any) {
+      if (error?.code === 'PGRST116') {
+        throw new BadRequestException(
+          'Activity preference feature is being initialized. Please try again shortly.',
         );
       }
       throw error;

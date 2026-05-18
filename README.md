@@ -33,11 +33,11 @@ calorie-ai-vn/
 
 The mobile app uses five primary tabs:
 
-- Today: daily cockpit with calorie budget, macro snapshot, meals, streak, and quick actions.
+- Today: daily cockpit with calorie budget, macro snapshot, meals, streak, quick actions, and movement recommendations from Profile activity preferences.
 - Scan: camera, gallery, text, receipt, barcode, food search, and voice-text parsing.
-- Log: food logs, saved meals, activity logs, and daily exercise roadmap.
+- Log: food logs, saved meals, activity logs, and quick completion from Profile activity preferences.
 - Coach: coaching insights and chat-style guidance.
-- Profile: profile, calorie targets, progress/insights/achievements entry points, reminders, subscription, and health sync settings.
+- Profile: profile, calorie targets, activity preferences, progress/insights/achievements entry points, reminders, subscription, and health sync settings.
 
 Progress, Insights, and Achievements are secondary screens linked from Today/Profile, not primary tabs.
 
@@ -129,6 +129,8 @@ docker compose up --build
 | GET | `/log/daily?date=YYYY-MM-DD` | Daily food log |
 | POST | `/log` | Add food log |
 | POST | `/log/activity` | Add activity log |
+| GET/POST | `/activity-preferences` | List or create user activity preference templates |
+| PUT/DELETE | `/activity-preferences/:preferenceId` | Update or delete a user activity preference template |
 
 ## Health And Nutrition Guardrails
 
@@ -139,6 +141,7 @@ docker compose up --build
 - Kidney disease, diabetes, and weight-affecting medication flags trigger medical-review warnings.
 - Targets include general fiber, sodium, free/added sugar, and saturated-fat goals; they are not disease-specific medical advice.
 - Today tracks logged fiber, sodium, total sugar, and saturated fat when the food source provides those nutrients, with a coverage note when data is missing.
+- Personal goal plans are recalculated server-side with calorie floors, deficit/surplus caps, maintenance-only overrides, and persisted safety warnings.
 
 ## Production Notes
 

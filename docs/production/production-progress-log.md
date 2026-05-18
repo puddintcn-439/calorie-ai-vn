@@ -19,10 +19,13 @@ Use one new entry for each production readiness review or milestone.
 - Added daily log totals and Today UI pills for actual fiber, sodium, total sugar, and saturated fat when logged food data includes those nutrients.
 - Added a Today safety prompt for incomplete profile setup and medical-review profiles.
 - Added migration `016_food_quality_nutrients.sql` for quality nutrient columns on food logs, foods, and saved meals.
+- Added `users.goal_plan` migration and backend-clamped personal goal-plan calculation with safety status/warnings.
+- Updated Today/Profile goal-plan UI so quick presets and manual plans go through backend safety clamps.
+- Added `user_activity_preferences` migration, API endpoints, Profile add/edit/delete UI, Today movement recommendations from those preferences, and Log quick completion from the same source.
 
 ### Remaining Gates
 1. Clinical/nutrition expert review for all health copy and thresholds.
-2. Staging migration apply for `015_user_health_flags.sql` and `016_food_quality_nutrients.sql`.
+2. Staging migration apply for `015_user_health_flags.sql`, `016_food_quality_nutrients.sql`, `017_add_goal_plan_to_users.sql`, and `018_user_activity_preferences.sql`.
 3. End-to-end QA for saving/reloading health flags on real Supabase.
 4. Product decision on whether to add disease-specific plans later or keep the app as wellness-only.
 

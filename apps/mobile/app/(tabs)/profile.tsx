@@ -1,8 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Animated,
-  View, Text, StyleSheet, Alert,
-  ActivityIndicator, useWindowDimensions, Switch, ScrollView, TouchableOpacity,
+  View,
+  StyleSheet,
+  ActivityIndicator,
+  useWindowDimensions,
+  Switch,
+  ScrollView,
+  TouchableOpacity,
+  Modal
 } from 'react-native';
 import { Platform } from 'react-native';
 import { router } from 'expo-router';
@@ -11,13 +17,23 @@ import { useAuthStore } from '../../store/auth.store';
 import { useReminderStore } from '../../store/reminder.store';
 import { useSubscriptionStore } from '../../store/subscription.store';
 import { useLogStore } from '../../store/log.store';
+import { useCalorieTargetStore } from '../../store/calorie-target.store';
+import { useInsightsStore } from '../../store/insights.store';
+import { useThemeStore } from '../../store/theme.store';
 import { apiClient } from '../../services/api';
-import { User, ActivityLevel, UserGoal, HealthFlag, ReminderPreferences, ActivityType, ACTIVITY_MET, SUBSCRIPTION_TIERS, SubscriptionTier } from '@calorie-ai/types';
-import { BodyText, Eyebrow, HeroTitle, ScreenShell, SurfaceCard } from '../../components/ui-shell';
+import { User, ActivityLevel, UserGoal, HealthFlag, GoalPlan, ReminderPreferences, ActivityType, ActivityLog, ACTIVITY_LABELS as EXERCISE_ACTIVITY_LABELS, SUBSCRIPTION_TIERS, SubscriptionTier } from '@calorie-ai/types';
+import { ScreenShell, SurfaceCard } from '../../components/ui-shell';
 import { UiButton } from '../../components/ui-button';
 import { UiChip } from '../../components/ui-chip';
 import { UiInput } from '../../components/ui-input';
 import MacrosCard from '../../components/macros-card';
+import { VisualHeroCard } from '../../components/visual-hero-card';
+import { AnimatedMaterialIcon } from '../../components/animated-icon';
+import { RewardToast, RewardToastData } from '../../components/reward-toast';
+import { createThemedStyles, theme, useAppTheme } from '../../components/theme';
+import { useI18n } from '../../components/i18n';
+
+const profileHeroIllustration = require('../../assets/images/profile-hero.png') as number;
 
 const ACTIVITY_LABELS: Record<ActivityLevel, string> = {
   sedentary: '🪑 Ít vận động',
@@ -85,18 +101,21 @@ type InstantCalorieTargets = {
 
 type ExerciseRoadmapItem = {
   id: string;
+  task_id?: string;
   title: string;
   detail: string;
   activity_type: ActivityType;
   duration_min: number;
   estimated_kcal: number;
+  is_custom?: boolean;
+  persisted_item_id?: string;
 };
 
 const BODY_STATUS_LABELS: Record<BodyStatus, string> = {
-  underweight: 'Risk: thấp cân',
-  normal: 'Risk thấp',
-  overweight: 'Risk tăng',
-  obese: 'Risk cao',
+  underweight: 'Rủi ro thấp cân',
+  normal: 'Rủi ro thấp',
+  overweight: 'Rủi ro tăng',
+  obese: 'Rủi ro cao',
 };
 
 const WEIGHT_RECOMMENDATION_LABELS: Record<WeightRecommendation, string> = {
@@ -113,39 +132,40 @@ const ACTIVITY_RECOMMENDATION_LABELS: Record<ActivityLevel, string> = {
   very_active: 'Rất nhiều',
 };
 
-const BODY_STATUS_TONES: Record<
-  BodyStatus,
-  { bg: string; border: string; accent: string; text: string; badgeBg: string }
-> = {
-  underweight: {
-    bg: '#0f2b3d',
-    border: '#2f95c6',
-    accent: '#7dd3fc',
-    text: '#e0f2fe',
-    badgeBg: '#123a53',
-  },
-  normal: {
-    bg: '#0f2f22',
-    border: '#22c55e',
-    accent: '#86efac',
-    text: '#dcfce7',
-    badgeBg: '#16442f',
-  },
-  overweight: {
-    bg: '#3a2a12',
-    border: '#f59e0b',
-    accent: '#fcd34d',
-    text: '#fef3c7',
-    badgeBg: '#52370f',
-  },
-  obese: {
-    bg: '#3b1720',
-    border: '#ef4444',
-    accent: '#fca5a5',
-    text: '#fee2e2',
-    badgeBg: '#5d1f2a',
-  },
-};
+function getBodyStatusTone(status: BodyStatus): { bg: string; border: string; accent: string; text: string; badgeBg: string } {
+  const colors = theme.colors;
+  const tones: Record<BodyStatus, { bg: string; border: string; accent: string; text: string; badgeBg: string }> = {
+    underweight: {
+      bg: colors.surfaceInfo,
+      border: colors.borderInfo,
+      accent: colors.info,
+      text: colors.textSoft,
+      badgeBg: colors.surfaceInfo,
+    },
+    normal: {
+      bg: colors.surfaceSuccess,
+      border: colors.success,
+      accent: colors.success,
+      text: colors.textSoft,
+      badgeBg: colors.surfaceSuccess,
+    },
+    overweight: {
+      bg: colors.surfaceWarning,
+      border: colors.warning,
+      accent: colors.warning,
+      text: colors.textSoft,
+      badgeBg: colors.surfaceWarning,
+    },
+    obese: {
+      bg: colors.surfaceDanger,
+      border: colors.danger,
+      accent: colors.danger,
+      text: colors.borderDanger,
+      badgeBg: colors.surfaceDanger,
+    },
+  };
+  return tones[status];
+}
 
 function round1(value: number): number {
   return Math.round(value * 10) / 10;
@@ -218,9 +238,26 @@ function buildExercisePlan(
 }
 
 import { estimateExerciseCalories as _estimateExerciseCalories } from '../../services/exercise.service';
+import { Text } from '../../components/i18n-text';
+import { Alert } from '../../components/i18n-alert';
 
 function estimateExerciseCalories(activityType: ActivityType, durationMin: number, weightKg: number): number {
   return _estimateExerciseCalories(activityType, durationMin, weightKg);
+}
+
+function parseRoadmapNote(notes?: string): { taskId: string; taskTitle: string } | null {
+  if (!notes || !notes.startsWith('ROADMAP_TASK:')) return null;
+  const payload = notes.replace('ROADMAP_TASK:', '');
+  const [taskId, taskTitle = 'Bài tập lộ trình'] = payload.split('|');
+  if (!taskId) return null;
+  return { taskId, taskTitle };
+}
+
+function nearestCatalogDuration(durationMin: number): 15 | 30 | 45 | 60 {
+  const options = [15, 30, 45, 60] as const;
+  return options.reduce((best, option) => (
+    Math.abs(option - durationMin) < Math.abs(best - durationMin) ? option : best
+  ), 30 as 15 | 30 | 45 | 60);
 }
 
 function buildExerciseRoadmap(
@@ -377,7 +414,7 @@ function buildInstantAssessment(profile: Partial<User>): InstantAssessmentResult
   const healthyMinWeight = round1(18.5 * heightM * heightM);
   const healthyMaxWeight = round1(24.9 * heightM * heightM);
   const safetyWarnings: string[] = [
-    'BMI là chỉ số screening/risk và mục tiêu calo chỉ là ước tính wellness, không phải chẩn đoán.',
+    'BMI là chỉ số sàng lọc/rủi ro và mục tiêu calo chỉ là ước tính wellness, không phải chẩn đoán.',
   ];
   if (profile.age && profile.age < 18) {
     safetyWarnings.push('Người dưới 18 tuổi chỉ nên dùng mục tiêu duy trì và cần chuyên gia/người giám hộ theo dõi.');
@@ -549,7 +586,10 @@ function calculateInstantCalorieTargets(
 }
 
 export default function ProfileScreen() {
+  const { requestedMode } = useAppTheme();
+  const { setThemeMode } = useThemeStore();
   const { logout } = useAuthStore();
+  const { locale, setLocale, t } = useI18n();
   const {
     preferences: reminderPrefs,
     previewNudge,
@@ -559,12 +599,23 @@ export default function ProfileScreen() {
     fetchPreviewNudge,
   } = useReminderStore();
   const { subscription, features, fetchSubscription, changeTier, isLoading: isSubscriptionLoading } = useSubscriptionStore();
-  const { activityLogs, fetchActivityLogs, addActivity } = useLogStore();
+  const {
+    activityLogs,
+    activityPreferences,
+    fetchDailyLog,
+    fetchActivityLogs,
+    deleteActivity,
+    fetchActivityPreferences,
+    addActivityPreference,
+    updateActivityPreference,
+    deleteActivityPreference,
+  } = useLogStore();
+  const { fetchRecommendations } = useCalorieTargetStore();
+  const { fetchWeeklyInsights } = useInsightsStore();
   const { width } = useWindowDimensions();
   const [profile, setProfile] = useState<Partial<User>>({});
   const [reminders, setReminders] = useState<Partial<ReminderPreferences>>({});
   const [previewMeal, setPreviewMeal] = useState<'breakfast' | 'lunch' | 'dinner' | 'snack'>('lunch');
-  const [completingTaskId, setCompletingTaskId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [basicCollapsed, setBasicCollapsed] = useState(true);
@@ -572,11 +623,21 @@ export default function ProfileScreen() {
   const [notificationsCollapsed, setNotificationsCollapsed] = useState(true);
   const [goalCollapsed, setGoalCollapsed] = useState(true);
   const [calorieCollapsed, setCalorieCollapsed] = useState(true);
+  const [goalPlanTargetKg, setGoalPlanTargetKg] = useState<number | undefined>(undefined);
+  const [goalPlanDurationWeeks, setGoalPlanDurationWeeks] = useState<number | undefined>(undefined);
+  const [goalPlanDirection, setGoalPlanDirection] = useState<'loss' | 'maintain' | 'gain'>('loss');
+  const [goalPlanCleared, setGoalPlanCleared] = useState(false);
+  const [roadmapCatalogVisible, setRoadmapCatalogVisible] = useState(false);
+  const [roadmapCatalogType, setRoadmapCatalogType] = useState<ActivityType | null>(null);
+  const [roadmapCatalogDuration, setRoadmapCatalogDuration] = useState<15 | 30 | 45 | 60>(30);
+  const [editingRoadmapTask, setEditingRoadmapTask] = useState<ExerciseRoadmapItem | null>(null);
+  const [reward, setReward] = useState<RewardToastData | null>(null);
   const highlightAnim = React.useRef(new Animated.Value(0)).current;
   const highlightLoopRef = React.useRef<Animated.CompositeAnimation | null>(null);
   const basicIncomplete = !profile.weight_kg || !profile.height_cm || !profile.age;
   const isDesktop = width >= 900;
   const selectedHealthFlags = normaliseHealthFlags(profile.health_flags);
+  const activeGoalPlan = profile.goal_plan ?? null;
   const instantAssessment = useMemo(() => buildInstantAssessment(profile), [
     profile.weight_kg,
     profile.height_cm,
@@ -584,39 +645,115 @@ export default function ProfileScreen() {
     profile.health_flags,
   ]);
   const assessmentTone = instantAssessment.assessment
-    ? BODY_STATUS_TONES[instantAssessment.assessment.body_status]
+    ? getBodyStatusTone(instantAssessment.assessment.body_status)
     : null;
-  const exerciseRoadmap = useMemo(() => {
-    const assessment = instantAssessment.assessment;
-    if (!assessment) return [];
-    return buildExerciseRoadmap(
-      assessment.body_status,
-      assessment.recommended_activity_level,
-      assessment.weight_recommendation,
-      profile.weight_kg ?? 65,
-    );
-  }, [
-    instantAssessment.assessment?.body_status,
-    instantAssessment.assessment?.recommended_activity_level,
-    instantAssessment.assessment?.weight_recommendation,
-    profile.weight_kg,
-  ]);
+  const roadmap = useMemo<ExerciseRoadmapItem[]>(() => {
+    return activityPreferences.map((item) => ({
+      id: item.id,
+      task_id: item.id,
+      title: item.title,
+      detail: 'Bài người dùng chọn trong Profile.',
+      activity_type: item.activity_type as ActivityType,
+      duration_min: item.duration_min,
+      estimated_kcal: estimateExerciseCalories(item.activity_type as ActivityType, item.duration_min, profile.weight_kg ?? 65),
+      is_custom: true,
+      persisted_item_id: item.id,
+    }));
+  }, [activityPreferences, profile.weight_kg]);
+
+  const roadmapActivityByTaskId = useMemo(() => {
+    const map: Record<string, ActivityLog> = {};
+    activityLogs.forEach((log) => {
+      const parsed = parseRoadmapNote(log.notes);
+      if (!parsed) return;
+      map[parsed.taskId] = log;
+    });
+    return map;
+  }, [activityLogs]);
 
   const completedRoadmapTaskIds = useMemo(() => {
     const ids = new Set<string>();
     activityLogs.forEach((log) => {
-      const note = log.notes ?? '';
-      if (!note.startsWith('ROADMAP_TASK:')) return;
-      const [taskId] = note.replace('ROADMAP_TASK:', '').split('|');
-      if (taskId) ids.add(taskId);
+      const parsed = parseRoadmapNote(log.notes);
+      if (parsed?.taskId) ids.add(parsed.taskId);
     });
     return ids;
   }, [activityLogs]);
 
   const completedRoadmapKcal = useMemo(
-    () => exerciseRoadmap.reduce((sum, item) => sum + (completedRoadmapTaskIds.has(item.id) ? item.estimated_kcal : 0), 0),
-    [exerciseRoadmap, completedRoadmapTaskIds],
+    () => roadmap.reduce((sum, item) => sum + (completedRoadmapTaskIds.has(item.id) ? item.estimated_kcal : 0), 0),
+    [roadmap, completedRoadmapTaskIds],
   );
+  const completedRoadmapCount = useMemo(
+    () => roadmap.filter((item) => completedRoadmapTaskIds.has(item.id)).length,
+    [roadmap, completedRoadmapTaskIds],
+  );
+  const setupSteps = useMemo(() => [
+    {
+      key: 'basic',
+      label: 'Thể trạng',
+      detail: profile.weight_kg && profile.height_cm && profile.age
+        ? `${profile.weight_kg} kg · ${profile.height_cm} cm · ${profile.age} tuổi`
+        : 'Thiếu số đo chính',
+      done: Boolean(profile.weight_kg && profile.height_cm && profile.age),
+      icon: 'monitor-weight',
+    },
+    {
+      key: 'goal',
+      label: 'Mục tiêu',
+      detail: activeGoalPlan?.computed_daily_calorie_target
+        ? `${activeGoalPlan.computed_daily_calorie_target} kcal/ngày`
+        : profile.goal ? GOAL_LABELS[profile.goal] : 'Chưa chọn mục tiêu',
+      done: Boolean(profile.goal && profile.daily_calorie_target),
+      icon: 'track-changes',
+    },
+    {
+      key: 'roadmap',
+      label: 'Vận động',
+      detail: roadmap.length > 0 ? `${roadmap.length} bài ưu tiên` : 'Chưa có lộ trình',
+      done: roadmap.length > 0,
+      icon: 'directions-run',
+    },
+    {
+      key: 'notifications',
+      label: 'Nhắc nhở',
+      detail: (reminders.allow_push_notifications ?? true) ? 'Đang bật' : 'Đang tắt',
+      done: reminders.allow_push_notifications ?? true,
+      icon: 'notifications-active',
+    },
+  ] as const, [
+    activeGoalPlan?.computed_daily_calorie_target,
+    profile.age,
+    profile.daily_calorie_target,
+    profile.goal,
+    profile.height_cm,
+    profile.weight_kg,
+    reminders.allow_push_notifications,
+    roadmap.length,
+  ]);
+  const completedSetupCount = setupSteps.filter((step) => step.done).length;
+  const setupProgressPct = Math.round((completedSetupCount / setupSteps.length) * 100);
+  const existingRoadmapActivityTypes = useMemo(
+    () => new Set(roadmap.map((item) => item.activity_type)),
+    [roadmap],
+  );
+  const catalogTypes = Object.keys(EXERCISE_ACTIVITY_LABELS) as ActivityType[];
+  const userWeight = profile.weight_kg ?? 65;
+
+  const openSetupStep = (key: typeof setupSteps[number]['key']) => {
+    if (key === 'basic') {
+      setBasicCollapsed(false);
+      setAssessmentCollapsed(false);
+      return;
+    }
+    if (key === 'goal' || key === 'roadmap') {
+      setGoalCollapsed(false);
+      return;
+    }
+    if (key === 'notifications') {
+      setNotificationsCollapsed(false);
+    }
+  };
 
   useEffect(() => {
     Promise.all([
@@ -633,8 +770,20 @@ export default function ProfileScreen() {
       fetchSubscription(),
       fetchPreviewNudge('lunch').catch(() => {}),
       fetchActivityLogs().catch(() => {}),
+      fetchActivityPreferences().catch(() => {}),
     ]).finally(() => setIsLoading(false));
   }, []);
+
+  // Sync local goal plan inputs when profile is loaded
+  useEffect(() => {
+    const gp = profile.goal_plan;
+    if (gp) {
+      setGoalPlanTargetKg(gp.target_kg ?? undefined);
+      setGoalPlanDurationWeeks(gp.duration_weeks ?? undefined);
+      setGoalPlanDirection(gp.direction ?? (profile.goal === 'lose_weight' ? 'loss' : (profile.goal === 'gain_muscle' ? 'gain' : 'maintain')));
+      setGoalPlanCleared(false);
+    }
+  }, [profile.goal_plan, profile.goal]);
 
   // Update local reminders state when reminder prefs are fetched
   useEffect(() => {
@@ -642,13 +791,6 @@ export default function ProfileScreen() {
       setReminders(reminderPrefs);
     }
   }, [reminderPrefs]);
-
-  // Auto-expand BMI assessment when both weight and height are set
-  useEffect(() => {
-    if (profile.weight_kg && profile.height_cm) {
-      setAssessmentCollapsed(false);
-    }
-  }, [profile.weight_kg, profile.height_cm]);
 
   // Highlight basic info card when required fields are missing
   useEffect(() => {
@@ -720,9 +862,37 @@ export default function ProfileScreen() {
     });
   };
 
+  const clearGoalPlan = () => {
+    setGoalPlanTargetKg(undefined);
+    setGoalPlanDurationWeeks(undefined);
+    setGoalPlanDirection('maintain');
+    setGoalPlanCleared(true);
+    setProfile((prev) => ({ ...prev, goal_plan: null }));
+  };
+
+  const buildGoalPlanPayload = (): GoalPlan | null | undefined => {
+    if (goalPlanCleared) return null;
+
+    const targetKg = Number(goalPlanTargetKg ?? 0);
+    const durationWeeks = Number(goalPlanDurationWeeks ?? 0);
+    const hasPlanInput = goalPlanDirection === 'maintain' || targetKg > 0 || durationWeeks > 0;
+    if (!hasPlanInput) return undefined;
+
+    const now = new Date();
+    const safeDuration = durationWeeks > 0 ? durationWeeks : 4;
+    return {
+      target_kg: goalPlanDirection === 'maintain' ? 0 : Math.max(0, targetKg),
+      duration_weeks: safeDuration,
+      direction: goalPlanDirection,
+      start_date: now.toISOString().split('T')[0],
+      end_date: new Date(now.getTime() + (safeDuration * 7 * 24 * 60 * 60 * 1000)).toISOString().split('T')[0],
+    };
+  };
+
   const handleSaveProfile = async () => {
     setIsSaving(true);
     try {
+      const goalPlanPayload = buildGoalPlanPayload();
       // Save profile
       const profileRes = await apiClient.patch('/user/profile', {
         full_name: profile.full_name,
@@ -737,6 +907,7 @@ export default function ProfileScreen() {
         target_lunch_cal: profile.target_lunch_cal ? Number(profile.target_lunch_cal) : undefined,
         target_dinner_cal: profile.target_dinner_cal ? Number(profile.target_dinner_cal) : undefined,
         target_snack_cal: profile.target_snack_cal ? Number(profile.target_snack_cal) : undefined,
+        goal_plan: goalPlanPayload,
         health_flags: selectedHealthFlags,
       });
       setProfile(profileRes.data);
@@ -755,10 +926,21 @@ export default function ProfileScreen() {
         nudge_motivation_style: reminders.nudge_motivation_style,
       };
 
-      await updateReminders(reminderUpdates);
-      await fetchPreviewNudge(previewMeal);
+      await Promise.all([
+        updateReminders(reminderUpdates),
+        fetchPreviewNudge(previewMeal),
+        fetchDailyLog().catch(() => {}),
+        fetchActivityLogs().catch(() => {}),
+        fetchActivityPreferences().catch(() => {}),
+        fetchRecommendations().catch(() => {}),
+        fetchWeeklyInsights().catch(() => {}),
+      ]);
 
-      Alert.alert('✅', 'Đã lưu hồ sơ và thông báo!');
+      setReward({
+        title: 'Đã lưu hồ sơ',
+        body: 'Mục tiêu, nhắc nhở và lộ trình đã được cập nhật.',
+        icon: 'checkmark-circle',
+      });
     } catch (e: any) {
       Alert.alert('Lỗi', e?.response?.data?.message ?? 'Không thể lưu.');
     } finally {
@@ -766,25 +948,118 @@ export default function ProfileScreen() {
     }
   };
 
-  const handleCompleteRoadmapTask = async (task: ExerciseRoadmapItem) => {
-    if (completedRoadmapTaskIds.has(task.id)) {
+  const openAddRoadmapExercise = () => {
+    setEditingRoadmapTask(null);
+    setRoadmapCatalogType(null);
+    setRoadmapCatalogDuration(30);
+    setRoadmapCatalogVisible(true);
+  };
+
+  const openEditRoadmapExercise = (task: ExerciseRoadmapItem) => {
+    setEditingRoadmapTask(task);
+    setRoadmapCatalogType(task.activity_type);
+    setRoadmapCatalogDuration(nearestCatalogDuration(task.duration_min));
+    setRoadmapCatalogVisible(true);
+  };
+
+  const handleRoadmapCatalogConfirm = async () => {
+    if (!roadmapCatalogType) return;
+
+    const activityLabel = EXERCISE_ACTIVITY_LABELS[roadmapCatalogType] ?? roadmapCatalogType;
+    const durationMin = roadmapCatalogDuration;
+    const duplicate = roadmap.find((item) => (
+      item.activity_type === roadmapCatalogType
+      && item.id !== editingRoadmapTask?.id
+    ));
+    if (duplicate) {
+      Alert.alert(
+        'Hoạt động đã có',
+        'Bài này đã nằm trong lộ trình. Hãy dùng nút Sửa trên bài đó nếu muốn đổi thời gian.',
+      );
       return;
     }
 
-    setCompletingTaskId(task.id);
     try {
-      await addActivity({
-        activity_type: task.activity_type,
-        duration_min: task.duration_min,
-        calories_burned: task.estimated_kcal,
-        notes: `ROADMAP_TASK:${task.id}|${task.title}`,
+      const linkedActivity = editingRoadmapTask ? roadmapActivityByTaskId[editingRoadmapTask.id] : null;
+      if (linkedActivity) {
+        await deleteActivity(linkedActivity.id);
+      }
+
+      if (editingRoadmapTask?.persisted_item_id) {
+        await updateActivityPreference(editingRoadmapTask.persisted_item_id, {
+          title: `${activityLabel} tự chọn`,
+          activity_type: roadmapCatalogType,
+          duration_min: durationMin,
+        });
+      } else {
+        await addActivityPreference({
+          title: `${activityLabel} tự chọn`,
+          activity_type: roadmapCatalogType,
+          duration_min: durationMin,
+          sort_order: activityPreferences.length,
+        });
+      }
+
+      await fetchActivityPreferences();
+      await fetchActivityLogs();
+      await fetchDailyLog();
+      setRoadmapCatalogVisible(false);
+      setEditingRoadmapTask(null);
+      setRoadmapCatalogType(null);
+      setRoadmapCatalogDuration(30);
+      setReward({
+        title: editingRoadmapTask ? 'Đã sửa lộ trình' : 'Đã thêm bài tập',
+        body: `${activityLabel} · ${durationMin} phút`,
+        icon: 'walk',
       });
-      Alert.alert('Đã cập nhật calo đốt', `+${task.estimated_kcal} kcal từ "${task.title}".`);
     } catch (error: any) {
-      Alert.alert('Không thể cập nhật', error?.response?.data?.message ?? 'Vui lòng thử lại.');
-    } finally {
-      setCompletingTaskId(null);
+      Alert.alert('Không thể lưu bài tập', error?.response?.data?.message ?? 'Vui lòng thử lại.');
     }
+  };
+
+  const removeRoadmapTask = async (task: ExerciseRoadmapItem) => {
+    try {
+      const linked = roadmapActivityByTaskId[task.id];
+      if (linked) {
+        await deleteActivity(linked.id);
+      }
+
+      if (task.is_custom && task.persisted_item_id) {
+        await deleteActivityPreference(task.persisted_item_id);
+      }
+
+      await Promise.all([
+        fetchActivityPreferences().catch(() => {}),
+        fetchActivityLogs().catch(() => {}),
+        fetchDailyLog().catch(() => {}),
+      ]);
+      setReward({
+        title: 'Đã xóa bài tập',
+        body: task.title,
+        icon: 'trash-outline',
+      });
+    } catch (error: any) {
+      Alert.alert('Không thể xóa bài tập', error?.response?.data?.message ?? 'Vui lòng thử lại.');
+    }
+  };
+
+  const handleRemoveRoadmapTask = (task: ExerciseRoadmapItem) => {
+    if (Platform.OS === 'web') {
+      const confirmed = globalThis.confirm?.(`Xóa "${task.title}" khỏi lộ trình?`) ?? false;
+      if (confirmed) {
+        void removeRoadmapTask(task);
+      }
+      return;
+    }
+
+    Alert.alert('Xóa bài tập', `Xóa "${task.title}" khỏi lộ trình?`, [
+      { text: 'Hủy', style: 'cancel' },
+      {
+        text: 'Xóa',
+        style: 'destructive',
+        onPress: () => void removeRoadmapTask(task),
+      },
+    ]);
   };
 
   const handleLogout = () => {
@@ -818,34 +1093,165 @@ export default function ProfileScreen() {
   if (isLoading) {
     return (
       <ScreenShell>
-        <ActivityIndicator color="#4ade80" style={{ marginTop: 80 }} />
+        <ActivityIndicator color={theme.colors.success} style={{ marginTop: 80 }} />
       </ScreenShell>
     );
   }
 
   return (
     <ScreenShell>
+      <Modal
+        visible={roadmapCatalogVisible}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setRoadmapCatalogVisible(false)}
+      >
+        <View style={styles.catalogOverlay}>
+          <View style={styles.catalogSheet}>
+            <View style={styles.catalogHeader}>
+              <Text style={styles.catalogTitle}>{editingRoadmapTask ? 'Sửa bài trong lộ trình' : 'Thêm bài vào lộ trình'}</Text>
+              <TouchableOpacity onPress={() => setRoadmapCatalogVisible(false)}>
+                <MaterialIcons name="close" size={22} color={theme.colors.textMuted} />
+              </TouchableOpacity>
+            </View>
+
+            {roadmapCatalogType === null ? (
+              <ScrollView showsVerticalScrollIndicator={false}>
+                <Text style={styles.catalogHint}>Chọn môn/bài người dùng muốn tập hoặc có thể chơi hôm nay ({userWeight} kg).</Text>
+                {catalogTypes.map((type) => {
+                  const kcal30 = estimateExerciseCalories(type, 30, userWeight);
+                  const alreadyAdded = existingRoadmapActivityTypes.has(type) && type !== editingRoadmapTask?.activity_type;
+                  return (
+                    <TouchableOpacity
+                      key={type}
+                      style={[styles.catalogItem, alreadyAdded && styles.catalogItemDisabled]}
+                      onPress={() => setRoadmapCatalogType(type)}
+                      disabled={alreadyAdded}
+                    >
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.catalogItemName, alreadyAdded && styles.catalogItemNameDisabled]}>
+                          {EXERCISE_ACTIVITY_LABELS[type]}
+                        </Text>
+                        <Text style={[styles.catalogItemKcal, alreadyAdded && styles.catalogItemKcalDisabled]}>
+                          {alreadyAdded ? 'Đã có, dùng Sửa để đổi thời gian' : `~${kcal30} kcal / 30 phút`}
+                        </Text>
+                      </View>
+                      <MaterialIcons name={alreadyAdded ? 'check-circle' : 'chevron-right'} size={18} color={alreadyAdded ? theme.colors.accentMint : theme.colors.textMuted} />
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            ) : (
+              <View>
+                <TouchableOpacity style={styles.catalogBack} onPress={() => setRoadmapCatalogType(null)}>
+                  <MaterialIcons name="arrow-back" size={16} color={theme.colors.accentMint} />
+                  <Text style={styles.catalogBackText}>Chọn lại bài</Text>
+                </TouchableOpacity>
+                <Text style={styles.catalogSelectedLabel}>{EXERCISE_ACTIVITY_LABELS[roadmapCatalogType]}</Text>
+                <Text style={styles.catalogHint}>Chọn thời gian tập:</Text>
+                <View style={styles.durationRow}>
+                  {([15, 30, 45, 60] as const).map((duration) => {
+                    const kcal = estimateExerciseCalories(roadmapCatalogType, duration, userWeight);
+                    return (
+                      <TouchableOpacity
+                        key={duration}
+                        style={[styles.durationBtn, roadmapCatalogDuration === duration && styles.durationBtnActive]}
+                        onPress={() => setRoadmapCatalogDuration(duration)}
+                      >
+                        <Text style={[styles.durationBtnMin, roadmapCatalogDuration === duration && styles.durationBtnTextActive]}>{duration} phút</Text>
+                        <Text style={[styles.durationBtnKcal, roadmapCatalogDuration === duration && styles.durationBtnTextActive]}>~{kcal} kcal</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+                <TouchableOpacity style={styles.catalogConfirmBtn} onPress={() => void handleRoadmapCatalogConfirm()}>
+                  <Text style={styles.catalogConfirmText}>
+                    {editingRoadmapTask ? 'Lưu thay đổi' : 'Thêm vào lộ trình'} · {roadmapCatalogDuration} phút · ~{estimateExerciseCalories(roadmapCatalogType, roadmapCatalogDuration, userWeight)} kcal
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        </View>
+      </Modal>
+
       <ScrollView showsVerticalScrollIndicator={false}>
-        <Eyebrow>Personal Coach</Eyebrow>
-        <HeroTitle>Thiết lập hồ sơ để AI tính target hợp lý hơn.</HeroTitle>
-        <BodyText style={styles.heroBody}>
-          Cập nhật chỉ số, mục tiêu và nhắc nhở.
-        </BodyText>
+        <VisualHeroCard
+          imageSource={profileHeroIllustration}
+          eyebrow="Hồ sơ cá nhân"
+          title="Thiết lập hồ sơ để AI tính mục tiêu hợp lý hơn."
+          body="Cập nhật chỉ số, mục tiêu, lộ trình vận động và nhắc nhở."
+        />
 
         <View style={styles.profileShortcutRow}>
           <TouchableOpacity style={styles.profileShortcut} onPress={() => router.push('/progress' as never)}>
-            <MaterialIcons name="monitor-weight" size={18} color="#75c7e8" />
+            <AnimatedMaterialIcon name="monitor-weight" size={18} color={theme.colors.accentCyan} motion="float" />
             <Text style={styles.profileShortcutText}>Cơ thể</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.profileShortcut} onPress={() => router.push('/insights' as never)}>
-            <MaterialIcons name="insights" size={18} color="#75c7e8" />
+            <AnimatedMaterialIcon name="insights" size={18} color={theme.colors.accentCyan} motion="pulse" />
             <Text style={styles.profileShortcutText}>Insight</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.profileShortcut} onPress={() => router.push('/achievements' as never)}>
-            <MaterialIcons name="emoji-events" size={18} color="#f3b84b" />
+            <AnimatedMaterialIcon name="emoji-events" size={18} color={theme.colors.accentAmber} motion="float" />
             <Text style={styles.profileShortcutText}>Thành tích</Text>
           </TouchableOpacity>
         </View>
+
+        <SurfaceCard style={styles.settingsCard}>
+          <View style={styles.settingsRow}>
+            <Text style={styles.settingsLabel}>{t('profile.language.title')}</Text>
+            <View style={styles.settingsChips}>
+              <UiChip label={t('locale.vi')} selected={locale === 'vi'} onPress={() => void setLocale('vi')} style={styles.settingsChip} />
+              <UiChip label={t('locale.en')} selected={locale === 'en'} onPress={() => void setLocale('en')} style={styles.settingsChip} />
+            </View>
+          </View>
+          <View style={styles.settingsDivider} />
+          <View style={styles.settingsRow}>
+            <Text style={styles.settingsLabel}>{t('profile.appearance.title')}</Text>
+            <View style={styles.settingsChips}>
+              <UiChip label={t('profile.appearance.light')} selected={requestedMode === 'light'} onPress={() => void setThemeMode('light')} style={styles.settingsChip} />
+              <UiChip label={t('profile.appearance.dark')} selected={requestedMode === 'dark'} onPress={() => void setThemeMode('dark')} style={styles.settingsChip} />
+              <UiChip label={t('profile.appearance.system')} selected={requestedMode === 'system'} onPress={() => void setThemeMode('system')} style={styles.settingsChip} />
+            </View>
+          </View>
+        </SurfaceCard>
+
+        <View style={[styles.profileActionBar, isDesktop && styles.profileActionBarDesktop]}>
+          <UiButton label="Lưu hồ sơ" onPress={handleSaveProfile} loading={isSaving} style={styles.profileSaveButton} />
+          <TouchableOpacity style={styles.profileLogoutButton} onPress={handleLogout}>
+            <MaterialIcons name="logout" size={16} color={theme.colors.danger} />
+            <Text style={styles.profileLogoutText}>Đăng xuất</Text>
+          </TouchableOpacity>
+        </View>
+
+        <SurfaceCard style={styles.setupCard}>
+          <View style={styles.setupHeader}>
+            <View>
+              <Text style={styles.setupEyebrow}>Thiết lập nhanh</Text>
+              <Text style={styles.setupTitle}>{completedSetupCount}/{setupSteps.length} mục đã sẵn sàng</Text>
+            </View>
+            <View style={styles.setupPercentPill}>
+              <Text style={styles.setupPercentText}>{setupProgressPct}%</Text>
+            </View>
+          </View>
+          <View style={styles.setupProgressTrack}>
+            <View style={[styles.setupProgressFill, { width: `${setupProgressPct}%` as any }]} />
+          </View>
+          <View style={styles.setupStepGrid}>
+            {setupSteps.map((step) => (
+              <TouchableOpacity key={step.key} style={[styles.setupStep, step.done && styles.setupStepDone]} onPress={() => openSetupStep(step.key)}>
+                <View style={[styles.setupStepIcon, step.done && styles.setupStepIconDone]}>
+                  <MaterialIcons name={step.done ? 'check' : step.icon as any} size={16} color={step.done ? theme.colors.textOnAccent : theme.colors.accentCyan} />
+                </View>
+                <View style={styles.setupStepCopy}>
+                  <Text style={styles.setupStepLabel}>{step.label}</Text>
+                  <Text style={styles.setupStepDetail} numberOfLines={1}>{step.detail}</Text>
+                </View>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </SurfaceCard>
 
         <SurfaceCard style={[styles.sectionCard, basicCollapsed && styles.sectionCardCompact]}>
           <Animated.View pointerEvents="none" style={[styles.highlightOverlay, { opacity: highlightAnim }]} />
@@ -858,7 +1264,7 @@ export default function ProfileScreen() {
                 </Text>
               )}
             </View>
-            <MaterialIcons name={basicCollapsed ? 'expand-more' : 'expand-less'} size={26} color="#9fb1d1" />
+            <MaterialIcons name={basicCollapsed ? 'expand-more' : 'expand-less'} size={26} color={theme.colors.textMuted} />
           </TouchableOpacity>
 
           {!basicCollapsed && (
@@ -908,7 +1314,7 @@ export default function ProfileScreen() {
                 </Text>
               )}
             </View>
-            <MaterialIcons name={assessmentCollapsed ? 'expand-more' : 'expand-less'} size={26} color="#9fb1d1" />
+            <MaterialIcons name={assessmentCollapsed ? 'expand-more' : 'expand-less'} size={26} color={theme.colors.textMuted} />
           </TouchableOpacity>
 
           {!assessmentCollapsed && (
@@ -926,11 +1332,11 @@ export default function ProfileScreen() {
                 >
                   <View style={styles.assessmentTopRow}>
                     <View>
-                      <Text style={[styles.assessmentBmiLabel, { color: assessmentTone?.accent }]}>BMI screening</Text>
+                      <Text style={[styles.assessmentBmiLabel, { color: assessmentTone?.accent }]}>Sàng lọc BMI</Text>
                       <Text style={[styles.assessmentBmiValue, { color: assessmentTone?.text }]}>{instantAssessment.assessment.bmi}</Text>
                     </View>
                     <View style={styles.assessmentMeta}>
-                      <Text style={styles.assessmentMetaLabel}>Mức risk</Text>
+                      <Text style={styles.assessmentMetaLabel}>Mức rủi ro</Text>
                       <Text style={[styles.assessmentMetaValue, { color: assessmentTone?.accent }]}> 
                         {BODY_STATUS_LABELS[instantAssessment.assessment.body_status]}
                       </Text>
@@ -945,7 +1351,7 @@ export default function ProfileScreen() {
                     </View>
                     <View style={[styles.assessmentBadge, { backgroundColor: assessmentTone?.badgeBg, borderColor: assessmentTone?.border }]}>
                       <Text style={[styles.assessmentBadgeText, { color: assessmentTone?.text }]}> 
-                        Goal phù hợp: {GOAL_LABELS[instantAssessment.assessment.recommended_goal]}
+                        Mục tiêu phù hợp: {GOAL_LABELS[instantAssessment.assessment.recommended_goal]}
                       </Text>
                     </View>
                     <View style={[styles.assessmentBadge, { backgroundColor: assessmentTone?.badgeBg, borderColor: assessmentTone?.border }]}>
@@ -1025,7 +1431,7 @@ export default function ProfileScreen() {
               <Text style={styles.sectionSubtitle}>{profile.goal ? GOAL_LABELS[profile.goal] : 'Chưa chọn'} · {profile.activity_level ? ACTIVITY_LABELS[profile.activity_level] : '...'}</Text>
             )}
           </View>
-          <MaterialIcons name={goalCollapsed ? 'expand-more' : 'expand-less'} size={26} color="#9fb1d1" />
+          <MaterialIcons name={goalCollapsed ? 'expand-more' : 'expand-less'} size={26} color={theme.colors.textMuted} />
         </TouchableOpacity>
 
         {!goalCollapsed && (
@@ -1045,6 +1451,104 @@ export default function ProfileScreen() {
                 <UiChip key={a} label={ACTIVITY_LABELS[a]} selected={profile.activity_level === a} onPress={() => setProfile((p) => ({ ...p, activity_level: a }))} style={styles.activityChip} />
               ))}
             </View>
+
+            <View style={[styles.goalPlanningGrid, isDesktop && styles.goalPlanningGridDesktop]}>
+              <View style={styles.goalPlanPanel}>
+                <Text style={styles.label}>Kế hoạch cá nhân</Text>
+                <View style={styles.goalPlanRow}>
+                  <UiInput label="Kg cần thay đổi" value={String(goalPlanTargetKg ?? '')} onChangeText={(v) => setGoalPlanTargetKg(Number(v) || undefined)} keyboardType="numeric" style={{ flex: 1 }} />
+                  <UiInput label="Thời gian (tuần)" value={String(goalPlanDurationWeeks ?? '')} onChangeText={(v) => setGoalPlanDurationWeeks(Number(v) || undefined)} keyboardType="numeric" style={{ width: 140 }} />
+                </View>
+                <View style={styles.chipRow}>
+                  <UiChip label="Giảm" selected={goalPlanDirection === 'loss'} onPress={() => setGoalPlanDirection('loss')} />
+                  <UiChip label="Giữ" selected={goalPlanDirection === 'maintain'} onPress={() => setGoalPlanDirection('maintain')} />
+                  <UiChip label="Tăng" selected={goalPlanDirection === 'gain'} onPress={() => setGoalPlanDirection('gain')} />
+                </View>
+                <Text style={styles.helperText}>Nhập kế hoạch cá nhân (ví dụ: giảm 3kg trong 8 tuần). Backend sẽ tự clamp nếu tốc độ quá mạnh hoặc hồ sơ cần maintenance.</Text>
+                {activeGoalPlan?.computed_daily_calorie_target && (
+                  <View style={styles.goalPlanStatusBox}>
+                    <Text style={styles.goalPlanStatusTitle}>
+                      Mục tiêu từ kế hoạch: {activeGoalPlan.computed_daily_calorie_target} kcal/ngày
+                    </Text>
+                    <Text style={styles.goalPlanStatusText}>
+                      Tốc độ: {activeGoalPlan.weekly_rate_kg ?? 0} kg/tuần · Trạng thái: {activeGoalPlan.safety_status ?? 'ok'}
+                    </Text>
+                    {activeGoalPlan.warnings?.map((warning, index) => (
+                      <Text key={`goal-plan-warning-${index}`} style={styles.goalPlanWarningText}>{warning}</Text>
+                    ))}
+                  </View>
+                )}
+                {activeGoalPlan && (
+                  <UiButton label="Xóa kế hoạch cá nhân" variant="ghost" onPress={clearGoalPlan} style={styles.clearGoalPlanButton} />
+                )}
+              </View>
+
+              <View style={styles.roadmapPanel}>
+                <View style={styles.roadmapHeader}>
+                  <View style={styles.roadmapPanelTitleRow}>
+                    <Text style={styles.label}>Lộ trình vận động</Text>
+                    <TouchableOpacity style={styles.roadmapAddBtn} onPress={openAddRoadmapExercise}>
+                      <MaterialIcons name="add" size={15} color={theme.colors.textOnAccent} />
+                      <Text style={styles.roadmapAddBtnText}>Thêm bài</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <Text style={styles.roadmapSummary}>
+                    {roadmap.length > 0
+                      ? `${completedRoadmapCount}/${roadmap.length} bài · ${completedRoadmapKcal} kcal đã log`
+                      : 'Chưa có bài tập ưu tiên.'}
+                  </Text>
+                </View>
+                <Text style={styles.helperText}>Đây là nơi chính để chọn môn/bài người dùng muốn tập hoặc có thể chơi. Tab Log chỉ ghi hoạt động đã hoàn thành.</Text>
+
+                {roadmap.length === 0 ? (
+                  <View style={styles.roadmapEmptyBox}>
+                    <Text style={styles.roadmapEmptyText}>Thêm các môn hoặc bài người dùng muốn tập. Today sẽ ưu tiên các bài này khi đề xuất hoạt động đốt calo.</Text>
+                  </View>
+                ) : (
+                  <View style={styles.roadmapWrap}>
+                    {roadmap.map((item) => {
+                      const completed = completedRoadmapTaskIds.has(item.id);
+                      return (
+                        <View
+                          key={item.id}
+                          style={[styles.roadmapItem, completed && styles.roadmapItemCompleted]}
+                        >
+                          <View style={styles.roadmapItemLeft}>
+                            <View style={[styles.checkbox, completed && styles.checkboxCompleted]}>
+                              {completed && <Text style={styles.checkboxTick}>✓</Text>}
+                            </View>
+                            <View style={styles.roadmapItemBody}>
+                              <Text style={styles.roadmapItemTitle}>{item.title}</Text>
+                              <Text style={styles.roadmapItemDetail}>{item.detail}</Text>
+                              <Text style={styles.roadmapItemMeta}>
+                                {item.duration_min} phút · ~{item.estimated_kcal} kcal · {EXERCISE_ACTIVITY_LABELS[item.activity_type] ?? item.activity_type}
+                              </Text>
+                              <Text style={styles.roadmapCta}>{completed ? 'Đã log hôm nay' : 'Today và Log sẽ dùng bài này để gợi ý/log nhanh'}</Text>
+                              <View style={styles.roadmapActionsRow}>
+                                <TouchableOpacity
+                                  style={styles.roadmapActionBtn}
+                                  onPress={() => openEditRoadmapExercise(item)}
+                                >
+                                  <MaterialIcons name="edit" size={13} color={theme.colors.accentCyan} />
+                                  <Text style={styles.roadmapActionText}>Sửa</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                  style={[styles.roadmapActionBtn, styles.roadmapDeleteBtn]}
+                                  onPress={() => handleRemoveRoadmapTask(item)}
+                                >
+                                  <MaterialIcons name="delete-outline" size={13} color={theme.colors.danger} />
+                                  <Text style={styles.roadmapDeleteText}>Xóa</Text>
+                                </TouchableOpacity>
+                              </View>
+                            </View>
+                          </View>
+                        </View>
+                      );
+                    })}
+                  </View>
+                )}
+              </View>
+            </View>
           </>
         )}
       </SurfaceCard>
@@ -1057,7 +1561,7 @@ export default function ProfileScreen() {
               <Text style={styles.sectionSubtitle}>{profile.daily_calorie_target ? `${profile.daily_calorie_target} kcal/ngày` : 'Chưa đặt'}</Text>
             )}
           </View>
-          <MaterialIcons name={calorieCollapsed ? 'expand-more' : 'expand-less'} size={26} color="#9fb1d1" />
+          <MaterialIcons name={calorieCollapsed ? 'expand-more' : 'expand-less'} size={26} color={theme.colors.textMuted} />
         </TouchableOpacity>
 
         {!calorieCollapsed && (
@@ -1089,12 +1593,12 @@ export default function ProfileScreen() {
           <Switch
             value={reminders.allow_push_notifications ?? true}
             onValueChange={(v) => setReminders((r) => ({ ...r, allow_push_notifications: v }))}
-            trackColor={{ false: '#203463', true: '#4ade80' }}
-            thumbColor={(reminders.allow_push_notifications ?? true) ? '#6ee7b7' : '#7082a9'}
+            trackColor={{ false: theme.colors.border, true: theme.colors.success }}
+            thumbColor={(reminders.allow_push_notifications ?? true) ? theme.colors.accentMint : theme.colors.textMuted}
           />
 
           <TouchableOpacity onPress={() => setNotificationsCollapsed((s) => !s)} style={{ paddingLeft: 8 }}>
-            <MaterialIcons name={notificationsCollapsed ? 'expand-more' : 'expand-less'} size={26} color="#9fb1d1" />
+            <MaterialIcons name={notificationsCollapsed ? 'expand-more' : 'expand-less'} size={26} color={theme.colors.textMuted} />
           </TouchableOpacity>
         </View>
 
@@ -1107,8 +1611,8 @@ export default function ProfileScreen() {
               <Switch
                 value={reminders.allow_push_notifications ?? true}
                 onValueChange={(v) => setReminders((r) => ({ ...r, allow_push_notifications: v }))}
-                trackColor={{ false: '#203463', true: '#4ade80' }}
-                thumbColor={reminders.allow_push_notifications ? '#6ee7b7' : '#7082a9'}
+                trackColor={{ false: theme.colors.border, true: theme.colors.success }}
+                thumbColor={reminders.allow_push_notifications ? theme.colors.accentMint : theme.colors.textMuted}
               />
             </View>
 
@@ -1182,7 +1686,7 @@ export default function ProfileScreen() {
               </View>
 
               <SurfaceCard style={styles.previewCard}>
-                {isPreviewLoading && <ActivityIndicator color="#6ee7b7" />}
+                {isPreviewLoading && <ActivityIndicator color={theme.colors.accentMint} />}
                 {!isPreviewLoading && previewNudge && (
                   <>
                     <Text style={styles.previewTitle}>{previewNudge.emoji} {previewNudge.title}</Text>
@@ -1213,7 +1717,7 @@ export default function ProfileScreen() {
             <MaterialIcons
               name={subscription?.tier === 'pro' ? 'star' : subscription?.tier === 'premium' ? 'favorite' : 'favorite-border'}
               size={32}
-              color={subscription?.tier === 'pro' ? '#fbbf24' : subscription?.tier === 'premium' ? '#f97316' : '#6b7280'}
+              color={subscription?.tier === 'pro' ? theme.colors.warning : subscription?.tier === 'premium' ? theme.colors.accentCoral : theme.colors.textDisabled}
             />
           </View>
 
@@ -1225,7 +1729,7 @@ export default function ProfileScreen() {
             {(Object.keys(SUBSCRIPTION_TIERS) as SubscriptionTier[]).map((tier) => {
               const tierInfo = SUBSCRIPTION_TIERS[tier];
               const isCurrentTier = subscription?.tier === tier;
-              const accent = tier === 'pro' ? '#fbbf24' : tier === 'premium' ? '#f97316' : '#6ee7b7';
+              const accent = tier === 'pro' ? theme.colors.warning : tier === 'premium' ? theme.colors.accentCoral : theme.colors.accentMint;
 
               return (
                 <TouchableOpacity
@@ -1233,7 +1737,7 @@ export default function ProfileScreen() {
                   style={[
                     styles.planOption,
                     isCurrentTier && styles.planOptionActive,
-                    isCurrentTier && { borderColor: accent, backgroundColor: '#16213f' },
+                    isCurrentTier && { borderColor: accent, backgroundColor: theme.colors.surfaceInfo },
                   ]}
                   onPress={() => void handleChangeSubscriptionTier(tier)}
                   disabled={isSubscriptionLoading}
@@ -1268,7 +1772,7 @@ export default function ProfileScreen() {
                     <MaterialIcons
                       name={features[name as keyof typeof features] ? 'check-circle' : 'cancel'}
                       size={18}
-                      color={features[name as keyof typeof features] ? '#10b981' : '#d1d5db'}
+                      color={features[name as keyof typeof features] ? theme.colors.success : theme.colors.textDisabled}
                     />
                     <Text style={[styles.featureCheckLabel, !features[name as keyof typeof features] && styles.featureCheckLabelDisabled]}>
                       {label}
@@ -1281,11 +1785,8 @@ export default function ProfileScreen() {
         </View>
       </SurfaceCard>
 
-      <View style={[styles.actionRow, isDesktop && styles.actionRowDesktop]}>
-        <UiButton label="Lưu hồ sơ" onPress={handleSaveProfile} loading={isSaving} style={styles.saveButton} />
-        <UiButton label="Đăng xuất" onPress={handleLogout} variant="danger" style={styles.logoutBtn} />
-      </View>
       </ScrollView>
+      <RewardToast reward={reward} onHide={() => setReward(null)} />
     </ScreenShell>
   );
 }
@@ -1347,8 +1848,8 @@ function ReminderTimePickerRow({
         <Switch
           value={enabled}
           onValueChange={onEnabledChange}
-          trackColor={{ false: '#203463', true: '#4ade80' }}
-          thumbColor={enabled ? '#6ee7b7' : '#7082a9'}
+          trackColor={{ false: theme.colors.border, true: theme.colors.success }}
+          thumbColor={enabled ? theme.colors.accentMint : theme.colors.textMuted}
         />
       </View>
 
@@ -1393,7 +1894,7 @@ function ReminderTimePickerRow({
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createThemedStyles((colors, radii) => ({
   heroBody: { marginBottom: 18, maxWidth: 720 },
   profileShortcutRow: { flexDirection: 'row', gap: 8, marginBottom: 14 },
   profileShortcut: {
@@ -1401,34 +1902,201 @@ const styles = StyleSheet.create({
     minHeight: 48,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#243244',
-    backgroundColor: '#162435',
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceAlt,
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
     gap: 6,
   },
-  profileShortcutText: { color: '#dbeafe', fontSize: 12, fontWeight: '800' },
+  profileShortcutText: { color: colors.textSoft, fontSize: 12, fontWeight: '800' },
+  settingsCard: {
+    marginBottom: 14,
+    paddingVertical: 12,
+    gap: 10,
+  },
+  settingsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    flexWrap: 'wrap',
+  },
+  settingsLabel: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '900',
+    minWidth: 96,
+  },
+  settingsChips: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    flexWrap: 'wrap',
+    gap: 6,
+    flex: 1,
+  },
+  settingsChip: {
+    marginVertical: 0,
+  },
+  settingsDivider: {
+    height: 1,
+    backgroundColor: colors.borderSubtle,
+  },
+  profileActionBar: {
+    minHeight: 52,
+    marginBottom: 14,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    padding: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  profileActionBarDesktop: {
+    maxWidth: 520,
+    alignSelf: 'flex-end',
+  },
+  profileSaveButton: {
+    flex: 1,
+  },
+  profileLogoutButton: {
+    minHeight: 40,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.borderDanger,
+    backgroundColor: colors.surfaceDanger,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 6,
+  },
+  profileLogoutText: {
+    color: colors.danger,
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  setupCard: {
+    marginBottom: 14,
+    backgroundColor: colors.surfaceSuccess,
+    borderColor: colors.borderSuccess,
+  },
+  setupHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 10,
+  },
+  setupEyebrow: {
+    color: colors.success,
+    fontSize: 11,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+  },
+  setupTitle: {
+    color: colors.text,
+    fontSize: 18,
+    fontWeight: '900',
+    marginTop: 2,
+  },
+  setupPercentPill: {
+    minHeight: 34,
+    borderRadius: 999,
+    backgroundColor: colors.accentMint,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  setupPercentText: {
+    color: colors.textOnAccent,
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  setupProgressTrack: {
+    height: 8,
+    borderRadius: 999,
+    overflow: 'hidden',
+    backgroundColor: colors.progressBg,
+    marginBottom: 12,
+  },
+  setupProgressFill: {
+    height: '100%',
+    borderRadius: 999,
+    backgroundColor: colors.accentMint,
+  },
+  setupStepGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  setupStep: {
+    flex: 1,
+    minWidth: 156,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.borderSuccess,
+    backgroundColor: colors.surfaceSuccess,
+    padding: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  setupStepDone: {
+    borderColor: colors.accentMint,
+    backgroundColor: colors.surfaceSuccess,
+  },
+  setupStepIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surfaceInfo,
+    borderWidth: 1,
+    borderColor: colors.borderInfo,
+  },
+  setupStepIconDone: {
+    backgroundColor: colors.accentMint,
+    borderColor: colors.accentMint,
+  },
+  setupStepCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  setupStepLabel: {
+    color: colors.text,
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  setupStepDetail: {
+    color: colors.textMuted,
+    fontSize: 11,
+    marginTop: 2,
+  },
   summaryRow: { gap: 12, marginBottom: 14 },
   summaryRowDesktop: { flexDirection: 'row' },
   summaryCard: { flex: 1, minHeight: 106, justifyContent: 'center' },
-  summaryValue: { color: '#eff6ff', fontSize: 22, fontWeight: '800', marginBottom: 8 },
-  summaryLabel: { color: '#8ea2c8', fontSize: 13, lineHeight: 18 },
+  summaryValue: { color: colors.text, fontSize: 22, fontWeight: '800', marginBottom: 8 },
+  summaryLabel: { color: colors.textMuted, fontSize: 13, lineHeight: 18 },
   assessmentCard: {
     marginTop: 10,
-    backgroundColor: '#0f172a',
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: '#1e3a5f',
+    borderColor: colors.border,
     borderRadius: 12,
     padding: 12,
     gap: 10,
   },
   assessmentTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  assessmentBmiLabel: { color: '#93c5fd', fontSize: 12, fontWeight: '600' },
-  assessmentBmiValue: { color: '#e2e8f0', fontSize: 28, fontWeight: '800' },
+  assessmentBmiLabel: { color: colors.info, fontSize: 12, fontWeight: '600' },
+  assessmentBmiValue: { color: colors.text, fontSize: 28, fontWeight: '800' },
   assessmentMeta: { alignItems: 'flex-end' },
-  assessmentMetaLabel: { color: '#94a3b8', fontSize: 12, marginBottom: 4 },
-  assessmentMetaValue: { color: '#dbeafe', fontSize: 16, fontWeight: '700' },
+  assessmentMetaLabel: { color: colors.textMuted, fontSize: 12, marginBottom: 4 },
+  assessmentMetaValue: { color: colors.textSoft, fontSize: 16, fontWeight: '700' },
   assessmentGuidesRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   assessmentBadge: {
     borderWidth: 1,
@@ -1440,9 +2108,9 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
   },
-  assessmentNote: { color: '#cbd5e1', fontSize: 13, lineHeight: 19 },
-  safetyNotice: { borderWidth: 1, borderColor: '#f59e0b55', backgroundColor: '#3a2a1233', borderRadius: 8, padding: 8, gap: 4 },
-  safetyNoticeText: { color: '#fcd34d', fontSize: 12, lineHeight: 17 },
+  assessmentNote: { color: colors.textSoft, fontSize: 13, lineHeight: 19 },
+  safetyNotice: { borderWidth: 1, borderColor: colors.borderWarning, backgroundColor: colors.surfaceWarning, borderRadius: 8, padding: 8, gap: 4 },
+  safetyNoticeText: { color: colors.warning, fontSize: 12, lineHeight: 17 },
   assessmentWeightPlan: { fontSize: 13, lineHeight: 19, fontWeight: '700' },
   assessmentActivityNote: { fontSize: 13, lineHeight: 19 },
   exerciseListWrap: { marginTop: 4, gap: 4 },
@@ -1450,56 +2118,168 @@ const styles = StyleSheet.create({
   exerciseListItem: { fontSize: 13, lineHeight: 18 },
   roadmapWrap: { marginTop: 10, gap: 8 },
   roadmapHeader: { gap: 4 },
-  roadmapTitle: { fontSize: 13, fontWeight: '800' },
-  roadmapSummary: { fontSize: 12, fontWeight: '700' },
+  roadmapPanelTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  roadmapTitle: { color: colors.textSoft, fontSize: 13, fontWeight: '800' },
+  roadmapSummary: { color: colors.textMuted, fontSize: 12, fontWeight: '700' },
+  roadmapAddBtn: {
+    minHeight: 30,
+    borderRadius: 999,
+    backgroundColor: colors.accentMint,
+    paddingHorizontal: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  roadmapAddBtnText: { color: colors.textOnAccent, fontSize: 12, fontWeight: '800' },
   roadmapItem: {
     borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceAlt,
     borderRadius: 12,
     paddingHorizontal: 10,
     paddingVertical: 9,
     gap: 6,
   },
+  roadmapItemCompleted: {
+    borderColor: colors.accentMint,
+    backgroundColor: colors.surfaceSuccess,
+  },
   roadmapItemLeft: { flexDirection: 'row', gap: 10, alignItems: 'flex-start' },
+  roadmapItemBody: { flex: 1, minWidth: 0 },
   checkbox: {
     width: 20,
     height: 20,
     borderRadius: 5,
     borderWidth: 1.5,
-    borderColor: '#94a3b8',
+    borderColor: colors.textMuted,
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 1,
   },
-  checkboxTick: { color: '#0f172a', fontSize: 12, fontWeight: '900' },
-  roadmapItemTitle: { fontSize: 13, fontWeight: '700', marginBottom: 2 },
-  roadmapItemDetail: { fontSize: 12, lineHeight: 17 },
-  roadmapItemMeta: { fontSize: 12, fontWeight: '700', marginTop: 4 },
-  roadmapCta: { fontSize: 11, fontWeight: '700' },
-  assessmentHint: { color: '#93c5fd', fontSize: 13, lineHeight: 19, marginTop: 10 },
+  checkboxCompleted: {
+    borderColor: colors.accentMint,
+    backgroundColor: colors.accentMint,
+  },
+  checkboxTick: { color: colors.surface, fontSize: 12, fontWeight: '900' },
+  roadmapItemTitle: { color: colors.text, fontSize: 13, fontWeight: '700', marginBottom: 2 },
+  roadmapItemDetail: { color: colors.textMuted, fontSize: 12, lineHeight: 17 },
+  roadmapItemMeta: { color: colors.accentMint, fontSize: 12, fontWeight: '700', marginTop: 4 },
+  roadmapCta: { color: colors.success, fontSize: 11, fontWeight: '700' },
+  roadmapActionsRow: { flexDirection: 'row', gap: 8, marginTop: 8 },
+  roadmapActionBtn: {
+    minHeight: 28,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colors.borderInfo,
+    backgroundColor: colors.surfaceInfo,
+    paddingHorizontal: 9,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  roadmapActionText: { color: colors.accentCyan, fontSize: 11, fontWeight: '800' },
+  roadmapDeleteBtn: {
+    borderColor: colors.borderDanger,
+    backgroundColor: colors.surfaceDanger,
+  },
+  roadmapDeleteText: { color: colors.danger, fontSize: 11, fontWeight: '800' },
+  roadmapEmptyBox: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceAlt,
+    padding: 12,
+    marginTop: 8,
+  },
+  roadmapEmptyText: { color: colors.textMuted, fontSize: 12, lineHeight: 18 },
+  assessmentHint: { color: colors.info, fontSize: 13, lineHeight: 19, marginTop: 10 },
   sectionCard: { marginBottom: 14 },
-  highlightOverlay: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, borderRadius: 12, backgroundColor: 'rgba(250,204,21,0.12)' },
+  highlightOverlay: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, borderRadius: 12, backgroundColor: colors.surfaceWarning },
   sectionCardCompact: { paddingVertical: 8, paddingHorizontal: 12 },
   sectionHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  sectionSubtitle: { color: '#9fb1d1', fontSize: 13, marginTop: 2 },
-  sectionTitle: { fontSize: 18, fontWeight: '800', color: '#dbeafe', marginBottom: 6 },
-  helperText: { color: '#8ea2c8', fontSize: 13, lineHeight: 19, marginBottom: 8 },
-  label: { color: '#94a3b8', fontSize: 13, marginBottom: 6, marginTop: 12, fontWeight: '500' },
+  sectionSubtitle: { color: colors.textMuted, fontSize: 13, marginTop: 2 },
+  sectionTitle: { fontSize: 18, fontWeight: '800', color: colors.textSoft, marginBottom: 6 },
+  helperText: { color: colors.textMuted, fontSize: 13, lineHeight: 19, marginBottom: 8 },
+  label: { color: colors.textMuted, fontSize: 13, marginBottom: 6, marginTop: 12, fontWeight: '500' },
   metricsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   metricsGridDesktop: { gap: 14 },
   fieldContainer: { width: '48%' },
   fieldContainerFull: { width: '100%' },
   input: {
-    backgroundColor: '#121d3f',
+    backgroundColor: colors.surfaceAlt,
     borderRadius: 14,
     padding: 14,
-    color: '#f8fafc',
+    color: colors.text,
     fontSize: 15,
     borderWidth: 1,
-    borderColor: '#23386b',
+    borderColor: colors.border,
   },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 4 },
   activityChip: { marginBottom: 8 },
   healthChip: { marginBottom: 6 },
+  goalPlanningGrid: { gap: 12, marginTop: 8 },
+  goalPlanningGridDesktop: { flexDirection: 'row', alignItems: 'stretch' },
+  goalPlanPanel: {
+    flex: 1,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceAlt,
+    padding: 12,
+  },
+  roadmapPanel: {
+    flex: 1,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.borderSuccess,
+    backgroundColor: colors.surfaceSuccess,
+    padding: 12,
+  },
+  catalogOverlay: { flex: 1, backgroundColor: colors.overlay, justifyContent: 'flex-end' },
+  catalogSheet: { backgroundColor: colors.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, maxHeight: '85%' },
+  catalogHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  catalogTitle: { color: colors.text, fontWeight: '800', fontSize: 18 },
+  catalogHint: { color: colors.textMuted, fontSize: 12, marginBottom: 12, lineHeight: 18 },
+  catalogItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surfaceAlt,
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  catalogItemDisabled: {
+    borderColor: colors.borderSuccess,
+    backgroundColor: colors.surfaceSuccess,
+    opacity: 0.72,
+  },
+  catalogItemName: { color: colors.text, fontWeight: '700', fontSize: 14, marginBottom: 2 },
+  catalogItemKcal: { color: colors.accentMint, fontSize: 12, fontWeight: '700' },
+  catalogItemNameDisabled: { color: colors.success },
+  catalogItemKcalDisabled: { color: colors.textMuted },
+  catalogBack: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 14 },
+  catalogBackText: { color: colors.accentMint, fontSize: 13, fontWeight: '700' },
+  catalogSelectedLabel: { color: colors.text, fontSize: 20, fontWeight: '800', marginBottom: 6 },
+  durationRow: { flexDirection: 'row', gap: 10, marginBottom: 20, flexWrap: 'wrap' },
+  durationBtn: {
+    flex: 1,
+    minWidth: 70,
+    backgroundColor: colors.surfaceAlt,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  durationBtnActive: { borderColor: colors.accentMint, backgroundColor: colors.surfaceSuccess },
+  durationBtnMin: { color: colors.text, fontWeight: '700', fontSize: 14 },
+  durationBtnKcal: { color: colors.textMuted, fontSize: 11, marginTop: 2 },
+  durationBtnTextActive: { color: colors.accentMint },
+  catalogConfirmBtn: { backgroundColor: colors.accentMint, borderRadius: 16, paddingVertical: 14, alignItems: 'center' },
+  catalogConfirmText: { color: colors.textOnAccent, fontWeight: '800', fontSize: 14 },
   mealTargetRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -1507,53 +2287,93 @@ const styles = StyleSheet.create({
     marginTop: 12,
     marginBottom: 4,
   },
+  goalPlanRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginTop: 8,
+    marginBottom: 4,
+    alignItems: 'center',
+  },
+  goalPlanStatusBox: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.borderInfo,
+    backgroundColor: colors.surfaceInfo,
+    padding: 12,
+    marginTop: 10,
+    gap: 5,
+  },
+  goalPlanStatusTitle: {
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  goalPlanStatusText: {
+    color: colors.textMuted,
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  goalPlanWarningText: {
+    color: colors.warning,
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '700',
+  },
+  clearGoalPlanButton: {
+    alignSelf: 'flex-start',
+    marginTop: 8,
+    paddingHorizontal: 0,
+  },
   mealTargetRowDesktop: {
     gap: 14,
   },
   mealTargetField: {
     width: '48%',
   },
-  mealTargetInput: { color: '#66f0a0', fontWeight: '800', fontSize: 18, textAlign: 'center' },
+  mealTargetInput: { color: colors.success, fontWeight: '800', fontSize: 18, textAlign: 'center' },
   actionRow: { gap: 10, marginTop: 4, marginBottom: 10 },
   actionRowDesktop: { flexDirection: 'row', alignItems: 'stretch' },
   saveButton: { flex: 1 },
   logoutBtn: { minWidth: 160 },
 
   switchRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, paddingVertical: 10 },
-  switchLabel: { color: '#dbeafe', fontSize: 14, fontWeight: '600' },
+  switchLabel: { color: colors.textSoft, fontSize: 14, fontWeight: '600' },
 
-  reminderRow: { marginBottom: 14, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#203463' },
+  reminderRow: { marginBottom: 14, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border },
   reminderLabel: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  reminderMealLabel: { color: '#dbeafe', fontSize: 14, fontWeight: '600' },
+  reminderMealLabel: { color: colors.textSoft, fontSize: 14, fontWeight: '600' },
   reminderTimeInputs: { flexDirection: 'row', gap: 8, alignItems: 'flex-end' },
   timeInputGroup: { flex: 1 },
-  timeInputLabel: { color: '#8ea2c8', fontSize: 12, marginBottom: 4, fontWeight: '500' },
-  timeInput: { textAlign: 'center', fontSize: 16, fontWeight: '700', color: '#6ee7b7' },
-  timeSeparator: { color: '#dbeafe', fontSize: 18, fontWeight: '700', marginBottom: 6 },
+  timeInputLabel: { color: colors.textMuted, fontSize: 12, marginBottom: 4, fontWeight: '500' },
+  timeInput: { textAlign: 'center', fontSize: 16, fontWeight: '700', color: colors.accentMint },
+  timeSeparator: { color: colors.textSoft, fontSize: 18, fontWeight: '700', marginBottom: 6 },
   previewSection: { marginTop: 12 },
-  previewCard: { marginTop: 10, backgroundColor: '#0f172a', borderColor: '#1e3a5f' },
-  previewTitle: { color: '#eff6ff', fontSize: 15, fontWeight: '800', marginBottom: 8 },
-  previewBody: { color: '#cbd5e1', fontSize: 13, lineHeight: 20 },
-  previewMeta: { color: '#8ea2c8', fontSize: 12, marginTop: 10, fontWeight: '600' },
-  subscriptionCard: { backgroundColor: '#111827', borderRadius: 12, padding: 14, borderWidth: 1, borderColor: '#1f2937' },
+  previewCard: { marginTop: 10, backgroundColor: colors.surface, borderColor: colors.border },
+  previewTitle: { color: colors.text, fontSize: 15, fontWeight: '800', marginBottom: 8 },
+  previewBody: { color: colors.textSoft, fontSize: 13, lineHeight: 20 },
+  previewMeta: { color: colors.textMuted, fontSize: 12, marginTop: 10, fontWeight: '600' },
+  subscriptionCard: { backgroundColor: colors.surface, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: colors.border },
   subscriptionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
-  subscriptionTier: { fontSize: 18, fontWeight: '700', color: '#dbeafe', marginBottom: 2 },
-  subscriptionStatus: { fontSize: 12, color: '#6b7280' },
-  subscriptionHelper: { color: '#8ea2c8', fontSize: 13, lineHeight: 19, marginBottom: 12 },
+  subscriptionTier: { fontSize: 18, fontWeight: '700', color: colors.textSoft, marginBottom: 2 },
+  subscriptionStatus: { fontSize: 12, color: colors.textDisabled },
+  subscriptionHelper: { color: colors.textMuted, fontSize: 13, lineHeight: 19, marginBottom: 12 },
   planSelectorRow: { gap: 10, marginBottom: 14 },
   planSelectorRowDesktop: { flexDirection: 'row' },
-  planOption: { flex: 1, backgroundColor: '#0f1419', borderRadius: 12, borderWidth: 1, borderColor: '#23386b', padding: 12, gap: 6 },
+  planOption: { flex: 1, backgroundColor: colors.surfaceAlt, borderRadius: 12, borderWidth: 1, borderColor: colors.border, padding: 12, gap: 6 },
   planOptionActive: { borderWidth: 1.5 },
   planOptionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
-  planOptionName: { fontSize: 15, fontWeight: '800', color: '#eff6ff' },
+  planOptionName: { fontSize: 15, fontWeight: '800', color: colors.text },
   planOptionTag: { fontSize: 11, fontWeight: '800' },
-  planOptionDescription: { color: '#9fb1d1', fontSize: 12, lineHeight: 18 },
-  planOptionPrice: { color: '#dbeafe', fontSize: 13, fontWeight: '700' },
-  planOptionAction: { color: '#6ee7b7', fontSize: 12, fontWeight: '700', marginTop: 4 },
+  planOptionDescription: { color: colors.textMuted, fontSize: 12, lineHeight: 18 },
+  planOptionPrice: { color: colors.textSoft, fontSize: 13, fontWeight: '700' },
+  planOptionAction: { color: colors.accentMint, fontSize: 12, fontWeight: '700', marginTop: 4 },
   featuresPreview: { marginBottom: 14 },
-  featuresLabel: { fontSize: 12, color: '#8ea2c8', fontWeight: '500', marginBottom: 8 },
+  featuresLabel: { fontSize: 12, color: colors.textMuted, fontWeight: '500', marginBottom: 8 },
   featureGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  featureCheckItem: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 4, paddingHorizontal: 8, backgroundColor: '#0f1419', borderRadius: 6 },
-  featureCheckLabel: { fontSize: 12, color: '#dbeafe', fontWeight: '500' },
-  featureCheckLabelDisabled: { color: '#6b7280' },
-});
+  featureCheckItem: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 4, paddingHorizontal: 8, backgroundColor: colors.surfaceAlt, borderRadius: 6 },
+  featureCheckLabel: { fontSize: 12, color: colors.textSoft, fontWeight: '500' },
+  featureCheckLabelDisabled: { color: colors.textDisabled },
+}));
+
+

@@ -1,7 +1,19 @@
-import React from 'react';
-import { Image, ImageSourcePropType, StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import {
+  Animated,
+  Easing,
+  Image,
+  ImageSourcePropType,
+  Platform,
+  StyleProp,
+  StyleSheet,
+  useWindowDimensions,
+  View,
+  ViewStyle
+} from 'react-native';
 import { SurfaceCard } from './ui-shell';
-import { theme } from './theme';
+import { useAppTheme } from './theme';
+import { Text } from './i18n-text';
 
 export function EmptyState({
   imageSource,
@@ -9,24 +21,70 @@ export function EmptyState({
   title,
   description,
   style,
+  variant = 'default',
 }: {
   imageSource?: ImageSourcePropType;
   icon: string;
   title: string;
   description: string;
   style?: StyleProp<ViewStyle>;
+  variant?: 'default' | 'compact';
 }) {
+  const { width } = useWindowDimensions();
+  const isCompact = variant === 'compact' || width < 420;
+  const pulse = useRef(new Animated.Value(0)).current;
+  const useNativeDriver = Platform.OS !== 'web';
+  const { colors, radii } = useAppTheme();
+
+  useEffect(() => {
+    if (imageSource) return;
+
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, {
+          toValue: 1,
+          duration: 900,
+          easing: Easing.inOut(Easing.quad),
+          useNativeDriver,
+        }),
+        Animated.timing(pulse, {
+          toValue: 0,
+          duration: 900,
+          easing: Easing.inOut(Easing.quad),
+          useNativeDriver,
+        }),
+      ]),
+    );
+    animation.start();
+    return () => animation.stop();
+  }, [imageSource, pulse, useNativeDriver]);
+
   return (
-    <SurfaceCard style={[styles.card, style]}>
+    <SurfaceCard style={[styles.card, { backgroundColor: colors.surfaceLifted }, isCompact && styles.compactCard, style]}>
       {imageSource ? (
-        <Image source={imageSource} style={styles.image} resizeMode="cover" />
+        <Image
+          source={imageSource}
+          style={[styles.image, { borderRadius: radii.lg, backgroundColor: colors.surfaceAlt }, isCompact && styles.compactImage]}
+          resizeMode="cover"
+        />
       ) : (
-        <View style={styles.iconWrap}>
+        <Animated.View style={[styles.iconWrap, isCompact && styles.compactIconWrap, {
+          backgroundColor: colors.surfaceAlt,
+          borderColor: colors.borderStrong,
+          transform: [{
+            scale: pulse.interpolate({
+              inputRange: [0, 1],
+              outputRange: [1, 1.08],
+            }),
+          }],
+        }]}>
           <Text style={styles.icon}>{icon}</Text>
-        </View>
+        </Animated.View>
       )}
-      <Text style={styles.title}>{title}</Text>
-      <Text style={styles.description}>{description}</Text>
+      <View style={[styles.copy, isCompact && styles.compactCopy]}>
+        <Text style={[styles.title, { color: colors.text }, isCompact && styles.compactTitle]}>{title}</Text>
+        <Text style={[styles.description, { color: colors.textSoft }, isCompact && styles.compactDescription]}>{description}</Text>
+      </View>
     </SurfaceCard>
   );
 }
@@ -34,14 +92,27 @@ export function EmptyState({
 const styles = StyleSheet.create({
   card: {
     alignItems: 'center',
-    paddingVertical: 22,
+    paddingVertical: 20,
+  },
+  compactCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    gap: 12,
   },
   image: {
     width: '100%',
-    height: 142,
-    borderRadius: theme.radii.lg,
+    maxWidth: 560,
+    aspectRatio: 16 / 7,
+    alignSelf: 'center',
     marginBottom: 14,
-    backgroundColor: theme.colors.surfaceAlt,
+  },
+  compactImage: {
+    width: 86,
+    height: 70,
+    maxWidth: 86,
+    aspectRatio: undefined,
+    marginBottom: 0,
   },
   iconWrap: {
     width: 58,
@@ -49,25 +120,43 @@ const styles = StyleSheet.create({
     borderRadius: 29,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: theme.colors.surfaceAlt,
     borderWidth: 1,
-    borderColor: theme.colors.borderStrong,
     marginBottom: 12,
+  },
+  compactIconWrap: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    marginBottom: 0,
   },
   icon: {
     fontSize: 28,
   },
+  copy: {
+    alignItems: 'center',
+  },
+  compactCopy: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: 'flex-start',
+  },
   title: {
-    color: theme.colors.text,
     fontSize: 16,
-    fontWeight: '800',
+    fontWeight: '900',
     marginBottom: 6,
   },
+  compactTitle: {
+    fontSize: 14,
+    marginBottom: 4,
+  },
   description: {
-    color: theme.colors.textSoft,
     fontSize: 13,
     lineHeight: 19,
     textAlign: 'center',
     maxWidth: 280,
+  },
+  compactDescription: {
+    textAlign: 'left',
+    maxWidth: undefined,
   },
 });

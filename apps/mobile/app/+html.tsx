@@ -31,7 +31,7 @@ export default function Root({ children }: PropsWithChildren) {
 const phoneFrameCSS = `
   /* ─── Reset ─────────────────────────────────────── */
   * { box-sizing: border-box; }
-  html, body { margin: 0; padding: 0; height: 100%; background: #050d1a; }
+  html, body { margin: 0; padding: 0; height: 100%; background: ghostwhite; }
   .device-stage { min-height: 100vh; }
 
   /* ─── Phone frame (desktop only) ────────────────── */
@@ -42,9 +42,9 @@ const phoneFrameCSS = `
       align-items: center;
       padding: 24px;
       background:
-        radial-gradient(circle at 15% 20%, #12355a66 0, transparent 40%),
-        radial-gradient(circle at 85% 80%, #3f2a5d66 0, transparent 35%),
-        #040a16;
+        radial-gradient(circle at 15% 20%, color-mix(in srgb, mediumaquamarine 18%, transparent) 0, transparent 40%),
+        radial-gradient(circle at 85% 80%, color-mix(in srgb, lightskyblue 20%, transparent) 0, transparent 35%),
+        ghostwhite;
     }
 
     .device-shell {
@@ -53,13 +53,13 @@ const phoneFrameCSS = `
       max-width: calc(100vw - 60px);
       border-radius: 46px;
       padding: 10px;
-      background: linear-gradient(160deg, #2b344f 0%, #161d30 55%, #0f1526 100%);
+      background: linear-gradient(160deg, color-mix(in srgb, slategray 20%, white) 0%, color-mix(in srgb, mintcream 84%, white) 55%, white 100%);
       overflow: hidden;
       box-shadow:
-        inset 0 0 0 1px #4e587a,
-        inset 0 0 0 3px #111827,
-        0 30px 80px #00000088,
-        0 6px 16px #00000055;
+        inset 0 0 0 1px color-mix(in srgb, slategray 30%, white),
+        inset 0 0 0 3px white,
+        0 30px 80px color-mix(in srgb, black 18%, transparent),
+        0 6px 16px color-mix(in srgb, black 12%, transparent);
       position: relative;
     }
 
@@ -68,7 +68,7 @@ const phoneFrameCSS = `
       height: 100%;
       border-radius: 36px;
       overflow: hidden;
-      background: #000;
+      background: white;
       position: relative;
     }
 
@@ -79,10 +79,10 @@ const phoneFrameCSS = `
       transform: translateX(-50%);
       width: 126px;
       height: 30px;
-      background: #0a0f1d;
+      background: color-mix(in srgb, slategray 18%, white);
       border-radius: 0 0 18px 18px;
       z-index: 9999;
-      box-shadow: 0 1px 0 #2b344f;
+      box-shadow: 0 1px 0 color-mix(in srgb, slategray 24%, white);
       pointer-events: none;
     }
   }

@@ -1,14 +1,11 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
   View,
-  Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  TextInput,
   ActivityIndicator,
-  Alert,
-  RefreshControl,
+  RefreshControl
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { BodyProgressEntry, BodyProgressTrend, CreateBodyProgressDto } from '@calorie-ai/types';
@@ -16,9 +13,13 @@ import { ScreenShell, SurfaceCard, Eyebrow, HeroTitle, BodyText } from '../../co
 import { UiButton } from '../../components/ui-button';
 import MacrosCard from '../../components/macros-card';
 import AdherenceCard from '../../components/adherence-card';
+import { createThemedStyles, theme, useAppTheme } from '../../components/theme';
 import { apiClient } from '../../services/api';
 import { calorieTargetService, WeeklyAdaptiveResult } from '../../services/calorie-target.service';
 import { getLocalDateYmd } from '../../services/date';
+import { Text } from '../../components/i18n-text';
+import { TextInput } from '../../components/i18n-text-input';
+import { Alert } from '../../components/i18n-alert';
 
 const ENERGY_LABELS = ['', '😴 Rất mệt', '😐 Mệt', '😊 Bình thường', '😄 Tốt', '🔥 Xuất sắc'];
 
@@ -26,7 +27,7 @@ function DeltaBadge({ value, unit, lowerIsBetter = false }: { value: number | nu
   if (value === null) return null;
   const isPositive = value > 0;
   const isGood = lowerIsBetter ? !isPositive : isPositive;
-  const color = value === 0 ? '#7082a9' : isGood ? '#6ee7b7' : '#fda4af';
+  const color = value === 0 ? theme.colors.textMuted : isGood ? theme.colors.accentMint : theme.colors.danger;
   const arrow = value > 0 ? '▲' : value < 0 ? '▼' : '—';
   return (
     <Text style={[styles.deltaBadge, { color }]}>
@@ -36,6 +37,7 @@ function DeltaBadge({ value, unit, lowerIsBetter = false }: { value: number | nu
 }
 
 export default function BodyProgressScreen() {
+  useAppTheme();
   const [trend, setTrend] = useState<BodyProgressTrend | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -199,7 +201,7 @@ export default function BodyProgressScreen() {
     return (
       <ScreenShell>
         <View style={styles.center}>
-          <ActivityIndicator size="large" color="#6ee7b7" />
+          <ActivityIndicator size="large" color={theme.colors.accentMint} />
         </View>
       </ScreenShell>
     );
@@ -246,7 +248,7 @@ export default function BodyProgressScreen() {
             {trend.weight_change_kg !== null && (
               <Text style={styles.totalChange}>
                 Tổng thay đổi cân nặng:{' '}
-                <Text style={{ color: (trend.weight_change_kg ?? 0) < 0 ? '#6ee7b7' : '#fda4af' }}>
+                <Text style={{ color: (trend.weight_change_kg ?? 0) < 0 ? theme.colors.accentMint : theme.colors.danger }}>
                   {(trend.weight_change_kg ?? 0) > 0 ? '+' : ''}{trend.weight_change_kg} kg
                 </Text>
               </Text>
@@ -299,7 +301,7 @@ export default function BodyProgressScreen() {
                   onChangeText={setWeightKg}
                   keyboardType="decimal-pad"
                   placeholder="VD: 65.5"
-                  placeholderTextColor="#4a6080"
+                  placeholderTextColor={theme.colors.textMuted}
                 />
               </View>
               <View style={styles.formField}>
@@ -310,7 +312,7 @@ export default function BodyProgressScreen() {
                   onChangeText={setWaistCm}
                   keyboardType="decimal-pad"
                   placeholder="VD: 78"
-                  placeholderTextColor="#4a6080"
+                  placeholderTextColor={theme.colors.textMuted}
                 />
               </View>
             </View>
@@ -324,7 +326,7 @@ export default function BodyProgressScreen() {
                   onChangeText={setHipCm}
                   keyboardType="decimal-pad"
                   placeholder="VD: 92"
-                  placeholderTextColor="#4a6080"
+                  placeholderTextColor={theme.colors.textMuted}
                 />
               </View>
               <View style={styles.formField}>
@@ -335,7 +337,7 @@ export default function BodyProgressScreen() {
                   onChangeText={setBodyFatPct}
                   keyboardType="decimal-pad"
                   placeholder="VD: 22.5"
-                  placeholderTextColor="#4a6080"
+                  placeholderTextColor={theme.colors.textMuted}
                 />
               </View>
             </View>
@@ -359,7 +361,7 @@ export default function BodyProgressScreen() {
               value={note}
               onChangeText={setNote}
               placeholder="VD: Ngủ tốt, đi gym buổi sáng..."
-              placeholderTextColor="#4a6080"
+              placeholderTextColor={theme.colors.textMuted}
               multiline
             />
 
@@ -390,7 +392,7 @@ export default function BodyProgressScreen() {
                       onPress={() => handleDeleteEntry(entry)}
                       style={styles.deleteButton}
                     >
-                      <Ionicons name="trash-outline" size={16} color="#fda4af" />
+                      <Ionicons name="trash-outline" size={16} color={theme.colors.danger} />
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -423,29 +425,29 @@ export default function BodyProgressScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createThemedStyles((colors, radii) => ({
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   heroBody: { marginBottom: 16, maxWidth: 720 },
-  trendCard: { marginBottom: 14, borderColor: '#27426f', backgroundColor: '#0f1c38' },
-  trendTitle: { color: '#eff6ff', fontSize: 15, fontWeight: '800', marginBottom: 12 },
+  trendCard: { marginBottom: 14, borderColor: colors.border, backgroundColor: colors.surfaceAlt },
+  trendTitle: { color: colors.text, fontSize: 15, fontWeight: '800', marginBottom: 12 },
   trendGrid: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
   trendItem: { alignItems: 'center', flex: 1 },
-  trendLabel: { color: '#b8c8e8', fontSize: 12, marginBottom: 4 },
-  trendValue: { color: '#eff6ff', fontSize: 16, fontWeight: '700' },
+  trendLabel: { color: colors.textSoft, fontSize: 12, marginBottom: 4 },
+  trendValue: { color: colors.text, fontSize: 16, fontWeight: '700' },
   deltaBadge: { fontSize: 12, marginTop: 2, fontWeight: '600' },
-  totalChange: { color: '#b8c8e8', fontSize: 13, marginTop: 8, textAlign: 'center' },
+  totalChange: { color: colors.textSoft, fontSize: 13, marginTop: 8, textAlign: 'center' },
   logButton: { marginBottom: 14 },
-  formCard: { marginBottom: 14, borderColor: '#4a6080' },
-  formTitle: { color: '#eff6ff', fontSize: 14, fontWeight: '700', marginBottom: 14 },
+  formCard: { marginBottom: 14, borderColor: colors.textMuted },
+  formTitle: { color: colors.text, fontSize: 14, fontWeight: '700', marginBottom: 14 },
   formRow: { flexDirection: 'row', gap: 12, marginBottom: 12 },
   formField: { flex: 1 },
-  fieldLabel: { color: '#b8c8e8', fontSize: 12, fontWeight: '600', marginBottom: 6 },
+  fieldLabel: { color: colors.textSoft, fontSize: 12, fontWeight: '600', marginBottom: 6 },
   textInput: {
-    backgroundColor: '#0d1733',
-    borderColor: '#27426f',
+    backgroundColor: colors.surfaceAlt,
+    borderColor: colors.border,
     borderWidth: 1,
     borderRadius: 8,
-    color: '#eff6ff',
+    color: colors.text,
     fontSize: 14,
     paddingHorizontal: 10,
     paddingVertical: 8,
@@ -457,24 +459,26 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#27426f',
-    backgroundColor: '#0d1733',
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceAlt,
   },
-  energyChipActive: { borderColor: '#6ee7b7', backgroundColor: '#0f2d2a' },
-  energyLabel: { color: '#b8c8e8', fontSize: 11 },
+  energyChipActive: { borderColor: colors.accentMint, backgroundColor: colors.surfaceSuccess },
+  energyLabel: { color: colors.textSoft, fontSize: 11 },
   saveButton: { marginTop: 8 },
-  historyTitle: { color: '#eff6ff', fontSize: 14, fontWeight: '700', marginBottom: 10 },
-  historyCard: { marginBottom: 10, borderColor: '#27426f' },
+  historyTitle: { color: colors.text, fontSize: 14, fontWeight: '700', marginBottom: 10 },
+  historyCard: { marginBottom: 10, borderColor: colors.border },
   historyHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  historyDate: { color: '#93c5fd', fontSize: 13, fontWeight: '600' },
+  historyDate: { color: colors.info, fontSize: 13, fontWeight: '600' },
   historyRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   energyEmoji: { fontSize: 18 },
   deleteButton: { padding: 4 },
   metricsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  metricChip: { color: '#eff6ff', fontSize: 13, backgroundColor: '#0d1733', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
-  historyNote: { color: '#7082a9', fontSize: 12, marginTop: 6, fontStyle: 'italic' },
-  emptyCard: { borderColor: '#27426f', backgroundColor: '#101a37' },
-  emptyText: { color: '#7082a9', fontSize: 14, textAlign: 'center', lineHeight: 21 },
-  previewCard: { marginBottom: 14, borderColor: '#335273', backgroundColor: '#081423' },
-  previewRow: { color: '#cfe8ff', fontSize: 13, marginTop: 4 },
-});
+  metricChip: { color: colors.text, fontSize: 13, backgroundColor: colors.surfaceAlt, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
+  historyNote: { color: colors.textMuted, fontSize: 12, marginTop: 6, fontStyle: 'italic' },
+  emptyCard: { borderColor: colors.border, backgroundColor: colors.surfaceAlt },
+  emptyText: { color: colors.textMuted, fontSize: 14, textAlign: 'center', lineHeight: 21 },
+  previewCard: { marginBottom: 14, borderColor: colors.borderInfo, backgroundColor: colors.surface },
+  previewRow: { color: colors.textSoft, fontSize: 13, marginTop: 4 },
+}));
+
+

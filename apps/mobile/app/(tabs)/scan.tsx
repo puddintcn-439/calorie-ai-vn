@@ -1,11 +1,14 @@
 import React, { useState, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, TextInput,
-  ScrollView, ActivityIndicator, Alert, Image, Platform,
+  View,
+  StyleSheet,
+  TouchableOpacity,
+  ScrollView,
+  ActivityIndicator,
+  Image,
+  Platform
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { Audio } from 'expo-av';
-import { CameraView, useCameraPermissions } from 'expo-camera';
 import { Ionicons } from '@expo/vector-icons';
 import { AIScanResponse, AIDetectedItem, Food, MealType, ContextMode, CONTEXT_ADAPTERS } from '@calorie-ai/types';
 import {
@@ -22,15 +25,37 @@ import { apiClient } from '../../services/api';
 const IMAGE_MEDIA_TYPES = ['images'] as any;
 import { telemetryService } from '../../services/telemetry.service';
 import { router } from 'expo-router';
-import { BodyText, Eyebrow, HeroTitle, ScreenShell, SurfaceCard } from '../../components/ui-shell';
+import { ScreenShell, SurfaceCard } from '../../components/ui-shell';
 import { EmptyState } from '../../components/empty-state';
+import { createThemedStyles, theme, useAppTheme } from '../../components/theme';
+import { AnimatedIonicon } from '../../components/animated-icon';
+import { VisualHeroCard } from '../../components/visual-hero-card';
+import { RewardToast, RewardToastData } from '../../components/reward-toast';
+import { Text } from '../../components/i18n-text';
+import { TextInput } from '../../components/i18n-text-input';
+import { Alert } from '../../components/i18n-alert';
 
 const scanHeroIllustration = require('../../assets/images/scan-hero.png') as number;
+type CameraModule = typeof import('expo-camera');
+type AudioModule = typeof import('expo-av')['Audio'];
+
+const nativeCameraModule: CameraModule | null = Platform.OS === 'web' ? null : (require('expo-camera') as CameraModule);
+const CameraView = nativeCameraModule?.CameraView;
+const useOptionalCameraPermissions = nativeCameraModule?.useCameraPermissions
+  ?? (() => [null, async () => ({ granted: false })] as const);
+const NativeAudio: AudioModule | null = Platform.OS === 'web' ? null : (require('expo-av') as typeof import('expo-av')).Audio;
 
 type InputMode = 'camera' | 'gallery' | 'text' | 'voice' | 'receipt' | 'barcode' | 'search';
+type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
 
-const MODE_ICONS: Record<InputMode, string> = {
-  camera: '📸', gallery: '🖼', text: '✏️', voice: '🎙️', receipt: '🧾', barcode: '🔍', search: '🍜',
+const MODE_ICONS: Record<InputMode, IoniconName> = {
+  camera: 'camera-outline',
+  gallery: 'images-outline',
+  text: 'create-outline',
+  voice: 'mic-outline',
+  receipt: 'receipt-outline',
+  barcode: 'barcode-outline',
+  search: 'search-outline',
 };
 
 const MODE_LABELS: Record<InputMode, string> = {
@@ -42,6 +67,9 @@ const MODE_LABELS: Record<InputMode, string> = {
   barcode: 'Mã vạch',
   search: 'Tìm món',
 };
+
+const PRIMARY_INPUT_MODES: InputMode[] = ['camera', 'text', 'search'];
+const SECONDARY_INPUT_MODES: InputMode[] = ['gallery', 'voice', 'receipt', 'barcode'];
 
 function formatCalorieRange(min: number, max: number): string {
   const roundedMin = Math.round(min);
@@ -60,6 +88,7 @@ function isQuotaFallbackResult(result: AIScanResponse): boolean {
 }
 
 export default function ScanScreen() {
+  useAppTheme();
   // Determine default meal based on current time
   const getDefaultMeal = (): MealType => {
     const hour = new Date().getHours();
@@ -70,6 +99,7 @@ export default function ScanScreen() {
   };
 
   const [mode, setMode] = useState<InputMode>('camera');
+  const [showMoreModes, setShowMoreModes] = useState(false);
   const [textInput, setTextInput] = useState('');
   const [voiceTranscript, setVoiceTranscript] = useState('');
   const [scannedImage, setScannedImage] = useState<string | null>(null);
@@ -83,6 +113,7 @@ export default function ScanScreen() {
   // Barcode
   const [barcodeScanned, setBarcodeScanned] = useState(false);
   const [barcodeResult, setBarcodeResult] = useState<any | null>(null);
+  const [manualBarcode, setManualBarcode] = useState('');
   // Manual search
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<Food[]>([]);
@@ -93,14 +124,15 @@ export default function ScanScreen() {
   // Context state
   const { activeContexts, toggleContext } = useContextStore();
   const [lastReceiptUri, setLastReceiptUri] = useState<string | null>(null);
-  const [cameraPermission, requestCameraPermission] = useCameraPermissions();
+  const [cameraPermission, requestCameraPermission] = useOptionalCameraPermissions();
 
   // Voice recording state
-  const [recording, setRecording] = useState<Audio.Recording | null>(null);
+  const [recording, setRecording] = useState<any | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [voiceRecordingNote, setVoiceRecordingNote] = useState('');
   const [voicePermissionGranted, setVoicePermissionGranted] = useState(false);
+  const [reward, setReward] = useState<RewardToastData | null>(null);
 
   const { addLog, saveMeal } = useLogStore();
   // Always prefer editableItems if we have a scan result, even if empty
@@ -198,9 +230,29 @@ export default function ScanScreen() {
     void telemetryService.emitContextToggled(context, isActive);
   };
 
+  const selectInputMode = (nextMode: InputMode) => {
+    setMode(nextMode);
+    setShowMoreModes(SECONDARY_INPUT_MODES.includes(nextMode));
+    setBarcodeScanned(false);
+    setBarcodeResult(null);
+    setScanResult(null);
+    setEditableItems([]);
+    setScanNotice(null);
+    setSearchResults([]);
+    setScannedImage(null);
+    setVoiceTranscript('');
+    setLastReceiptUri(null);
+    setManualBarcode('');
+  };
+
   const requestMicPermission = async () => {
+    if (!NativeAudio) {
+      setVoicePermissionGranted(false);
+      return false;
+    }
+
     try {
-      const permission = await Audio.requestPermissionsAsync();
+      const permission = await NativeAudio.requestPermissionsAsync();
       setVoicePermissionGranted(permission.granted);
       return permission.granted;
     } catch (error) {
@@ -211,6 +263,11 @@ export default function ScanScreen() {
 
   const startVoiceRecording = async () => {
     try {
+      if (!NativeAudio) {
+        setVoiceRecordingNote('Bản web chưa hỗ trợ ghi âm trực tiếp. Hãy nhập hoặc dán nội dung bữa ăn để Coach phân tích.');
+        return;
+      }
+
       if (!voicePermissionGranted) {
         const granted = await requestMicPermission();
         if (!granted) {
@@ -219,13 +276,13 @@ export default function ScanScreen() {
         }
       }
 
-      await Audio.setAudioModeAsync({
+      await NativeAudio.setAudioModeAsync({
         allowsRecordingIOS: true,
         playsInSilentModeIOS: true,
       });
 
-      const rec = new Audio.Recording();
-      await rec.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
+      const rec = new NativeAudio.Recording();
+      await rec.prepareToRecordAsync(NativeAudio.RecordingOptionsPresets.HIGH_QUALITY);
       await rec.startAsync();
       
       setRecording(rec);
@@ -433,7 +490,12 @@ export default function ScanScreen() {
           image_url: scannedImage ?? undefined,
         });
       }
-      Alert.alert('✅ Đã lưu!', `${currentItems.length} món`, [{ text: 'OK', onPress: () => router.replace('/') }]);
+      setReward({
+        title: 'Đã log bữa ăn',
+        body: `${currentItems.length} món · ${Math.round(totalCalories)} kcal`,
+        icon: 'checkmark-circle',
+      });
+      setTimeout(() => router.replace('/'), 850);
     } catch { Alert.alert('Lỗi', 'Không thể lưu log'); }
   };
 
@@ -456,7 +518,11 @@ export default function ScanScreen() {
           sodium_mg: i.sodium_mg,
           estimated_grams: i.estimated_grams,
         })));
-        Alert.alert('✅ Đã lưu!', `"${name}" vào bộ sưu tập.`);
+        setReward({
+          title: 'Đã lưu bộ sưu tập',
+          body: `"${name}" đã sẵn sàng để log nhanh.`,
+          icon: 'bookmark',
+        });
       } catch { Alert.alert('Lỗi', 'Không thể lưu bữa ăn.'); }
       finally { setIsSavingMeal(false); }
     }, 'plain-text');
@@ -468,6 +534,12 @@ export default function ScanScreen() {
     try { setBarcodeResult((await apiClient.get(`/food/barcode/${barcode}`)).data); }
     catch { Alert.alert('Không tìm thấy', 'Sản phẩm chưa có trong CSDL.'); setBarcodeScanned(false); }
     finally { setIsScanning(false); }
+  };
+
+  const handleManualBarcodeLookup = async () => {
+    const barcode = manualBarcode.trim();
+    if (!barcode) return;
+    await handleBarcodeScan({ data: barcode });
   };
 
   const handleLogBarcode = async () => {
@@ -488,7 +560,12 @@ export default function ScanScreen() {
         sodium_mg: barcodeResult.sodium_mg != null ? Math.round(barcodeResult.sodium_mg * ratio) : undefined,
         estimated_grams: grams,
       });
-      Alert.alert('✅ Đã lưu!', undefined, [{ text: 'OK', onPress: () => router.replace('/') }]);
+      setReward({
+        title: 'Đã log sản phẩm',
+        body: `${barcodeResult.name_vi ?? barcodeResult.name} · ${Math.round((barcodeResult.calories_per_100g ?? 0) * ratio)} kcal`,
+        icon: 'checkmark-circle',
+      });
+      setTimeout(() => router.replace('/'), 850);
     } catch { Alert.alert('Lỗi', 'Không thể lưu log'); }
   };
 
@@ -523,7 +600,11 @@ export default function ScanScreen() {
         sodium_mg: food.sodium_mg != null ? Math.round(food.sodium_mg * ratio) : undefined,
         estimated_grams: grams,
       });
-      Alert.alert('✅ Đã lưu!', `${food.name_vi ?? food.name}`);
+      setReward({
+        title: 'Đã log món ăn',
+        body: `${food.name_vi ?? food.name} · ${Math.round((food.calories_per_100g ?? 0) * ratio)} kcal`,
+        icon: 'checkmark-circle',
+      });
     } catch {
       Alert.alert('Lỗi', 'Không thể lưu món ăn tìm kiếm.');
     }
@@ -533,35 +614,58 @@ export default function ScanScreen() {
 
   return (
     <ScreenShell>
-        <View style={styles.scanHeroCard}>
-          <Image source={scanHeroIllustration} style={styles.scanHeroImage} resizeMode="cover" />
-          <View style={styles.scanHeroCopy}>
-            <Eyebrow>Scan</Eyebrow>
-            <HeroTitle>Log món ăn nhanh hơn.</HeroTitle>
-            <BodyText style={styles.heroBody}>Chụp, nói hoặc nhập món Việt trong vài giây.</BodyText>
-          </View>
-        </View>
+        <VisualHeroCard
+          imageSource={scanHeroIllustration}
+          eyebrow="Quét món"
+          title="Log món ăn nhanh hơn."
+          body="Chụp, nói hoặc nhập món Việt trong vài giây."
+        />
 
         {/* Mode Tabs */}
         <View style={styles.modeTabs}>
-          {(Object.keys(MODE_ICONS) as InputMode[]).map((m) => (
+          {PRIMARY_INPUT_MODES.map((m) => (
             <TouchableOpacity key={m} style={[styles.modeTab, mode === m && styles.modeTabActive]}
-              onPress={() => {
-                setMode(m);
-                setBarcodeScanned(false);
-                setBarcodeResult(null);
-                setScanResult(null);
-                setEditableItems([]);
-                setScanNotice(null);
-                setSearchResults([]);
-                setScannedImage(null);
-                setVoiceTranscript('');
-                setLastReceiptUri(null);
-              }}>
-              <Text style={[styles.modeTabText, mode === m && styles.modeTabTextActive]}>{MODE_ICONS[m]} {MODE_LABELS[m]}</Text>
+              onPress={() => selectInputMode(m)}>
+              <AnimatedIonicon
+                name={MODE_ICONS[m]}
+                size={16}
+                color={mode === m ? theme.colors.textOnAccent : theme.colors.accentCyan}
+                motion="float"
+                active={mode === m}
+              />
+              <Text style={[styles.modeTabText, mode === m && styles.modeTabTextActive]}>{MODE_LABELS[m]}</Text>
             </TouchableOpacity>
           ))}
+          <TouchableOpacity
+            style={[styles.modeTab, styles.modeMoreTab, (showMoreModes || SECONDARY_INPUT_MODES.includes(mode)) && styles.modeTabActive]}
+            onPress={() => setShowMoreModes((value) => !value)}
+          >
+            <AnimatedIonicon
+              name="ellipsis-horizontal"
+              size={16}
+              color={(showMoreModes || SECONDARY_INPUT_MODES.includes(mode)) ? theme.colors.textOnAccent : theme.colors.accentCyan}
+              motion="float"
+              active={showMoreModes || SECONDARY_INPUT_MODES.includes(mode)}
+            />
+            <Text style={[styles.modeTabText, (showMoreModes || SECONDARY_INPUT_MODES.includes(mode)) && styles.modeTabTextActive]}>Khác</Text>
+          </TouchableOpacity>
         </View>
+        {(showMoreModes || SECONDARY_INPUT_MODES.includes(mode)) && (
+          <View style={styles.modeMorePanel}>
+            {SECONDARY_INPUT_MODES.map((m) => (
+              <TouchableOpacity key={m} style={[styles.modeTab, styles.modeSecondaryTab, mode === m && styles.modeTabActive]} onPress={() => selectInputMode(m)}>
+                <AnimatedIonicon
+                  name={MODE_ICONS[m]}
+                  size={15}
+                  color={mode === m ? theme.colors.textOnAccent : theme.colors.accentCyan}
+                  motion="float"
+                  active={mode === m}
+                />
+                <Text style={[styles.modeTabText, mode === m && styles.modeTabTextActive]}>{MODE_LABELS[m]}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
 
         {/* ── Life Context Selector ── */}
         <ContextPicker activeContexts={activeContexts} onToggle={handleContextToggle} />
@@ -582,7 +686,7 @@ export default function ScanScreen() {
                 value={searchQuery}
                 onChangeText={setSearchQuery}
                 placeholder="VD: pho bo, bun cha, com ga"
-                placeholderTextColor="#6b7280"
+                placeholderTextColor={theme.colors.textDisabled}
               />
               <TouchableOpacity style={styles.analyzeButton} onPress={handleSearchFoods}>
                 <Text style={styles.analyzeButtonText}>Tìm món</Text>
@@ -592,7 +696,7 @@ export default function ScanScreen() {
 
             {isSearching ? (
               <View style={styles.scanningContainer}>
-                <ActivityIndicator size="large" color="#4ade80" />
+                <ActivityIndicator size="large" color={theme.colors.success} />
                 <Text style={styles.scanningText}>Đang tìm trong cơ sở dữ liệu...</Text>
               </View>
             ) : null}
@@ -625,9 +729,27 @@ export default function ScanScreen() {
         {/* ── Barcode Mode ── */}
         {mode === 'barcode' && !barcodeResult && (
           <View style={styles.barcodeContainer}>
-            {!cameraPermission?.granted ? (
+            {Platform.OS === 'web' || !CameraView ? (
+              <SurfaceCard style={styles.manualBarcodeCard}>
+                <Text style={styles.manualBarcodeTitle}>Nhập mã vạch</Text>
+                <Text style={styles.manualBarcodeHint}>Bản web dùng nhập thủ công để tránh phụ thuộc camera/CDN. App native vẫn dùng camera để quét trực tiếp.</Text>
+                <View style={styles.manualBarcodeRow}>
+                  <TextInput
+                    style={styles.manualBarcodeInput}
+                    value={manualBarcode}
+                    onChangeText={setManualBarcode}
+                    placeholder="VD: 893..."
+                    placeholderTextColor={theme.colors.textDisabled}
+                    keyboardType="numeric"
+                  />
+                  <TouchableOpacity style={styles.manualBarcodeButton} onPress={handleManualBarcodeLookup}>
+                    <Text style={styles.manualBarcodeButtonText}>Tra cứu</Text>
+                  </TouchableOpacity>
+                </View>
+              </SurfaceCard>
+            ) : !cameraPermission?.granted ? (
               <TouchableOpacity style={styles.captureButton} onPress={requestCameraPermission}>
-                <Ionicons name="barcode-outline" size={40} color="#4ade80" />
+                <AnimatedIonicon name="barcode-outline" size={40} color={theme.colors.success} motion="pulse" />
                 <Text style={styles.captureText}>Cấp quyền Camera để quét barcode</Text>
               </TouchableOpacity>
             ) : (
@@ -637,7 +759,7 @@ export default function ScanScreen() {
                   barcodeScannerSettings={{ barcodeTypes: ['ean13', 'ean8', 'upc_a', 'upc_e', 'qr'] }} />
                 {isScanning && (
                   <View style={styles.barcodeScanningOverlay}>
-                    <ActivityIndicator color="#4ade80" />
+                    <ActivityIndicator color={theme.colors.success} />
                     <Text style={styles.scanningText}>Đang tra cứu...</Text>
                   </View>
                 )}
@@ -680,13 +802,13 @@ export default function ScanScreen() {
         {/* ── Camera / Gallery modes ── */}
         {mode === 'camera' && (
           <TouchableOpacity style={styles.captureButton} onPress={handleCameraCapture}>
-            <Ionicons name="camera" size={40} color="#4ade80" />
+            <AnimatedIonicon name="camera" size={40} color={theme.colors.success} motion="pulse" />
             <Text style={styles.captureText}>Chụp ảnh đồ ăn</Text>
           </TouchableOpacity>
         )}
         {mode === 'gallery' && (
           <TouchableOpacity style={styles.captureButton} onPress={handleGalleryPick}>
-            <Ionicons name="images" size={40} color="#4ade80" />
+            <AnimatedIonicon name="images" size={40} color={theme.colors.success} motion="float" />
             <Text style={styles.captureText}>Chọn từ thư viện</Text>
           </TouchableOpacity>
         )}
@@ -696,7 +818,7 @@ export default function ScanScreen() {
           <View style={styles.textInputContainer}>
             <TextInput style={styles.textInput} value={textInput} onChangeText={setTextInput}
               placeholder="VD: 1 tô phở bò đặc biệt, 1 ly cà phê sữa..."
-              placeholderTextColor="#6b7280" multiline />
+              placeholderTextColor={theme.colors.textDisabled} multiline />
             <TouchableOpacity style={styles.analyzeButton} onPress={handleTextScan}>
               <Text style={styles.analyzeButtonText}>Phân tích</Text>
             </TouchableOpacity>
@@ -711,8 +833,8 @@ export default function ScanScreen() {
                 style={[styles.captureButton, voiceRecordingNote && styles.captureButtonSecondary]}
                 onPress={startVoiceRecording}
               >
-                <Ionicons name="mic" size={40} color={voiceRecordingNote ? '#7dd3fc' : '#4ade80'} />
-                <Text style={[styles.captureText, voiceRecordingNote && { color: '#7dd3fc' }]}>
+                <AnimatedIonicon name="mic" size={40} color={voiceRecordingNote ? theme.colors.info : theme.colors.success} motion="pulse" />
+                <Text style={[styles.captureText, voiceRecordingNote && { color: theme.colors.info }]}>
                   {voiceRecordingNote ? '🎙️ Ghi âm lại' : '🎙️ Ghi âm nháp'}
                 </Text>
               </TouchableOpacity>
@@ -725,7 +847,7 @@ export default function ScanScreen() {
                   style={styles.stopRecordingButton}
                   onPress={stopVoiceRecording}
                 >
-                  <Ionicons name="stop" size={32} color="#fff" />
+                  <AnimatedIonicon name="stop" size={32} color={theme.colors.text} motion="pulse" />
                   <Text style={styles.stopRecordingText}>Dừng ghi âm</Text>
                 </TouchableOpacity>
               </View>
@@ -742,7 +864,7 @@ export default function ScanScreen() {
                   style={styles.textInput}
                   value={voiceTranscript}
                   onChangeText={setVoiceTranscript}
-                  placeholderTextColor="#6b7280"
+                  placeholderTextColor={theme.colors.textDisabled}
                   multiline
                   editable={!isScanning}
                 />
@@ -755,7 +877,7 @@ export default function ScanScreen() {
                   value={voiceTranscript}
                   onChangeText={setVoiceTranscript}
                   placeholder='VD: sáng nay mình ăn 1 tô bún bò và uống 1 ly sữa đậu nành'
-                  placeholderTextColor="#6b7280"
+                  placeholderTextColor={theme.colors.textDisabled}
                   multiline
                   editable={!isScanning}
                 />
@@ -780,7 +902,7 @@ export default function ScanScreen() {
           <View style={styles.textInputContainer}>
             <MealPicker selected={selectedMeal} onSelect={setSelectedMeal} />
             <TouchableOpacity style={styles.captureButton} onPress={handleReceiptCapture}>
-              <Ionicons name="camera" size={40} color="#4ade80" />
+              <AnimatedIonicon name="camera" size={40} color={theme.colors.success} motion="pulse" />
               <Text style={styles.captureText}>Chụp hóa đơn</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.secondaryButton} onPress={handleReceiptPick}>
@@ -802,7 +924,7 @@ export default function ScanScreen() {
         {/* Loading spinner for AI scan */}
         {(isScanning || isReceiptScanning) && mode !== 'barcode' && (
           <View style={styles.scanningContainer}>
-            <ActivityIndicator size="large" color="#4ade80" />
+            <ActivityIndicator size="large" color={theme.colors.success} />
             <Text style={styles.scanningText}>{mode === 'receipt' ? 'AI đang đọc hóa đơn...' : 'AI đang phân tích...'}</Text>
           </View>
         )}
@@ -857,10 +979,10 @@ export default function ScanScreen() {
               <Text style={styles.refineTitle}>🔄 Điều chỉnh kết quả</Text>
               <Text style={styles.refineHint}>AI ước lượng sai? Nhập thêm thông tin:</Text>
               <TextInput style={styles.refineInput} value={refineContext} onChangeText={setRefineContext}
-                placeholder='VD: "Thực ra là 2 phần", "Thêm 1 quả trứng"' placeholderTextColor="#6b7280" multiline />
+                placeholder='VD: "Thực ra là 2 phần", "Thêm 1 quả trứng"' placeholderTextColor={theme.colors.textDisabled} multiline />
               <TouchableOpacity style={[styles.refineButton, (!refineContext.trim() || isRefining) && styles.buttonDisabled]}
                 onPress={handleRefineScan} disabled={!refineContext.trim() || isRefining}>
-                {isRefining ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.refineButtonText}>Phân tích lại</Text>}
+                {isRefining ? <ActivityIndicator size="small" color={theme.colors.text} /> : <Text style={styles.refineButtonText}>Phân tích lại</Text>}
               </TouchableOpacity>
             </SurfaceCard>
           </View>
@@ -874,6 +996,7 @@ export default function ScanScreen() {
             description="Thử chụp rõ hơn, thêm mô tả bằng chữ hoặc dùng phần điều chỉnh để AI hiểu đúng hơn."
           />
         )}
+        <RewardToast reward={reward} onHide={() => setReward(null)} />
     </ScreenShell>
   );
 }
@@ -961,7 +1084,7 @@ function ScanResultItem({
   const [nameInput, setNameInput] = useState(item.name_vi ?? item.name);
 
   const confidenceColor =
-    item.confidence >= 0.8 ? '#4ade80' : item.confidence >= 0.6 ? '#fbbf24' : '#f87171';
+    item.confidence >= 0.8 ? theme.colors.success : item.confidence >= 0.6 ? theme.colors.warning : theme.colors.danger;
   const confidenceLabel =
     item.confidence >= 0.8 ? 'Cao' : item.confidence >= 0.6 ? 'Trung bình' : 'Thấp';
 
@@ -1026,14 +1149,22 @@ function ScanResultItem({
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createThemedStyles((colors, radii) => ({
   scanHeroCard: {
     borderRadius: 8,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: '#243244',
-    backgroundColor: '#101b29',
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.surfaceLifted,
     marginBottom: 16,
+    ...(Platform.OS === 'web'
+      ? { boxShadow: `0px 14px 30px ${colors.shadow}24` }
+      : {
+          shadowColor: colors.shadow,
+          shadowOpacity: 0.2,
+          shadowRadius: 18,
+          shadowOffset: { width: 0, height: 10 },
+        }),
   },
   scanHeroImage: {
     width: '100%',
@@ -1043,112 +1174,149 @@ const styles = StyleSheet.create({
     padding: 14,
   },
   heroBody: { maxWidth: 700 },
-  modeTabs: { flexDirection: 'row', gap: 8, marginBottom: 18, flexWrap: 'wrap' },
-  modeTab: { paddingVertical: 11, paddingHorizontal: 13, borderRadius: 8, backgroundColor: '#0f1b3b', alignItems: 'center', borderWidth: 1, borderColor: '#23386b' },
-  modeTabActive: { backgroundColor: '#6ee7b7', borderColor: '#6ee7b7' },
-  modeTabText: { color: '#c5d3eb', fontWeight: '700', fontSize: 14, textTransform: 'capitalize' },
-  modeTabTextActive: { color: '#07111f' },
+  modeTabs: { flexDirection: 'row', gap: 8, marginBottom: 8, flexWrap: 'wrap' },
+  modeTab: {
+    minHeight: 40,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    backgroundColor: colors.surfaceLifted,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+    flexDirection: 'row',
+    gap: 6,
+  },
+  modeMoreTab: {
+    minWidth: 86,
+  },
+  modeMorePanel: {
+    flexDirection: 'row',
+    gap: 8,
+    flexWrap: 'wrap',
+    marginBottom: 18,
+    padding: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceAlt,
+  },
+  modeSecondaryTab: {
+    backgroundColor: colors.surface,
+  },
+  modeTabActive: { backgroundColor: colors.accentMint, borderColor: colors.accentMint },
+  modeTabText: { color: colors.textSoft, fontWeight: '800', fontSize: 13, textTransform: 'capitalize' },
+  modeTabTextActive: { color: colors.textOnAccent },
   searchContainer: { marginBottom: 16 },
   searchItemCard: { marginBottom: 10 },
-  captureButton: { backgroundColor: '#0f1a37ee', borderRadius: 8, padding: 30, alignItems: 'center', gap: 12, marginBottom: 14, borderWidth: 1, borderColor: '#203463' },
-  captureText: { color: '#9fb1d1', fontSize: 15, fontWeight: '600' },
+  captureButton: { backgroundColor: colors.surfaceLifted, borderRadius: 8, padding: 30, alignItems: 'center', gap: 12, marginBottom: 14, borderWidth: 1, borderColor: colors.borderStrong },
+  captureText: { color: colors.textSoft, fontSize: 15, fontWeight: '700' },
   textInputContainer: { gap: 10, marginBottom: 16 },
-  textInput: { backgroundColor: '#121d3f', borderRadius: 8, padding: 14, color: '#fff', minHeight: 80, borderWidth: 1, borderColor: '#23386b' },
-  analyzeButton: { backgroundColor: '#7dd3fc', borderRadius: 8, padding: 14, alignItems: 'center' },
-  analyzeButtonText: { color: '#07111f', fontWeight: '800', fontSize: 16 },
+  textInput: { backgroundColor: colors.surfaceLifted, borderRadius: 8, padding: 14, color: colors.text, minHeight: 80, borderWidth: 1, borderColor: colors.border },
+  analyzeButton: { backgroundColor: colors.accentCyan, borderRadius: 8, padding: 14, alignItems: 'center' },
+  analyzeButtonText: { color: colors.textOnAccent, fontWeight: '800', fontSize: 16 },
   previewImage: { width: '100%', height: 220, borderRadius: 8, marginBottom: 16 },
   scanningContainer: { alignItems: 'center', padding: 30, gap: 12 },
-  scanningText: { color: '#9fb1d1', fontSize: 15, marginTop: 8 },
-  sectionTitle: { fontSize: 18, fontWeight: '700', color: '#eff6ff', marginBottom: 12 },
+  scanningText: { color: colors.textMuted, fontSize: 15, marginTop: 8 },
+  sectionTitle: { fontSize: 18, fontWeight: '700', color: colors.text, marginBottom: 12 },
   mealPicker: { flexDirection: 'row', gap: 8, marginBottom: 12 },
-  mealChip: { flex: 1, padding: 10, borderRadius: 8, backgroundColor: '#122041', alignItems: 'center', borderWidth: 1, borderColor: '#23386b' },
-  mealChipActive: { backgroundColor: '#6ee7b720', borderWidth: 1, borderColor: '#6ee7b7' },
-  mealChipText: { color: '#b6c7e3', fontSize: 13, fontWeight: '600' },
-  mealChipTextActive: { color: '#6ee7b7', fontWeight: '800' },
+  mealChip: { flex: 1, padding: 10, borderRadius: 8, backgroundColor: colors.surfaceAlt, alignItems: 'center', borderWidth: 1, borderColor: colors.border },
+  mealChipActive: { backgroundColor: colors.surfaceSuccess, borderWidth: 1, borderColor: colors.accentMint },
+  mealChipText: { color: colors.textSoft, fontSize: 13, fontWeight: '600' },
+  mealChipTextActive: { color: colors.accentMint, fontWeight: '800' },
   // Context picker
   contextPickerContainer: { marginBottom: 16 },
-  contextPickerLabel: { color: '#9fb1d1', fontSize: 12, fontWeight: '600', marginBottom: 8 },
+  contextPickerLabel: { color: colors.textMuted, fontSize: 12, fontWeight: '600', marginBottom: 8 },
   contextPicker: { flexDirection: 'row', gap: 6, flexWrap: 'wrap' },
-  contextChip: { paddingVertical: 8, paddingHorizontal: 10, borderRadius: 8, backgroundColor: '#122041', borderWidth: 1, borderColor: '#23386b', alignItems: 'center', flexDirection: 'row', gap: 4 },
-  contextChipActive: { backgroundColor: '#6ee7b720', borderColor: '#6ee7b7' },
+  contextChip: { paddingVertical: 8, paddingHorizontal: 10, borderRadius: 8, backgroundColor: colors.surfaceAlt, borderWidth: 1, borderColor: colors.border, alignItems: 'center', flexDirection: 'row', gap: 4 },
+  contextChipActive: { backgroundColor: colors.surfaceSuccess, borderColor: colors.accentMint },
   contextChipIcon: { fontSize: 16 },
-  contextChipText: { color: '#b6c7e3', fontSize: 12, fontWeight: '600' },
-  contextChipTextActive: { color: '#6ee7b7', fontWeight: '800' },
+  contextChipText: { color: colors.textSoft, fontSize: 12, fontWeight: '600' },
+  contextChipTextActive: { color: colors.accentMint, fontWeight: '800' },
   resultItem: { marginBottom: 10 },
-  resultItemLowConf: { borderColor: '#7f1d1d', borderWidth: 1 },
+  resultItemLowConf: { borderColor: colors.borderDanger, borderWidth: 1 },
   confidenceRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
   confidenceBadge: { fontSize: 12, fontWeight: '700' },
-  removeBtn: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, backgroundColor: '#1c1c2e', borderWidth: 1, borderColor: '#374151' },
-  removeBtnText: { color: '#f87171', fontSize: 12, fontWeight: '700' },
-  nameEditInput: { backgroundColor: '#0b1330', borderRadius: 8, padding: 10, color: '#fff', fontSize: 15, fontWeight: '700', borderWidth: 1.5, borderColor: '#6ee7b7', marginBottom: 6 },
+  removeBtn: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, backgroundColor: colors.surfaceMuted, borderWidth: 1, borderColor: colors.borderStrong },
+  removeBtnText: { color: colors.danger, fontSize: 12, fontWeight: '700' },
+  nameEditInput: { backgroundColor: colors.surfacePressed, borderRadius: 8, padding: 10, color: colors.text, fontSize: 15, fontWeight: '700', borderWidth: 1.5, borderColor: colors.accentMint, marginBottom: 6 },
   resultNameButton: { flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 },
   calorieColumn: { alignItems: 'flex-end' },
   editHint: { fontSize: 12, opacity: 0.5 },
   resultHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
-  resultName: { color: '#fff', fontWeight: '700', flex: 1 },
-  resultCalorie: { color: '#6ee7b7', fontWeight: '800' },
-  resultRange: { color: '#9fb1d1', fontSize: 12, marginTop: 2 },
-  resultDetail: { color: '#9fb1d1', fontSize: 13, marginBottom: 2 },
-  resultMacros: { color: '#8194ba', fontSize: 12 },
+  resultName: { color: colors.text, fontWeight: '700', flex: 1 },
+  resultCalorie: { color: colors.accentMint, fontWeight: '800' },
+  resultRange: { color: colors.textMuted, fontSize: 12, marginTop: 2 },
+  resultDetail: { color: colors.textMuted, fontSize: 13, marginBottom: 2 },
+  resultMacros: { color: colors.textMuted, fontSize: 12 },
   adjustRow: { flexDirection: 'row', gap: 10, marginTop: 10 },
-  adjustBtn: { backgroundColor: '#11244c', borderWidth: 1, borderColor: '#2b4f8c', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8 },
-  adjustBtnText: { color: '#bfdbfe', fontSize: 12, fontWeight: '700' },
-  lowConfidenceBanner: { backgroundColor: '#2d1010', borderColor: '#7f1d1d', borderWidth: 1, marginBottom: 12 },
-  lowConfidenceTitle: { color: '#f87171', fontSize: 15, fontWeight: '800', marginBottom: 6 },
-  lowConfidenceBody: { color: '#fca5a5', fontSize: 13, lineHeight: 19 },
-  scanNoticeCard: { backgroundColor: '#2d1010', borderColor: '#7f1d1d', borderWidth: 1, marginBottom: 12 },
-  scanNoticeTitle: { color: '#f87171', fontSize: 15, fontWeight: '800', marginBottom: 6 },
-  scanNoticeBody: { color: '#fca5a5', fontSize: 13, lineHeight: 19 },
+  adjustBtn: { backgroundColor: colors.surfaceInfo, borderWidth: 1, borderColor: colors.borderInfo, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8 },
+  adjustBtnText: { color: colors.textSoft, fontSize: 12, fontWeight: '700' },
+  lowConfidenceBanner: { backgroundColor: colors.surfaceDanger, borderColor: colors.borderDanger, borderWidth: 1, marginBottom: 12 },
+  lowConfidenceTitle: { color: colors.danger, fontSize: 15, fontWeight: '800', marginBottom: 6 },
+  lowConfidenceBody: { color: colors.danger, fontSize: 13, lineHeight: 19 },
+  scanNoticeCard: { backgroundColor: colors.surfaceDanger, borderColor: colors.borderDanger, borderWidth: 1, marginBottom: 12 },
+  scanNoticeTitle: { color: colors.danger, fontSize: 15, fontWeight: '800', marginBottom: 6 },
+  scanNoticeBody: { color: colors.danger, fontSize: 13, lineHeight: 19 },
   totalCard: { marginVertical: 12, alignItems: 'center' },
-  totalLabel: { color: '#9fb1d1', fontSize: 13, marginBottom: 4 },
-  totalCalorie: { color: '#6ee7b7', fontSize: 30, fontWeight: '800' },
-  totalRange: { color: '#9fb1d1', fontSize: 13, marginTop: 4 },
-  totalMacros: { color: '#9fb1d1', fontSize: 13, marginTop: 4 },
-  saveButton: { backgroundColor: '#6ee7b7', borderRadius: 8, padding: 16, alignItems: 'center', marginBottom: 10 },
-  saveButtonText: { color: '#07111f', fontWeight: '800', fontSize: 16 },
-  secondaryButton: { borderRadius: 8, padding: 14, alignItems: 'center', marginBottom: 10, borderWidth: 1, borderColor: '#7dd3fc', backgroundColor: '#0d2440' },
-  secondaryButtonText: { color: '#7dd3fc', fontWeight: '700', fontSize: 15 },
+  totalLabel: { color: colors.textMuted, fontSize: 13, marginBottom: 4 },
+  totalCalorie: { color: colors.accentMint, fontSize: 30, fontWeight: '800' },
+  totalRange: { color: colors.textMuted, fontSize: 13, marginTop: 4 },
+  totalMacros: { color: colors.textMuted, fontSize: 13, marginTop: 4 },
+  saveButton: { backgroundColor: colors.accentMint, borderRadius: 8, padding: 16, alignItems: 'center', marginBottom: 10 },
+  saveButtonText: { color: colors.textOnAccent, fontWeight: '800', fontSize: 16 },
+  secondaryButton: { borderRadius: 8, padding: 14, alignItems: 'center', marginBottom: 10, borderWidth: 1, borderColor: colors.accentCyan, backgroundColor: colors.surfaceInfo },
+  secondaryButtonText: { color: colors.accentCyan, fontWeight: '800', fontSize: 15 },
   buttonDisabled: { opacity: 0.4 },
   refineContainer: { marginBottom: 20 },
-  refineTitle: { color: '#fff', fontWeight: '700', fontSize: 16, marginBottom: 4 },
-  refineHint: { color: '#9fb1d1', fontSize: 13, marginBottom: 10 },
-  refineInput: { backgroundColor: '#0b1330', borderRadius: 8, padding: 12, color: '#fff', minHeight: 60, marginBottom: 10, borderWidth: 1, borderColor: '#203463' },
-  refineButton: { backgroundColor: '#8b5cf6', borderRadius: 8, padding: 12, alignItems: 'center' },
-  refineButtonText: { color: '#fff', fontWeight: '600', fontSize: 14 },
+  refineTitle: { color: colors.text, fontWeight: '700', fontSize: 16, marginBottom: 4 },
+  refineHint: { color: colors.textMuted, fontSize: 13, marginBottom: 10 },
+  refineInput: { backgroundColor: colors.surfacePressed, borderRadius: 8, padding: 12, color: colors.text, minHeight: 60, marginBottom: 10, borderWidth: 1, borderColor: colors.border },
+  refineButton: { backgroundColor: colors.accentPlum, borderRadius: 8, padding: 12, alignItems: 'center' },
+  refineButtonText: { color: colors.text, fontWeight: '600', fontSize: 14 },
   // Barcode
   barcodeContainer: { marginBottom: 16 },
+  manualBarcodeCard: { marginBottom: 12 },
+  manualBarcodeTitle: { color: colors.text, fontSize: 16, fontWeight: '900', marginBottom: 6 },
+  manualBarcodeHint: { color: colors.textMuted, fontSize: 12, lineHeight: 18, marginBottom: 12 },
+  manualBarcodeRow: { flexDirection: 'row', gap: 8, alignItems: 'center' },
+  manualBarcodeInput: { flex: 1, backgroundColor: colors.surfaceAlt, borderRadius: 8, borderWidth: 1, borderColor: colors.border, color: colors.text, paddingHorizontal: 12, paddingVertical: 11, fontSize: 14 },
+  manualBarcodeButton: { minHeight: 44, borderRadius: 8, backgroundColor: colors.accentMint, paddingHorizontal: 14, alignItems: 'center', justifyContent: 'center' },
+  manualBarcodeButtonText: { color: colors.textOnAccent, fontSize: 13, fontWeight: '900' },
   barcodeCamera: { width: '100%', height: 280, borderRadius: 8, overflow: 'hidden' },
-  barcodeScanningOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0008' },
-  barcodeHint: { color: '#9fb1d1', textAlign: 'center', marginTop: 10, fontSize: 13 },
+  barcodeScanningOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.overlay },
+  barcodeHint: { color: colors.textMuted, textAlign: 'center', marginTop: 10, fontSize: 13 },
   barcodeImage: { width: '100%', height: 160, borderRadius: 8, marginBottom: 12 },
-  barcodeProductName: { color: '#fff', fontSize: 18, fontWeight: '800', marginBottom: 4 },
-  barcodeServing: { color: '#9fb1d1', fontSize: 13, marginBottom: 12 },
+  barcodeProductName: { color: colors.text, fontSize: 18, fontWeight: '800', marginBottom: 4 },
+  barcodeServing: { color: colors.textMuted, fontSize: 13, marginBottom: 12 },
   // Voice recording styles
   recordingActiveContainer: { alignItems: 'center', paddingVertical: 20, gap: 20 },
   recordingPulse: { 
     width: 120, 
     height: 120, 
     borderRadius: 60, 
-    backgroundColor: '#f87171', 
+    backgroundColor: colors.danger, 
     justifyContent: 'center', 
     alignItems: 'center',
     borderWidth: 2,
-    borderColor: '#fee2e2',
+    borderColor: colors.borderDanger,
     ...(Platform.OS === 'web'
-      ? { boxShadow: '0px 0px 10px rgba(248, 113, 113, 0.5)' }
+      ? { boxShadow: `0px 0px 10px ${colors.danger}66` }
       : {
-          shadowColor: '#f87171',
+          shadowColor: colors.danger,
           shadowOffset: { width: 0, height: 0 },
           shadowOpacity: 0.5,
           shadowRadius: 10,
         }),
     elevation: 8,
   },
-  recordingDuration: { color: '#fff', fontSize: 32, fontWeight: '800' },
-  stopRecordingButton: { backgroundColor: '#f87171', borderRadius: 8, paddingHorizontal: 24, paddingVertical: 16, flexDirection: 'row', alignItems: 'center', gap: 12 },
-  stopRecordingText: { color: '#fff', fontWeight: '800', fontSize: 16 },
+  recordingDuration: { color: colors.text, fontSize: 32, fontWeight: '800' },
+  stopRecordingButton: { backgroundColor: colors.danger, borderRadius: 8, paddingHorizontal: 24, paddingVertical: 16, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  stopRecordingText: { color: colors.text, fontWeight: '800', fontSize: 16 },
   captureButtonSecondary: { opacity: 0.7 },
   transcriptContainer: { marginVertical: 12 },
-  transcriptLabel: { color: '#9fb1d1', fontSize: 12, fontWeight: '600', marginBottom: 8 },
-  voiceHintText: { color: '#9fb1d1', fontSize: 13, fontStyle: 'italic', textAlign: 'center', marginVertical: 16, lineHeight: 20 },
-});
+  transcriptLabel: { color: colors.textMuted, fontSize: 12, fontWeight: '600', marginBottom: 8 },
+  voiceHintText: { color: colors.textMuted, fontSize: 13, fontStyle: 'italic', textAlign: 'center', marginVertical: 16, lineHeight: 20 },
+}));
+
+

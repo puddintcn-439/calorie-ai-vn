@@ -1,8 +1,20 @@
 import React, { ReactNode, useEffect, useRef } from 'react';
-import { Animated, Easing, Platform, ScrollView, StyleProp, StyleSheet, Text, TextStyle, useWindowDimensions, View, ViewStyle } from 'react-native';
+import {
+  Animated,
+  Easing,
+  Platform,
+  ScrollView,
+  StyleProp,
+  StyleSheet,
+  TextStyle,
+  useWindowDimensions,
+  View,
+  ViewStyle
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { theme } from './theme';
+import { useAppTheme } from './theme';
+import { Text } from './i18n-text';
 
 export function ScreenShell({
   children,
@@ -18,6 +30,7 @@ export function ScreenShell({
   const fade = useRef(new Animated.Value(0)).current;
   const translate = useRef(new Animated.Value(18)).current;
   const useNativeDriver = Platform.OS !== 'web';
+  const { colors } = useAppTheme();
 
   useEffect(() => {
     Animated.parallel([
@@ -43,7 +56,11 @@ export function ScreenShell({
   );
 
   return (
-    <LinearGradient colors={[theme.colors.bgTop, theme.colors.bgMid, theme.colors.bgBottom]} style={styles.gradient}>
+    <LinearGradient
+      colors={[colors.bgTop, colors.bgMid, colors.surfaceAlt, colors.bgBottom]}
+      locations={[0, 0.38, 0.72, 1]}
+      style={styles.gradient}
+    >
       <SafeAreaView style={styles.safeArea}>
         {scroll ? (
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
@@ -61,6 +78,7 @@ export function SurfaceCard({ children, style }: { children: ReactNode; style?: 
   const fade = useRef(new Animated.Value(0)).current;
   const scale = useRef(new Animated.Value(0.98)).current;
   const useNativeDriver = Platform.OS !== 'web';
+  const { colors, radii } = useAppTheme();
 
   useEffect(() => {
     Animated.parallel([
@@ -79,25 +97,54 @@ export function SurfaceCard({ children, style }: { children: ReactNode; style?: 
     ]).start();
   }, [fade, scale]);
 
-  return <Animated.View style={[styles.card, style, { opacity: fade, transform: [{ scale }] }]}>{children}</Animated.View>;
+  return (
+    <Animated.View
+      style={[
+        {
+          backgroundColor: colors.surface,
+          borderRadius: radii.xl,
+          borderWidth: 1,
+          borderColor: colors.border,
+          padding: 16,
+          ...(Platform.OS === 'web'
+            ? { boxShadow: `0px 14px 30px ${colors.shadow}24` }
+            : {
+                shadowColor: colors.shadow,
+                shadowOpacity: 0.16,
+                shadowRadius: 18,
+                shadowOffset: { width: 0, height: 10 },
+              }),
+          elevation: 5,
+        },
+        style,
+        { opacity: fade, transform: [{ scale }] },
+      ]}
+    >
+      {children}
+    </Animated.View>
+  );
 }
 
 export function Eyebrow({ children }: { children: ReactNode }) {
-  return <Text style={styles.eyebrow}>{children}</Text>;
+  const { colors } = useAppTheme();
+  return <Text style={[styles.eyebrow, { color: colors.accentCyan }]}>{children}</Text>;
 }
 
 export function HeroTitle({ children }: { children: ReactNode }) {
-  return <Text style={styles.heroTitle}>{children}</Text>;
+  const { width } = useWindowDimensions();
+  const { colors } = useAppTheme();
+  return <Text style={[styles.heroTitle, { color: colors.text }, width < 480 && styles.heroTitleMobile]}>{children}</Text>;
 }
 
 export function BodyText({ children, style }: { children: ReactNode; style?: StyleProp<TextStyle> }) {
-  return <Text style={[styles.bodyText, style]}>{children}</Text>;
+  const { colors } = useAppTheme();
+  return <Text style={[styles.bodyText, { color: colors.textSoft }, style]}>{children}</Text>;
 }
 
 const styles = StyleSheet.create({
   gradient: { flex: 1 },
   safeArea: { flex: 1 },
-  scrollContent: { padding: 16, paddingBottom: 40 },
+  scrollContent: { padding: 16, paddingBottom: 128 },
   noScrollContent: { flex: 1, paddingHorizontal: 20 },
   inner: {
     width: '100%',
@@ -107,39 +154,24 @@ const styles = StyleSheet.create({
   innerDesktop: {
     paddingHorizontal: 12,
   },
-  card: {
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.radii.xl,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    padding: 16,
-    ...(Platform.OS === 'web'
-      ? { boxShadow: '0px 10px 18px rgba(2, 6, 23, 0.22)' }
-      : {
-          shadowColor: '#020617',
-          shadowOpacity: 0.18,
-          shadowRadius: 14,
-          shadowOffset: { width: 0, height: 8 },
-        }),
-    elevation: 5,
-  },
   eyebrow: {
-    color: theme.colors.accentCyan,
     fontSize: 12,
     textTransform: 'uppercase',
-    letterSpacing: 0.8,
+    letterSpacing: 0,
     fontWeight: '700',
     marginBottom: 10,
   },
   heroTitle: {
-    color: theme.colors.text,
     fontSize: 28,
     lineHeight: 34,
     fontWeight: '800',
     marginBottom: 8,
   },
+  heroTitleMobile: {
+    fontSize: 25,
+    lineHeight: 31,
+  },
   bodyText: {
-    color: theme.colors.textSoft,
     fontSize: 14,
     lineHeight: 21,
   },

@@ -1,12 +1,18 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  Pressable,
+  StyleSheet,
+  View
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { ScreenShell, SurfaceCard, Eyebrow, HeroTitle, BodyText } from '../../components/ui-shell';
 import { UiButton } from '../../components/ui-button';
 import { UiInput } from '../../components/ui-input';
-import { theme } from '../../components/theme';
+import { createThemedStyles, theme, useAppTheme } from '../../components/theme';
 import { useLogStore } from '../../store/log.store';
 import { loadPresets, savePreset as savePresetService, removePreset as removePresetService } from '../../services/presets.service';
+import { Text } from '../../components/i18n-text';
+import { Alert } from '../../components/i18n-alert';
 
 type LocalSet = { reps: number; weight_kg: number };
 type LocalExercise = {
@@ -30,6 +36,7 @@ const defaultExercise = (name = ''): LocalExercise => ({
 });
 
 export default function StrengthLogScreen() {
+  useAppTheme();
   const { addActivity } = useLogStore();
   const [exercises, setExercises] = useState<LocalExercise[]>([defaultExercise('Squat')]);
   const [sessionNotes, setSessionNotes] = useState('');
@@ -238,7 +245,7 @@ export default function StrengthLogScreen() {
               containerStyle={styles.compactInput}
             />
             <Pressable onPress={() => addSetToExercise(exercise.id)} style={styles.addSetButton}>
-              <Ionicons name="add" size={18} color="#07111f" />
+              <Ionicons name="add" size={18} color={theme.colors.textOnAccent} />
               <Text style={styles.addSetText}>Thêm set</Text>
             </Pressable>
           </View>
@@ -280,7 +287,7 @@ export default function StrengthLogScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createThemedStyles((colors, radii) => ({
   container: {
     paddingBottom: 96,
   },
@@ -296,30 +303,30 @@ const styles = StyleSheet.create({
   statTile: {
     flex: 1,
     minHeight: 72,
-    borderRadius: theme.radii.lg,
+    borderRadius: radii.lg,
     borderWidth: 1,
-    borderColor: theme.colors.border,
-    backgroundColor: theme.colors.surfaceAlt,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceAlt,
     padding: 12,
     justifyContent: 'center',
   },
   statTileWide: {
     flex: 1.45,
     minHeight: 72,
-    borderRadius: theme.radii.lg,
+    borderRadius: radii.lg,
     borderWidth: 1,
-    borderColor: '#31513d',
-    backgroundColor: theme.colors.surfaceWarm,
+    borderColor: colors.borderSuccess,
+    backgroundColor: colors.surfaceWarm,
     padding: 12,
     justifyContent: 'center',
   },
   statValue: {
-    color: theme.colors.text,
+    color: colors.text,
     fontSize: 20,
     fontWeight: '800',
   },
   statLabel: {
-    color: theme.colors.textMuted,
+    color: colors.textMuted,
     fontSize: 12,
     marginTop: 4,
   },
@@ -333,31 +340,31 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   sectionTitle: {
-    color: theme.colors.text,
+    color: colors.text,
     fontSize: 17,
     fontWeight: '800',
   },
   sectionMeta: {
-    color: theme.colors.textMuted,
+    color: colors.textMuted,
     fontSize: 12,
     marginTop: 2,
   },
   headerIcon: {
     width: 36,
     height: 36,
-    borderRadius: theme.radii.lg,
+    borderRadius: radii.lg,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#153424',
+    backgroundColor: colors.surfaceSuccess,
     borderWidth: 1,
-    borderColor: '#2c5c3f',
+    borderColor: colors.borderSuccess,
   },
   notesInput: {
     minHeight: 76,
     textAlignVertical: 'top',
   },
   fieldLabel: {
-    color: theme.colors.textSoft,
+    color: colors.textSoft,
     fontSize: 12,
     fontWeight: '700',
     marginBottom: 8,
@@ -371,10 +378,10 @@ const styles = StyleSheet.create({
   presetPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderRadius: theme.radii.lg,
+    borderRadius: radii.lg,
     borderWidth: 1,
-    borderColor: theme.colors.border,
-    backgroundColor: '#142031',
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceAlt,
     overflow: 'hidden',
   },
   presetName: {
@@ -383,7 +390,7 @@ const styles = StyleSheet.create({
     paddingRight: 8,
   },
   presetText: {
-    color: theme.colors.textSoft,
+    color: colors.textSoft,
     fontSize: 13,
     fontWeight: '700',
   },
@@ -393,7 +400,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderLeftWidth: 1,
-    borderLeftColor: theme.colors.border,
+    borderLeftColor: colors.border,
   },
   exerciseCard: {
     marginBottom: 12,
@@ -409,23 +416,23 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   exerciseKicker: {
-    color: theme.colors.accentCyan,
+    color: colors.accentCyan,
     fontSize: 12,
     fontWeight: '700',
     marginBottom: 3,
   },
   exerciseTitle: {
-    color: theme.colors.text,
+    color: colors.text,
     fontSize: 18,
     fontWeight: '800',
   },
   iconDangerButton: {
     width: 38,
     height: 38,
-    borderRadius: theme.radii.lg,
+    borderRadius: radii.lg,
     borderWidth: 1,
-    borderColor: '#4b2020',
-    backgroundColor: '#1a0f12',
+    borderColor: colors.borderDanger,
+    backgroundColor: colors.surfaceDanger,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -444,27 +451,27 @@ const styles = StyleSheet.create({
   },
   addSetButton: {
     minHeight: 48,
-    borderRadius: theme.radii.lg,
+    borderRadius: radii.lg,
     paddingHorizontal: 12,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 4,
-    backgroundColor: theme.colors.accentMint,
+    backgroundColor: colors.accentMint,
     borderWidth: 1,
-    borderColor: '#84e4b5',
+    borderColor: colors.borderSuccess,
   },
   addSetText: {
-    color: '#07111f',
+    color: colors.textOnAccent,
     fontSize: 13,
     fontWeight: '800',
   },
   setList: {
     marginTop: 12,
     marginBottom: 4,
-    borderRadius: theme.radii.lg,
+    borderRadius: radii.lg,
     borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderColor: colors.border,
     overflow: 'hidden',
   },
   setRow: {
@@ -474,37 +481,37 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingHorizontal: 10,
     borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
-    backgroundColor: '#111d2b',
+    borderBottomColor: colors.border,
+    backgroundColor: colors.surfaceAlt,
   },
   setIndex: {
     width: 26,
     height: 26,
-    borderRadius: theme.radii.sm,
+    borderRadius: radii.sm,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#173224',
+    backgroundColor: colors.surfaceSuccess,
   },
   setIndexText: {
-    color: theme.colors.accentMint,
+    color: colors.accentMint,
     fontSize: 12,
     fontWeight: '800',
   },
   setValue: {
     flex: 1,
-    color: theme.colors.textSoft,
+    color: colors.textSoft,
     fontSize: 14,
     fontWeight: '700',
   },
   removeSetButton: {
     width: 32,
     height: 32,
-    borderRadius: theme.radii.lg,
+    borderRadius: radii.lg,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#122336',
+    backgroundColor: colors.surfaceInfo,
     borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderColor: colors.border,
   },
   exerciseNotesInput: {
     minHeight: 48,
@@ -524,4 +531,6 @@ const styles = StyleSheet.create({
   footerButton: {
     width: '100%',
   },
-});
+}));
+
+

@@ -1,10 +1,17 @@
 import React, { useEffect } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import {
+  StyleSheet,
+  TouchableOpacity,
+  View
+} from 'react-native';
 import { router } from 'expo-router';
 import { BodyText, Eyebrow, HeroTitle, ScreenShell, SurfaceCard } from '../components/ui-shell';
 import { useGamificationStore } from '../store/gamification.store';
+import { createThemedStyles, theme, useAppTheme } from '../components/theme';
+import { Text } from '../components/i18n-text';
 
 export default function AchievementsScreen() {
+  useAppTheme();
   const { summary, isLoading, fetchSummary } = useGamificationStore();
 
   useEffect(() => {
@@ -88,32 +95,34 @@ function MetricCard({ value, label }: { value: number; label: string }) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = createThemedStyles((colors, radii) => ({
   heroBody: { marginBottom: 16, maxWidth: 700 },
-  backButton: { alignSelf: 'flex-start', marginBottom: 16, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 999, backgroundColor: '#13213f', borderWidth: 1, borderColor: '#23386b' },
-  backButtonText: { color: '#dbeafe', fontSize: 13, fontWeight: '700' },
+  backButton: { alignSelf: 'flex-start', marginBottom: 16, paddingHorizontal: 14, paddingVertical: 10, borderRadius: 999, backgroundColor: colors.surfaceAlt, borderWidth: 1, borderColor: colors.border },
+  backButtonText: { color: colors.textSoft, fontSize: 13, fontWeight: '700' },
   overviewCard: { marginBottom: 18 },
   overviewHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 16 },
-  overviewTitle: { color: '#eff6ff', fontSize: 18, fontWeight: '800', marginBottom: 4 },
-  overviewSubtitle: { color: '#9fb1d1', fontSize: 13, lineHeight: 19, maxWidth: 240 },
-  streakValue: { color: '#f0abfc', fontSize: 30, fontWeight: '800' },
+  overviewTitle: { color: colors.text, fontSize: 18, fontWeight: '800', marginBottom: 4 },
+  overviewSubtitle: { color: colors.textMuted, fontSize: 13, lineHeight: 19, maxWidth: 240 },
+  streakValue: { color: colors.accentPlum, fontSize: 30, fontWeight: '800' },
   metricsRow: { flexDirection: 'row', gap: 10, marginBottom: 14 },
-  metricCard: { flex: 1, backgroundColor: '#122041', borderRadius: 14, paddingVertical: 14, paddingHorizontal: 10, borderWidth: 1, borderColor: '#223a70', alignItems: 'center' },
-  metricValue: { color: '#eff6ff', fontSize: 18, fontWeight: '800' },
-  metricLabel: { color: '#8ca0c3', fontSize: 11, marginTop: 4, textAlign: 'center' },
-  milestoneText: { color: '#c4b5fd', fontSize: 12, fontWeight: '600' },
-  sectionTitle: { color: '#eff6ff', fontSize: 18, fontWeight: '800', marginBottom: 12 },
+  metricCard: { flex: 1, backgroundColor: colors.surfaceAlt, borderRadius: 14, paddingVertical: 14, paddingHorizontal: 10, borderWidth: 1, borderColor: colors.border, alignItems: 'center' },
+  metricValue: { color: colors.text, fontSize: 18, fontWeight: '800' },
+  metricLabel: { color: colors.textMuted, fontSize: 11, marginTop: 4, textAlign: 'center' },
+  milestoneText: { color: colors.accentPlum, fontSize: 12, fontWeight: '600' },
+  sectionTitle: { color: colors.text, fontSize: 18, fontWeight: '800', marginBottom: 12 },
   badgesList: { gap: 12, marginBottom: 18 },
   badgeCard: { borderWidth: 1 },
-  badgeUnlocked: { borderColor: '#14532d', backgroundColor: '#10231d' },
-  badgeLocked: { borderColor: '#24324f', backgroundColor: '#111b31' },
+  badgeUnlocked: { borderColor: colors.borderSuccess, backgroundColor: colors.surfaceSuccess },
+  badgeLocked: { borderColor: colors.border, backgroundColor: colors.surfaceAlt },
   badgeTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
   badgeIcon: { fontSize: 24 },
   badgeState: { fontSize: 11, fontWeight: '800', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 999 },
-  badgeStateUnlocked: { color: '#d1fae5', backgroundColor: '#14532d' },
-  badgeStateLocked: { color: '#cbd5e1', backgroundColor: '#24324f' },
-  badgeTitle: { color: '#eff6ff', fontSize: 16, fontWeight: '800', marginBottom: 6 },
-  badgeDescription: { color: '#9fb1d1', fontSize: 13, lineHeight: 19 },
-  emptyTitle: { color: '#eff6ff', fontSize: 16, fontWeight: '800', marginBottom: 6 },
-  emptyText: { color: '#9fb1d1', fontSize: 13, lineHeight: 19 },
-});
+  badgeStateUnlocked: { color: colors.textSoft, backgroundColor: colors.borderSuccess },
+  badgeStateLocked: { color: colors.textSoft, backgroundColor: colors.border },
+  badgeTitle: { color: colors.text, fontSize: 16, fontWeight: '800', marginBottom: 6 },
+  badgeDescription: { color: colors.textMuted, fontSize: 13, lineHeight: 19 },
+  emptyTitle: { color: colors.text, fontSize: 16, fontWeight: '800', marginBottom: 6 },
+  emptyText: { color: colors.textMuted, fontSize: 13, lineHeight: 19 },
+}));
+
+

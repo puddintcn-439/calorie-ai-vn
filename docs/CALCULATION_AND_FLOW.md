@@ -12,6 +12,7 @@ Required:
 Optional:
 - `body_fat_pct`
 - `health_flags`: `pregnant`, `breastfeeding`, `kidney_disease`, `diabetes`, `eating_disorder_history`, `weight_affecting_medication`
+- `goal_plan`: JSON object for planned weight change, e.g. `{ "direction": "loss", "target_kg": 3, "duration_weeks": 8 }`
 
 ## BMI
 
@@ -61,6 +62,18 @@ Maintenance-only overrides:
 - Breastfeeding
 - Eating-disorder history/risk
 - Underweight user requesting weight loss
+
+## Goal Plan
+
+`users.goal_plan` stores a user-facing weight-change plan. `target_kg` means total planned kg change, not destination body weight.
+
+Server-side rules:
+- Sanitize direction, target kg, duration, dates, and note before saving.
+- Recalculate calorie target on the backend from profile TDEE, not from the previous daily target.
+- Loss plans are capped by the same 20% TDEE deficit and calorie floors as base target calculation.
+- Gain plans are capped by the conservative `gain_muscle` target.
+- Under-18, pregnancy/breastfeeding, eating-disorder history/risk, and underweight-loss profiles are changed to maintenance-only.
+- The persisted plan includes `computed_daily_calorie_target`, `daily_calorie_delta`, `weekly_rate_kg`, `safety_status`, and `warnings`.
 
 ## Health Guardrails
 

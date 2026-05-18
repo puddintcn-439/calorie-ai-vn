@@ -2,14 +2,15 @@ import React, { useRef, useState } from 'react';
 import {
   Animated,
   StyleSheet,
-  Text,
-  TextInput,
   TextInputProps,
   View,
   ViewStyle,
   StyleProp,
 } from 'react-native';
-import { theme } from './theme';
+import { useAppTheme } from './theme';
+import { useI18n } from './i18n';
+import { Text } from './i18n-text';
+import { TextInput } from './i18n-text-input';
 
 interface UiInputProps extends TextInputProps {
   label?: string;
@@ -20,6 +21,8 @@ interface UiInputProps extends TextInputProps {
 export function UiInput({ label, containerStyle, error, style, ...rest }: UiInputProps) {
   const [focused, setFocused] = useState(false);
   const borderAnim = useRef(new Animated.Value(0)).current;
+  const { colors, radii } = useAppTheme();
+  const { tx } = useI18n();
 
   const handleFocus = () => {
     setFocused(true);
@@ -43,22 +46,33 @@ export function UiInput({ label, containerStyle, error, style, ...rest }: UiInpu
 
   const borderColor = borderAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [theme.colors.border, theme.colors.accentMint],
+    outputRange: [colors.border, colors.accentMint],
   });
 
   return (
     <View style={[styles.wrapper, containerStyle]}>
-      {label ? <Text style={styles.label}>{label}</Text> : null}
-      <Animated.View style={[styles.inputWrap, { borderColor }, error && styles.inputWrapError]}>
+      {label ? <Text style={[styles.label, { color: colors.textSoft }]}>{label}</Text> : null}
+      <Animated.View
+        style={[
+          styles.inputWrap,
+          {
+            borderRadius: radii.lg,
+            backgroundColor: colors.surfaceAlt,
+            borderColor,
+          },
+          error && { borderColor: colors.danger },
+        ]}
+      >
         <TextInput
-          style={[styles.input, style]}
-          placeholderTextColor={theme.colors.textMuted}
+          {...rest}
+          style={[styles.input, { color: colors.text }, style]}
+          placeholder={typeof rest.placeholder === 'string' ? tx(rest.placeholder) : rest.placeholder}
+          placeholderTextColor={colors.textMuted}
           onFocus={handleFocus}
           onBlur={handleBlur}
-          {...rest}
         />
       </Animated.View>
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+      {error ? <Text style={[styles.error, { color: colors.danger }]}>{error}</Text> : null}
     </View>
   );
 }
@@ -68,29 +82,21 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   label: {
-    color: theme.colors.textSoft,
     fontSize: 12,
     fontWeight: '600',
     marginBottom: 6,
     letterSpacing: 0.4,
   },
   inputWrap: {
-    borderRadius: theme.radii.lg,
     borderWidth: 1,
-    backgroundColor: theme.colors.surfaceAlt,
     overflow: 'hidden',
   },
-  inputWrapError: {
-    borderColor: theme.colors.danger,
-  },
   input: {
-    color: theme.colors.text,
     fontSize: 15,
     paddingVertical: 14,
     paddingHorizontal: 15,
   },
   error: {
-    color: theme.colors.danger,
     fontSize: 12,
     marginTop: 4,
   },

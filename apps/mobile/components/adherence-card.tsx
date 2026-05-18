@@ -1,9 +1,15 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
+import {
+  ActivityIndicator,
+  StyleSheet,
+  View
+} from 'react-native';
+import { router } from 'expo-router';
 import { SurfaceCard } from './ui-shell';
 import { UiButton } from './ui-button';
+import { useAppTheme } from './theme';
 import { apiClient } from '../services/api';
-import { router } from 'expo-router';
+import { Text } from './i18n-text';
 
 type WeeklySummary = {
   adherence_percentage: number;
@@ -18,6 +24,7 @@ type WeeklySummary = {
 export default function AdherenceCard() {
   const [loading, setLoading] = useState(true);
   const [summary, setSummary] = useState<WeeklySummary | null>(null);
+  const { colors } = useAppTheme();
 
   useEffect(() => {
     let mounted = true;
@@ -27,52 +34,58 @@ export default function AdherenceCard() {
         if (!mounted) return;
         setSummary(res.data ?? null);
       } catch (err) {
-        // ignore silently
+        // Keep this card passive so coach availability does not block Today.
       } finally {
         if (mounted) setLoading(false);
       }
     })();
-    return () => { mounted = false; };
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   if (loading) {
     return (
-      <SurfaceCard style={styles.card}>
-        <ActivityIndicator color="#6ee7b7" />
+      <SurfaceCard style={[styles.card, { borderColor: colors.borderInfo }]}>
+        <ActivityIndicator color={colors.accentMint} />
       </SurfaceCard>
     );
   }
 
   if (!summary) {
     return (
-      <SurfaceCard style={styles.card}>
-        <Text style={styles.title}>📈 Tuân thủ tuần</Text>
-        <Text style={styles.empty}>Chưa có dữ liệu tuần này. Ghi nhật ký ăn uống để nhận phân tích.</Text>
+      <SurfaceCard style={[styles.card, { borderColor: colors.borderInfo }]}>
+        <Text style={[styles.title, { color: colors.text }]}>📈 Tuân thủ tuần</Text>
+        <Text style={[styles.empty, { color: colors.textMuted }]}>
+          Chưa có dữ liệu tuần này. Ghi nhật ký ăn uống để nhận phân tích.
+        </Text>
       </SurfaceCard>
     );
   }
 
   return (
-    <SurfaceCard style={styles.card}>
-      <Text style={styles.title}>📈 Tuân thủ tuần</Text>
+    <SurfaceCard style={[styles.card, { borderColor: colors.borderInfo }]}>
+      <Text style={[styles.title, { color: colors.text }]}>📈 Tuân thủ tuần</Text>
       <View style={styles.row}>
         <View style={styles.col}>
-          <Text style={styles.label}>Tuân thủ</Text>
-          <Text style={styles.value}>{summary.adherence_percentage}%</Text>
+          <Text style={[styles.label, { color: colors.textSoft }]}>Tuân thủ</Text>
+          <Text style={[styles.value, { color: colors.accentMint }]}>{summary.adherence_percentage}%</Text>
         </View>
         <View style={styles.col}>
-          <Text style={styles.label}>Ghi chép</Text>
-          <Text style={styles.value}>{summary.logs_count}</Text>
+          <Text style={[styles.label, { color: colors.textSoft }]}>Ghi chép</Text>
+          <Text style={[styles.value, { color: colors.accentMint }]}>{summary.logs_count}</Text>
         </View>
       </View>
 
       <View style={styles.rowSmall}>
-        <Text style={styles.small}>Trên mục tiêu: {summary.days_above_target}</Text>
-        <Text style={styles.small}>Trên đích: {summary.days_on_target}</Text>
-        <Text style={styles.small}>Dưới mục tiêu: {summary.days_below_target}</Text>
+        <Text style={[styles.small, { color: colors.textSoft }]}>Trên mục tiêu: {summary.days_above_target}</Text>
+        <Text style={[styles.small, { color: colors.textSoft }]}>Đúng đích: {summary.days_on_target}</Text>
+        <Text style={[styles.small, { color: colors.textSoft }]}>Dưới mục tiêu: {summary.days_below_target}</Text>
       </View>
 
-      {summary.recommended_action ? <Text style={styles.action}>{summary.recommended_action}</Text> : null}
+      {summary.recommended_action ? (
+        <Text style={[styles.action, { color: colors.textSoft }]}>{summary.recommended_action}</Text>
+      ) : null}
 
       <UiButton label="Mở Coach" onPress={() => router.push('/(tabs)/coach')} style={{ marginTop: 10 }} />
     </SurfaceCard>
@@ -80,14 +93,14 @@ export default function AdherenceCard() {
 }
 
 const styles = StyleSheet.create({
-  card: { marginBottom: 12, borderColor: '#27426f' },
-  title: { color: '#eff6ff', fontSize: 15, fontWeight: '800', marginBottom: 8 },
+  card: { marginBottom: 12 },
+  title: { fontSize: 15, fontWeight: '800', marginBottom: 8 },
   row: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
   col: { flex: 1 },
-  label: { color: '#b8c8e8', fontSize: 12 },
-  value: { color: '#6ee7b7', fontSize: 18, fontWeight: '800' },
-  rowSmall: { flexDirection: 'row', justifyContent: 'space-between' },
-  small: { color: '#cfe8ff', fontSize: 12 },
-  action: { color: '#cfe8ff', fontSize: 13, marginTop: 8, fontStyle: 'italic' },
-  empty: { color: '#7082a9' },
+  label: { fontSize: 12 },
+  value: { fontSize: 18, fontWeight: '800' },
+  rowSmall: { flexDirection: 'row', justifyContent: 'space-between', gap: 8 },
+  small: { fontSize: 12 },
+  action: { fontSize: 13, marginTop: 8, fontStyle: 'italic' },
+  empty: { fontSize: 13, lineHeight: 19 },
 });
