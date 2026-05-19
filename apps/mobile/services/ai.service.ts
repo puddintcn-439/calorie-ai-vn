@@ -37,21 +37,21 @@ export async function scanImageFromUri(uri: string): Promise<AIScanResponse> {
     } as any);
   }
 
-  const res = await apiClient.post<AIScanResponse>('/ai/scan/image', formData, {
+  const res = await withRetry(() => apiClient.post<AIScanResponse>('/ai/scan/image', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
     timeout: 30000,
-  });
+  }));
 
   return res.data;
 }
 
 export async function scanText(text: string): Promise<AIScanResponse> {
-  const res = await apiClient.post<AIScanResponse>('/ai/scan/text', { text });
+  const res = await withRetry(() => apiClient.post<AIScanResponse>('/ai/scan/text', { text }));
   return res.data;
 }
 
 export async function scanVoice(payload: ScanVoicePayload): Promise<AIScanResponse> {
-  const res = await apiClient.post<AIScanResponse>('/ai/scan/voice', payload);
+  const res = await withRetry(() => apiClient.post<AIScanResponse>('/ai/scan/voice', payload));
   return res.data;
 }
 
@@ -75,10 +75,10 @@ export async function scanReceipt(payload: ScanReceiptPayload): Promise<AIScanRe
   if (payload.merchant_hint) formData.append('merchant_hint', payload.merchant_hint);
   if (payload.meal_hint) formData.append('meal_hint', payload.meal_hint);
 
-  const res = await apiClient.post<AIScanResponse>('/ai/scan/receipt', formData, {
+  const res = await withRetry(() => apiClient.post<AIScanResponse>('/ai/scan/receipt', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
     timeout: 30000,
-  });
+  }));
 
   return res.data;
 }
@@ -88,11 +88,11 @@ export async function refineScan(
   context: string,
   scanId: string,
 ): Promise<AIScanResponse> {
-  const res = await apiClient.post<AIScanResponse>('/ai/scan/refine', {
+  const res = await withRetry(() => apiClient.post<AIScanResponse>('/ai/scan/refine', {
     scan_id: scanId,
     context,
     original_items_summary: originalItemsSummary,
-  });
+  }));
   return res.data;
 }
 
@@ -103,9 +103,31 @@ export async function askCoach(
   // Check subscription access to AI Coach
   await featureGatingService.requireFeature('ai_coach', 'AI Coach');
 
-  const res = await apiClient.post<AICoachResponse>('/ai/coach', {
+  const res = await withRetry(() => apiClient.post<AICoachResponse>('/ai/coach', {
     message,
     ...context,
-  });
+  }));
   return res.data;
+}
+
+// Small retry wrapper with exponential backoff for transient errors
+async function withRetry<T>(fn: () => Promise<T>, attempts = 3, baseDelay = 600): Promise<T> {
+  let lastError: any = null;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastError = err;
+      // Determine if error is retryable
+      const status = err?.response?.status;
+      const code = err?.code;
+      const isServerError = typeof status === 'number' && (status >= 500 || status === 429 || status === 503);
+      const isNetwork = code === 'ECONNABORTED' || code === 'ENOTFOUND' || code === 'ECONNREFUSED' || code === 'ETIMEDOUT' || code === 'ERR_NETWORK';
+      const shouldRetry = isServerError || isNetwork;
+      if (!shouldRetry || attempt === attempts) break;
+      const delay = baseDelay * Math.pow(2, attempt - 1);
+      await new Promise((res) => setTimeout(res, delay));
+    }
+  }
+  throw lastError;
 }

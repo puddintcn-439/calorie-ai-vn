@@ -123,6 +123,8 @@ export default function ScanScreen() {
   const [isLogging, setIsLogging] = useState(false);
   const [isReceiptScanning, setIsReceiptScanning] = useState(false);
   const [scanNotice, setScanNotice] = useState<string | null>(null);
+  const [lastFailedScan, setLastFailedScan] = useState<{ mode: InputMode; payload?: any } | null>(null);
+  const [isRetrying, setIsRetrying] = useState(false);
 
   // Context state
   const { activeContexts, toggleContext } = useContextStore();
@@ -387,9 +389,11 @@ export default function ScanScreen() {
         correction_count: 0,
       });
     }
-    catch {
+    catch (err) {
       void telemetryService.emitLogFailed('image', 'scan_api_error', Date.now() - startedAt);
       setScanNotice('Không thể phân tích ảnh lúc này. Vui lòng thử lại sau ít phút.');
+      setLastFailedScan({ mode: 'camera', payload: uri });
+      console.error('runImageScan error', err);
       Alert.alert('screen.tabs.scan.alert.012', 'screen.tabs.scan.alert.013');
     }
     finally { setIsScanning(false); }
@@ -410,9 +414,11 @@ export default function ScanScreen() {
         correction_count: 0,
       });
     }
-    catch {
+    catch (err) {
       void telemetryService.emitLogFailed('text', 'scan_api_error', Date.now() - startedAt);
       setScanNotice('Không thể phân tích mô tả lúc này. Vui lòng thử lại sau ít phút.');
+      setLastFailedScan({ mode: 'text', payload: textInput.trim() });
+      console.error('handleTextScan error', err);
       Alert.alert('screen.tabs.scan.alert.014', 'screen.tabs.scan.alert.015');
     }
     finally { setIsScanning(false); }
@@ -440,9 +446,11 @@ export default function ScanScreen() {
         correction_count: 0,
       });
     }
-    catch {
+    catch (err) {
       void telemetryService.emitLogFailed('voice', 'scan_api_error', Date.now() - startedAt);
       setScanNotice('Không thể phân tích giọng nói lúc này. Vui lòng thử lại sau ít phút.');
+      setLastFailedScan({ mode: 'voice', payload: transcript });
+      console.error('handleVoiceScan error', err);
       Alert.alert('screen.tabs.scan.alert.016', 'screen.tabs.scan.alert.017');
     }
     finally { setIsScanning(false); }
@@ -467,9 +475,11 @@ export default function ScanScreen() {
         correction_count: 0,
       });
     }
-    catch {
+    catch (err) {
       void telemetryService.emitLogFailed('receipt', 'scan_api_error', Date.now() - startedAt);
       setScanNotice('Không thể phân tích hóa đơn lúc này. Vui lòng thử lại sau ít phút.');
+      setLastFailedScan({ mode: 'receipt', payload: uri });
+      console.error('runReceiptScan error', err);
       Alert.alert('screen.tabs.scan.alert.018', 'screen.tabs.scan.alert.019');
     }
     finally { setIsReceiptScanning(false); }
@@ -568,7 +578,12 @@ export default function ScanScreen() {
       setBarcodeResult(result);
       setBarcodeGrams(String(Math.round(result.serving_size_g ?? 100)));
     }
-    catch { Alert.alert('screen.tabs.scan.alert.029', 'screen.tabs.scan.alert.030'); setBarcodeScanned(false); }
+    catch (err) { 
+      console.error('handleBarcodeScan error', err);
+      Alert.alert('screen.tabs.scan.alert.029', 'screen.tabs.scan.alert.030');
+      setLastFailedScan({ mode: 'barcode', payload: barcode });
+      setBarcodeScanned(false);
+    }
     finally { setIsScanning(false); }
   };
 
@@ -576,6 +591,39 @@ export default function ScanScreen() {
     const barcode = manualBarcode.trim();
     if (!barcode) return;
     await handleBarcodeScan({ data: barcode });
+  };
+
+  const handleRetryLast = async () => {
+    if (!lastFailedScan) return;
+    setIsRetrying(true);
+    setScanNotice(null);
+    try {
+      switch (lastFailedScan.mode) {
+        case 'camera':
+          await runImageScan(lastFailedScan.payload);
+          break;
+        case 'receipt':
+          await runReceiptScan(lastFailedScan.payload);
+          break;
+        case 'text':
+          setTextInput(lastFailedScan.payload ?? '');
+          await handleTextScan();
+          break;
+        case 'voice':
+          setVoiceTranscript(lastFailedScan.payload ?? '');
+          await handleVoiceScan();
+          break;
+          case 'barcode':
+            await handleBarcodeScan({ data: lastFailedScan.payload });
+            break;
+      }
+    } catch (err) {
+      console.error('handleRetryLast error', err);
+      setScanNotice('Thử lại không thành công. Vui lòng thử lại sau ít phút.');
+    } finally {
+      setIsRetrying(false);
+      setLastFailedScan(null);
+    }
   };
 
   const handleLogBarcode = async () => {
@@ -725,6 +773,16 @@ export default function ScanScreen() {
           <SurfaceCard style={styles.scanNoticeCard}>
             <Text style={styles.scanNoticeTitle} i18nKey="screen.tabs.scan.text.002" />
             <Text style={styles.scanNoticeBody}>{scanNotice}</Text>
+            {lastFailedScan ? (
+              <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
+                <TouchableOpacity style={[styles.analyzeButton, isRetrying && styles.buttonDisabled]} onPress={handleRetryLast} disabled={isRetrying}>
+                  <Text style={styles.analyzeButtonText}>{isRetrying ? 'Đang thử lại...' : 'Thử lại'}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.secondaryButton} onPress={() => { setLastFailedScan(null); setScanNotice(null); }}>
+                  <Text style={styles.secondaryButtonText}>Huỷ</Text>
+                </TouchableOpacity>
+              </View>
+            ) : null}
           </SurfaceCard>
         ) : null}
 
