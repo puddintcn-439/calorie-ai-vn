@@ -20,7 +20,7 @@ import { AnimatedIonicon } from '../../components/animated-icon';
 import { RewardToast, RewardToastData } from '../../components/reward-toast';
 import { useI18n } from '../../components/i18n';
 
-const logHeroIllustration = require('../../assets/images/log-hero.png') as number;
+const logHeroIllustration = require('../../assets/images/log-hero.jpg') as number;
 
 const MEAL_LABELS: Record<MealType, string> = {
   breakfast: 'screen.tabs.log.meal.breakfast',

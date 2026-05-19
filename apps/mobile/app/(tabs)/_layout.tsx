@@ -8,10 +8,29 @@ import { useI18n } from '../../components/i18n';
 
 type TabIconName = ComponentProps<typeof Ionicons>['name'];
 
-function TabIcon({ name, color, size, focused }: { name: TabIconName; color: string; size: number; focused: boolean }) {
+function TabIcon({
+  name,
+  color,
+  size,
+  focused,
+  compact,
+  desktop,
+}: {
+  name: TabIconName;
+  color: string;
+  size: number;
+  focused: boolean;
+  compact: boolean;
+  desktop: boolean;
+}) {
   const { colors } = useAppTheme();
   return (
-    <View style={[styles.tabIconWrap, focused && { backgroundColor: colors.accentMint }]}>
+    <View style={[
+      styles.tabIconWrap,
+      compact && styles.tabIconWrapCompact,
+      desktop && styles.tabIconWrapDesktop,
+      focused && { backgroundColor: colors.accentMint },
+    ]}>
       <AnimatedIonicon
         name={name}
         size={Math.max(18, size - 2)}
@@ -27,7 +46,7 @@ export default function TabsLayout() {
   const { width } = useWindowDimensions();
   const isCompact = width < 480;
   const isDesktop = width >= 900;
-  const desktopTabWidth = Math.min(720, width - 64);
+  const desktopTabWidth = Math.min(600, width - 80);
   const { colors } = useAppTheme();
   const { t } = useI18n();
 
@@ -37,13 +56,13 @@ export default function TabsLayout() {
         headerShown: false,
         tabBarStyle: {
           position: 'absolute',
-          left: isDesktop ? Math.max(32, (width - desktopTabWidth) / 2) : isCompact ? 20 : 10,
-          right: isDesktop ? 'auto' : isCompact ? 20 : 10,
-          bottom: isDesktop ? 18 : isCompact ? 12 : 10,
+          left: isDesktop ? Math.max(40, (width - desktopTabWidth) / 2) : isCompact ? 18 : 10,
+          right: isDesktop ? 'auto' : isCompact ? 18 : 10,
+          bottom: isDesktop ? 10 : isCompact ? 8 : 10,
           width: isDesktop ? desktopTabWidth : undefined,
-          height: isDesktop ? 64 : isCompact ? 68 : 74,
-          paddingTop: isDesktop ? 5 : isCompact ? 6 : 7,
-          paddingHorizontal: isDesktop ? 10 : isCompact ? 4 : 6,
+          height: isDesktop ? 52 : isCompact ? 64 : 66,
+          paddingTop: isDesktop ? 2 : isCompact ? 4 : 4,
+          paddingHorizontal: isDesktop ? 8 : isCompact ? 4 : 6,
           backgroundColor: colors.tabBar,
           borderColor: colors.border,
           borderWidth: 1,
@@ -58,10 +77,15 @@ export default function TabsLayout() {
               }),
           elevation: 6,
         },
+        tabBarItemStyle: {
+          paddingVertical: isDesktop ? 3 : 4,
+        },
+        tabBarHideOnKeyboard: true,
         tabBarLabelStyle: {
-          fontSize: isCompact ? 9 : 10,
+          fontSize: isCompact ? 9 : isDesktop ? 9 : 10,
+          lineHeight: isCompact ? 12 : 13,
           fontWeight: '800',
-          paddingBottom: isDesktop ? 1 : 3,
+          paddingBottom: 0,
         },
         tabBarActiveTintColor: colors.accentMint,
         tabBarInactiveTintColor: colors.textMuted,
@@ -71,28 +95,28 @@ export default function TabsLayout() {
         name="index"
         options={{
           title: t('tabs.today'),
-          tabBarIcon: ({ color, size, focused }) => <TabIcon name="home" size={size} color={color} focused={focused} />,
+          tabBarIcon: ({ color, size, focused }) => <TabIcon name="home" size={size} color={color} focused={focused} compact={isCompact} desktop={isDesktop} />,
         }}
       />
       <Tabs.Screen
         name="scan"
         options={{
           title: t('tabs.scan'),
-          tabBarIcon: ({ color, size, focused }) => <TabIcon name="camera" size={size} color={color} focused={focused} />,
+          tabBarIcon: ({ color, size, focused }) => <TabIcon name="camera" size={size} color={color} focused={focused} compact={isCompact} desktop={isDesktop} />,
         }}
       />
       <Tabs.Screen
         name="log"
         options={{
           title: t('tabs.log'),
-          tabBarIcon: ({ color, size, focused }) => <TabIcon name="list" size={size} color={color} focused={focused} />,
+          tabBarIcon: ({ color, size, focused }) => <TabIcon name="list" size={size} color={color} focused={focused} compact={isCompact} desktop={isDesktop} />,
         }}
       />
       <Tabs.Screen
         name="coach"
         options={{
           title: t('tabs.coach'),
-          tabBarIcon: ({ color, size, focused }) => <TabIcon name="chatbubbles" size={size} color={color} focused={focused} />,
+          tabBarIcon: ({ color, size, focused }) => <TabIcon name="chatbubbles" size={size} color={color} focused={focused} compact={isCompact} desktop={isDesktop} />,
         }}
       />
       <Tabs.Screen
@@ -100,7 +124,7 @@ export default function TabsLayout() {
         options={{
           href: null,
           title: t('tabs.body'),
-          tabBarIcon: ({ color, size, focused }) => <TabIcon name="body" size={size} color={color} focused={focused} />,
+          tabBarIcon: ({ color, size, focused }) => <TabIcon name="body" size={size} color={color} focused={focused} compact={isCompact} desktop={isDesktop} />,
         }}
       />
       <Tabs.Screen
@@ -108,14 +132,14 @@ export default function TabsLayout() {
         options={{
           href: null,
           title: t('tabs.insights'),
-          tabBarIcon: ({ color, size, focused }) => <TabIcon name="stats-chart" size={size} color={color} focused={focused} />,
+          tabBarIcon: ({ color, size, focused }) => <TabIcon name="stats-chart" size={size} color={color} focused={focused} compact={isCompact} desktop={isDesktop} />,
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
           title: t('tabs.profile'),
-          tabBarIcon: ({ color, size, focused }) => <TabIcon name="person" size={size} color={color} focused={focused} />,
+          tabBarIcon: ({ color, size, focused }) => <TabIcon name="person" size={size} color={color} focused={focused} compact={isCompact} desktop={isDesktop} />,
         }}
       />
       <Tabs.Screen
@@ -131,10 +155,18 @@ export default function TabsLayout() {
 
 const styles = StyleSheet.create({
   tabIconWrap: {
-    width: 32,
-    height: 28,
+    width: 30,
+    height: 27,
     borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  tabIconWrapCompact: {
+    width: 28,
+    height: 26,
+  },
+  tabIconWrapDesktop: {
+    width: 26,
+    height: 24,
   },
 });

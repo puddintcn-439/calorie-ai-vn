@@ -1,10 +1,30 @@
 import { Injectable, HttpException, HttpStatus, Logger } from '@nestjs/common';
 import { SupabaseService } from '../../common/supabase/supabase.service';
-import { Food, FoodCategory } from '@calorie-ai/types';
+import {
+  Food,
+  FoodCategory,
+  FoodQualityDuplicateGroup,
+  FoodQualityField,
+  FoodQualityReport,
+  FoodSource,
+} from '@calorie-ai/types';
 
 @Injectable()
 export class FoodService {
   private readonly logger = new Logger(FoodService.name);
+  private readonly qualityFields: FoodQualityField[] = [
+    'calories_per_100g',
+    'protein_g',
+    'carbs_g',
+    'fat_g',
+    'fiber_g',
+    'sugar_g',
+    'saturated_fat_g',
+    'sodium_mg',
+    'serving_size_g',
+    'barcode',
+    'image_url',
+  ];
 
   constructor(private supabase: SupabaseService) {}
 
@@ -37,6 +57,156 @@ export class FoodService {
       .eq('id', id)
       .single();
     return data as Food | null;
+  }
+
+  async getQualityReport(limit = 25): Promise<FoodQualityReport> {
+    const { data, error } = await this.supabase.db
+      .from('foods')
+      .select([
+        'id',
+        'name',
+        'name_vi',
+        'source',
+        'source_id',
+        'barcode',
+        'image_url',
+        'nutrient_confidence',
+        'has_impossible_values',
+        'calories_per_100g',
+        'protein_g',
+        'carbs_g',
+        'fat_g',
+        'fiber_g',
+        'sugar_g',
+        'saturated_fat_g',
+        'sodium_mg',
+        'serving_size_g',
+      ].join(','))
+      .limit(10_000);
+
+    if (error) throw error;
+
+    const rows = (data ?? []) as unknown as Food[];
+    const total = rows.length;
+    const threshold = 0.7;
+
+    if (total === 0) {
+      return {
+        generated_at: new Date().toISOString(),
+        sample_size: 0,
+        low_confidence_threshold: threshold,
+        quality_score: 0,
+        low_confidence_count: 0,
+        impossible_values_count: 0,
+        source_distribution: [],
+        field_coverage: this.qualityFields.map((field) => ({
+          field,
+          filled_count: 0,
+          coverage_ratio: 0,
+        })),
+        top_low_confidence: [],
+      };
+    }
+
+    const lowConfidenceRows = rows.filter((food) => Number(food.nutrient_confidence ?? 0) < threshold);
+    const impossibleRows = rows.filter((food) => food.has_impossible_values === true);
+    const sourceCounts = rows.reduce<Record<string, number>>((acc, food) => {
+      const source = food.source ?? 'ai_estimated';
+      acc[source] = (acc[source] ?? 0) + 1;
+      return acc;
+    }, {});
+
+    const fieldCoverage = this.qualityFields.map((field) => {
+      const filledCount = rows.filter((food) => this.hasValue((food as unknown as Record<string, unknown>)[field])).length;
+      return {
+        field,
+        filled_count: filledCount,
+        coverage_ratio: this.roundRatio(filledCount / total),
+      };
+    });
+
+    const sourceDistribution = Object.entries(sourceCounts)
+      .sort((a, b) => b[1] - a[1])
+      .map(([source, count]) => ({
+        source: source as FoodSource,
+        count,
+        ratio: this.roundRatio(count / total),
+      }));
+
+    const optionalCoverage = fieldCoverage
+      .filter((item) => !['calories_per_100g', 'protein_g', 'carbs_g', 'fat_g'].includes(item.field))
+      .reduce((sum, item) => sum + item.coverage_ratio, 0) / 7;
+    const confidenceAverage = rows.reduce((sum, food) => sum + Number(food.nutrient_confidence ?? 0), 0) / total;
+    const impossiblePenalty = impossibleRows.length / total;
+    const qualityScore = Math.round(Math.max(0, Math.min(1, confidenceAverage * 0.7 + optionalCoverage * 0.2 - impossiblePenalty * 0.3 + 0.1)) * 100);
+
+    const topLowConfidence = rows
+      .filter((food) => Number(food.nutrient_confidence ?? 0) < threshold || food.has_impossible_values)
+      .sort((a, b) => {
+        if (a.has_impossible_values !== b.has_impossible_values) {
+          return a.has_impossible_values ? -1 : 1;
+        }
+        return Number(a.nutrient_confidence ?? 0) - Number(b.nutrient_confidence ?? 0);
+      })
+      .slice(0, Math.max(1, Math.min(limit, 100)))
+      .map((food) => ({
+        id: food.id,
+        name: food.name,
+        name_vi: food.name_vi,
+        source: food.source,
+        nutrient_confidence: food.nutrient_confidence,
+        has_impossible_values: food.has_impossible_values,
+        missing_fields: this.qualityFields.filter((field) => !this.hasValue((food as unknown as Record<string, unknown>)[field])),
+      }));
+
+    return {
+      generated_at: new Date().toISOString(),
+      sample_size: total,
+      low_confidence_threshold: threshold,
+      quality_score: qualityScore,
+      low_confidence_count: lowConfidenceRows.length,
+      impossible_values_count: impossibleRows.length,
+      source_distribution: sourceDistribution,
+      field_coverage: fieldCoverage,
+      top_low_confidence: topLowConfidence,
+    };
+  }
+
+  async findPotentialDuplicates(limit = 50): Promise<FoodQualityDuplicateGroup[]> {
+    const { data, error } = await this.supabase.db
+      .from('foods')
+      .select('id,name,name_vi,source,source_id,barcode,nutrient_confidence')
+      .limit(10_000);
+
+    if (error) throw error;
+
+    const groups = new Map<string, Food[]>();
+
+    for (const food of (data ?? []) as Food[]) {
+      const key = this.normaliseFoodName(food.name_vi ?? food.name);
+      if (key.length < 3) continue;
+      const list = groups.get(key) ?? [];
+      list.push(food);
+      groups.set(key, list);
+    }
+
+    return [...groups.entries()]
+      .filter(([, foods]) => foods.length > 1)
+      .sort((a, b) => b[1].length - a[1].length)
+      .slice(0, Math.max(1, Math.min(limit, 100)))
+      .map(([key, foods]) => ({
+        key,
+        count: foods.length,
+        foods: foods.map((food) => ({
+          id: food.id,
+          name: food.name,
+          name_vi: food.name_vi,
+          source: food.source,
+          source_id: food.source_id,
+          barcode: food.barcode,
+          nutrient_confidence: food.nutrient_confidence,
+        })),
+      }));
   }
 
   async findByBarcode(barcode: string): Promise<Partial<Food>> {
@@ -194,6 +364,26 @@ export class FoodService {
     if (macroSum > 105) return true;
     if ((food.calories_per_100g ?? 0) > 0 && macroKcal > food.calories_per_100g! * 1.35 + 50) return true;
     return false;
+  }
+
+  private hasValue(value: unknown): boolean {
+    if (value === null || value === undefined || value === '') return false;
+    if (typeof value === 'number') return Number.isFinite(value);
+    return true;
+  }
+
+  private roundRatio(value: number): number {
+    return Number(Math.max(0, Math.min(1, value)).toFixed(3));
+  }
+
+  private normaliseFoodName(value?: string): string {
+    return String(value ?? '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim()
+      .replace(/\s+/g, ' ');
   }
 
   private resolveCategory(tags: string[]): FoodCategory {

@@ -51,3 +51,56 @@ export interface FoodSearchResult {
   total: number;
   query: string;
 }
+
+export type FoodQualityField =
+  | 'calories_per_100g'
+  | 'protein_g'
+  | 'carbs_g'
+  | 'fat_g'
+  | 'fiber_g'
+  | 'sugar_g'
+  | 'saturated_fat_g'
+  | 'sodium_mg'
+  | 'serving_size_g'
+  | 'barcode'
+  | 'image_url';
+
+export interface FoodQualityCoverageItem {
+  field: FoodQualityField;
+  filled_count: number;
+  coverage_ratio: number;
+}
+
+export interface FoodSourceDistributionItem {
+  source: FoodSource;
+  count: number;
+  ratio: number;
+}
+
+export interface FoodQualitySummaryItem {
+  id: string;
+  name: string;
+  name_vi?: string;
+  source: FoodSource;
+  nutrient_confidence?: number;
+  has_impossible_values: boolean;
+  missing_fields: FoodQualityField[];
+}
+
+export interface FoodQualityDuplicateGroup {
+  key: string;
+  count: number;
+  foods: Pick<Food, 'id' | 'name' | 'name_vi' | 'source' | 'source_id' | 'barcode' | 'nutrient_confidence'>[];
+}
+
+export interface FoodQualityReport {
+  generated_at: string;
+  sample_size: number;
+  low_confidence_threshold: number;
+  quality_score: number;
+  low_confidence_count: number;
+  impossible_values_count: number;
+  source_distribution: FoodSourceDistributionItem[];
+  field_coverage: FoodQualityCoverageItem[];
+  top_low_confidence: FoodQualitySummaryItem[];
+}

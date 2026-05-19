@@ -35,7 +35,7 @@ import { Text } from '../../components/i18n-text';
 import { TextInput } from '../../components/i18n-text-input';
 import { Alert } from '../../components/i18n-alert';
 
-const scanHeroIllustration = require('../../assets/images/scan-hero.png') as number;
+const scanHeroIllustration = require('../../assets/images/scan-hero.jpg') as number;
 type CameraModule = typeof import('expo-camera');
 type AudioModule = typeof import('expo-av')['Audio'];
 

@@ -33,7 +33,7 @@ import { RewardToast, RewardToastData } from '../../components/reward-toast';
 import { createThemedStyles, theme, useAppTheme } from '../../components/theme';
 import { useI18n } from '../../components/i18n';
 
-const profileHeroIllustration = require('../../assets/images/profile-hero.png') as number;
+const profileHeroIllustration = require('../../assets/images/profile-hero.jpg') as number;
 
 const ACTIVITY_LABELS: Record<ActivityLevel, string> = {
   sedentary: '🪑 Ít vận động',
@@ -1786,12 +1786,16 @@ export default function ProfileScreen() {
         </View>
       </SurfaceCard>
 
-        <View style={styles.logoutFooter}>
+        <SurfaceCard style={styles.accountCard}>
+          <View style={styles.accountCopy}>
+            <Text style={styles.accountTitle} i18nKey="profile.account.title" />
+            <Text style={styles.accountHint} i18nKey="profile.account.hint" />
+          </View>
           <TouchableOpacity style={styles.profileLogoutButton} onPress={handleLogout}>
             <MaterialIcons name="logout" size={16} color={theme.colors.danger} />
             <Text style={styles.profileLogoutText} i18nKey="profile.logout" />
           </TouchableOpacity>
-        </View>
+        </SurfaceCard>
 
       </View>
       <RewardToast reward={reward} onHide={() => setReward(null)} />
@@ -1965,10 +1969,29 @@ const styles = createThemedStyles((colors, radii) => ({
   profileSaveButton: {
     flex: 1,
   },
-  logoutFooter: {
-    alignItems: 'flex-end',
+  accountCard: {
     marginTop: 2,
     marginBottom: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    backgroundColor: colors.surfaceAlt,
+  },
+  accountCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  accountTitle: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  accountHint: {
+    color: colors.textMuted,
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 3,
   },
   profileLogoutButton: {
     minHeight: 40,

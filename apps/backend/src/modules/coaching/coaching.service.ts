@@ -151,10 +151,6 @@ export class CoachingService {
         .gte('logged_at', weekStart.toISOString())
         .order('logged_at', { ascending: true });
 
-      if (error || !logs || logs.length === 0) {
-        return null;
-      }
-
       // Get target from users table
       const { data: userProfile } = await this.supabase.db
         .from('users')
@@ -162,7 +158,18 @@ export class CoachingService {
         .eq('id', userId)
         .single();
 
-      const dailyGoal = userProfile?.daily_calorie_target ?? 2000;
+      const dailyGoal = Number(userProfile?.daily_calorie_target) > 0
+        ? Number(userProfile?.daily_calorie_target)
+        : 2000;
+
+      if (error) {
+        this.logger.error(`Failed to fetch logs for weekly summary: ${error}`);
+        return null;
+      }
+
+      if (!logs || logs.length === 0) {
+        return this.createEmptyWeeklySummary(userId, weekStart, dailyGoal);
+      }
 
       // Calculate metrics
       const dailyData = this.organizeDailyData(logs, dailyGoal);
@@ -224,6 +231,30 @@ export class CoachingService {
   }
 
   // ======================== Helper Methods ========================
+
+  private createEmptyWeeklySummary(userId: string, weekStart: Date, dailyGoal: number): CoachingSummary {
+    return {
+      id: 0,
+      user_id: userId,
+      week_start_date: weekStart.toISOString().split('T')[0],
+      logs_count: 0,
+      adherence_percentage: 0,
+      consistency_score: 0,
+      primary_pattern: PatternType.INCONSISTENT_LOGGING,
+      secondary_patterns: [],
+      insights_generated: 0,
+      total_calories: 0,
+      average_daily_calories: 0,
+      calorie_variance: 0,
+      days_above_target: 0,
+      days_below_target: 0,
+      days_on_target: 0,
+      recommended_action: 'Start with one meal log today. Even a rough estimate gives Coach enough context to personalize the next step.',
+      priority_level: PriorityLevel.MEDIUM,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+  }
 
   private organizeDailyData(logs: any[], dailyGoal: number): Record<string, DailyNutritionData> {
     const dailyData: Record<string, DailyNutritionData> = {};
@@ -308,19 +339,21 @@ export class CoachingService {
   }
 
   private detectWeekendVariance(dailyData: Record<string, DailyNutritionData>, userId: string, dailyGoal: number): BehavioralPattern | null {
-    const weekdayAvg = Object.entries(dailyData)
-      .filter(([date]) => {
-        const dayOfWeek = new Date(date).getDay();
-        return dayOfWeek !== 0 && dayOfWeek !== 6; // Not weekend
-      })
-      .reduce((sum, [, day]) => sum + day.total_calories, 0) / 5;
+    const weekdayDays = Object.entries(dailyData).filter(([date]) => {
+      const dayOfWeek = new Date(date).getDay();
+      return dayOfWeek !== 0 && dayOfWeek !== 6; // Not weekend
+    });
+    const weekendDays = Object.entries(dailyData).filter(([date]) => {
+      const dayOfWeek = new Date(date).getDay();
+      return dayOfWeek === 0 || dayOfWeek === 6; // Weekend only
+    });
 
-    const weekendAvg = Object.entries(dailyData)
-      .filter(([date]) => {
-        const dayOfWeek = new Date(date).getDay();
-        return dayOfWeek === 0 || dayOfWeek === 6; // Weekend only
-      })
-      .reduce((sum, [, day]) => sum + day.total_calories, 0) / 2;
+    if (weekdayDays.length === 0 || weekendDays.length === 0) return null;
+
+    const weekdayAvg = weekdayDays.reduce((sum, [, day]) => sum + day.total_calories, 0) / weekdayDays.length;
+    const weekendAvg = weekendDays.reduce((sum, [, day]) => sum + day.total_calories, 0) / weekendDays.length;
+
+    if (!Number.isFinite(weekdayAvg) || weekdayAvg <= 0 || !Number.isFinite(weekendAvg)) return null;
 
     const variance = Math.abs(weekendAvg - weekdayAvg) / weekdayAvg;
 
@@ -385,6 +418,87 @@ export class CoachingService {
     return null;
   }
 
+  private getCanonicalInsightInfo(patternType: PatternType): { title: string; description: string; action: string; emoji: string } {
+    const insights: Record<PatternType, { title: string; description: string; action: string; emoji: string }> = {
+      [PatternType.SKIPPED_MEALS]: {
+        title: 'Skipping meals',
+        description: 'You skipped meals several times this week. That can make you overly hungry and more likely to overeat later.',
+        action: 'Prepare a small meal or protein snack every 4-5 hours to keep energy steadier.',
+        emoji: '⏭️',
+      },
+      [PatternType.BINGE_EPISODES]: {
+        title: 'High-calorie spikes',
+        description: 'Your data shows a few days with large calorie jumps, which can make weekly progress less stable.',
+        action: 'Note the context, such as stress, poor sleep, or social meals, and plan a lighter fallback for next time.',
+        emoji: '🍽️',
+      },
+      [PatternType.NIGHT_EATING]: {
+        title: 'Late-night eating',
+        description: 'A large share of calories is landing late in the day, which may affect sleep and next-day hunger.',
+        action: 'Try finishing your last main meal about 2 hours before bed; if hungry, choose a light protein option.',
+        emoji: '🌙',
+      },
+      [PatternType.WEEKEND_VARIANCE]: {
+        title: 'Weekend variance',
+        description: 'Weekend eating differs a lot from weekdays, making progress harder to keep consistent.',
+        action: 'Pre-plan 1-2 key weekend meals so you can stay flexible without drifting too far.',
+        emoji: '📅',
+      },
+      [PatternType.EMOTIONAL_TRIGGER]: {
+        title: 'Emotional eating cue',
+        description: 'Your eating pattern suggests mood may be influencing food choices.',
+        action: 'Add a short mood note when logging meals so recurring triggers become easier to spot.',
+        emoji: '💭',
+      },
+      [PatternType.INCONSISTENT_LOGGING]: {
+        title: 'Logging gaps',
+        description: 'You logged only a few days this week. Consistent logging helps the app calculate targets and coaching more accurately.',
+        action: 'Set a reminder after meals. A rough estimate is still more useful than a blank day.',
+        emoji: '📝',
+      },
+      [PatternType.STRESS_EATING]: {
+        title: 'Stress eating',
+        description: 'On higher-stress days, your calorie intake appears to rise noticeably.',
+        action: 'Before eating more, try a 5-10 minute walk or a glass of water, then decide again.',
+        emoji: '😰',
+      },
+      [PatternType.TIMING_PREFERENCE]: {
+        title: 'Stable meal timing',
+        description: 'You tend to eat at a consistent time window, which is a useful base for habit building.',
+        action: 'Keep this rhythm and prepare suitable meals before your usual eating window.',
+        emoji: '⏰',
+      },
+    };
+
+    return insights[patternType] ?? {
+      title: 'Behavior pattern found',
+      description: 'The app found a notable pattern in your recent nutrition data.',
+      action: 'Review the last few days of logs to understand what is repeating.',
+      emoji: '🔍',
+    };
+  }
+
+  private getCanonicalRecommendation(pattern: PatternType | undefined, adherence: number): string {
+    if (!pattern) {
+      if (adherence >= 80) return 'Great consistency this week. Keep the current rhythm.';
+      if (adherence >= 60) return 'Solid progress. Logging a bit more consistently will make recommendations more accurate.';
+      return 'You are moving in the right direction. Prioritize consistent logging before optimizing details.';
+    }
+
+    const recommendations: Record<PatternType, string> = {
+      [PatternType.SKIPPED_MEALS]: 'Prioritize small, regular meals to avoid getting overly hungry late in the day.',
+      [PatternType.BINGE_EPISODES]: 'Identify triggers and prepare an easier fallback meal before the next high-risk moment.',
+      [PatternType.NIGHT_EATING]: 'Try finishing your last main meal about 2 hours before bed to support better sleep.',
+      [PatternType.WEEKEND_VARIANCE]: 'Plan a few weekend choices in advance so you can enjoy flexibility without drifting too far.',
+      [PatternType.STRESS_EATING]: 'Use one short stress-reduction action before deciding to eat more.',
+      [PatternType.EMOTIONAL_TRIGGER]: 'Add mood notes when logging meals to spot recurring triggers.',
+      [PatternType.INCONSISTENT_LOGGING]: 'Log right after meals, even roughly, so the data is not empty.',
+      [PatternType.TIMING_PREFERENCE]: 'Use your natural eating window to keep a stable routine.',
+    };
+
+    return recommendations[pattern as PatternType];
+  }
+
   private createInsightFromPattern(pattern: BehavioralPattern, userId: string): CoachingInsight {
     const insights: Record<PatternType, { title: string; description: string; action: string; emoji: string }> = {
       [PatternType.SKIPPED_MEALS]: {
@@ -444,22 +558,27 @@ export class CoachingService {
       emoji: '🔍',
     };
 
+    void info;
+    const canonicalInfo = this.getCanonicalInsightInfo(pattern.pattern_type);
+
     return {
       id: 0,
       user_id: userId,
       insight_type: pattern.severity_level >= 4 ? InsightType.WARNING : InsightType.PATTERN_ALERT,
-      title: info.title,
-      description: info.description,
-      action_suggestion: info.action,
+      title: canonicalInfo.title,
+      description: canonicalInfo.description,
+      action_suggestion: canonicalInfo.action,
       impact_score: pattern.severity_level * 2,
       pattern_id: pattern.id,
       is_acknowledged: false,
       created_at: new Date().toISOString(),
-      emoji: info.emoji,
+      emoji: canonicalInfo.emoji,
     };
   }
 
   private generateRecommendation(pattern: PatternType | undefined, adherence: number): string {
+    return this.getCanonicalRecommendation(pattern, adherence);
+
     if (!pattern) {
       if (adherence >= 80) return '🎉 Tuần này rất đều. Giữ nhịp hiện tại là đủ tốt.';
       if (adherence >= 60) return '👍 Tiến độ ổn. Log đều hơn một chút sẽ giúp gợi ý chính xác hơn.';
@@ -477,7 +596,7 @@ export class CoachingService {
       [PatternType.TIMING_PREFERENCE]: 'Tận dụng khung giờ ăn tự nhiên để duy trì nhịp ổn định.',
     };
 
-    return recommendations[pattern];
+    return recommendations[pattern as PatternType];
   }
 
   private calculateVariance(values: number[]): number {

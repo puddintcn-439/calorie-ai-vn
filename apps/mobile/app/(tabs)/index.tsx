@@ -3,13 +3,14 @@ import {
   Image,
   StyleSheet,
   TouchableOpacity,
+  useWindowDimensions,
   View
 } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import Svg, { Circle } from 'react-native-svg';
 import { ACTIVITY_MET, ActivityPreference, ActivityType, FoodLog, GoalPlan, MealType, User, UserGoal } from '@calorie-ai/types';
-import { BodyText, Eyebrow, HeroTitle, ScreenShell, SurfaceCard } from '../../components/ui-shell';
+import { BodyText, Eyebrow, ScreenShell, SurfaceCard } from '../../components/ui-shell';
 import { EmptyState } from '../../components/empty-state';
 import { createThemedStyles, theme, useAppTheme } from '../../components/theme';
 import { useGamificationStore } from '../../store/gamification.store';
@@ -24,8 +25,8 @@ import { Text } from '../../components/i18n-text';
 import { Alert } from '../../components/i18n-alert';
 import { useI18n } from '../../components/i18n';
 
-const mealIllustration = require('../../assets/images/vietnamese-meal.png') as number;
-const todayHeroIllustration = require('../../assets/images/today-hero.png') as number;
+const mealIllustration = require('../../assets/images/vietnamese-meal.jpg') as number;
+const todayHeroIllustration = require('../../assets/images/today-hero.jpg') as number;
 
 const MEAL_ORDER: MealType[] = ['breakfast', 'lunch', 'dinner', 'snack'];
 
@@ -255,9 +256,9 @@ function buildNutritionNudges(
   return items.slice(0, 3);
 }
 
-function CaloriesRing({ consumed, burned, target }: { consumed: number; burned: number; target: number }) {
-  const size = 214;
-  const stroke = 14;
+function CaloriesRing({ consumed, burned, target, compact = false }: { consumed: number; burned: number; target: number; compact?: boolean }) {
+  const size = compact ? 154 : 214;
+  const stroke = compact ? 12 : 14;
   const radius = (size - stroke) / 2;
   const circumference = 2 * Math.PI * radius;
   const net = Math.max(0, consumed - burned);
@@ -265,7 +266,7 @@ function CaloriesRing({ consumed, burned, target }: { consumed: number; burned: 
   const remaining = target - net;
 
   return (
-    <View style={styles.ringWrap}>
+    <View style={[styles.ringWrap, { width: size, height: size }]}>
       <Svg width={size} height={size} style={styles.ringSvg}>
         <Circle cx={size / 2} cy={size / 2} r={radius} stroke={theme.colors.progressBg} strokeWidth={stroke} fill="none" />
         <Circle
@@ -282,9 +283,9 @@ function CaloriesRing({ consumed, burned, target }: { consumed: number; burned: 
         />
       </Svg>
       <View style={styles.ringCenter}>
-        <Text style={styles.ringValue}>{formatNumber(net)}</Text>
-        <Text style={styles.ringLabel} i18nKey="screen.tabs.index.text.001" />
-        <Text style={[styles.ringRemain, remaining < 0 && styles.ringRemainOver]}>
+        <Text style={[styles.ringValue, compact && styles.ringValueCompact]}>{formatNumber(net)}</Text>
+        <Text style={[styles.ringLabel, compact && styles.ringLabelCompact]} i18nKey="screen.tabs.index.text.001" />
+        <Text style={[styles.ringRemain, compact && styles.ringRemainCompact, remaining < 0 && styles.ringRemainOver]}>
           {remaining >= 0 ? `còn ${formatNumber(remaining)}` : `dư ${formatNumber(Math.abs(remaining))}`}
         </Text>
       </View>
@@ -508,6 +509,8 @@ function buildMovementPlan(
 export default function DashboardScreen() {
   useAppTheme();
   const { t } = useI18n();
+  const { width } = useWindowDimensions();
+  const isCompact = width < 480;
   const {
     dailyLog,
     activityLogs,
@@ -817,14 +820,14 @@ export default function DashboardScreen() {
   };
 
   return (
-    <ScreenShell contentStyle={styles.screen}>
-      <View style={styles.headerRow}>
+    <ScreenShell contentStyle={[styles.screen, isCompact && styles.screenCompact]}>
+      <View style={[styles.headerRow, isCompact && styles.headerRowCompact]}>
         <View style={styles.headerCopy}>
           <Eyebrow>Hôm nay</Eyebrow>
-          <HeroTitle>Tổng quan hôm nay</HeroTitle>
-          <BodyText style={styles.heroBody}>Nhìn nhanh calo, bữa ăn và việc cần chỉnh ở bữa kế tiếp.</BodyText>
+          <Text style={[styles.dashboardTitle, isCompact && styles.dashboardTitleCompact]}>Tổng quan hôm nay</Text>
+          <BodyText style={[styles.heroBody, isCompact && styles.heroBodyCompact]}>Nhìn nhanh calo, bữa ăn và việc cần chỉnh ở bữa kế tiếp.</BodyText>
         </View>
-        <TouchableOpacity style={styles.streakPill} onPress={() => router.push('/achievements' as never)}>
+        <TouchableOpacity style={[styles.streakPill, isCompact && styles.streakPillCompact]} onPress={() => router.push('/achievements' as never)}>
           <AnimatedIonicon name="flame" size={16} color={theme.colors.accentAmber} motion="pulse" />
           <Text style={styles.streakText}>{summary?.current_streak ?? 0} ngày</Text>
         </TouchableOpacity>
@@ -832,23 +835,24 @@ export default function DashboardScreen() {
 
       <SurfaceCard style={[
         styles.nextActionCard,
+        isCompact && styles.nextActionCardCompact,
         nextAction.tone === 'good' && styles.nextActionCardGood,
         nextAction.tone === 'warn' && styles.nextActionCardWarn,
       ]}>
-        <View style={styles.nextActionIconWrap}>
+        <View style={[styles.nextActionIconWrap, isCompact && styles.nextActionIconWrapCompact]}>
           <Ionicons
             name={nextAction.icon}
             size={20}
             color={nextAction.tone === 'warn' ? theme.colors.accentAmber : theme.colors.accentMint}
           />
         </View>
-        <View style={styles.nextActionCopy}>
+        <View style={[styles.nextActionCopy, isCompact && styles.nextActionCopyCompact]}>
           <Text style={styles.nextActionLabel}>{nextAction.label}</Text>
-          <Text style={styles.nextActionTitle}>{nextAction.title}</Text>
-          <Text style={styles.nextActionBody}>{nextAction.body}</Text>
+          <Text style={[styles.nextActionTitle, isCompact && styles.nextActionTitleCompact]}>{nextAction.title}</Text>
+          <Text style={[styles.nextActionBody, isCompact && styles.nextActionBodyCompact]}>{nextAction.body}</Text>
         </View>
         <TouchableOpacity
-          style={[styles.nextActionButton, nextAction.kind === 'movement' && (isLoggingMovement || movementPlanCompleted) && styles.disabledButton]}
+          style={[styles.nextActionButton, isCompact && styles.nextActionButtonCompact, nextAction.kind === 'movement' && (isLoggingMovement || movementPlanCompleted) && styles.disabledButton]}
           onPress={handleNextActionPress}
           disabled={nextAction.kind === 'movement' && (isLoggingMovement || movementPlanCompleted)}
         >
@@ -856,37 +860,37 @@ export default function DashboardScreen() {
         </TouchableOpacity>
       </SurfaceCard>
 
-      <View style={styles.actionGrid}>
-        <TouchableOpacity style={styles.primaryAction} onPress={() => router.push('/scan' as never)}>
+      <View style={[styles.actionGrid, isCompact && styles.actionGridCompact]}>
+        <TouchableOpacity style={[styles.primaryAction, isCompact && styles.primaryActionCompact]} onPress={() => router.push('/scan' as never)}>
           <AnimatedIonicon name="camera" size={20} color={theme.colors.textOnAccent} motion="pulse" />
           <Text style={styles.primaryActionText} i18nKey="screen.tabs.index.text.002" />
         </TouchableOpacity>
-        <TouchableOpacity style={styles.secondaryAction} onPress={() => router.push('/log' as never)}>
+        <TouchableOpacity style={[styles.secondaryAction, isCompact && styles.secondaryActionCompact]} onPress={() => router.push('/log' as never)}>
           <AnimatedIonicon name="create-outline" size={18} color={theme.colors.accentMint} motion="float" />
           <Text style={styles.secondaryActionText} i18nKey="screen.tabs.index.text.003" />
         </TouchableOpacity>
       </View>
 
-      <SurfaceCard style={styles.cockpitCard}>
-        <View style={styles.cockpitMain}>
-          <CaloriesRing consumed={consumed} burned={burned} target={target} />
-          <View style={styles.cockpitSide}>
-            <View style={styles.targetRow}>
+      <SurfaceCard style={[styles.cockpitCard, isCompact && styles.cockpitCardCompact]}>
+        <View style={[styles.cockpitMain, isCompact && styles.cockpitMainCompact]}>
+          <CaloriesRing consumed={consumed} burned={burned} target={target} compact={isCompact} />
+          <View style={[styles.cockpitSide, isCompact && styles.cockpitSideCompact]}>
+            <View style={[styles.targetRow, isCompact && styles.targetRowCompact]}>
               <Text style={styles.targetLabel} i18nKey="screen.tabs.index.text.004" />
-              <Text style={styles.targetValue}>{formatNumber(target)} kcal</Text>
+              <Text style={[styles.targetValue, isCompact && styles.targetValueCompact]}>{formatNumber(target)} kcal</Text>
             </View>
-            <View style={styles.targetRow}>
+            <View style={[styles.targetRow, isCompact && styles.targetRowCompact]}>
               <Text style={styles.targetLabel} i18nKey="screen.tabs.index.text.005" />
-              <Text style={styles.targetValue}>{formatNumber(consumed)}</Text>
+              <Text style={[styles.targetValue, isCompact && styles.targetValueCompact]}>{formatNumber(consumed)}</Text>
             </View>
-            <View style={styles.targetRow}>
+            <View style={[styles.targetRow, isCompact && styles.targetRowCompact]}>
               <Text style={styles.targetLabel} i18nKey="screen.tabs.index.text.006" />
-              <Text style={styles.targetValueBurned}>-{formatNumber(burned)}</Text>
+              <Text style={[styles.targetValueBurned, isCompact && styles.targetValueCompact]}>-{formatNumber(burned)}</Text>
             </View>
           </View>
         </View>
 
-        <View style={styles.macroRow}>
+        <View style={[styles.macroRow, isCompact && styles.macroRowCompact]}>
           <MacroPill label="screen.tabs.index.label.001" value={`${Math.round(protein)}g`} color={theme.colors.accentCoral} />
           <MacroPill label="screen.tabs.index.label.002" value={`${Math.round(carbs)}g`} color={theme.colors.accentCyan} />
           <MacroPill label="screen.tabs.index.label.003" value={`${Math.round(fat)}g`} color={theme.colors.accentAmber} />
@@ -1207,6 +1211,9 @@ const styles = createThemedStyles((colors, radii) => ({
   screen: {
     paddingBottom: 24,
   },
+  screenCompact: {
+    paddingBottom: 8,
+  },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -1214,11 +1221,31 @@ const styles = createThemedStyles((colors, radii) => ({
     gap: 12,
     marginBottom: 14,
   },
+  headerRowCompact: {
+    gap: 8,
+    marginBottom: 10,
+  },
   headerCopy: {
     flex: 1,
   },
+  dashboardTitle: {
+    color: colors.text,
+    fontSize: 30,
+    lineHeight: 36,
+    fontWeight: '900',
+    marginBottom: 8,
+  },
+  dashboardTitleCompact: {
+    fontSize: 25,
+    lineHeight: 31,
+    marginBottom: 6,
+  },
   heroBody: {
     maxWidth: 520,
+  },
+  heroBodyCompact: {
+    fontSize: 13,
+    lineHeight: 19,
   },
   streakPill: {
     minHeight: 38,
@@ -1230,6 +1257,10 @@ const styles = createThemedStyles((colors, radii) => ({
     backgroundColor: colors.surfaceWarning,
     borderWidth: 1,
     borderColor: colors.borderWarning,
+  },
+  streakPillCompact: {
+    minHeight: 34,
+    paddingHorizontal: 10,
   },
   streakText: {
     color: colors.text,
@@ -1244,6 +1275,10 @@ const styles = createThemedStyles((colors, radii) => ({
     alignItems: 'center',
     flexWrap: 'wrap',
     gap: 12,
+  },
+  nextActionCardCompact: {
+    padding: 12,
+    gap: 10,
   },
   nextActionCardGood: {
     borderColor: colors.borderSuccess,
@@ -1263,9 +1298,17 @@ const styles = createThemedStyles((colors, radii) => ({
     borderWidth: 1,
     borderColor: colors.border,
   },
+  nextActionIconWrapCompact: {
+    width: 36,
+    height: 36,
+  },
   nextActionCopy: {
     flex: 1,
     minWidth: 180,
+  },
+  nextActionCopyCompact: {
+    minWidth: 0,
+    flexBasis: 0,
   },
   nextActionLabel: {
     color: colors.textMuted,
@@ -1279,11 +1322,18 @@ const styles = createThemedStyles((colors, radii) => ({
     fontSize: 17,
     fontWeight: '900',
   },
+  nextActionTitleCompact: {
+    fontSize: 16,
+    lineHeight: 20,
+  },
   nextActionBody: {
     color: colors.textSoft,
     fontSize: 12,
     lineHeight: 17,
     marginTop: 3,
+  },
+  nextActionBodyCompact: {
+    lineHeight: 16,
   },
   nextActionButton: {
     minHeight: 38,
@@ -1293,6 +1343,11 @@ const styles = createThemedStyles((colors, radii) => ({
     paddingHorizontal: 12,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  nextActionButtonCompact: {
+    minHeight: 36,
+    minWidth: 92,
+    paddingHorizontal: 10,
   },
   nextActionButtonText: {
     color: colors.textOnAccent,
@@ -1305,14 +1360,19 @@ const styles = createThemedStyles((colors, radii) => ({
     borderColor: colors.borderStrong,
     padding: 18,
   },
+  cockpitCardCompact: {
+    marginBottom: 12,
+    padding: 12,
+  },
   cockpitMain: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 14,
   },
+  cockpitMainCompact: {
+    gap: 8,
+  },
   ringWrap: {
-    width: 214,
-    height: 214,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1329,16 +1389,27 @@ const styles = createThemedStyles((colors, radii) => ({
     fontWeight: '900',
     lineHeight: 46,
   },
+  ringValueCompact: {
+    fontSize: 32,
+    lineHeight: 38,
+  },
   ringLabel: {
     color: colors.textMuted,
     fontSize: 12,
     fontWeight: '700',
+  },
+  ringLabelCompact: {
+    fontSize: 11,
   },
   ringRemain: {
     color: colors.accentMint,
     fontSize: 13,
     fontWeight: '800',
     marginTop: 7,
+  },
+  ringRemainCompact: {
+    fontSize: 12,
+    marginTop: 5,
   },
   ringRemainOver: {
     color: colors.accentCoral,
@@ -1347,6 +1418,9 @@ const styles = createThemedStyles((colors, radii) => ({
     flex: 1,
     gap: 8,
   },
+  cockpitSideCompact: {
+    gap: 6,
+  },
   targetRow: {
     borderRadius: radii.lg,
     backgroundColor: colors.surfaceAlt,
@@ -1354,6 +1428,10 @@ const styles = createThemedStyles((colors, radii) => ({
     borderColor: colors.border,
     paddingHorizontal: 13,
     paddingVertical: 11,
+  },
+  targetRowCompact: {
+    paddingHorizontal: 10,
+    paddingVertical: 8,
   },
   targetLabel: {
     color: colors.textMuted,
@@ -1366,6 +1444,9 @@ const styles = createThemedStyles((colors, radii) => ({
     fontWeight: '900',
     marginTop: 2,
   },
+  targetValueCompact: {
+    fontSize: 16,
+  },
   targetValueBurned: {
     color: colors.accentAmber,
     fontSize: 18,
@@ -1376,6 +1457,10 @@ const styles = createThemedStyles((colors, radii) => ({
     flexDirection: 'row',
     gap: 8,
     marginTop: 16,
+  },
+  macroRowCompact: {
+    gap: 6,
+    marginTop: 12,
   },
   macroPill: {
     flex: 1,
@@ -1511,6 +1596,10 @@ const styles = createThemedStyles((colors, radii) => ({
     flexDirection: 'row',
     gap: 10,
     marginBottom: 12,
+  },
+  actionGridCompact: {
+    gap: 8,
+    marginBottom: 10,
   },
   movementCard: {
     marginBottom: 12,
@@ -1745,6 +1834,10 @@ const styles = createThemedStyles((colors, radii) => ({
     justifyContent: 'center',
     gap: 8,
   },
+  primaryActionCompact: {
+    minHeight: 50,
+    gap: 6,
+  },
   primaryActionText: {
     color: colors.textOnAccent,
     fontSize: 16,
@@ -1761,6 +1854,10 @@ const styles = createThemedStyles((colors, radii) => ({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
+  },
+  secondaryActionCompact: {
+    minHeight: 50,
+    gap: 6,
   },
   secondaryActionText: {
     color: colors.accentMint,

@@ -51,6 +51,117 @@ describe('FoodService.search', () => {
   });
 });
 
+describe('FoodService.getQualityReport', () => {
+  it('returns aggregate coverage and low-confidence foods', async () => {
+    const foods = [
+      {
+        id: '1',
+        name: 'Rice bowl',
+        source: 'custom_vn',
+        calories_per_100g: 160,
+        protein_g: 4,
+        carbs_g: 32,
+        fat_g: 2,
+        fiber_g: 2,
+        sugar_g: 1,
+        saturated_fat_g: 0.3,
+        sodium_mg: 120,
+        serving_size_g: 250,
+        barcode: null,
+        image_url: 'https://example.com/rice.jpg',
+        nutrient_confidence: 0.95,
+        has_impossible_values: false,
+      },
+      {
+        id: '2',
+        name: 'Mystery snack',
+        source: 'ai_estimated',
+        calories_per_100g: 1200,
+        protein_g: 8,
+        carbs_g: 40,
+        fat_g: 20,
+        fiber_g: null,
+        sugar_g: null,
+        saturated_fat_g: null,
+        sodium_mg: null,
+        serving_size_g: null,
+        barcode: null,
+        image_url: null,
+        nutrient_confidence: 0.45,
+        has_impossible_values: true,
+      },
+    ];
+
+    const db = {
+      from: jest.fn().mockReturnValue({
+        select: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockResolvedValue({ data: foods, error: null }),
+      }),
+    };
+
+    const service = new FoodService({ db } as unknown as SupabaseService);
+    const report = await service.getQualityReport(10);
+
+    expect(report.sample_size).toBe(2);
+    expect(report.low_confidence_count).toBe(1);
+    expect(report.impossible_values_count).toBe(1);
+    expect(report.field_coverage.find((item) => item.field === 'fiber_g')).toMatchObject({
+      filled_count: 1,
+      coverage_ratio: 0.5,
+    });
+    expect(report.source_distribution).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ source: 'custom_vn', count: 1, ratio: 0.5 }),
+        expect.objectContaining({ source: 'ai_estimated', count: 1, ratio: 0.5 }),
+      ]),
+    );
+    expect(report.top_low_confidence[0]).toMatchObject({
+      id: '2',
+      missing_fields: expect.arrayContaining(['fiber_g', 'sodium_mg']),
+    });
+  });
+
+  it('returns an empty report when there are no foods', async () => {
+    const db = {
+      from: jest.fn().mockReturnValue({
+        select: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockResolvedValue({ data: [], error: null }),
+      }),
+    };
+
+    const service = new FoodService({ db } as unknown as SupabaseService);
+    const report = await service.getQualityReport();
+
+    expect(report.sample_size).toBe(0);
+    expect(report.quality_score).toBe(0);
+    expect(report.field_coverage.every((item) => item.filled_count === 0)).toBe(true);
+  });
+});
+
+describe('FoodService.findPotentialDuplicates', () => {
+  it('groups foods by normalized name', async () => {
+    const foods = [
+      { id: '1', name: 'Pho Bo', source: 'custom_vn', nutrient_confidence: 0.9 },
+      { id: '2', name: 'pho   bo', source: 'openfoodfacts', nutrient_confidence: 0.8 },
+      { id: '3', name: 'Chicken salad', source: 'usda', nutrient_confidence: 0.95 },
+    ];
+
+    const db = {
+      from: jest.fn().mockReturnValue({
+        select: jest.fn().mockReturnThis(),
+        limit: jest.fn().mockResolvedValue({ data: foods, error: null }),
+      }),
+    };
+
+    const service = new FoodService({ db } as unknown as SupabaseService);
+    const duplicates = await service.findPotentialDuplicates();
+
+    expect(duplicates).toHaveLength(1);
+    expect(duplicates[0].key).toBe('pho bo');
+    expect(duplicates[0].foods.map((food) => food.id)).toEqual(['1', '2']);
+  });
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 // findById
 // ─────────────────────────────────────────────────────────────────────────────

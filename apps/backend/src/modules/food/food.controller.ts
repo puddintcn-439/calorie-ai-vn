@@ -20,6 +20,18 @@ export class FoodController {
     return this.foodService.findByBarcode(barcode);
   }
 
+  @Get('quality/report')
+  qualityReport(@Query('limit') limit?: string) {
+    const safeLimit = Number.isFinite(Number(limit)) ? Number(limit) : 25;
+    return this.foodService.getQualityReport(safeLimit);
+  }
+
+  @Get('quality/duplicates')
+  qualityDuplicates(@Query('limit') limit?: string) {
+    const safeLimit = Number.isFinite(Number(limit)) ? Number(limit) : 50;
+    return this.foodService.findPotentialDuplicates(safeLimit);
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.foodService.findById(id);

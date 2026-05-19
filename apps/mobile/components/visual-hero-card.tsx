@@ -21,7 +21,7 @@ export function VisualHeroCard({
   const { colors, mode } = useAppTheme();
 
   return (
-    <SurfaceCard style={[styles.card, { backgroundColor: colors.surfaceLifted, borderColor: colors.borderStrong }, style]}>
+    <SurfaceCard style={[styles.card, compact && styles.cardCompact, { backgroundColor: colors.surfaceLifted, borderColor: colors.borderStrong }, style]}>
       <Image source={imageSource} style={[styles.image, { backgroundColor: colors.surfaceAlt, opacity: mode === 'dark' ? 0.92 : 1 }, compact && styles.imageCompact]} resizeMode="cover" />
       <View style={[styles.copy, compact && styles.copyCompact]}>
         <Eyebrow>{eyebrow}</Eyebrow>
@@ -38,18 +38,21 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     marginBottom: 16,
   },
+  cardCompact: {
+    marginBottom: 12,
+  },
   image: {
     width: '100%',
     height: 168,
   },
   imageCompact: {
-    height: 150,
+    height: 126,
   },
   copy: {
     padding: 14,
   },
   copyCompact: {
-    padding: 14,
+    padding: 12,
   },
   body: {
     maxWidth: 700,

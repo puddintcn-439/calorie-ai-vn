@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View } from 'react-native';
+import { Image, useWindowDimensions, View } from 'react-native';
 import { router } from 'expo-router';
 import { useAuthStore } from '../../store/auth.store';
 import { BodyText, Eyebrow, HeroTitle, ScreenShell, SurfaceCard } from '../../components/ui-shell';
@@ -9,8 +9,12 @@ import { createThemedStyles, useAppTheme } from '../../components/theme';
 import { Text } from '../../components/i18n-text';
 import { Alert } from '../../components/i18n-alert';
 
+const loginHeroImage = require('../../assets/images/scan-hero.jpg') as number;
+
 export default function LoginScreen() {
   useAppTheme();
+  const { width } = useWindowDimensions();
+  const isCompact = width < 480;
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -30,6 +34,7 @@ export default function LoginScreen() {
 
   return (
     <ScreenShell scroll={false} contentStyle={styles.centeredContent}>
+      <Image source={loginHeroImage} resizeMode="cover" style={[styles.heroImage, isCompact && styles.heroImageCompact]} />
       <View style={styles.heroBlock}>
         <Eyebrow>auth.login.eyebrow</Eyebrow>
         <HeroTitle>auth.login.title</HeroTitle>
@@ -69,8 +74,22 @@ export default function LoginScreen() {
 
 const styles = createThemedStyles((colors, radii) => ({
   centeredContent: { flex: 1, justifyContent: 'center', maxWidth: 560, alignSelf: 'center', width: '100%' },
-  heroBlock: { marginBottom: 18, paddingHorizontal: 4 },
-  badgeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 16 },
+  heroImage: {
+    width: '100%',
+    height: 132,
+    borderRadius: radii.xl,
+    marginBottom: 14,
+    backgroundColor: colors.surfaceAlt,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+  },
+  heroImageCompact: {
+    height: 112,
+    borderRadius: radii.lg,
+    marginBottom: 12,
+  },
+  heroBlock: { marginBottom: 14, paddingHorizontal: 4 },
+  badgeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 },
   badge: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 18, backgroundColor: colors.surfaceAlt, borderWidth: 1, borderColor: colors.border },
   badgeText: { color: colors.textSoft, fontSize: 12, fontWeight: '700' },
   formCard: { width: '100%', padding: 20 },

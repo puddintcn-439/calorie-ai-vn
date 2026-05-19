@@ -5,9 +5,8 @@ import {
   View,
   ScrollView,
   RefreshControl,
-  FlatList
 } from 'react-native';
-import { useFocusEffect } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { ScreenShell, SurfaceCard } from '../../components/ui-shell';
 import { UiButton } from '../../components/ui-button';
 import { UiInput } from '../../components/ui-input';
@@ -18,8 +17,9 @@ import { apiClient } from '../../services/api';
 import { VisualHeroCard } from '../../components/visual-hero-card';
 import { createThemedStyles, theme, useAppTheme } from '../../components/theme';
 import { Text } from '../../components/i18n-text';
+import { Locale, useI18n } from '../../components/i18n';
 
-const coachHeroIllustration = require('../../assets/images/coach-hero.png') as number;
+const coachHeroIllustration = require('../../assets/images/coach-hero.jpg') as number;
 
 interface ChatMessage {
   id: string;
@@ -107,6 +107,84 @@ function localizeInsightText(text?: string | null) {
   return INSIGHT_TEXT_TRANSLATIONS[text] ?? text;
 }
 
+const CANONICAL_INSIGHT_TEXT_VI: Record<string, string> = {
+  'Skipping meals': 'Bỏ bữa nhiều lần',
+  'You skipped meals several times this week. That can make you overly hungry and more likely to overeat later.': 'Tuần này bạn bỏ bữa vài lần. Điều này dễ làm bạn đói quá mức và ăn bù về sau.',
+  'Prepare a small meal or protein snack every 4-5 hours to keep energy steadier.': 'Chuẩn bị một bữa nhỏ hoặc snack giàu protein mỗi 4-5 giờ để giữ năng lượng ổn định.',
+  'High-calorie spikes': 'Ngày ăn vượt nhiều',
+  'Your data shows a few days with large calorie jumps, which can make weekly progress less stable.': 'Dữ liệu có vài ngày calo tăng vọt, khiến tiến độ tuần khó ổn định.',
+  'Note the context, such as stress, poor sleep, or social meals, and plan a lighter fallback for next time.': 'Ghi lại bối cảnh như stress, thiếu ngủ hoặc tiệc để chuẩn bị phương án nhẹ hơn lần sau.',
+  'Late-night eating': 'Ăn muộn buổi tối',
+  'A large share of calories is landing late in the day, which may affect sleep and next-day hunger.': 'Phần lớn calo đang rơi vào cuối ngày, có thể ảnh hưởng giấc ngủ và cảm giác đói hôm sau.',
+  'Try finishing your last main meal about 2 hours before bed; if hungry, choose a light protein option.': 'Thử chốt bữa chính trước giờ ngủ khoảng 2 tiếng; nếu đói hãy chọn đồ nhẹ giàu protein.',
+  'Weekend variance': 'Cuối tuần lệch nhịp',
+  'Weekend eating differs a lot from weekdays, making progress harder to keep consistent.': 'Cách ăn cuối tuần khác khá nhiều so với ngày thường, làm tiến độ khó đều.',
+  'Pre-plan 1-2 key weekend meals so you can stay flexible without drifting too far.': 'Chọn trước 1-2 bữa chính cuối tuần để vẫn linh hoạt mà không lệch quá xa.',
+  'Emotional eating cue': 'Ăn theo cảm xúc',
+  'Your eating pattern suggests mood may be influencing food choices.': 'Mẫu ăn uống cho thấy cảm xúc có thể đang ảnh hưởng đến lựa chọn món.',
+  'Add a short mood note when logging meals so recurring triggers become easier to spot.': 'Khi log bữa, thêm một ghi chú ngắn về tâm trạng để nhận ra trigger lặp lại.',
+  'Logging gaps': 'Ghi chép chưa đều',
+  'You logged only a few days this week. Consistent logging helps the app calculate targets and coaching more accurately.': 'Tuần này bạn chỉ log vài ngày. Log đều giúp app tính mục tiêu và gợi ý chính xác hơn.',
+  'Set a reminder after meals. A rough estimate is still more useful than a blank day.': 'Đặt nhắc nhở sau mỗi bữa. Ước lượng nhanh vẫn hữu ích hơn bỏ trống.',
+  'Stress eating': 'Ăn khi căng thẳng',
+  'On higher-stress days, your calorie intake appears to rise noticeably.': 'Những ngày stress cao, lượng calo của bạn có xu hướng tăng rõ.',
+  'Before eating more, try a 5-10 minute walk or a glass of water, then decide again.': 'Trước khi ăn thêm, thử đi bộ 5-10 phút hoặc uống nước rồi quyết định lại.',
+  'Stable meal timing': 'Khung giờ ăn ổn định',
+  'You tend to eat at a consistent time window, which is a useful base for habit building.': 'Bạn có xu hướng ăn vào khung giờ khá ổn định, đây là nền tốt để duy trì thói quen.',
+  'Keep this rhythm and prepare suitable meals before your usual eating window.': 'Giữ nhịp này và chuẩn bị sẵn bữa phù hợp trước khung giờ quen thuộc.',
+  'Great consistency this week. Keep the current rhythm.': 'Tuần này rất đều. Giữ nhịp hiện tại là đủ tốt.',
+  'Solid progress. Logging a bit more consistently will make recommendations more accurate.': 'Tiến độ ổn. Log đều hơn một chút sẽ giúp gợi ý chính xác hơn.',
+  'You are moving in the right direction. Prioritize consistent logging before optimizing details.': 'Bạn đang đi đúng hướng. Hãy ưu tiên log đều trước khi tối ưu sâu.',
+  'Start with one meal log today. Even a rough estimate gives Coach enough context to personalize the next step.': 'Bắt đầu bằng một bữa log hôm nay. Ước lượng nhanh cũng đủ để Coach cá nhân hóa bước tiếp theo.',
+  'Prioritize small, regular meals to avoid getting overly hungry late in the day.': 'Ưu tiên bữa nhỏ đều hơn để tránh đói quá mức vào cuối ngày.',
+  'Identify triggers and prepare an easier fallback meal before the next high-risk moment.': 'Nhận diện trigger và chuẩn bị trước bữa thay thế dễ kiểm soát hơn.',
+  'Try finishing your last main meal about 2 hours before bed to support better sleep.': 'Thử chốt bữa chính trước giờ ngủ khoảng 2 tiếng để ngủ tốt hơn.',
+  'Plan a few weekend choices in advance so you can enjoy flexibility without drifting too far.': 'Lên trước vài lựa chọn cuối tuần để vẫn vui mà không lệch quá xa.',
+  'Use one short stress-reduction action before deciding to eat more.': 'Dùng một hành động giảm stress ngắn trước khi quyết định ăn thêm.',
+  'Add mood notes when logging meals to spot recurring triggers.': 'Ghi chú cảm xúc khi log bữa để nhận ra trigger lặp lại.',
+  'Log right after meals, even roughly, so the data is not empty.': 'Log ngay sau bữa, kể cả ước lượng nhanh, để dữ liệu không bị rỗng.',
+  'Use your natural eating window to keep a stable routine.': 'Tận dụng khung giờ ăn tự nhiên để duy trì nhịp ổn định.',
+};
+
+function getLocalizedInsightTypeLabel(type: string, locale: Locale) {
+  if (locale === 'en') {
+    const labels: Record<string, string> = {
+      pattern_alert: 'Pattern',
+      recommendation: 'Recommendation',
+      achievement: 'Progress',
+      warning: 'Needs attention',
+      prediction: 'Forecast',
+    };
+    return labels[type] ?? 'Recommendation';
+  }
+
+  return INSIGHT_TYPE_LABELS[type] ?? 'Gợi ý';
+}
+
+function localizeInsightTextForLocale(text: string | null | undefined, locale: Locale) {
+  if (!text) return '';
+  if (locale !== 'vi') return text;
+  return CANONICAL_INSIGHT_TEXT_VI[text] ?? INSIGHT_TEXT_TRANSLATIONS[text] ?? text;
+}
+
+void getInsightTypeLabel;
+void localizeInsightText;
+
+function finiteNumber(value: unknown): number | null {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
+function formatSummaryNumber(value: unknown, fallback = '--') {
+  const numeric = finiteNumber(value);
+  return numeric === null ? fallback : String(Math.round(numeric));
+}
+
+function formatSummaryPercent(value: unknown) {
+  const numeric = finiteNumber(value);
+  return numeric === null ? '--' : `${Math.round(numeric)}%`;
+}
+
 function getCoachErrorMessage(error: unknown): string {
   const fallback = 'Xin lỗi, tôi đang bị gián đoạn kết nối. Bạn thử lại sau ít phút nhé.';
 
@@ -140,6 +218,7 @@ function getCoachErrorMessage(error: unknown): string {
 
 export default function CoachScreen() {
   useAppTheme();
+  const { locale, t } = useI18n();
   const { dailyLog, fetchDailyLog } = useLogStore();
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -154,6 +233,14 @@ export default function CoachScreen() {
       text: 'Xin chào. Tôi là AI Coach. Bạn có thể hỏi về bữa ăn, macro hoặc cách đặt mục tiêu calo hôm nay.',
     },
   ]);
+
+  useEffect(() => {
+    setMessages((prev) => prev.map((message) => (
+      message.id === 'welcome'
+        ? { ...message, text: t('screen.tabs.coach.message.welcome') }
+        : message
+    )));
+  }, [t]);
 
   const loadInsights = useCallback(async () => {
     try {
@@ -203,6 +290,8 @@ export default function CoachScreen() {
       target_calories: target,
     };
   }, [dailyLog]);
+  const summaryRecommendation = localizeInsightTextForLocale(summary?.recommended_action, locale) || t('screen.tabs.coach.summaryFallback')
+    || 'Coach cần thêm dữ liệu log trong tuần để đưa ra gợi ý chính xác hơn.';
 
   const handleSend = async () => {
     const message = input.trim();
@@ -256,13 +345,13 @@ export default function CoachScreen() {
       <View style={styles.insightHeader}>
         <Text style={styles.insightEmoji}>{insight.emoji || '💡'}</Text>
         <View style={styles.insightTitleContainer}>
-          <Text style={styles.insightTitle}>{localizeInsightText(insight.title)}</Text>
-          <Text style={styles.insightType}>{getInsightTypeLabel(insight.insight_type)}</Text>
+          <Text style={styles.insightTitle}>{localizeInsightTextForLocale(insight.title, locale)}</Text>
+          <Text style={styles.insightType}>{getLocalizedInsightTypeLabel(insight.insight_type, locale)}</Text>
         </View>
       </View>
-      <Text style={styles.insightDescription}>{localizeInsightText(insight.description)}</Text>
+      <Text style={styles.insightDescription}>{localizeInsightTextForLocale(insight.description, locale)}</Text>
       {insight.action_suggestion && (
-        <Text style={styles.insightAction}>💡 {localizeInsightText(insight.action_suggestion)}</Text>
+        <Text style={styles.insightAction}>💡 {localizeInsightTextForLocale(insight.action_suggestion, locale)}</Text>
       )}
       <UiButton
         label="screen.tabs.coach.label.001"
@@ -292,20 +381,20 @@ export default function CoachScreen() {
             <View style={styles.summaryGrid}>
               <View style={styles.summaryItem}>
                 <Text style={styles.summaryLabel} i18nKey="screen.tabs.coach.text.002" />
-                <Text style={styles.summaryValue}>{summary.adherence_percentage}%</Text>
+                <Text style={styles.summaryValue}>{formatSummaryPercent(summary.adherence_percentage)}</Text>
               </View>
               <View style={styles.summaryItem}>
                 <Text style={styles.summaryLabel} i18nKey="screen.tabs.coach.text.003" />
-                <Text style={styles.summaryValue}>{summary.logs_count}</Text>
+                <Text style={styles.summaryValue}>{formatSummaryNumber(summary.logs_count, '0')}</Text>
               </View>
               <View style={styles.summaryItem}>
                 <Text style={styles.summaryLabel} i18nKey="screen.tabs.coach.text.004" />
                 <Text style={styles.summaryValue}>
-                  {Math.round(summary.average_daily_calories)}
+                  {formatSummaryNumber(summary.average_daily_calories)}
                 </Text>
               </View>
             </View>
-            <Text style={styles.summaryRecommendation}>{localizeInsightText(summary.recommended_action)}</Text>
+            <Text style={styles.summaryRecommendation}>{summaryRecommendation}</Text>
           </SurfaceCard>
         )}
 
@@ -322,7 +411,10 @@ export default function CoachScreen() {
         ) : (
           <SurfaceCard style={styles.noInsightsCard}>
             <Text style={styles.noInsightsText}>
+              {t('screen.tabs.coach.emptyInsights')}
+              {false ? <>
               ✨ Bạn đang làm rất tốt! Không có cảnh báo nào ngay bây giờ.
+              </> : null}
             </Text>
           </SurfaceCard>
         )}
@@ -330,11 +422,31 @@ export default function CoachScreen() {
         {/* Context Card */}
         <SurfaceCard style={styles.contextCard}>
           <Text style={styles.contextTitle} i18nKey="screen.tabs.coach.text.006" />
+          <Text style={styles.contextLine}>{t('screen.tabs.coach.context.consumed')}: {context.today_calories} kcal</Text>
+          <Text style={styles.contextLine}>{t('screen.tabs.coach.context.target')}: {context.target_calories} kcal</Text>
+          <Text style={styles.contextLine}>
+            {t('screen.tabs.coach.context.remaining')}: {context.target_calories - context.today_calories} kcal
+          </Text>
+          <View style={styles.contextActions}>
+            <UiButton
+              label="screen.tabs.coach.action.logMeal"
+              onPress={() => router.push('/scan')}
+              style={styles.contextActionButton}
+            />
+            <UiButton
+              label="screen.tabs.coach.action.today"
+              variant="secondary"
+              onPress={() => router.push('/')}
+              style={styles.contextActionButton}
+            />
+          </View>
+          {false ? <>
           <Text style={styles.contextLine}>Đã ăn: {context.today_calories} kcal</Text>
           <Text style={styles.contextLine}>Mục tiêu: {context.target_calories} kcal</Text>
           <Text style={styles.contextLine}>
             Còn lại: {context.target_calories - context.today_calories} kcal
           </Text>
+          </> : null}
         </SurfaceCard>
 
         {/* Chat Messages */}
@@ -347,7 +459,7 @@ export default function CoachScreen() {
                 msg.role === 'user' ? styles.userCard : styles.coachCard,
               ]}
             >
-              <Text style={styles.roleLabel}>{msg.role === 'user' ? 'Bạn' : 'Coach'}</Text>
+              <Text style={styles.roleLabel}>{msg.role === 'user' ? t('screen.tabs.coach.role.user') : 'Coach'}</Text>
               <Text style={styles.messageText}>{msg.text}</Text>
             </SurfaceCard>
           ))}
@@ -500,6 +612,15 @@ const styles = createThemedStyles((colors, radii) => ({
     color: colors.textSoft,
     fontSize: 13,
     marginBottom: 4,
+  },
+  contextActions: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 10,
+  },
+  contextActionButton: {
+    flex: 1,
+    paddingVertical: 11,
   },
   chatList: {
     gap: 10,

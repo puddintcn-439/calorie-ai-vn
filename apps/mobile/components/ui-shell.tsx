@@ -78,6 +78,8 @@ export function ScreenShell({
 }
 
 export function SurfaceCard({ children, style }: { children: ReactNode; style?: StyleProp<ViewStyle> }) {
+  const { width } = useWindowDimensions();
+  const isCompact = width < 480;
   const fade = useRef(new Animated.Value(0)).current;
   const scale = useRef(new Animated.Value(0.98)).current;
   const useNativeDriver = Platform.OS !== 'web';
@@ -105,19 +107,19 @@ export function SurfaceCard({ children, style }: { children: ReactNode; style?: 
       style={[
         {
           backgroundColor: colors.surface,
-          borderRadius: radii.xl,
+          borderRadius: isCompact ? radii.lg : radii.xl,
           borderWidth: 1,
           borderColor: colors.border,
-          padding: 16,
+          padding: isCompact ? 14 : 16,
           ...(Platform.OS === 'web'
             ? { boxShadow: `0px 14px 30px ${colors.shadow}24` }
             : {
                 shadowColor: colors.shadow,
                 shadowOpacity: 0.16,
-                shadowRadius: 18,
+                shadowRadius: isCompact ? 12 : 18,
                 shadowOffset: { width: 0, height: 10 },
               }),
-          elevation: 5,
+          elevation: isCompact ? 3 : 5,
         },
         style,
         { opacity: fade, transform: [{ scale }] },
@@ -147,10 +149,10 @@ export function BodyText({ children, style }: { children: ReactNode; style?: Sty
 const styles = StyleSheet.create({
   gradient: { flex: 1 },
   safeArea: { flex: 1 },
-  scrollContent: { padding: 16, paddingBottom: 176 },
-  scrollContentDesktop: { paddingBottom: 150 },
-  noScrollContent: { flex: 1, paddingHorizontal: 20, paddingBottom: 112 },
-  noScrollContentDesktop: { paddingBottom: 96 },
+  scrollContent: { padding: 14, paddingBottom: 128 },
+  scrollContentDesktop: { padding: 16, paddingBottom: 112 },
+  noScrollContent: { flex: 1, paddingHorizontal: 18, paddingBottom: 96 },
+  noScrollContentDesktop: { paddingBottom: 84 },
   inner: {
     width: '100%',
     maxWidth: 1080,
@@ -173,8 +175,8 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   heroTitleMobile: {
-    fontSize: 25,
-    lineHeight: 31,
+    fontSize: 23,
+    lineHeight: 29,
   },
   bodyText: {
     fontSize: 14,
