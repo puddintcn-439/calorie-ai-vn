@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { SupabaseService } from '../../common/supabase/supabase.service';
 import { UserProfile } from '@calorie-ai/types';
+import { ConfigService } from '@nestjs/config';
 
 export interface MealRecommendation {
   meal_type: 'breakfast' | 'lunch' | 'dinner' | 'snack';
@@ -40,7 +41,18 @@ type FoodRow = {
 
 @Injectable()
 export class RecommendationService {
-  constructor(private readonly supabaseService: SupabaseService) {}
+  private readonly toleranceFactor: number;
+  private readonly maxFoodPool: number;
+  private readonly minCaloriesPer100g: number;
+
+  constructor(
+    private readonly supabaseService: SupabaseService,
+    private readonly config?: ConfigService,
+  ) {
+    this.toleranceFactor = Number(this.config?.get('RECOMMEND_TOLERANCE')) || 0.2;
+    this.maxFoodPool = Number(this.config?.get('RECOMMEND_MAX_FOOD_POOL')) || 50;
+    this.minCaloriesPer100g = Number(this.config?.get('RECOMMEND_MIN_CALORIES_PER_100G')) || 20;
+  }
 
   /**
    * Get recommended foods for a meal based on remaining calories
@@ -58,20 +70,29 @@ export class RecommendationService {
       fat_g: number;
     }[]
   > {
-    const tolerance = remaining_calories * 0.2; // ±20% tolerance
+    const tolerance = Math.max(10, Math.round(remaining_calories * this.toleranceFactor));
     void meal_type;
 
+    const poolLimit = Math.max(limit * 8, this.maxFoodPool);
     const { data } = await this.supabaseService.db
       .from('foods')
       .select('name, name_vi, calories_per_100g, protein_g, carbs_g, fat_g, serving_size_g')
-      .gte('calories_per_100g', 20)
+      .gte('calories_per_100g', this.minCaloriesPer100g)
       .lte('calories_per_100g', 900)
       .order('nutrient_confidence', { ascending: false })
-      .limit(Math.max(limit * 8, 30));
+      .limit(poolLimit);
 
-    return ((data ?? []) as FoodRow[])
-      .map((food) => this.toFoodSuggestion(food))
+    const pool = ((data ?? []) as FoodRow[]).map((food) => this.toFoodSuggestion(food));
+
+    const matches = pool
       .filter((food) => food.calories >= remaining_calories - tolerance && food.calories <= remaining_calories + tolerance)
+      .slice(0, limit);
+
+    if (matches.length > 0) return matches;
+
+    // Fallback: return nearest foods by absolute calorie difference
+    return pool
+      .sort((a, b) => Math.abs(a.calories - remaining_calories) - Math.abs(b.calories - remaining_calories))
       .slice(0, limit);
   }
 
@@ -84,13 +105,19 @@ export class RecommendationService {
   ): Promise<WeeklyRecommendations> {
     const dailyTarget = profile.daily_calorie_target || 2000;
 
-    // Get today's logs
-    const today = new Date().toISOString().split('T')[0];
+    // Get today's logs (between start of today and start of tomorrow)
+    const today = new Date();
+    const todayStr = today.toISOString().split('T')[0];
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowStr = tomorrow.toISOString().split('T')[0];
+
     const { data: todayLogs } = await this.supabaseService.db
       .from('food_logs')
       .select('calories')
       .eq('user_id', user_id)
-      .gte('logged_at', `${today}T00:00:00Z`);
+      .gte('logged_at', `${todayStr}T00:00:00Z`)
+      .lt('logged_at', `${tomorrowStr}T00:00:00Z`);
 
     const consumedToday = (todayLogs || []).reduce(
       (sum, log) => sum + log.calories,
@@ -123,15 +150,12 @@ export class RecommendationService {
       .eq('user_id', user_id)
       .gte('logged_at', sevenDaysAgo.toISOString());
 
-    const weeklyAdherence = this.calculateWeeklyAdherence(
-      weekLogs || [],
-      dailyTarget,
-    );
+    const weeklyAdherence = this.calculateWeeklyAdherence(weekLogs || [], dailyTarget);
     const trend = this.calculateTrend(consumedToday, dailyTarget);
 
     return {
       user_id,
-      date: today,
+      date: todayStr,
       daily_target: dailyTarget,
       remaining_calories: remainingCalories,
       meals: [
