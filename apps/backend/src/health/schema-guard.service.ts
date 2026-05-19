@@ -43,19 +43,35 @@ export class SchemaGuardService implements OnModuleInit {
   }
 
   private async checkTableExists(tableName: string): Promise<boolean> {
-    const { error } = await this.supabase.db
-      .from(tableName)
-      .select('id', { head: true, count: 'exact' })
-      .limit(1);
+    try {
+      const { error } = await this.supabase.db
+        .from(tableName)
+        .select('id', { head: true, count: 'exact' })
+        .limit(1);
 
-    if (!error) return true;
+      if (!error) return true;
 
-    const errorText = `${error.message ?? ''} ${error.details ?? ''}`.toLowerCase();
-    if (errorText.includes('schema cache') || errorText.includes(`public.${tableName}`)) {
-      return false;
+      const errorText = `${error.message ?? ''} ${error.details ?? ''}`.toLowerCase();
+      if (errorText.includes('schema cache') || errorText.includes(`public.${tableName}`)) {
+        return false;
+      }
+
+      // In development, treat other Supabase errors as non-fatal and report missing table.
+      const env = process.env.NODE_ENV ?? 'development';
+      if (env === 'development') {
+        this.logger.warn(`[schema-guard] Supabase check for table ${tableName} returned error, continuing in development: ${error.message ?? error}`);
+        return false;
+      }
+
+      // In non-development environments, surface the error so startup fails.
+      throw error;
+    } catch (err) {
+      const env = process.env.NODE_ENV ?? 'development';
+      if (env === 'development') {
+        this.logger.warn(`[schema-guard] Error checking table ${tableName}, continuing in development: ${err}`);
+        return false;
+      }
+      throw err;
     }
-
-    // Any non-schema error (network, auth, etc.) should surface as startup failure.
-    throw error;
   }
 }
