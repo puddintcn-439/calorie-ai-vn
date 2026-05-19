@@ -337,6 +337,59 @@ describe('FoodIngestionService.ingestFromOpenFoodFacts', () => {
     expect(result.updated).toBe(0);
     expect(result.skipped).toBe(0);
     expect(insert).toHaveBeenCalled();
+    expect(insert).toHaveBeenCalledWith(expect.objectContaining({
+      serving_size_g: 75,
+      serving_description: '75',
+    }));
+  });
+
+  it('parses Open Food Facts serving size with container count and ml unit', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: jest.fn().mockResolvedValue({
+        products: [
+          {
+            code: '8933',
+            product_name: 'Green Tea Bottle',
+            categories_tags: ['en:beverages'],
+            nutriments: {
+              'energy-kcal_100g': 35,
+              proteins_100g: 0,
+              carbohydrates_100g: 8,
+              fat_100g: 0,
+            },
+            serving_size: '1 bottle (250 ml)',
+          },
+        ],
+      }),
+    } as any);
+
+    const insert = jest.fn().mockResolvedValue({ data: null, error: null });
+    const maybeSingle = jest.fn().mockResolvedValue({ data: null, error: null });
+
+    const db = {
+      from: jest.fn().mockImplementation((table: string) => {
+        if (table === 'foods') {
+          return {
+            select: jest.fn().mockReturnThis(),
+            eq: jest.fn().mockReturnThis(),
+            maybeSingle,
+            insert,
+            update: jest.fn().mockReturnThis(),
+          };
+        }
+        return makeMockDb();
+      }),
+    };
+
+    const service = new FoodIngestionService({ db } as unknown as SupabaseService);
+    const result = await service.ingestFromOpenFoodFacts('tea', 1, 10);
+
+    expect(result.inserted).toBe(1);
+    expect(insert).toHaveBeenCalledWith(expect.objectContaining({
+      serving_size_g: 250,
+      serving_description: '1 bottle (250 ml)',
+    }));
   });
 
   it('skips unchanged product when hash matches existing row', async () => {
@@ -475,6 +528,281 @@ describe('FoodIngestionService.ingestFromOpenFoodFacts', () => {
     expect(result.fetched).toBe(1);
     expect(result.skipped).toBe(1);
     expect(result.inserted).toBe(0);
+  });
+});
+
+describe('FoodIngestionService.ingestFromUSDA', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+    delete process.env.USDA_API_KEY;
+  });
+
+  it('inserts USDA food and normalizes core nutrients', async () => {
+    process.env.USDA_API_KEY = 'test-usda-key';
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: jest.fn().mockResolvedValue({
+        foods: [
+          {
+            fdcId: 171688,
+            description: 'Chicken breast, roasted',
+            foodCategory: 'Poultry Products',
+            dataType: 'Foundation',
+            servingSize: 3,
+            servingSizeUnit: 'oz',
+            foodNutrients: [
+              { nutrientNumber: '1008', nutrientName: 'Energy', unitName: 'KCAL', value: 165 },
+              { nutrientNumber: '1003', nutrientName: 'Protein', unitName: 'G', value: 31 },
+              { nutrientNumber: '1005', nutrientName: 'Carbohydrate, by difference', unitName: 'G', value: 0 },
+              { nutrientNumber: '1004', nutrientName: 'Total lipid (fat)', unitName: 'G', value: 3.6 },
+              { nutrientNumber: '1079', nutrientName: 'Fiber, total dietary', unitName: 'G', value: 0 },
+              { nutrientNumber: '1093', nutrientName: 'Sodium, Na', unitName: 'MG', value: 74 },
+              { nutrientNumber: '1258', nutrientName: 'Fatty acids, total saturated', unitName: 'G', value: 1.0 },
+            ],
+          },
+        ],
+      }),
+    } as any);
+
+    const maybeSingle = jest.fn().mockResolvedValue({ data: null, error: null });
+    const insert = jest.fn().mockResolvedValue({ data: null, error: null });
+
+    const db = {
+      from: jest.fn().mockImplementation((table: string) => {
+        if (table === 'foods') {
+          return {
+            select: jest.fn().mockReturnThis(),
+            eq: jest.fn().mockReturnThis(),
+            maybeSingle,
+            insert,
+            update: jest.fn().mockReturnThis(),
+          };
+        }
+        return makeMockDb();
+      }),
+    };
+
+    const service = new FoodIngestionService({ db } as unknown as SupabaseService);
+    const result = await service.ingestFromUSDA('chicken breast', 1, 10);
+
+    expect(result).toMatchObject({
+      source: 'usda',
+      fetched: 1,
+      inserted: 1,
+      updated: 0,
+      skipped: 0,
+    });
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        href: expect.stringContaining('api.nal.usda.gov/fdc/v1/foods/search'),
+      }),
+      expect.any(Object),
+    );
+    expect(insert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'Chicken Breast, Roasted',
+        source: 'usda',
+        source_id: '171688',
+        source_url: 'https://fdc.nal.usda.gov/fdc-app.html#/food-details/171688/nutrients',
+        category: 'meat',
+        calories_per_100g: 165,
+        protein_g: 31,
+        carbs_g: 0,
+        fat_g: 3.6,
+        sodium_mg: 74,
+        saturated_fat_g: 1,
+        serving_size_g: 85,
+        is_validated: true,
+        has_impossible_values: false,
+      }),
+    );
+  });
+
+  it('updates existing USDA row when source hash changes', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: jest.fn().mockResolvedValue({
+        foods: [
+          {
+            fdcId: 20037,
+            description: 'Rice, white, cooked',
+            foodCategory: 'Cereal Grains and Pasta',
+            dataType: 'SR Legacy',
+            foodNutrients: [
+              { nutrientNumber: '1008', nutrientName: 'Energy', value: 130 },
+              { nutrientNumber: '1003', nutrientName: 'Protein', value: 2.7 },
+              { nutrientNumber: '1005', nutrientName: 'Carbohydrate, by difference', value: 28.2 },
+              { nutrientNumber: '1004', nutrientName: 'Total lipid (fat)', value: 0.3 },
+            ],
+          },
+        ],
+      }),
+    } as any);
+
+    const maybeSingle = jest.fn().mockResolvedValue({ data: { id: 'rice-1', source_data_hash: 'old-hash' }, error: null });
+    const update = jest.fn().mockReturnValue({ eq: jest.fn().mockResolvedValue({ data: null, error: null }) });
+
+    const db = {
+      from: jest.fn().mockImplementation((table: string) => {
+        if (table === 'foods') {
+          return {
+            select: jest.fn().mockReturnThis(),
+            eq: jest.fn().mockReturnThis(),
+            maybeSingle,
+            insert: jest.fn(),
+            update,
+          };
+        }
+        return makeMockDb();
+      }),
+    };
+
+    const service = new FoodIngestionService({ db } as unknown as SupabaseService);
+    const result = await service.ingestFromUSDA('rice cooked', 1, 10);
+
+    expect(result.updated).toBe(1);
+    expect(result.inserted).toBe(0);
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({ source: 'usda', source_id: '20037' }));
+  });
+
+  it('records page error when USDA request fails', async () => {
+    global.fetch = jest.fn().mockResolvedValue({ ok: false, status: 403 } as any);
+
+    const service = new FoodIngestionService({ db: { from: jest.fn() } } as unknown as SupabaseService);
+    const result = await service.ingestFromUSDA('milk', 1, 10);
+
+    expect(result.fetched).toBe(0);
+    expect(result.errors[0]).toContain('USDA search HTTP 403');
+  });
+});
+
+describe('FoodIngestionService.ingestBatch', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('deduplicates queries and aggregates both USDA and OFF reports', async () => {
+    const service = new FoodIngestionService(makeSupabase());
+    jest.spyOn(service, 'ingestFromUSDA').mockImplementation(async (query) => ({
+      source: 'usda',
+      query,
+      fetched: 2,
+      inserted: 1,
+      updated: 0,
+      skipped: 1,
+      flagged_impossible: 0,
+      errors: [],
+    }));
+    jest.spyOn(service, 'ingestFromOpenFoodFacts').mockImplementation(async (query) => ({
+      source: 'openfoodfacts',
+      query,
+      fetched: 3,
+      inserted: 1,
+      updated: 1,
+      skipped: 1,
+      flagged_impossible: 1,
+      errors: [`${query} warning`],
+    }));
+
+    const result = await service.ingestBatch([' pho ', 'pizza', 'pho', ''], 'both', 1);
+
+    expect(result.queries).toEqual(['pho', 'pizza']);
+    expect(result.reports).toHaveLength(4);
+    expect(result.totals).toMatchObject({
+      fetched: 10,
+      inserted: 4,
+      updated: 2,
+      skipped: 4,
+      flagged_impossible: 2,
+    });
+    expect(result.totals.errors).toEqual([
+      'openfoodfacts:pho: pho warning',
+      'openfoodfacts:pizza: pizza warning',
+    ]);
+  });
+
+  it('can run USDA-only batch ingestion', async () => {
+    const service = new FoodIngestionService(makeSupabase());
+    const usdaSpy = jest.spyOn(service, 'ingestFromUSDA').mockResolvedValue({
+      source: 'usda',
+      query: 'rice',
+      fetched: 1,
+      inserted: 1,
+      updated: 0,
+      skipped: 0,
+      flagged_impossible: 0,
+      errors: [],
+    });
+    const offSpy = jest.spyOn(service, 'ingestFromOpenFoodFacts').mockResolvedValue({
+      source: 'openfoodfacts',
+      query: 'rice',
+      fetched: 1,
+      inserted: 1,
+      updated: 0,
+      skipped: 0,
+      flagged_impossible: 0,
+      errors: [],
+    });
+
+    const result = await service.ingestBatch(['rice'], 'usda', 2);
+
+    expect(result.reports).toHaveLength(1);
+    expect(usdaSpy).toHaveBeenCalledWith('rice', 2);
+    expect(offSpy).not.toHaveBeenCalled();
+  });
+
+  it('runs preset catalog ingestion for Vietnamese foods', async () => {
+    const service = new FoodIngestionService(makeSupabase());
+    const batchSpy = jest.spyOn(service, 'ingestBatch').mockResolvedValue({
+      source: 'both',
+      queries: [],
+      reports: [],
+      totals: {
+        fetched: 0,
+        inserted: 0,
+        updated: 0,
+        skipped: 0,
+        flagged_impossible: 0,
+        errors: [],
+      },
+    });
+
+    await service.ingestPresetCatalog('vietnamese', 'both', 1);
+
+    expect(batchSpy).toHaveBeenCalledTimes(1);
+    const [queries, source, maxPages] = batchSpy.mock.calls[0];
+    expect(source).toBe('both');
+    expect(maxPages).toBe(1);
+    expect(queries).toContain('pho bo');
+    expect(queries).toContain('com tam');
+    expect(queries).toContain('che ba mau');
+    expect(queries).not.toContain('pizza margherita');
+  });
+
+  it('runs preset catalog ingestion for all foods without truncating preset queries', async () => {
+    const service = new FoodIngestionService(makeSupabase());
+    const batchSpy = jest.spyOn(service, 'ingestBatch').mockResolvedValue({
+      source: 'usda',
+      queries: [],
+      reports: [],
+      totals: {
+        fetched: 0,
+        inserted: 0,
+        updated: 0,
+        skipped: 0,
+        flagged_impossible: 0,
+        errors: [],
+      },
+    });
+
+    await service.ingestPresetCatalog('all', 'usda', 2);
+
+    const [queries, source, maxPages] = batchSpy.mock.calls[0];
+    expect(source).toBe('usda');
+    expect(maxPages).toBe(2);
+    expect(queries.length).toBeLessThanOrEqual(100);
+    expect(queries).toContain('pho bo');
+    expect(queries).toContain('beef rendang');
   });
 });
 

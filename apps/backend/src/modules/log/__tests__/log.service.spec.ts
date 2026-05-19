@@ -7,7 +7,7 @@ import { FoodLog, SavedMealItem, MealType, ACTIVITY_MET } from '@calorie-ai/type
 // ─────────────────────────────────────────────────────────────────────────────
 function makeChain(resolvedValue: unknown) {
   const chain: Record<string, jest.Mock> = {};
-  const methods = ['from', 'select', 'insert', 'update', 'delete', 'eq', 'gte', 'lte', 'order', 'in', 'single'];
+  const methods = ['from', 'select', 'insert', 'update', 'delete', 'eq', 'is', 'gte', 'lte', 'order', 'in', 'single'];
   methods.forEach((m) => { chain[m] = jest.fn().mockReturnThis(); });
   // last method in common chains should resolve
   chain['single'] = jest.fn().mockResolvedValue(resolvedValue);
@@ -66,6 +66,7 @@ describe('LogService.getDailyLog', () => {
         return {
           select: jest.fn().mockReturnThis(),
           eq: jest.fn().mockReturnThis(),
+          is: jest.fn().mockReturnThis(),
           gte: jest.fn().mockReturnThis(),
           lte: jest.fn().mockReturnThis(),
           order: jest.fn().mockResolvedValue({ data: logs, error: null }),
@@ -110,6 +111,7 @@ describe('LogService.getDailyLog', () => {
         return {
           select: jest.fn().mockReturnThis(),
           eq: jest.fn().mockReturnThis(),
+          is: jest.fn().mockReturnThis(),
           gte: jest.fn().mockReturnThis(),
           lte: jest.fn().mockReturnThis(),
           order: jest.fn().mockResolvedValue({ data: [], error: null }),
@@ -138,6 +140,7 @@ describe('LogService.getDailyLog', () => {
         return {
           select: jest.fn().mockReturnThis(),
           eq: jest.fn().mockReturnThis(),
+          is: jest.fn().mockReturnThis(),
           gte: jest.fn().mockReturnThis(),
           lte: jest.fn().mockReturnThis(),
           order: jest.fn().mockResolvedValue({ data: null, error: new Error('query error') }),
@@ -158,6 +161,7 @@ describe('LogService.getDailyLog', () => {
         return {
           select: jest.fn().mockReturnThis(),
           eq: jest.fn().mockReturnThis(),
+          is: jest.fn().mockReturnThis(),
           gte,
           lte,
           order: jest.fn().mockResolvedValue({ data: [], error: null }),
@@ -185,11 +189,146 @@ describe('LogService.getDailyLog', () => {
 // deleteLog
 // ─────────────────────────────────────────────────────────────────────────────
 describe('LogService.deleteLog', () => {
-  it('returns {success:true} on successful delete', async () => {
-    const supabase = makeSupabase(() => makeChain({ data: null, error: null }));
+  it('soft-deletes and returns deleted log for undo', async () => {
+    const deleted = { id: 'log1', user_id: 'u1', deleted_at: '2026-05-19T00:00:00.000Z' };
+    const supabase = makeSupabase(() => ({
+      update: jest.fn().mockReturnThis(),
+      eq: jest.fn().mockReturnThis(),
+      is: jest.fn().mockReturnThis(),
+      select: jest.fn().mockReturnThis(),
+      single: jest.fn().mockResolvedValue({ data: deleted, error: null }),
+    }));
     const service = new LogService(supabase);
     const result = await service.deleteLog('log1', 'u1');
-    expect(result).toEqual({ success: true });
+    expect(result).toEqual({ success: true, deleted });
+  });
+});
+
+describe('LogService.restoreLog', () => {
+  it('clears deleted_at and returns restored log', async () => {
+    const restored = { id: 'log1', user_id: 'u1', deleted_at: null };
+    const supabase = makeSupabase(() => ({
+      update: jest.fn().mockReturnThis(),
+      eq: jest.fn().mockReturnThis(),
+      select: jest.fn().mockReturnThis(),
+      single: jest.fn().mockResolvedValue({ data: restored, error: null }),
+    }));
+    const service = new LogService(supabase);
+    await expect(service.restoreLog('log1', 'u1')).resolves.toEqual(restored);
+  });
+});
+
+describe('LogService.updateLog', () => {
+  it('scales calories and macros when portion grams change', async () => {
+    const existing = {
+      id: 'log1',
+      user_id: 'u1',
+      meal_type: 'lunch',
+      name: 'Rice',
+      estimated_grams: 100,
+      calories: 130,
+      protein_g: 2.7,
+      carbs_g: 28,
+      fat_g: 0.3,
+      fiber_g: 1,
+      sugar_g: 0.1,
+      saturated_fat_g: 0.1,
+      sodium_mg: 5,
+    };
+    const updated = {
+      ...existing,
+      estimated_grams: 150,
+      calories: 195,
+      protein_g: 4.1,
+      carbs_g: 42,
+      fat_g: 0.5,
+      fiber_g: 1.5,
+      sodium_mg: 8,
+    };
+    const updatePayloads: Record<string, unknown>[] = [];
+    const from = jest.fn()
+      .mockReturnValueOnce({
+        select: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockReturnThis(),
+        is: jest.fn().mockReturnThis(),
+        single: jest.fn().mockResolvedValue({ data: existing, error: null }),
+      })
+      .mockReturnValueOnce({
+        update: jest.fn().mockImplementation((payload) => {
+          updatePayloads.push(payload);
+          return {
+            eq: jest.fn().mockReturnThis(),
+            is: jest.fn().mockReturnThis(),
+            select: jest.fn().mockReturnThis(),
+            single: jest.fn().mockResolvedValue({ data: updated, error: null }),
+          };
+        }),
+      });
+
+    const service = new LogService({ db: { from } } as unknown as SupabaseService);
+    const result = await service.updateLog('log1', 'u1', { estimated_grams: 150 });
+
+    expect(result).toEqual(updated);
+    expect(updatePayloads[0]).toMatchObject({
+      estimated_grams: 150,
+      calories: 195,
+      protein_g: 4.1,
+      carbs_g: 42,
+      fat_g: 0.5,
+      fiber_g: 1.5,
+      sodium_mg: 8,
+    });
+  });
+
+  it('respects explicit macro overrides while editing meal and notes', async () => {
+    const existing = {
+      id: 'log1',
+      user_id: 'u1',
+      meal_type: 'lunch',
+      name: 'Rice',
+      estimated_grams: 100,
+      calories: 130,
+      protein_g: 2.7,
+      carbs_g: 28,
+      fat_g: 0.3,
+    };
+    const payloads: Record<string, unknown>[] = [];
+    const from = jest.fn()
+      .mockReturnValueOnce({
+        select: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockReturnThis(),
+        is: jest.fn().mockReturnThis(),
+        single: jest.fn().mockResolvedValue({ data: existing, error: null }),
+      })
+      .mockReturnValueOnce({
+        update: jest.fn().mockImplementation((payload) => {
+          payloads.push(payload);
+          return {
+            eq: jest.fn().mockReturnThis(),
+            is: jest.fn().mockReturnThis(),
+            select: jest.fn().mockReturnThis(),
+            single: jest.fn().mockResolvedValue({ data: { ...existing, ...payload }, error: null }),
+          };
+        }),
+      });
+
+    const service = new LogService({ db: { from } } as unknown as SupabaseService);
+    await service.updateLog('log1', 'u1', {
+      meal_type: 'dinner',
+      estimated_grams: 200,
+      calories: 240,
+      notes: 'less oil',
+    });
+
+    expect(payloads[0]).toMatchObject({
+      meal_type: 'dinner',
+      estimated_grams: 200,
+      calories: 240,
+      protein_g: 5.4,
+      carbs_g: 56,
+      fat_g: 0.6,
+      notes: 'less oil',
+    });
   });
 });
 
@@ -374,6 +513,38 @@ describe('LogService.deleteSavedMeal', () => {
     }));
     const service = new LogService(supabase);
     await expect(service.deleteSavedMeal('sm1', 'u1')).rejects.toThrow('delete failed');
+  });
+});
+
+describe('LogService.updateSavedMeal', () => {
+  it('updates name/items and recomputes totals', async () => {
+    const payloads: Record<string, unknown>[] = [];
+    const supabase = makeSupabase(() => ({
+      update: jest.fn().mockImplementation((payload) => {
+        payloads.push(payload);
+        return {
+          eq: jest.fn().mockReturnThis(),
+          select: jest.fn().mockReturnThis(),
+          single: jest.fn().mockResolvedValue({ data: { id: 'sm1', user_id: 'u1', ...payload }, error: null }),
+        };
+      }),
+    }));
+    const service = new LogService(supabase);
+
+    const result = await service.updateSavedMeal('sm1', 'u1', {
+      name: 'New combo',
+      items: [{ name: 'Egg', calories: 80, protein_g: 7, carbs_g: 1, fat_g: 5, sodium_mg: 70, estimated_grams: 50 }],
+    });
+
+    expect(payloads[0]).toMatchObject({
+      name: 'New combo',
+      total_calories: 80,
+      total_protein_g: 7,
+      total_carbs_g: 1,
+      total_fat_g: 5,
+      total_sodium_mg: 70,
+    });
+    expect(result.name).toBe('New combo');
   });
 });
 

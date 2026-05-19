@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 const { Pool } = require('pg');
+const { getSupabaseDbUrl } = require('./lib/env');
 
-const connectionString = 'postgresql://postgres.ymtdrtmmqyhjvhrjyuoo:DKMvkl@4399@aws-1-ap-southeast-2.pooler.supabase.com:6543/postgres';
+const connectionString = getSupabaseDbUrl();
 const rolesToInspect = process.argv.slice(2);
 
 (async () => {

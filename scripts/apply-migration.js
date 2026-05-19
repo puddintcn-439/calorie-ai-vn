@@ -6,8 +6,9 @@
 
 const { Pool } = require('pg');
 const fs = require('fs');
+const { getSupabaseDbUrl } = require('./lib/env');
 
-const connectionString = 'postgresql://postgres.ymtdrtmmqyhjvhrjyuoo:DKMvkl@4399@aws-1-ap-southeast-2.pooler.supabase.com:6543/postgres';
+const connectionString = getSupabaseDbUrl();
 
 const migrationSQL = `
 CREATE TABLE IF NOT EXISTS public.user_daily_roadmap (

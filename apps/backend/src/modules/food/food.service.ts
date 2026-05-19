@@ -29,25 +29,50 @@ export class FoodService {
   constructor(private supabase: SupabaseService) {}
 
   async search(query: string, limit = 20): Promise<Food[]> {
-    // Use Postgres full-text search on the GIN index for better Vietnamese matching.
-    // Fall back to ilike when the query contains non-ASCII characters that tsquery
-    // might reject (e.g. tones/diacritics).
-    const tsQuery = query
-      .trim()
-      .split(/\s+/)
-      .filter(Boolean)
-      .map((w) => `${w}:*`)
-      .join(' & ');
+    const trimmedQuery = query.trim();
+    if (!trimmedQuery) return [];
 
-    const { data, error } = await this.supabase.db
+    const safeLimit = Math.max(1, Math.min(Number.isFinite(limit) ? limit : 20, 100));
+    const tsQuery = this.buildPrefixTsQuery(trimmedQuery);
+    const resultsById = new Map<string, Food>();
+
+    if (tsQuery) {
+      const { data, error } = await this.supabase.db
+        .from('foods')
+        .select('*')
+        .or(`name.fts.${tsQuery},name_vi.fts.${tsQuery}`)
+        .order('nutrient_confidence', { ascending: false, nullsFirst: false })
+        .limit(safeLimit);
+
+      if (error) {
+        this.logger.warn(`Full-text food search failed for "${trimmedQuery}": ${error.message ?? error}`);
+      } else {
+        for (const food of (data ?? []) as Food[]) {
+          resultsById.set(food.id, food);
+        }
+      }
+    }
+
+    if (resultsById.size >= safeLimit) {
+      return [...resultsById.values()].slice(0, safeLimit);
+    }
+
+    const { data: fallbackData, error: fallbackError } = await this.supabase.db
       .from('foods')
       .select('*')
-      .or(`name.ilike.%${query}%,name_vi.ilike.%${query}%`)
+      .or(`name.ilike.%${trimmedQuery}%,name_vi.ilike.%${trimmedQuery}%`)
       .order('nutrient_confidence', { ascending: false, nullsFirst: false })
-      .limit(limit);
+      .limit(safeLimit);
 
-    if (error) throw error;
-    return (data ?? []) as Food[];
+    if (fallbackError) throw fallbackError;
+
+    for (const food of (fallbackData ?? []) as Food[]) {
+      if (!resultsById.has(food.id)) {
+        resultsById.set(food.id, food);
+      }
+    }
+
+    return [...resultsById.values()].slice(0, safeLimit);
   }
 
   async findById(id: string): Promise<Food | null> {
@@ -374,6 +399,18 @@ export class FoodService {
 
   private roundRatio(value: number): number {
     return Number(Math.max(0, Math.min(1, value)).toFixed(3));
+  }
+
+  private buildPrefixTsQuery(query: string): string | null {
+    const tokens = query
+      .normalize('NFKC')
+      .toLowerCase()
+      .split(/\s+/)
+      .map((token) => token.replace(/[^\p{L}\p{N}]+/gu, ''))
+      .filter(Boolean);
+
+    if (tokens.length === 0) return null;
+    return tokens.map((token) => `${token}:*`).join(' & ');
   }
 
   private normaliseFoodName(value?: string): string {

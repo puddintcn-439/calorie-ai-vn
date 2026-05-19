@@ -8,10 +8,13 @@ describe('LogController', () => {
   beforeEach(() => {
     logService = {
       createLog: jest.fn(),
+      updateLog: jest.fn(),
+      restoreLog: jest.fn(),
       getDailyLog: jest.fn(),
       deleteLog: jest.fn(),
       getSavedMeals: jest.fn(),
       createSavedMeal: jest.fn(),
+      updateSavedMeal: jest.fn(),
       logSavedMeal: jest.fn(),
       deleteSavedMeal: jest.fn(),
       createActivityLog: jest.fn(),
@@ -58,6 +61,28 @@ describe('LogController', () => {
       ).resolves.toEqual(expected);
 
       expect(logService.syncActivityBatch).toHaveBeenCalledWith('user-1', dto);
+    });
+  });
+
+  describe('update', () => {
+    it('forwards food log edits to service', async () => {
+      logService.updateLog.mockResolvedValue({ id: 'log1', estimated_grams: 150 } as any);
+
+      await expect(
+        controller.update('log1', { estimated_grams: 150 } as any, { user: { id: 'user-1' } }),
+      ).resolves.toEqual({ id: 'log1', estimated_grams: 150 });
+
+      expect(logService.updateLog).toHaveBeenCalledWith('log1', 'user-1', { estimated_grams: 150 });
+    });
+  });
+
+  describe('restore', () => {
+    it('forwards restore to service', async () => {
+      logService.restoreLog.mockResolvedValue({ id: 'log1', deleted_at: null } as any);
+
+      await expect(controller.restore('log1', { user: { id: 'user-1' } })).resolves.toEqual({ id: 'log1', deleted_at: null });
+
+      expect(logService.restoreLog).toHaveBeenCalledWith('log1', 'user-1');
     });
   });
 

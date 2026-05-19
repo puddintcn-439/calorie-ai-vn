@@ -20,7 +20,9 @@ CREATE TABLE user_behavioral_patterns (
   frequency_score DECIMAL(3,2), -- 0-1, how often this pattern occurs
   
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+
+  CONSTRAINT user_behavioral_patterns_user_pattern_type_key UNIQUE (user_id, pattern_type)
 );
 
 -- Coaching insights generated for user
@@ -88,8 +90,7 @@ CREATE TABLE user_coaching_summaries (
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Create indexes for fast queries
-CREATE INDEX IF NOT EXISTS idx_patterns_user_type ON user_behavioral_patterns(user_id, pattern_type);
+-- The unique constraint above backs Supabase upsert onConflict: 'user_id,pattern_type'.
 CREATE INDEX IF NOT EXISTS idx_patterns_detected_at ON user_behavioral_patterns(user_id, last_detected_at);
 CREATE INDEX IF NOT EXISTS idx_insights_user_type ON user_coaching_insights(user_id, insight_type);
 CREATE INDEX IF NOT EXISTS idx_insights_created ON user_coaching_insights(user_id, created_at DESC);

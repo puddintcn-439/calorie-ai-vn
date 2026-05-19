@@ -24,6 +24,8 @@ export interface FoodLog {
   ai_scan_id?: string;
   notes?: string;
   created_at: string;
+  updated_at?: string;
+  deleted_at?: string;
 }
 
 export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
@@ -90,4 +92,25 @@ export interface SavedMeal {
   use_count: number;
   last_used_at?: string;
   created_at: string;
+  updated_at?: string;
 }
+
+export type UpdateFoodLogInput = Partial<Pick<
+  FoodLog,
+  | 'meal_type'
+  | 'logged_at'
+  | 'quantity'
+  | 'unit'
+  | 'estimated_grams'
+  | 'calories'
+  | 'protein_g'
+  | 'carbs_g'
+  | 'fat_g'
+  | 'fiber_g'
+  | 'sugar_g'
+  | 'saturated_fat_g'
+  | 'sodium_mg'
+  | 'name'
+  | 'name_vi'
+  | 'notes'
+>>;

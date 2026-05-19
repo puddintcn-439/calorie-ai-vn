@@ -5,7 +5,7 @@
 **Project:** Calorie AI VN - AI-powered calorie tracking & personalization for Vietnamese users  
 **Duration:** 3 sprints (May 2026)  
 **Team:** 1 Full-stack engineer (VuNH44)  
-**Status:** ✅ **COMPLETE & PRODUCTION READY**
+**Status:** **Implementation summary; production gate remains conditional no-go**
 
 ---
 
@@ -132,7 +132,7 @@
 - ✅ **Documentation**
   - Deployment guide (local, staging, production)
   - Monitoring setup (Prometheus + Grafana + PagerDuty)
-  - Production readiness assessment (92% complete)
+  - Production readiness assessment redirected to the active 72% conditional no-go report
 
 **Quality:**
 - All tests passing (17 total)
@@ -205,24 +205,31 @@
 
 ## Production Readiness
 
-### Final Score: 92% ✅
+### Current Readiness Source
+
+The active readiness source is `docs/production/readiness-report.md`.
+
+- Current score: **72% adjusted**
+- Gate status: **CONDITIONAL NO-GO**
+- Superseded document: `docs/production/PRODUCTION_READINESS_FINAL.md`
+- Reason: the old 92% assessment used future-dated sign-off dates and should not be treated as current evidence.
 
 | Domain | Score | Status |
 |--------|-------|--------|
-| Feature Completeness | 100% | ✅ Complete |
-| Code Quality | 95% | ✅ Excellent |
-| Performance | 85% | ✅ Tested |
-| Security | 88% | ✅ Hardened |
-| Reliability | 90% | ✅ Ready |
-| Observability | 92% | ✅ Configured |
-| CI/CD & Deployment | 90% | ✅ Automated |
-| Documentation | 95% | ✅ Comprehensive |
+| Feature Completeness | See active report | Staged/native validation still required |
+| Code Quality | See active report | Backend verification present |
+| Performance | See active report | Load evidence still required |
+| Security | See active report | Review and live config evidence still required |
+| Reliability | See active report | Native and external dependency QA still required |
+| Observability | See active report | External alert path still required |
+| CI/CD & Deployment | See active report | Real deploy/rollback evidence still required |
+| Documentation | See active report | Active report is canonical |
 
 ### Go-Live Recommendation
-**🟢 APPROVED FOR PRODUCTION**
-- Confidence: 92% (High)
-- Launch Date: May 30, 2026
-- SLA Target: 99.5% uptime
+**CONDITIONAL NO-GO**
+- Confidence source: `docs/production/readiness-report.md`
+- Current score: 72% adjusted
+- Launch date: not approved until remaining gates are closed
 
 ---
 
@@ -311,15 +318,15 @@
 - **Tech Lead:** VuNH44 (GitHub Copilot Agent)
 - **Code Repository:** github.com/calorie-ai-vn
 - **Documentation:** docs/ folder (deployment, monitoring, incident runbook)
-- **Production Readiness:** docs/production/PRODUCTION_READINESS_FINAL.md
+- **Production Readiness:** docs/production/readiness-report.md
 
 ---
 
 ## Sign-Off
 
-✅ **Sprint 1-3 Complete and Approved for Production Launch**
+**Sprint 1-3 implementation summary complete; production launch not approved yet**
 
 **Prepared By:** GitHub Copilot Agent  
-**Date:** May 26-28, 2026  
+**Date:** Updated 2026-05-19  
 **For:** Calorie AI VN Product Team  
-**Status:** Ready for GA ✅
+**Status:** Conditional no-go; use `docs/production/readiness-report.md` for the current gate.

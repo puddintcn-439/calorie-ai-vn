@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { SupabaseService } from '../../common/supabase/supabase.service';
-import { FoodLog, DailyLog, MealType, SavedMeal, SavedMealItem, ActivityLog, CreateActivityLogDto, ACTIVITY_MET, ActivitySyncBatchDto, ActivitySyncResult } from '@calorie-ai/types';
+import { FoodLog, DailyLog, MealType, SavedMeal, SavedMealItem, ActivityLog, CreateActivityLogDto, ACTIVITY_MET, ActivitySyncBatchDto, ActivitySyncResult, UpdateFoodLogInput } from '@calorie-ai/types';
 
 @Injectable()
 export class LogService {
@@ -40,6 +40,7 @@ export class LogService {
       .from('food_logs')
       .select('*')
       .eq('user_id', userId)
+      .is('deleted_at', null)
       .gte('logged_at', startIso)
       .lte('logged_at', endIso)
       .order('logged_at', { ascending: true });
@@ -92,14 +93,56 @@ export class LogService {
   }
 
   async deleteLog(id: string, userId: string) {
-    const { error } = await this.supabase.db
+    const { data, error } = await this.supabase.db
       .from('food_logs')
-      .delete()
+      .update({ deleted_at: new Date().toISOString() })
       .eq('id', id)
-      .eq('user_id', userId);
+      .eq('user_id', userId)
+      .is('deleted_at', null)
+      .select()
+      .single();
 
     if (error) throw error;
-    return { success: true };
+    return { success: true, deleted: data as FoodLog };
+  }
+
+  async restoreLog(id: string, userId: string): Promise<FoodLog> {
+    const { data, error } = await this.supabase.db
+      .from('food_logs')
+      .update({ deleted_at: null })
+      .eq('id', id)
+      .eq('user_id', userId)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data as FoodLog;
+  }
+
+  async updateLog(id: string, userId: string, updates: UpdateFoodLogInput): Promise<FoodLog> {
+    const { data: existing, error: existingError } = await this.supabase.db
+      .from('food_logs')
+      .select('*')
+      .eq('id', id)
+      .eq('user_id', userId)
+      .is('deleted_at', null)
+      .single();
+
+    if (existingError) throw existingError;
+    if (!existing) throw new Error('Food log not found');
+
+    const payload = this.buildFoodLogUpdate(existing as FoodLog, updates);
+    const { data, error } = await this.supabase.db
+      .from('food_logs')
+      .update(payload)
+      .eq('id', id)
+      .eq('user_id', userId)
+      .is('deleted_at', null)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data as FoodLog;
   }
 
   // ---- Saved Meals ----
@@ -117,14 +160,7 @@ export class LogService {
   }
 
   async createSavedMeal(userId: string, name: string, items: SavedMealItem[]): Promise<SavedMeal> {
-    const total_calories = items.reduce((s, i) => s + i.calories, 0);
-    const total_protein_g = items.reduce((s, i) => s + i.protein_g, 0);
-    const total_carbs_g = items.reduce((s, i) => s + i.carbs_g, 0);
-    const total_fat_g = items.reduce((s, i) => s + i.fat_g, 0);
-    const total_fiber_g = items.reduce((s, i) => s + Number(i.fiber_g ?? 0), 0);
-    const total_sugar_g = items.reduce((s, i) => s + Number(i.sugar_g ?? 0), 0);
-    const total_saturated_fat_g = items.reduce((s, i) => s + Number(i.saturated_fat_g ?? 0), 0);
-    const total_sodium_mg = items.reduce((s, i) => s + Number(i.sodium_mg ?? 0), 0);
+    const totals = this.computeSavedMealTotals(items);
 
     const { data, error } = await this.supabase.db
       .from('saved_meals')
@@ -132,14 +168,7 @@ export class LogService {
         user_id: userId,
         name,
         items,
-        total_calories,
-        total_protein_g,
-        total_carbs_g,
-        total_fat_g,
-        total_fiber_g,
-        total_sugar_g,
-        total_saturated_fat_g,
-        total_sodium_mg,
+        ...totals,
       })
       .select()
       .single();
@@ -201,6 +230,30 @@ export class LogService {
 
     if (error) throw error;
     return { success: true };
+  }
+
+  async updateSavedMeal(
+    id: string,
+    userId: string,
+    updates: { name?: string; items?: SavedMealItem[] },
+  ): Promise<SavedMeal> {
+    const payload: Record<string, unknown> = {};
+    if (updates.name !== undefined) payload.name = updates.name.trim();
+    if (updates.items !== undefined) {
+      payload.items = updates.items;
+      Object.assign(payload, this.computeSavedMealTotals(updates.items));
+    }
+
+    const { data, error } = await this.supabase.db
+      .from('saved_meals')
+      .update(payload)
+      .eq('id', id)
+      .eq('user_id', userId)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data as SavedMeal;
   }
 
   // ─────────────────────── Activity Logs ───────────────────────
@@ -297,5 +350,80 @@ export class LogService {
 
     if (error) throw error;
     return { success: true };
+  }
+
+  private buildFoodLogUpdate(existing: FoodLog, updates: UpdateFoodLogInput): Record<string, unknown> {
+    const payload: Record<string, unknown> = {};
+    const directFields: (keyof UpdateFoodLogInput)[] = [
+      'meal_type',
+      'logged_at',
+      'quantity',
+      'unit',
+      'name',
+      'name_vi',
+      'notes',
+    ];
+
+    for (const field of directFields) {
+      if (updates[field] !== undefined) payload[field] = updates[field];
+    }
+
+    const macroFields: (keyof UpdateFoodLogInput)[] = [
+      'calories',
+      'protein_g',
+      'carbs_g',
+      'fat_g',
+      'fiber_g',
+      'sugar_g',
+      'saturated_fat_g',
+      'sodium_mg',
+    ];
+    const gramsChanged = updates.estimated_grams !== undefined && updates.estimated_grams !== existing.estimated_grams;
+    const oldGrams = Number(existing.estimated_grams);
+    const newGrams = Number(updates.estimated_grams);
+    const ratio = gramsChanged && Number.isFinite(oldGrams) && oldGrams > 0 && Number.isFinite(newGrams) && newGrams >= 0
+      ? newGrams / oldGrams
+      : null;
+
+    if (updates.estimated_grams !== undefined) payload.estimated_grams = this.round1(newGrams);
+
+    for (const field of macroFields) {
+      const explicit = updates[field];
+      if (explicit !== undefined) {
+        payload[field] = field === 'calories' || field === 'sodium_mg'
+          ? Math.round(Number(explicit))
+          : this.round1(Number(explicit));
+        continue;
+      }
+
+      if (ratio !== null) {
+        const current = existing[field as keyof FoodLog];
+        if (current != null) {
+          payload[field] = field === 'calories' || field === 'sodium_mg'
+            ? Math.round(Number(current) * ratio)
+            : this.round1(Number(current) * ratio);
+        }
+      }
+    }
+
+    return payload;
+  }
+
+  private computeSavedMealTotals(items: SavedMealItem[]): Record<string, number> {
+    return {
+      total_calories: Math.round(items.reduce((s, i) => s + Number(i.calories ?? 0), 0)),
+      total_protein_g: this.round1(items.reduce((s, i) => s + Number(i.protein_g ?? 0), 0)),
+      total_carbs_g: this.round1(items.reduce((s, i) => s + Number(i.carbs_g ?? 0), 0)),
+      total_fat_g: this.round1(items.reduce((s, i) => s + Number(i.fat_g ?? 0), 0)),
+      total_fiber_g: this.round1(items.reduce((s, i) => s + Number(i.fiber_g ?? 0), 0)),
+      total_sugar_g: this.round1(items.reduce((s, i) => s + Number(i.sugar_g ?? 0), 0)),
+      total_saturated_fat_g: this.round1(items.reduce((s, i) => s + Number(i.saturated_fat_g ?? 0), 0)),
+      total_sodium_mg: Math.round(items.reduce((s, i) => s + Number(i.sodium_mg ?? 0), 0)),
+    };
+  }
+
+  private round1(value: number): number {
+    if (!Number.isFinite(value)) return 0;
+    return Math.round(value * 10) / 10;
   }
 }

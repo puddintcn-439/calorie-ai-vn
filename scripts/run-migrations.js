@@ -8,9 +8,11 @@
 const https = require('https');
 const fs = require('fs');
 const path = require('path');
+const { getSupabaseUrl, getSupabaseServiceKey } = require('./lib/env');
 
-const SUPABASE_URL = 'https://ymtdrtmmqyhjvhrjyuoo.supabase.co';
-const SUPABASE_SERVICE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InltdGRydG1tcXloanZocmp5dW9vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3ODA5MDQ2NSwiZXhwIjoyMDkzNjY2NDY1fQ.Pp_zOTD3ssjCGHsRUJniMFDPmXzVpk-qnNzEetWk9Qk';
+const SUPABASE_URL = getSupabaseUrl();
+getSupabaseServiceKey();
+const projectRef = new URL(SUPABASE_URL).hostname.split('.')[0];
 
 const migrationSQL = `
 CREATE TABLE IF NOT EXISTS public.user_daily_roadmap (
@@ -46,7 +48,7 @@ console.log('');
 console.log('Since Supabase REST API does not support executing raw SQL,');
 console.log('please manually run the migration using the Supabase dashboard:');
 console.log('');
-console.log('1. Visit: https://app.supabase.com/project/ymtdrtmmqyhjvhrjyuoo/sql/new');
+console.log(`1. Visit: https://app.supabase.com/project/${projectRef}/sql/new`);
 console.log('2. Paste the following SQL:');
 console.log('');
 console.log('-------------------------------------------');

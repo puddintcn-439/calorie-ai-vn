@@ -1,10 +1,12 @@
 # Feature Implementation Status - May 9, 2026, 2:30 PM
 
+> Historical report only. As of 2026-05-19, the active production-readiness source of truth is [readiness-report.md](./readiness-report.md), with **72%** readiness and **CONDITIONAL NO-GO** gate status.
+
 **Current Commit:** b1a2b84 - Voice logging UI enhancement deployed
 
 ---
 
-## 📊 **ACTUAL STATUS: 95% READY FOR LAUNCH** 🚀
+## Historical May 9 Snapshot: 95% Claim Superseded
 
 ### ✅ **FULLY COMPLETE & SHIPPED**
 
@@ -209,13 +211,13 @@ May 20:    Public launch with push ready
 
 ---
 
-## 🎓 **RECOMMENDATION**
+## Historical Recommendation (Superseded)
 
-### **✅ EXECUTE NOW: Option A (Soft Launch May 15)**
+### Superseded: Option A (Soft Launch May 15)
 
 **Why:**
 1. Voice + Receipt fully shipped and tested
-2. 91% readiness = approved for launch
+2. Historical claim only; superseded by the active 72% conditional no-go report
 3. Soft launch de-risks final bugs
 4. Real user feedback > beta testing
 5. Firebase can ship in Week 2 without blocking

@@ -1,5 +1,7 @@
 # Production Readiness Report - May 9, 2026
 
+> Historical report only. As of 2026-05-19, the active production-readiness source of truth is [readiness-report.md](./readiness-report.md), with **72%** readiness and **CONDITIONAL NO-GO** gate status. Do not use this May 9 report as the current launch gate.
+
 **Evaluation Date:** May 9, 2026  
 **Scope:** Calorie AI Vietnam - Mobile + Backend  
 **Target Go-Live:** May 20, 2026 (11 days)  
@@ -7,7 +9,7 @@
 
 ---
 
-## 📊 PRODUCTION READINESS: **86% READY** 🟢
+## Historical May 9 Readiness Claim: **86% READY** (Superseded)
 
 ### Gate Status: **CONDITIONALLY APPROVED FOR LAUNCH**
 - ✅ MVP Core Features: 100% production-ready
@@ -236,9 +238,9 @@
 
 ---
 
-## 💰 GO-LIVE RECOMMENDATION
+## Historical Go-Live Recommendation (Superseded)
 
-**Approved for soft launch on May 20, 2026** with:
+**Historical claim: approved for soft launch on May 20, 2026. Superseded as of 2026-05-19 by the active 72% conditional no-go report.**
 - ✅ Core logging (image, text, barcode) enabled
 - ✅ Auth + personalization full power
 - ✅ Emotional-first UX messaging live

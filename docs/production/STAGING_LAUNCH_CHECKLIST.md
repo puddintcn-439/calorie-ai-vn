@@ -1,7 +1,9 @@
 # Staging & Launch Checklist - May 9, 2026
 
+> Historical checklist only. As of 2026-05-19, launch approval must come from [readiness-report.md](./readiness-report.md), which currently records **72%** readiness and **CONDITIONAL NO-GO** gate status.
+
 ## 🎯 Overall Status
-- **Production Readiness:** 91% ✅
+- **Historical Production Readiness Claim:** 91% (superseded by the active 72% conditional no-go report)
 - **P0 Features:** 18/18 complete ✅
 - **TypeScript:** All checks passing ✅
 - **Tests:** 129/129 passing (79.45% coverage) ✅
@@ -251,4 +253,4 @@ Optional tables (for features):
 - **Backend Owner:** [Name] ✓
 - **Mobile Owner:** [Name] ✓
 - **Product Owner:** [Name] ✓
-- **Launch Date Approved:** May 20, 2026 ✓
+- **Historical Launch Date Claim:** May 20, 2026 (superseded; not currently approved)

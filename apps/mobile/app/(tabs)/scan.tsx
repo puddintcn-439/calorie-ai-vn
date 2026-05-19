@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
-import { AIScanResponse, AIDetectedItem, Food, MealType, ContextMode, CONTEXT_ADAPTERS } from '@calorie-ai/types';
+import { AIScanResponse, AIDetectedItem, Food, FoodLog, MealType, ContextMode, CONTEXT_ADAPTERS } from '@calorie-ai/types';
 import {
   scanImageFromUri,
   scanText,
@@ -113,11 +113,14 @@ export default function ScanScreen() {
   // Barcode
   const [barcodeScanned, setBarcodeScanned] = useState(false);
   const [barcodeResult, setBarcodeResult] = useState<any | null>(null);
+  const [barcodeGrams, setBarcodeGrams] = useState('100');
   const [manualBarcode, setManualBarcode] = useState('');
   // Manual search
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<Food[]>([]);
+  const [searchGramsById, setSearchGramsById] = useState<Record<string, string>>({});
   const [isSearching, setIsSearching] = useState(false);
+  const [isLogging, setIsLogging] = useState(false);
   const [isReceiptScanning, setIsReceiptScanning] = useState(false);
   const [scanNotice, setScanNotice] = useState<string | null>(null);
 
@@ -134,7 +137,7 @@ export default function ScanScreen() {
   const [voicePermissionGranted, setVoicePermissionGranted] = useState(false);
   const [reward, setReward] = useState<RewardToastData | null>(null);
 
-  const { addLog, saveMeal } = useLogStore();
+  const { addLog, removeLog, saveMeal } = useLogStore();
   // Always prefer editableItems if we have a scan result, even if empty
   const currentItems = scanResult ? editableItems : [];
   const totalCalories = currentItems.reduce((s, i) => s + i.calories, 0);
@@ -243,6 +246,31 @@ export default function ScanScreen() {
     setVoiceTranscript('');
     setLastReceiptUri(null);
     setManualBarcode('');
+    setBarcodeGrams('100');
+    setSearchGramsById({});
+  };
+
+  const promptAfterLog = (logs: FoodLog[], summary: string) => {
+    Alert.alert('Logged', summary, [
+      { text: 'Keep scanning', style: 'cancel' },
+      {
+        text: 'Undo',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await Promise.all(logs.map((log) => removeLog(log.id)));
+            setReward({
+              title: 'Log undone',
+              body: `${logs.length} item${logs.length > 1 ? 's' : ''} removed`,
+              icon: 'arrow-undo',
+            });
+          } catch {
+            Alert.alert('Could not undo', 'Open Log to delete the item manually.');
+          }
+        },
+      },
+      { text: 'View Today', onPress: () => router.replace('/') },
+    ]);
   };
 
   const requestMicPermission = async () => {
@@ -472,10 +500,12 @@ export default function ScanScreen() {
   };
 
   const handleSaveLog = async () => {
-    if (!currentItems.length) return;
+    if (!currentItems.length || isLogging) return;
+    setIsLogging(true);
     try {
+      const createdLogs: FoodLog[] = [];
       for (const item of currentItems) {
-        await addLog({
+        const created = await addLog({
           name: item.name_vi ?? item.name,
           meal_type: selectedMeal,
           calories: item.calories,
@@ -489,14 +519,16 @@ export default function ScanScreen() {
           estimated_grams: item.estimated_grams,
           image_url: scannedImage ?? undefined,
         });
+        createdLogs.push(created);
       }
       setReward({
         title: 'Đã log bữa ăn',
         body: `${currentItems.length} món · ${Math.round(totalCalories)} kcal`,
         icon: 'checkmark-circle',
       });
-      setTimeout(() => router.replace('/'), 850);
+      promptAfterLog(createdLogs, `${currentItems.length} items · ${Math.round(totalCalories)} kcal`);
     } catch { Alert.alert('screen.tabs.scan.alert.025', 'screen.tabs.scan.alert.026'); }
+    finally { setIsLogging(false); }
   };
 
   const handleSaveAsMeal = async () => {
@@ -531,7 +563,11 @@ export default function ScanScreen() {
   const handleBarcodeScan = async ({ data: barcode }: { data: string }) => {
     if (barcodeScanned) return;
     setBarcodeScanned(true); setIsScanning(true);
-    try { setBarcodeResult((await apiClient.get(`/food/barcode/${barcode}`)).data); }
+    try {
+      const result = (await apiClient.get(`/food/barcode/${barcode}`)).data;
+      setBarcodeResult(result);
+      setBarcodeGrams(String(Math.round(result.serving_size_g ?? 100)));
+    }
     catch { Alert.alert('screen.tabs.scan.alert.029', 'screen.tabs.scan.alert.030'); setBarcodeScanned(false); }
     finally { setIsScanning(false); }
   };
@@ -543,11 +579,16 @@ export default function ScanScreen() {
   };
 
   const handleLogBarcode = async () => {
-    if (!barcodeResult) return;
-    const grams = barcodeResult.serving_size_g ?? 100;
+    if (!barcodeResult || isLogging) return;
+    const grams = Number(barcodeGrams);
+    if (!Number.isFinite(grams) || grams <= 0) {
+      Alert.alert('Invalid portion', 'Enter grams greater than 0.');
+      return;
+    }
     const ratio = grams / 100;
+    setIsLogging(true);
     try {
-      await addLog({
+      const created = await addLog({
         name: barcodeResult.name_vi ?? barcodeResult.name,
         meal_type: selectedMeal,
         calories: Math.round((barcodeResult.calories_per_100g ?? 0) * ratio),
@@ -565,8 +606,9 @@ export default function ScanScreen() {
         body: `${barcodeResult.name_vi ?? barcodeResult.name} · ${Math.round((barcodeResult.calories_per_100g ?? 0) * ratio)} kcal`,
         icon: 'checkmark-circle',
       });
-      setTimeout(() => router.replace('/'), 850);
+      promptAfterLog([created], `${barcodeResult.name_vi ?? barcodeResult.name} · ${Math.round((barcodeResult.calories_per_100g ?? 0) * ratio)} kcal`);
     } catch { Alert.alert('screen.tabs.scan.alert.031', 'screen.tabs.scan.alert.032'); }
+    finally { setIsLogging(false); }
   };
 
   const handleSearchFoods = async () => {
@@ -575,7 +617,9 @@ export default function ScanScreen() {
     setIsSearching(true);
     try {
       const res = await apiClient.get<Food[]>(`/food/search?q=${encodeURIComponent(q)}`);
-      setSearchResults(res.data ?? []);
+      const foods = res.data ?? [];
+      setSearchResults(foods);
+      setSearchGramsById(Object.fromEntries(foods.map((food) => [food.id, String(Math.round(food.serving_size_g ?? 100))])));
     } catch {
       Alert.alert('screen.tabs.scan.alert.033', 'screen.tabs.scan.alert.034');
     } finally {
@@ -584,10 +628,16 @@ export default function ScanScreen() {
   };
 
   const handleLogSearchedFood = async (food: Food) => {
-    const grams = food.serving_size_g ?? 100;
+    if (isLogging) return;
+    const grams = Number(searchGramsById[food.id] ?? food.serving_size_g ?? 100);
+    if (!Number.isFinite(grams) || grams <= 0) {
+      Alert.alert('Invalid portion', 'Enter grams greater than 0.');
+      return;
+    }
     const ratio = grams / 100;
+    setIsLogging(true);
     try {
-      await addLog({
+      const created = await addLog({
         name: food.name_vi ?? food.name,
         meal_type: selectedMeal,
         calories: Math.round((food.calories_per_100g ?? 0) * ratio),
@@ -605,9 +655,10 @@ export default function ScanScreen() {
         body: `${food.name_vi ?? food.name} · ${Math.round((food.calories_per_100g ?? 0) * ratio)} kcal`,
         icon: 'checkmark-circle',
       });
+      promptAfterLog([created], `${food.name_vi ?? food.name} · ${Math.round((food.calories_per_100g ?? 0) * ratio)} kcal`);
     } catch {
       Alert.alert('screen.tabs.scan.alert.035', 'screen.tabs.scan.alert.036');
-    }
+    } finally { setIsLogging(false); }
   };
 
   // ─────────────────────── Render ───────────────────────
@@ -701,19 +752,37 @@ export default function ScanScreen() {
               </View>
             ) : null}
 
-            {searchResults.map((food) => (
+            {searchResults.map((food) => {
+              const grams = Number(searchGramsById[food.id] ?? food.serving_size_g ?? 100);
+              const ratio = Number.isFinite(grams) && grams > 0 ? grams / 100 : 1;
+              const kcal = Math.round((food.calories_per_100g ?? 0) * ratio);
+              return (
               <SurfaceCard key={food.id} style={styles.searchItemCard}>
                 <View style={styles.resultHeader}>
                   <Text style={styles.resultName}>{food.name_vi ?? food.name}</Text>
-                  <Text style={styles.resultCalorie}>{food.calories_per_100g ?? 0} kcal</Text>
+                  <Text style={styles.resultCalorie}>{kcal} kcal</Text>
                 </View>
                 <Text style={styles.resultDetail}>Khẩu phần mặc định: {food.serving_size_g ?? 100}g</Text>
-                <Text style={styles.resultMacros}>P: {food.protein_g ?? 0}g  C: {food.carbs_g ?? 0}g  F: {food.fat_g ?? 0}g</Text>
-                <TouchableOpacity style={styles.saveButton} onPress={() => handleLogSearchedFood(food)}>
-                  <Text style={styles.saveButtonText} i18nKey="screen.tabs.scan.text.005" />
+                <View style={styles.portionRow}>
+                  <Text style={styles.portionLabel}>Grams</Text>
+                  <TextInput
+                    style={styles.portionInput}
+                    value={searchGramsById[food.id] ?? String(Math.round(food.serving_size_g ?? 100))}
+                    onChangeText={(value) => setSearchGramsById((prev) => ({ ...prev, [food.id]: value }))}
+                    keyboardType="numeric"
+                    placeholder="100"
+                    placeholderTextColor={theme.colors.textDisabled}
+                  />
+                </View>
+                <Text style={styles.resultMacros}>
+                  P: {Number(((food.protein_g ?? 0) * ratio).toFixed(1))}g  C: {Number(((food.carbs_g ?? 0) * ratio).toFixed(1))}g  F: {Number(((food.fat_g ?? 0) * ratio).toFixed(1))}g
+                </Text>
+                <TouchableOpacity style={[styles.saveButton, isLogging && styles.buttonDisabled]} onPress={() => handleLogSearchedFood(food)} disabled={isLogging}>
+                  <Text style={styles.saveButtonText}>{isLogging ? 'Logging...' : 'Log food'}</Text>
                 </TouchableOpacity>
               </SurfaceCard>
-            ))}
+              );
+            })}
 
             {!isSearching && searchQuery.trim().length > 0 && searchResults.length === 0 ? (
               <EmptyState
@@ -776,8 +845,8 @@ export default function ScanScreen() {
             <Text style={styles.barcodeServing}>{barcodeResult.serving_description ?? `${barcodeResult.serving_size_g ?? 100}g`} / khẩu phần</Text>
             <SurfaceCard style={styles.totalCard}>
               {(() => {
-                const grams = barcodeResult.serving_size_g ?? 100;
-                const ratio = grams / 100;
+                const grams = Number(barcodeGrams);
+                const ratio = Number.isFinite(grams) && grams > 0 ? grams / 100 : 1;
                 return (
                   <>
                     <Text style={styles.totalLabel} i18nKey="screen.tabs.scan.text.012" />
@@ -789,11 +858,22 @@ export default function ScanScreen() {
                 );
               })()}
             </SurfaceCard>
+            <View style={styles.portionRow}>
+              <Text style={styles.portionLabel}>Grams</Text>
+              <TextInput
+                style={styles.portionInput}
+                value={barcodeGrams}
+                onChangeText={setBarcodeGrams}
+                keyboardType="numeric"
+                placeholder="100"
+                placeholderTextColor={theme.colors.textDisabled}
+              />
+            </View>
             <MealPicker selected={selectedMeal} onSelect={setSelectedMeal} />
-            <TouchableOpacity style={styles.saveButton} onPress={handleLogBarcode}>
-              <Text style={styles.saveButtonText} i18nKey="screen.tabs.scan.text.013" />
+            <TouchableOpacity style={[styles.saveButton, isLogging && styles.buttonDisabled]} onPress={handleLogBarcode} disabled={isLogging}>
+              <Text style={styles.saveButtonText}>{isLogging ? 'Logging...' : 'Log food'}</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.secondaryButton} onPress={() => { setBarcodeScanned(false); setBarcodeResult(null); }}>
+            <TouchableOpacity style={styles.secondaryButton} onPress={() => { setBarcodeScanned(false); setBarcodeResult(null); setBarcodeGrams('100'); }}>
               <Text style={styles.secondaryButtonText} i18nKey="screen.tabs.scan.text.014" />
             </TouchableOpacity>
           </View>
@@ -968,8 +1048,8 @@ export default function ScanScreen() {
               <Text style={styles.totalRange}>Khoảng: {formatCalorieRange(totalCaloriesMin, totalCaloriesMax)}</Text>
               <Text style={styles.totalMacros}>P: {Math.round(totalProtein)}g  C: {Math.round(totalCarbs)}g  F: {Math.round(totalFat)}g</Text>
             </SurfaceCard>
-            <TouchableOpacity style={styles.saveButton} onPress={handleSaveLog}>
-              <Text style={styles.saveButtonText} i18nKey="screen.tabs.scan.text.013" />
+            <TouchableOpacity style={[styles.saveButton, isLogging && styles.buttonDisabled]} onPress={handleSaveLog} disabled={isLogging}>
+              <Text style={styles.saveButtonText}>{isLogging ? 'Logging...' : 'Log meal'}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[styles.secondaryButton, isSavingMeal && styles.buttonDisabled]} onPress={handleSaveAsMeal} disabled={isSavingMeal}>
               <Text style={styles.secondaryButtonText} i18nKey="screen.tabs.scan.text.027" />
@@ -1249,6 +1329,19 @@ const styles = createThemedStyles((colors, radii) => ({
   resultRange: { color: colors.textMuted, fontSize: 12, marginTop: 2 },
   resultDetail: { color: colors.textMuted, fontSize: 13, marginBottom: 2 },
   resultMacros: { color: colors.textMuted, fontSize: 12 },
+  portionRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginVertical: 8 },
+  portionLabel: { color: colors.textMuted, fontSize: 12, fontWeight: '800' },
+  portionInput: {
+    minWidth: 90,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+    backgroundColor: colors.surfaceAlt,
+    color: colors.text,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    fontSize: 14,
+  },
   adjustRow: { flexDirection: 'row', gap: 10, marginTop: 10 },
   adjustBtn: { backgroundColor: colors.surfaceInfo, borderWidth: 1, borderColor: colors.borderInfo, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8 },
   adjustBtnText: { color: colors.textSoft, fontSize: 12, fontWeight: '700' },

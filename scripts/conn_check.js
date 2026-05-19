@@ -1,11 +1,8 @@
 #!/usr/bin/env node
 const { Client } = require('pg');
+const { getSupabaseDbUrl } = require('./lib/env');
 
-const cs = process.argv[2];
-if (!cs) {
-  console.error('Usage: node scripts/conn_check.js "<connectionString>"');
-  process.exit(2);
-}
+const cs = process.argv[2] || getSupabaseDbUrl();
 
 const client = new Client({ connectionString: cs, ssl: { rejectUnauthorized: false } });
 

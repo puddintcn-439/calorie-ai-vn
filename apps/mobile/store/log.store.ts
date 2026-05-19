@@ -31,9 +31,12 @@ interface LogState {
   fetchSavedMeals: () => Promise<void>;
   fetchActivityLogs: (date?: string) => Promise<void>;
   fetchDailyRoadmap: (date?: string) => Promise<void>;
-  addLog: (data: Omit<Partial<FoodLog>, 'user_id'>) => Promise<void>;
-  removeLog: (id: string) => Promise<void>;
+  addLog: (data: Omit<Partial<FoodLog>, 'user_id'>) => Promise<FoodLog>;
+  updateLog: (id: string, data: Partial<FoodLog>) => Promise<void>;
+  removeLog: (id: string) => Promise<FoodLog | null>;
+  restoreLog: (id: string) => Promise<void>;
   saveMeal: (name: string, items: SavedMeal['items']) => Promise<void>;
+  updateSavedMeal: (id: string, data: Partial<Pick<SavedMeal, 'name' | 'items'>>) => Promise<void>;
   logSavedMeal: (id: string, mealType: MealType) => Promise<void>;
   deleteSavedMeal: (id: string) => Promise<void>;
   addActivity: (dto: CreateActivityLogDto) => Promise<void>;
@@ -93,17 +96,34 @@ export const useLogStore = create<LogState>((set, get) => ({
   },
 
   addLog: async (data) => {
-    await apiClient.post('/log', data);
+    const res = await apiClient.post('/log', data);
+    await get().fetchDailyLog();
+    return res.data;
+  },
+
+  updateLog: async (id, data) => {
+    await apiClient.patch(`/log/${id}`, data);
     await get().fetchDailyLog();
   },
 
   removeLog: async (id) => {
-    await apiClient.delete(`/log/${id}`);
+    const res = await apiClient.delete(`/log/${id}`);
+    await get().fetchDailyLog();
+    return res.data?.deleted ?? null;
+  },
+
+  restoreLog: async (id) => {
+    await apiClient.post(`/log/${id}/restore`);
     await get().fetchDailyLog();
   },
 
   saveMeal: async (name, items) => {
     await apiClient.post('/log/saved-meals', { name, items });
+    await get().fetchSavedMeals();
+  },
+
+  updateSavedMeal: async (id, data) => {
+    await apiClient.patch(`/log/saved-meals/${id}`, data);
     await get().fetchSavedMeals();
   },
 

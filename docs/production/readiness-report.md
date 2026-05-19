@@ -1,10 +1,15 @@
 # Production Readiness Report
 
 ## Metadata
-- Date: 2026-05-09 (updated post-P0 implementation)
+- Date: 2026-05-19 (current source of truth)
 - Scope: calorie-ai-vn (monorepo)
 - Target Go-Live: 2026-Q3 (conditional)
-- Reviewer: Copilot
+- Reviewer: Codex
+
+## Source-of-Truth Note
+- This file is the active production-readiness source of truth as of 2026-05-19.
+- `docs/production/PRODUCTION_READINESS_FINAL.md` is superseded and must not be used as the primary readiness reference.
+- The superseded file previously claimed 92% readiness with future-dated sign-off dates (2026-05-26 / 2026-05-30), which are not valid current evidence on 2026-05-19.
 
 ## Executive Summary
 - Readiness Percentage: **72%**
@@ -60,5 +65,5 @@ Adjusted readiness = 72%
 - Remaining conditions (external, not code):
   1. Execute first EAS preview build and record build evidence in mobile-preview-build-qa-record.md
   2. Wire one external alert path (poll `/health/metrics`, alert on `fired: true`)
-- Next Review Date: 2026-05-16
+- Next Review Date: 2026-05-26
 

@@ -1,5 +1,6 @@
 import { FoodService } from '../food.service';
 import { SupabaseService } from '../../../common/supabase/supabase.service';
+import { Logger } from '@nestjs/common';
 
 function makeChain(resolvedValue: unknown): Record<string, jest.Mock> {
   const c: Record<string, jest.Mock> = {};
@@ -16,38 +17,82 @@ function makeChain(resolvedValue: unknown): Record<string, jest.Mock> {
 // search
 // ─────────────────────────────────────────────────────────────────────────────
 describe('FoodService.search', () => {
-  it('returns matching foods ordered by nutrient_confidence', async () => {
-    const foods = [
+  it('uses full-text search first and merges ilike fallback results', async () => {
+    const fullTextFoods = [
+      { id: '1', name: 'Pho Bo', nutrient_confidence: 0.9 },
+    ];
+    const fallbackFoods = [
       { id: '1', name: 'Pho Bo', nutrient_confidence: 0.9 },
       { id: '2', name: 'Pho Ga', nutrient_confidence: 0.8 },
     ];
+    const fullTextQuery = {
+      select: jest.fn().mockReturnThis(),
+      or: jest.fn().mockReturnThis(),
+      order: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockResolvedValue({ data: fullTextFoods, error: null }),
+    };
+    const fallbackQuery = {
+      select: jest.fn().mockReturnThis(),
+      or: jest.fn().mockReturnThis(),
+      order: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockResolvedValue({ data: fallbackFoods, error: null }),
+    };
     const db = {
-      from: jest.fn().mockReturnValue({
-        select: jest.fn().mockReturnThis(),
-        or: jest.fn().mockReturnThis(),
-        order: jest.fn().mockReturnThis(),
-        limit: jest.fn().mockResolvedValue({ data: foods, error: null }),
-      }),
+      from: jest.fn()
+        .mockReturnValueOnce(fullTextQuery)
+        .mockReturnValueOnce(fallbackQuery),
     };
     const supabase = { db } as unknown as SupabaseService;
     const service = new FoodService(supabase);
-    const result = await service.search('pho');
+    const result = await service.search('pho bo');
+
+    expect(fullTextQuery.or).toHaveBeenCalledWith('name.fts.pho:* & bo:*,name_vi.fts.pho:* & bo:*');
+    expect(fallbackQuery.or).toHaveBeenCalledWith('name.ilike.%pho bo%,name_vi.ilike.%pho bo%');
     expect(result).toHaveLength(2);
-    expect(result[0].name).toBe('Pho Bo');
+    expect(result.map((food) => food.id)).toEqual(['1', '2']);
   });
 
-  it('throws when supabase returns an error', async () => {
+  it('throws when the ilike fallback returns an error', async () => {
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+    const fullTextQuery = {
+      select: jest.fn().mockReturnThis(),
+      or: jest.fn().mockReturnThis(),
+      order: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockResolvedValue({ data: null, error: new Error('fts failed') }),
+    };
+    const fallbackQuery = {
+      select: jest.fn().mockReturnThis(),
+      or: jest.fn().mockReturnThis(),
+      order: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockResolvedValue({ data: null, error: new Error('search failed') }),
+    };
     const db = {
-      from: jest.fn().mockReturnValue({
-        select: jest.fn().mockReturnThis(),
-        or: jest.fn().mockReturnThis(),
-        order: jest.fn().mockReturnThis(),
-        limit: jest.fn().mockResolvedValue({ data: null, error: new Error('search failed') }),
-      }),
+      from: jest.fn()
+        .mockReturnValueOnce(fullTextQuery)
+        .mockReturnValueOnce(fallbackQuery),
     };
     const supabase = { db } as unknown as SupabaseService;
     const service = new FoodService(supabase);
     await expect(service.search('x')).rejects.toThrow('search failed');
+    warnSpy.mockRestore();
+  });
+
+  it('keeps Vietnamese letters in the full-text prefix query', async () => {
+    const fullTextQuery = {
+      select: jest.fn().mockReturnThis(),
+      or: jest.fn().mockReturnThis(),
+      order: jest.fn().mockReturnThis(),
+      limit: jest.fn().mockResolvedValue({ data: [{ id: '1', name: 'Phở bò' }], error: null }),
+    };
+    const db = {
+      from: jest.fn().mockReturnValue(fullTextQuery),
+    };
+    const supabase = { db } as unknown as SupabaseService;
+    const service = new FoodService(supabase);
+    await service.search('phở bò!', 1);
+
+    expect(fullTextQuery.or).toHaveBeenCalledWith('name.fts.phở:* & bò:*,name_vi.fts.phở:* & bò:*');
+    expect(db.from).toHaveBeenCalledTimes(1);
   });
 });
 

@@ -1,5 +1,5 @@
 import {
-  Controller, Get, Post, Delete,
+  Controller, Get, Post, Delete, Patch,
   Body, Param, Query, Request, UseGuards, HttpCode, HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiProperty } from '@nestjs/swagger';
@@ -7,7 +7,7 @@ import { IsString, IsEnum, IsNumber, IsOptional, Min, IsArray, ValidateNested, I
 import { Type } from 'class-transformer';
 import { LogService } from './log.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { MealType, LogSource, SavedMealItem, ActivityType, CreateActivityLogDto, ActivitySyncBatchDto, ActivitySource, SyncedActivityEntry } from '@calorie-ai/types';
+import { MealType, LogSource, SavedMealItem, ActivityType, CreateActivityLogDto, ActivitySyncBatchDto, ActivitySource, SyncedActivityEntry, UpdateFoodLogInput } from '@calorie-ai/types';
 
 class CreateLogDto {
   @ApiProperty() @IsString() name: string;
@@ -24,6 +24,25 @@ class CreateLogDto {
   @ApiProperty({ required: false }) @IsString() @IsOptional() scan_id?: string;
   @ApiProperty({ required: false }) @IsString() @IsOptional() image_url?: string;
   @ApiProperty({ required: false }) @IsString() @IsOptional() notes?: string;
+}
+
+class UpdateLogDto implements UpdateFoodLogInput {
+  @ApiProperty({ required: false }) @IsOptional() @IsEnum(['breakfast','lunch','dinner','snack']) meal_type?: MealType;
+  @ApiProperty({ required: false }) @IsOptional() @IsString() logged_at?: string;
+  @ApiProperty({ required: false }) @IsOptional() @IsNumber() @Min(0) quantity?: number;
+  @ApiProperty({ required: false }) @IsOptional() @IsString() unit?: string;
+  @ApiProperty({ required: false }) @IsOptional() @IsNumber() @Min(0) estimated_grams?: number;
+  @ApiProperty({ required: false }) @IsOptional() @IsNumber() @Min(0) calories?: number;
+  @ApiProperty({ required: false }) @IsOptional() @IsNumber() @Min(0) protein_g?: number;
+  @ApiProperty({ required: false }) @IsOptional() @IsNumber() @Min(0) carbs_g?: number;
+  @ApiProperty({ required: false }) @IsOptional() @IsNumber() @Min(0) fat_g?: number;
+  @ApiProperty({ required: false }) @IsOptional() @IsNumber() @Min(0) fiber_g?: number;
+  @ApiProperty({ required: false }) @IsOptional() @IsNumber() @Min(0) sugar_g?: number;
+  @ApiProperty({ required: false }) @IsOptional() @IsNumber() @Min(0) saturated_fat_g?: number;
+  @ApiProperty({ required: false }) @IsOptional() @IsNumber() @Min(0) sodium_mg?: number;
+  @ApiProperty({ required: false }) @IsOptional() @IsString() name?: string;
+  @ApiProperty({ required: false }) @IsOptional() @IsString() name_vi?: string;
+  @ApiProperty({ required: false }) @IsOptional() @IsString() notes?: string;
 }
 
 class SavedMealItemDto implements SavedMealItem {
@@ -47,6 +66,16 @@ class CreateSavedMealDto {
   @ValidateNested({ each: true })
   @Type(() => SavedMealItemDto)
   items: SavedMealItemDto[];
+}
+
+class UpdateSavedMealDto {
+  @ApiProperty({ required: false }) @IsOptional() @IsString() name?: string;
+  @ApiProperty({ required: false, type: [SavedMealItemDto] })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => SavedMealItemDto)
+  items?: SavedMealItemDto[];
 }
 
 class LogSavedMealDto {
@@ -142,6 +171,17 @@ export class LogController {
     return this.logService.deleteLog(id, req.user.id);
   }
 
+  @Patch(':id')
+  update(@Param('id') id: string, @Body() dto: UpdateLogDto, @Request() req: any) {
+    return this.logService.updateLog(id, req.user.id, dto);
+  }
+
+  @Post(':id/restore')
+  @HttpCode(HttpStatus.OK)
+  restore(@Param('id') id: string, @Request() req: any) {
+    return this.logService.restoreLog(id, req.user.id);
+  }
+
   // ---- Saved Meals ----
 
   @Get('saved-meals')
@@ -164,6 +204,11 @@ export class LogController {
   @HttpCode(HttpStatus.OK)
   deleteSavedMeal(@Param('id') id: string, @Request() req: any) {
     return this.logService.deleteSavedMeal(id, req.user.id);
+  }
+
+  @Patch('saved-meals/:id')
+  updateSavedMeal(@Param('id') id: string, @Body() dto: UpdateSavedMealDto, @Request() req: any) {
+    return this.logService.updateSavedMeal(id, req.user.id, dto);
   }
 
   // ─────────────────────── Activity ───────────────────────

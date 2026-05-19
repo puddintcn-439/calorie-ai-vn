@@ -5,7 +5,8 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
-  Modal
+  Modal,
+  TextInput
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
@@ -153,7 +154,7 @@ function buildExerciseRoadmap(
 export default function LogScreen() {
   useAppTheme();
   const { t, tx } = useI18n();
-  const { dailyLog, savedMeals, activityLogs, activityPreferences, isLoading, fetchDailyLog, fetchSavedMeals, fetchActivityLogs, fetchActivityPreferences, removeLog, logSavedMeal, deleteSavedMeal, addActivity, deleteActivity } = useLogStore();
+  const { dailyLog, savedMeals, activityLogs, activityPreferences, isLoading, fetchDailyLog, fetchSavedMeals, fetchActivityLogs, fetchActivityPreferences, updateLog, removeLog, restoreLog, logSavedMeal, updateSavedMeal, deleteSavedMeal, addActivity, deleteActivity } = useLogStore();
   const [perMealTargets, setPerMealTargets] = useState<Record<MealType, number>>({
     breakfast: 400, lunch: 600, dinner: 600, snack: 200,
   });
@@ -162,6 +163,17 @@ export default function LogScreen() {
   const [catalogVisible, setCatalogVisible] = useState(false);
   const [catalogSelectedType, setCatalogSelectedType] = useState<ActivityType | null>(null);
   const [catalogDuration, setCatalogDuration] = useState<15 | 30 | 45 | 60>(30);
+  const [editingLog, setEditingLog] = useState<FoodLog | null>(null);
+  const [editMealType, setEditMealType] = useState<MealType>('lunch');
+  const [editName, setEditName] = useState('');
+  const [editGrams, setEditGrams] = useState('');
+  const [editCalories, setEditCalories] = useState('');
+  const [editProtein, setEditProtein] = useState('');
+  const [editCarbs, setEditCarbs] = useState('');
+  const [editFat, setEditFat] = useState('');
+  const [editNotes, setEditNotes] = useState('');
+  const [editingSavedMeal, setEditingSavedMeal] = useState<SavedMeal | null>(null);
+  const [editSavedMealName, setEditSavedMealName] = useState('');
   const [reward, setReward] = useState<RewardToastData | null>(null);
 
   const loadLogData = useCallback(() => {
@@ -260,6 +272,123 @@ export default function LogScreen() {
       { text: 'screen.tabs.log.alert.012', style: 'cancel' },
       { text: 'screen.tabs.log.alert.013', style: 'destructive', onPress: () => deleteSavedMeal(meal.id) },
     ]);
+  };
+
+  const openEditSavedMeal = (meal: SavedMeal) => {
+    setEditingSavedMeal(meal);
+    setEditSavedMealName(meal.name);
+  };
+
+  const handleSaveSavedMeal = async () => {
+    if (!editingSavedMeal) return;
+    const name = editSavedMealName.trim();
+    if (!name) {
+      Alert.alert('Invalid saved meal', 'Name is required.');
+      return;
+    }
+
+    try {
+      await updateSavedMeal(editingSavedMeal.id, { name });
+      setEditingSavedMeal(null);
+      setReward({
+        title: 'Saved meal updated',
+        body: name,
+        icon: 'bookmark',
+      });
+    } catch {
+      Alert.alert('Could not update saved meal', 'Try again in a moment.');
+    }
+  };
+
+  const openEditLog = (log: FoodLog) => {
+    setEditingLog(log);
+    setEditMealType(log.meal_type);
+    setEditName(log.name_vi ?? log.name);
+    setEditGrams(String(Math.round(log.estimated_grams)));
+    setEditCalories(String(Math.round(log.calories)));
+    setEditProtein(String(Math.round(log.protein_g)));
+    setEditCarbs(String(Math.round(log.carbs_g)));
+    setEditFat(String(Math.round(log.fat_g)));
+    setEditNotes(log.notes ?? '');
+  };
+
+  const updateEditGrams = (value: string) => {
+    setEditGrams(value);
+    if (!editingLog) return;
+
+    const grams = Number(value);
+    if (!Number.isFinite(grams) || grams < 0 || editingLog.estimated_grams <= 0) return;
+
+    const ratio = grams / editingLog.estimated_grams;
+    setEditCalories(String(Math.round(editingLog.calories * ratio)));
+    setEditProtein(String(Number((editingLog.protein_g * ratio).toFixed(1))));
+    setEditCarbs(String(Number((editingLog.carbs_g * ratio).toFixed(1))));
+    setEditFat(String(Number((editingLog.fat_g * ratio).toFixed(1))));
+  };
+
+  const handleSaveEditedLog = async () => {
+    if (!editingLog) return;
+
+    const grams = Number(editGrams);
+    const calories = Number(editCalories);
+    const protein = Number(editProtein);
+    const carbs = Number(editCarbs);
+    const fat = Number(editFat);
+
+    if (![grams, calories, protein, carbs, fat].every((value) => Number.isFinite(value) && value >= 0)) {
+      Alert.alert('Invalid log', 'Check portion and macro values.');
+      return;
+    }
+
+    try {
+      await updateLog(editingLog.id, {
+        meal_type: editMealType,
+        name: editName.trim() || editingLog.name,
+        name_vi: editName.trim() || editingLog.name_vi,
+        estimated_grams: grams,
+        calories,
+        protein_g: protein,
+        carbs_g: carbs,
+        fat_g: fat,
+        notes: editNotes.trim() || undefined,
+      });
+      setEditingLog(null);
+      setReward({
+        title: 'Log updated',
+        body: `${editName || editingLog.name} · ${Math.round(calories)} kcal`,
+        icon: 'create',
+      });
+    } catch {
+      Alert.alert('Could not update log', 'Try again in a moment.');
+    }
+  };
+
+  const handleRemoveLog = async (log: FoodLog) => {
+    try {
+      const deleted = await removeLog(log.id);
+      setReward({
+        title: 'Log deleted',
+        body: `${log.name_vi ?? log.name} · ${Math.round(log.calories)} kcal`,
+        icon: 'trash',
+      });
+      if (deleted) {
+        Alert.alert('Log deleted', 'Undo this delete?', [
+          { text: 'Keep deleted', style: 'cancel' },
+          {
+            text: 'Undo',
+            onPress: async () => {
+              try {
+                await restoreLog(log.id);
+              } catch {
+                Alert.alert('Could not undo', 'Try again in a moment.');
+              }
+            },
+          },
+        ]);
+      }
+    } catch {
+      Alert.alert('Could not delete log', 'Try again in a moment.');
+    }
   };
 
   const submitQuickActivity = async (activityType: ActivityType, minsRaw?: string | number | null) => {
@@ -434,6 +563,110 @@ export default function LogScreen() {
         </View>
       </Modal>
 
+      <Modal
+        visible={editingLog !== null}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setEditingLog(null)}
+      >
+        <View style={styles.catalogOverlay}>
+          <View style={styles.catalogSheet}>
+            <View style={styles.catalogHeader}>
+              <Text style={styles.catalogTitle}>Edit log</Text>
+              <TouchableOpacity onPress={() => setEditingLog(null)}>
+                <Ionicons name="close" size={22} color={theme.colors.textMuted} />
+              </TouchableOpacity>
+            </View>
+
+            <TextInput
+              value={editName}
+              onChangeText={setEditName}
+              placeholder="Food name"
+              placeholderTextColor={theme.colors.textDisabled}
+              style={styles.editInput}
+            />
+
+            <View style={styles.editMealRow}>
+              {(['breakfast', 'lunch', 'dinner', 'snack'] as MealType[]).map((meal) => (
+                <TouchableOpacity
+                  key={meal}
+                  style={[styles.editMealBtn, editMealType === meal && styles.editMealBtnActive]}
+                  onPress={() => setEditMealType(meal)}
+                >
+                  <Text style={[styles.editMealBtnText, editMealType === meal && styles.editMealBtnTextActive]}>
+                    {tx(MEAL_LABELS[meal])}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <View style={styles.editGrid}>
+              <View style={styles.editField}>
+                <Text style={styles.editLabel}>Grams</Text>
+                <TextInput value={editGrams} onChangeText={updateEditGrams} keyboardType="numeric" style={styles.editInput} />
+              </View>
+              <View style={styles.editField}>
+                <Text style={styles.editLabel}>Kcal</Text>
+                <TextInput value={editCalories} onChangeText={setEditCalories} keyboardType="numeric" style={styles.editInput} />
+              </View>
+              <View style={styles.editField}>
+                <Text style={styles.editLabel}>Protein</Text>
+                <TextInput value={editProtein} onChangeText={setEditProtein} keyboardType="numeric" style={styles.editInput} />
+              </View>
+              <View style={styles.editField}>
+                <Text style={styles.editLabel}>Carbs</Text>
+                <TextInput value={editCarbs} onChangeText={setEditCarbs} keyboardType="numeric" style={styles.editInput} />
+              </View>
+              <View style={styles.editField}>
+                <Text style={styles.editLabel}>Fat</Text>
+                <TextInput value={editFat} onChangeText={setEditFat} keyboardType="numeric" style={styles.editInput} />
+              </View>
+            </View>
+
+            <TextInput
+              value={editNotes}
+              onChangeText={setEditNotes}
+              placeholder="Notes"
+              placeholderTextColor={theme.colors.textDisabled}
+              style={[styles.editInput, styles.editNotes]}
+              multiline
+            />
+
+            <TouchableOpacity style={styles.catalogConfirmBtn} onPress={() => void handleSaveEditedLog()}>
+              <Text style={styles.catalogConfirmText}>Save changes</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={editingSavedMeal !== null}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setEditingSavedMeal(null)}
+      >
+        <View style={styles.catalogOverlay}>
+          <View style={styles.catalogSheet}>
+            <View style={styles.catalogHeader}>
+              <Text style={styles.catalogTitle}>Edit saved meal</Text>
+              <TouchableOpacity onPress={() => setEditingSavedMeal(null)}>
+                <Ionicons name="close" size={22} color={theme.colors.textMuted} />
+              </TouchableOpacity>
+            </View>
+            <TextInput
+              value={editSavedMealName}
+              onChangeText={setEditSavedMealName}
+              placeholder="Saved meal name"
+              placeholderTextColor={theme.colors.textDisabled}
+              style={[styles.editInput, { marginBottom: 14 }]}
+            />
+            <TouchableOpacity style={styles.catalogConfirmBtn} onPress={() => void handleSaveSavedMeal()}>
+              <Text style={styles.catalogConfirmText}>Save saved meal</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       <VisualHeroCard
         imageSource={logHeroIllustration}
         eyebrow="screen.tabs.log.eyebrow.001"
@@ -473,6 +706,9 @@ export default function LogScreen() {
                   <Text style={styles.savedName} numberOfLines={1}>{meal.name}</Text>
                   <Text style={styles.savedCalorie}>{meal.total_calories} kcal</Text>
                   <Text style={styles.savedMacro}>P:{Math.round(meal.total_protein_g)} C:{Math.round(meal.total_carbs_g)} F:{Math.round(meal.total_fat_g)}</Text>
+                  <TouchableOpacity style={styles.savedEdit} onPress={() => openEditSavedMeal(meal)}>
+                    <Ionicons name="create-outline" size={15} color={theme.colors.textMuted} />
+                  </TouchableOpacity>
                   <TouchableOpacity style={styles.savedDelete} onPress={() => handleDeleteSaved(meal)}>
                     <Ionicons name="close-circle" size={16} color={theme.colors.textDisabled} />
                   </TouchableOpacity>
@@ -513,9 +749,14 @@ export default function LogScreen() {
                   </View>
                   <View style={styles.logRight}>
                     <Text style={styles.logCalorie}>{log.calories} kcal</Text>
-                    <TouchableOpacity onPress={() => removeLog(log.id)}>
-                      <Ionicons name="trash-outline" size={18} color={theme.colors.danger} />
-                    </TouchableOpacity>
+                    <View style={styles.logActions}>
+                      <TouchableOpacity onPress={() => openEditLog(log)}>
+                        <Ionicons name="create-outline" size={18} color={theme.colors.accentCyan} />
+                      </TouchableOpacity>
+                      <TouchableOpacity onPress={() => void handleRemoveLog(log)}>
+                        <Ionicons name="trash-outline" size={18} color={theme.colors.danger} />
+                      </TouchableOpacity>
+                    </View>
                   </View>
                 </View>
               ))}
@@ -585,6 +826,7 @@ const styles = createThemedStyles((colors, radii) => ({
   savedName: { color: colors.text, fontWeight: '700', fontSize: 13, marginBottom: 6, paddingRight: 16 },
   savedCalorie: { color: colors.accentMint, fontWeight: '800', fontSize: 18, marginBottom: 4 },
   savedMacro: { color: colors.textMuted, fontSize: 11 },
+  savedEdit: { position: 'absolute', top: 8, right: 28 },
   savedDelete: { position: 'absolute', top: 8, right: 8 },
   logSummaryCard: {
     flexDirection: 'row',
@@ -640,6 +882,7 @@ const styles = createThemedStyles((colors, radii) => ({
   logName: { color: colors.text, fontSize: 14, fontWeight: '600' },
   logDetail: { color: colors.textMuted, fontSize: 12, marginTop: 2 },
   logRight: { alignItems: 'flex-end', gap: 4 },
+  logActions: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   logCalorie: { color: colors.accentMint, fontWeight: '700' },
   emptyStateCard: { marginTop: 8 },
   activitySection: { marginBottom: 20, marginTop: 4 },
@@ -681,6 +924,25 @@ const styles = createThemedStyles((colors, radii) => ({
   durationBtnTextActive: { color: colors.accentMint },
   catalogConfirmBtn: { backgroundColor: colors.accentMint, borderRadius: 16, paddingVertical: 14, alignItems: 'center' },
   catalogConfirmText: { color: colors.textOnAccent, fontWeight: '800', fontSize: 14 },
+  editInput: {
+    backgroundColor: colors.surfaceAlt,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+    color: colors.text,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+  },
+  editMealRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginVertical: 12 },
+  editMealBtn: { paddingHorizontal: 10, paddingVertical: 8, borderRadius: 8, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceAlt },
+  editMealBtnActive: { backgroundColor: colors.surfaceSuccess, borderColor: colors.accentMint },
+  editMealBtnText: { color: colors.textMuted, fontWeight: '700', fontSize: 12 },
+  editMealBtnTextActive: { color: colors.accentMint },
+  editGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 12 },
+  editField: { flexBasis: '30%', flexGrow: 1, minWidth: 92 },
+  editLabel: { color: colors.textMuted, fontSize: 11, fontWeight: '800', marginBottom: 5 },
+  editNotes: { minHeight: 72, textAlignVertical: 'top', marginBottom: 14 },
 }));
 
 
