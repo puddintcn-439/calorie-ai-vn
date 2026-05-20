@@ -1,5 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import * as fs from 'fs';
+import * as path from 'path';
 import { GoogleGenerativeAI, Part } from '@google/generative-ai';
 import {
   AIScanResponse,
@@ -9,6 +11,7 @@ import {
 } from '@calorie-ai/types';
 import { createHash, randomUUID } from 'crypto';
 import { MetricsService } from '../../common/metrics/metrics.service';
+import { AiQueueService } from './ai.queue.service';
 
 type EvidenceProvider = 'google' | 'tavily';
 
@@ -22,6 +25,13 @@ interface WebEvidence {
 export class AiService {
   private readonly logger = new Logger(AiService.name);
   private genAI: GoogleGenerativeAI;
+  private providerTimeoutMs: number;
+  private providerRetries: number;
+  private providerMaxConcurrency: number;
+  private providerCurrent = 0;
+  private providerWaiters: Array<() => void> = [];
+  private textScanCache = new Map<string, { expiresAt: number; response: AIScanResponse }>();
+  private static readonly TEXT_CACHE_TTL_MS = 10 * 60 * 1000;
   private static readonly AI_FALLBACK_MESSAGE =
     'Coach AI đang bận do giới hạn quota. Tạm thời bạn ưu tiên 1 phần protein nạc + nhiều rau và giữ bữa tối trong khoảng calo còn lại nhé.';
   private static readonly MAX_GOOGLE_REFERENCES = 3;
@@ -29,13 +39,43 @@ export class AiService {
   private static readonly MIN_RANGE_RATIO = 0.1;
   private static readonly MAX_RANGE_RATIO = 0.35;
   private static readonly IMAGE_CACHE_TTL_MS = 10 * 60 * 1000;
+  private static readonly ALLOWED_CATEGORIES = new Set([
+    'rice_dish',
+    'noodle',
+    'meat',
+    'seafood',
+    'vegetable',
+    'fruit',
+    'drink',
+    'snack',
+    'dessert',
+    'fast_food',
+    'other',
+  ]);
   private imageScanCache = new Map<string, { expiresAt: number; response: AIScanResponse }>();
 
   constructor(
     private config: ConfigService,
     private metrics: MetricsService,
+    private aiQueue?: AiQueueService,
   ) {
-    this.genAI = new GoogleGenerativeAI(this.config.getOrThrow('GEMINI_API_KEY'));
+    const simulateEnv = this.config.get('AI_SIMULATE_LOCAL_RESPONSE');
+    const simulate = simulateEnv === true || String(simulateEnv ?? '').toLowerCase() === 'true' || String(simulateEnv) === '1';
+    if (!simulate) {
+      this.genAI = new GoogleGenerativeAI(this.config.getOrThrow('GEMINI_API_KEY'));
+    } else {
+      // In simulation mode we avoid instantiating the real provider client.
+      // generateWithTiming short-circuits when simulation is enabled.
+      this.genAI = {} as unknown as GoogleGenerativeAI;
+    }
+    this.providerTimeoutMs = Number(this.config.get('AI_PROVIDER_TIMEOUT_MS') ?? 5000);
+    this.providerRetries = Number(this.config.get('AI_PROVIDER_RETRIES') ?? 1);
+    this.providerMaxConcurrency = Number(this.config.get('AI_PROVIDER_MAX_CONCURRENCY') ?? 3);
+    // If AiQueueService is not injected (unit tests or legacy), provide a passthrough
+    if (!this.aiQueue) {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      this.aiQueue = { execute: async <T>(_opName: string, fn: () => Promise<T>) => fn() } as unknown as AiQueueService;
+    }
   }
 
   async scanImage(imageBase64: string, mimeType = 'image/jpeg'): Promise<AIScanResponse> {
@@ -54,11 +94,16 @@ export class AiService {
     const prompt = FOOD_SCAN_PROMPT;
 
     try {
-      const firstPassResult = await model.generateContent([prompt, imagePart]);
+      const { result: firstPassResult, durationMs: firstPassMs } = await this.generateWithTiming(
+        model,
+        [prompt, imagePart],
+        'scanImage:first_pass',
+      );
       const firstPassText = firstPassResult.response.text();
       const firstPassResponse = this.parseAIResponse(firstPassText, Date.now() - start, {
         cache_hit: false,
         cache_key: cacheKey.slice(0, 12),
+        provider_duration_ms: firstPassMs,
       });
 
       const shouldUseWebEvidence = this.shouldUseImageWebEvidence() && firstPassResponse.items.length > 0;
@@ -92,7 +137,11 @@ export class AiService {
           webEvidence.digest,
         );
 
-        const secondPassResult = await model.generateContent([enhancedPrompt, imagePart]);
+        const { result: secondPassResult, durationMs: secondPassMs } = await this.generateWithTiming(
+          model,
+          [enhancedPrompt, imagePart],
+          'scanImage:second_pass',
+        );
         const secondPassText = secondPassResult.response.text();
         const responseWithEvidence = this.parseAIResponse(secondPassText, Date.now() - start, {
           cache_hit: false,
@@ -100,6 +149,7 @@ export class AiService {
           web_evidence_used: true,
           web_provider: webEvidence.provider,
           web_sources: webEvidence.sources,
+          provider_duration_ms: secondPassMs,
         });
 
         this.setCachedImageScan(cacheKey, responseWithEvidence);
@@ -118,6 +168,14 @@ export class AiService {
     } catch (error) {
       this.logger.error('Gemini scan failed', error);
       this.metrics.recordAiScan(false);
+      const isTimeout = String(error ?? '').includes('AI_TIMEOUT');
+      if (isTimeout) {
+        return this.buildAiUnavailableScanResponse(Date.now() - start, {
+          reason: 'timeout',
+          parse_mode: 'image',
+          provider_duration_ms: this.providerTimeoutMs,
+        });
+      }
       if (this.isQuotaOrRateLimitError(error)) {
         return this.buildAiUnavailableScanResponse(Date.now() - start, {
           reason: 'quota_or_rate_limited',
@@ -131,28 +189,41 @@ export class AiService {
   async scanText(textInput: string): Promise<AIScanResponse> {
     const start = Date.now();
     const model = this.createDeterministicModel();
-    const webEvidence = await this.fetchWebNutritionEvidence(
-      `${textInput} calories nutrition label`,
-    );
+    const cacheKey = createHash('sha256').update(textInput.trim()).digest('hex');
+    const cached = this.getCachedTextScan(cacheKey);
+    if (cached) {
+      return this.cloneResponseWithMetadata(cached, { cache_hit: true, cache_key: cacheKey.slice(0, 12) });
+    }
 
-    const prompt = this.withWebEvidencePrompt(
-      `${FOOD_TEXT_PROMPT}\n\nNgười dùng nhập: "${textInput}"`,
-      webEvidence?.digest,
-    );
+    const webEvidence = await this.fetchWebNutritionEvidence(`${textInput} calories nutrition label`);
+
+    const prompt = this.withWebEvidencePrompt(`${FOOD_TEXT_PROMPT}\n\nNgười dùng nhập: "${textInput}"`, webEvidence?.digest);
 
     try {
-      const result = await model.generateContent(prompt);
+      const { result, durationMs } = await this.generateWithTiming(model, prompt, 'scanText');
       const text = result.response.text();
       const response = this.parseAIResponse(text, Date.now() - start, {
         web_evidence_used: Boolean(webEvidence),
         web_provider: webEvidence?.provider,
         web_sources: webEvidence?.sources,
+        provider_duration_ms: durationMs,
       });
+      this.setCachedTextScan(cacheKey, response);
       this.metrics.recordAiScan(true);
       return response;
     } catch (error) {
       this.logger.error('Gemini text scan failed', error);
       this.metrics.recordAiScan(false);
+      const isTimeout = String(error ?? '').includes('AI_TIMEOUT');
+      if (isTimeout) {
+        return this.buildAiUnavailableScanResponse(Date.now() - start, {
+          reason: 'timeout',
+          parse_mode: 'text',
+          provider_duration_ms: this.providerTimeoutMs,
+          web_evidence_used: Boolean(webEvidence),
+          web_provider: webEvidence?.provider,
+        });
+      }
       if (this.isQuotaOrRateLimitError(error)) {
         return this.buildAiUnavailableScanResponse(Date.now() - start, {
           reason: 'quota_or_rate_limited',
@@ -189,14 +260,24 @@ Context:
 User transcript: "${sanitizedTranscript}"`;
 
     try {
-      const result = await model.generateContent(prompt);
+      const { result, durationMs } = await this.generateWithTiming(model, prompt, 'scanVoice');
       const text = result.response.text();
       return this.parseAIResponse(text, Date.now() - start, {
         parse_mode: 'voice_transcript',
         locale_used: options?.locale,
+        provider_duration_ms: durationMs,
       });
     } catch (error) {
       this.logger.error('Gemini voice scan failed', error);
+      const isTimeout = String(error ?? '').includes('AI_TIMEOUT');
+      if (isTimeout) {
+        return this.buildAiUnavailableScanResponse(Date.now() - start, {
+          reason: 'timeout',
+          parse_mode: 'voice_transcript',
+          locale_used: options?.locale,
+          provider_duration_ms: this.providerTimeoutMs,
+        });
+      }
       if (this.isQuotaOrRateLimitError(error)) {
         return this.buildAiUnavailableScanResponse(Date.now() - start, {
           reason: 'quota_or_rate_limited',
@@ -234,16 +315,26 @@ Context:
 - meal_hint: ${options?.meal_hint ?? 'unknown'}`;
 
     try {
-      const result = await model.generateContent([prompt, imagePart]);
+      const { result, durationMs } = await this.generateWithTiming(model, [prompt, imagePart], 'scanReceipt');
       const text = result.response.text();
       return this.parseAIResponse(text, Date.now() - start, {
         parse_mode: 'receipt_ocr',
         locale_used: options?.locale,
         currency: options?.currency,
         merchant: options?.merchant_hint,
+        provider_duration_ms: durationMs,
       });
     } catch (error) {
       this.logger.error('Gemini receipt scan failed', error);
+      const isTimeout = String(error ?? '').includes('AI_TIMEOUT');
+      if (isTimeout) {
+        return this.buildAiUnavailableScanResponse(Date.now() - start, {
+          reason: 'timeout',
+          parse_mode: 'receipt_ocr',
+          locale_used: options?.locale,
+          provider_duration_ms: this.providerTimeoutMs,
+        });
+      }
       if (this.isQuotaOrRateLimitError(error)) {
         return this.buildAiUnavailableScanResponse(Date.now() - start, {
           reason: 'quota_or_rate_limited',
@@ -273,15 +364,26 @@ Thông tin bổ sung: "${context}"
 Điều chỉnh lại ước lượng dựa trên thông tin bổ sung.`, webEvidence?.digest);
 
     try {
-      const result = await model.generateContent(prompt);
+      const { result, durationMs } = await this.generateWithTiming(model, prompt, 'refineScan');
       const text = result.response.text();
       return this.parseAIResponse(text, Date.now() - start, {
         web_evidence_used: Boolean(webEvidence),
         web_provider: webEvidence?.provider,
         web_sources: webEvidence?.sources,
+        provider_duration_ms: durationMs,
       });
     } catch (error) {
       this.logger.error('Gemini refine scan failed', error);
+      const isTimeout = String(error ?? '').includes('AI_TIMEOUT');
+      if (isTimeout) {
+        return this.buildAiUnavailableScanResponse(Date.now() - start, {
+          reason: 'timeout',
+          parse_mode: 'refine',
+          web_evidence_used: Boolean(webEvidence),
+          web_provider: webEvidence?.provider,
+          provider_duration_ms: this.providerTimeoutMs,
+        });
+      }
       if (this.isQuotaOrRateLimitError(error)) {
         return this.buildAiUnavailableScanResponse(Date.now() - start, {
           reason: 'quota_or_rate_limited',
@@ -487,8 +589,9 @@ Người dùng hỏi: "${message}"
 Trả lời ngắn gọn, thân thiện bằng tiếng Việt. Không quá 3 câu.`;
 
     try {
-      const result = await model.generateContent(prompt);
+      const { result, durationMs } = await this.generateWithTiming(model, prompt, 'getCoachReply');
       const text = result.response.text();
+      this.logger.debug(`[AI-PROVIDER] coach duration_ms=${durationMs}`);
 
       return {
         message: text.trim(),
@@ -497,8 +600,9 @@ Trả lời ngắn gọn, thân thiện bằng tiếng Việt. Không quá 3 câ
     } catch (error) {
       this.logger.error('Gemini coach failed', error);
 
-      // Prevent UI-breaking 500 responses when Gemini key is valid but quota is unavailable.
-      if (this.isQuotaOrRateLimitError(error)) {
+      const isTimeout = String(error ?? '').includes('AI_TIMEOUT');
+      // Prevent UI-breaking 500 responses when Gemini key is valid but quota is unavailable or timeout
+      if (isTimeout || this.isQuotaOrRateLimitError(error)) {
         return {
           message: AiService.AI_FALLBACK_MESSAGE,
           suggestions: [
@@ -556,28 +660,30 @@ Trả lời ngắn gọn, thân thiện bằng tiếng Việt. Không quá 3 câ
       const jsonStr = jsonMatch ? jsonMatch[1] : rawText;
       const parsed = JSON.parse(jsonStr.trim());
 
-      const items: AIDetectedItem[] = (parsed.items ?? []).map((item: any) => ({
-        ...this.buildCaloriesRange(
-          Number(item.calories) || 0,
-          Number(item.confidence) || 0.7,
-          item.calories_min,
-          item.calories_max,
-        ),
-        name: item.name ?? '',
-        name_vi: item.name_vi ?? item.name ?? '',
-        category: item.category ?? 'other',
-        quantity: Number(item.quantity) || 1,
-        unit: item.unit ?? 'gram',
-        estimated_grams: Number(item.estimated_grams) || 100,
-        protein_g: Number(item.protein_g) || 0,
-        carbs_g: Number(item.carbs_g) || 0,
-        fat_g: Number(item.fat_g) || 0,
-        fiber_g: this.numOpt(item.fiber_g),
-        sugar_g: this.numOpt(item.sugar_g),
-        saturated_fat_g: this.numOpt(item.saturated_fat_g),
-        sodium_mg: this.numOpt(item.sodium_mg),
-        confidence: Number(item.confidence) || 0.7,
-      }));
+      const items: AIDetectedItem[] = (parsed.items ?? []).map((item: any) => {
+        const caloriesRaw = Number(item.calories) || 0;
+        const confidenceRaw = Number(item.confidence) || 0.7;
+        const caloriesRange = this.buildCaloriesRange(caloriesRaw, confidenceRaw, item.calories_min, item.calories_max);
+        const category = this.normalizeCategory(item.category ?? item.name ?? 'other');
+
+        return {
+          ...caloriesRange,
+          name: item.name ?? '',
+          name_vi: item.name_vi ?? item.name ?? '',
+          category,
+          quantity: this.clampNumber(item.quantity ?? 1, 1, 100, 1),
+          unit: String(item.unit ?? 'gram'),
+          estimated_grams: this.clampNumber(item.estimated_grams ?? 100, 10, 5000, 100),
+          protein_g: this.clampNumber(item.protein_g ?? 0, 0, 1000, 0),
+          carbs_g: this.clampNumber(item.carbs_g ?? 0, 0, 1000, 0),
+          fat_g: this.clampNumber(item.fat_g ?? 0, 0, 1000, 0),
+          fiber_g: this.numOpt(item.fiber_g),
+          sugar_g: this.numOpt(item.sugar_g),
+          saturated_fat_g: this.numOpt(item.saturated_fat_g),
+          sodium_mg: this.numOpt(item.sodium_mg),
+          confidence: Math.max(0, Math.min(1, Number(item.confidence) || 0.7)),
+        } as AIDetectedItem;
+      });
 
       const unresolvedItems: AIUnresolvedItem[] = (parsed.unresolved_items ?? []).map(
         (item: any) => ({
@@ -667,6 +773,33 @@ Trả lời ngắn gọn, thân thiện bằng tiếng Việt. Không quá 3 câ
     return Number.isFinite(n) && n >= 0 ? n : undefined;
   }
 
+  private normalizeCategory(input: unknown): string {
+    const s = String(input ?? '').toLowerCase().trim();
+    if (!s) return 'other';
+
+    if (AiService.ALLOWED_CATEGORIES.has(s)) return s;
+
+    // Synonym mappings
+    if (s.includes('pho') || s.includes('noodle') || s.includes('bun') || s.includes('soup')) return 'noodle';
+    if (s.includes('rice') || s.includes('com') || s.includes('cơm') || s.includes('rice_dish')) return 'rice_dish';
+    if (s.includes('seafood') || s.includes('fish') || s.includes('shrimp') || s.includes('prawn')) return 'seafood';
+    if (s.includes('veg') || s.includes('rau') || s.includes('vegetable')) return 'vegetable';
+    if (s.includes('fruit') || s.includes('trai cay') || s.includes('trái cây')) return 'fruit';
+    if (s.includes('drink') || s.includes('juice') || s.includes('beverage')) return 'drink';
+    if (s.includes('snack') || s.includes('chips') || s.includes('banh')) return 'snack';
+    if (s.includes('dessert') || s.includes('cake') || s.includes('kem')) return 'dessert';
+    if (s.includes('fast') || s.includes('burger') || s.includes('fried')) return 'fast_food';
+    if (s.includes('meat') || s.includes('chicken') || s.includes('beef') || s.includes('pork')) return 'meat';
+
+    return 'other';
+  }
+
+  private clampNumber(value: unknown, min: number, max: number, fallback = 0): number {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return fallback;
+    return Math.max(min, Math.min(max, Math.round(n)));
+  }
+
   private createDeterministicModel() {
     return this.genAI.getGenerativeModel({
       model: 'gemini-2.5-flash',
@@ -675,6 +808,139 @@ Trả lời ngắn gọn, thân thiện bằng tiếng Việt. Không quá 3 câ
         topP: 0.2,
       },
     });
+  }
+
+  private async acquireProviderSlot(): Promise<void> {
+    if (this.providerCurrent < this.providerMaxConcurrency) {
+      this.providerCurrent += 1;
+      return;
+    }
+
+    await new Promise<void>((resolve) => {
+      this.providerWaiters.push(resolve);
+    });
+    this.providerCurrent += 1;
+  }
+
+  private releaseProviderSlot(): void {
+    this.providerCurrent = Math.max(0, this.providerCurrent - 1);
+    const next = this.providerWaiters.shift();
+    if (next) next();
+  }
+
+  private getCachedTextScan(cacheKey: string): AIScanResponse | null {
+    const hit = this.textScanCache.get(cacheKey);
+    if (!hit) return null;
+    if (Date.now() > hit.expiresAt) {
+      this.textScanCache.delete(cacheKey);
+      return null;
+    }
+    return hit.response;
+  }
+
+  private setCachedTextScan(cacheKey: string, response: AIScanResponse): void {
+    this.textScanCache.set(cacheKey, {
+      expiresAt: Date.now() + AiService.TEXT_CACHE_TTL_MS,
+      response,
+    });
+  }
+
+  private async generateWithTiming(model: any, input: any, opName: string): Promise<{ result: any; durationMs: number }> {
+    const t0 = Date.now();
+    // Dev-only simulation mode: if enabled, return a cached debug response
+    // to avoid calling the real provider during local tests.
+    try {
+      const simulateEnv = this.config.get('AI_SIMULATE_LOCAL_RESPONSE');
+      const simulate = simulateEnv === true || String(simulateEnv ?? '').toLowerCase() === 'true' || String(simulateEnv) === '1';
+      if (simulate) {
+        const candidates: string[] = [
+          path.resolve(process.cwd(), 'tmp', 'ai_debug_response.json'),
+          path.resolve(__dirname, '..', '..', '..', '..', '..', 'tmp', 'ai_debug_response.json'),
+          path.resolve(__dirname, '..', '..', '..', '..', 'tmp', 'ai_debug_response.json'),
+          path.resolve(__dirname, '..', '..', '..', 'tmp', 'ai_debug_response.json'),
+        ];
+
+        let debugPath: string | null = null;
+        for (const c of candidates) {
+          if (fs.existsSync(c)) {
+            debugPath = c;
+            break;
+          }
+        }
+
+        if (!debugPath) {
+          let dir = __dirname;
+          for (let i = 0; i < 8; i += 1) {
+            const p = path.join(dir, 'tmp', 'ai_debug_response.json');
+            if (fs.existsSync(p)) {
+              debugPath = p;
+              break;
+            }
+            dir = path.resolve(dir, '..');
+          }
+        }
+
+        if (!debugPath) {
+          let dir = process.cwd();
+          for (let i = 0; i < 8; i += 1) {
+            const p = path.join(dir, 'tmp', 'ai_debug_response.json');
+            if (fs.existsSync(p)) {
+              debugPath = p;
+              break;
+            }
+            dir = path.resolve(dir, '..');
+          }
+        }
+
+        if (debugPath) {
+          const raw = fs.readFileSync(debugPath, 'utf8');
+          const simulatedMs = Number(this.config.get('AI_SIMULATED_LATENCY_MS') ?? 8200);
+          await new Promise((r) => setTimeout(r, simulatedMs));
+          const fakeResult = { response: { text: () => raw } };
+          this.logger.debug(`[AI-PROVIDER] ${opName} simulated duration_ms=${simulatedMs} debugPath=${debugPath}`);
+          return { result: fakeResult, durationMs: simulatedMs };
+        }
+
+        this.logger.warn('[AiService] AI_SIMULATE_LOCAL_RESPONSE=true but no tmp/ai_debug_response.json found; falling back to real provider');
+      }
+    } catch (e) {
+      this.logger.warn('AI simulation failed, falling back to real provider', e as Error);
+    }
+
+    const executeFn = async (): Promise<{ result: any; durationMs: number }> => {
+      let lastErr: unknown = null;
+      for (let attempt = 0; attempt <= this.providerRetries; attempt += 1) {
+        try {
+          const genPromise = model.generateContent(input);
+
+          const result = await Promise.race([
+            genPromise,
+            new Promise((_, reject) => setTimeout(() => reject(new Error('AI_TIMEOUT')), this.providerTimeoutMs)),
+          ]);
+
+          const duration = Date.now() - t0;
+          this.logger.debug(`[AI-PROVIDER] ${opName} success duration_ms=${duration} attempt=${attempt + 1}`);
+          return { result, durationMs: duration };
+        } catch (err) {
+          lastErr = err;
+          const duration = Date.now() - t0;
+          const isTimeout = String(err ?? '').includes('AI_TIMEOUT');
+          this.logger.warn(`[AI-PROVIDER] ${opName} attempt=${attempt + 1} failed after ${duration}ms`, err as Error);
+          if (attempt < this.providerRetries && !isTimeout) {
+            const backoff = Math.pow(2, attempt) * 200;
+            await new Promise((r) => setTimeout(r, backoff));
+            continue;
+          }
+          this.logger.error(`[AI-PROVIDER] ${opName} failed after ${duration}ms attempts=${attempt + 1}`, err as Error);
+          throw err;
+        }
+      }
+
+      // Should not reach here but throw last error if it does
+      throw lastErr;
+    };
+
+    return (this.aiQueue as AiQueueService).execute(opName, executeFn);
   }
 
   private buildImageCacheKey(imageBase64: string, mimeType: string): string {

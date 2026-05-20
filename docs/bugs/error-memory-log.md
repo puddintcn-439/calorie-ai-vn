@@ -373,6 +373,18 @@ Use this file to store compact lessons from real failures after they are fixed.
 - Files: `apps/mobile/services/api.ts`
 - Reuse Signal: Recheck this whenever web shows `ERR_CONNECTION_REFUSED` to a private LAN IP after adding native-device networking fallbacks.
 
+
+## 2026-05-20 - Local AI scan returned 500 due to invalid Gemini API key during dev test
+
+- Scope: backend AI (dev)
+- Error Signature: `Error: [GoogleGenerativeAI Error]: Error fetching from https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent: [400 Bad Request] API key not valid. Please pass a valid API key.`
+- Trigger: `POST /ai/scan/image` from local web test (upload raw/resized image) while `GEMINI_API_KEY` is invalid and `AI_SIMULATE_LOCAL_RESPONSE` was not set in the environment.
+- Root Cause: The service attempted to call the real Gemini provider with an invalid API key. Local dev simulation (reading `tmp/ai_debug_response.json`) was implemented but not enabled in the runtime `.env`, so the code fell through to provider calls and threw.
+- Fix: For local testing without a valid provider key, set `AI_SIMULATE_LOCAL_RESPONSE=true` (and optionally `AI_SIMULATED_LATENCY_MS`) in `apps/backend/.env` or export them in the shell before starting the backend. The code already includes a simulation branch that returns the recorded `tmp/ai_debug_response.json` when enabled.
+- Validation: Restart the backend with simulation enabled and re-run the image upload test; the endpoint should return a simulated `AIScanResponse` rather than a 500.
+- Prevention Rule: Developers testing LLM endpoints locally must either provide a valid `GEMINI_API_KEY` or enable `AI_SIMULATE_LOCAL_RESPONSE=true` in local env; CI should mock provider calls for deterministic tests.
+- Files: `apps/backend/src/modules/ai/ai.service.ts`, `apps/backend/.env`, `tmp/ai_debug_response.json`
+
 ## 2026-05-11 - AI scan/refine returned 500 when Gemini quota was exhausted
 
 - Scope: backend AI + mobile web UX
