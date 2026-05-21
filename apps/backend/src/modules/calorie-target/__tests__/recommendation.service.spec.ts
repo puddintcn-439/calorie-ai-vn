@@ -11,6 +11,7 @@ function makeChain(resolvedValue: unknown) {
     'delete',
     'eq',
     'gte',
+    'lt',
     'lte',
     'order',
     'in',
@@ -90,7 +91,9 @@ describe('RecommendationService', () => {
       const todayLogsQuery = {
         select: jest.fn().mockReturnValue({
           eq: jest.fn().mockReturnValue({
-            gte: jest.fn().mockResolvedValue({ data: [{ calories: 1200 }] }),
+            gte: jest.fn().mockReturnValue({
+              lt: jest.fn().mockResolvedValue({ data: [{ calories: 1200 }] }),
+            }),
           }),
         }),
       };
@@ -140,7 +143,9 @@ describe('RecommendationService', () => {
       const todayLogsQuery = {
         select: jest.fn().mockReturnValue({
           eq: jest.fn().mockReturnValue({
-            gte: jest.fn().mockResolvedValue({ data: [{ calories: 1500 }, { calories: 600 }] }),
+            gte: jest.fn().mockReturnValue({
+              lt: jest.fn().mockResolvedValue({ data: [{ calories: 1500 }, { calories: 600 }] }),
+            }),
           }),
         }),
       };
