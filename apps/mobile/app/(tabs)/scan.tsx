@@ -775,11 +775,11 @@ export default function ScanScreen() {
             <Text style={styles.scanNoticeBody}>{scanNotice}</Text>
             {lastFailedScan ? (
               <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
-                <TouchableOpacity style={[styles.analyzeButton, isRetrying && styles.buttonDisabled]} onPress={handleRetryLast} disabled={isRetrying}>
-                  <Text style={styles.analyzeButtonText}>{isRetrying ? 'Đang thử lại...' : 'Thử lại'}</Text>
+                <TouchableOpacity style={[styles.retryButton, isRetrying && styles.buttonDisabled]} onPress={handleRetryLast} disabled={isRetrying}>
+                  <Text style={styles.retryButtonText}>{isRetrying ? 'Đang thử lại...' : 'Thử lại'}</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.secondaryButton} onPress={() => { setLastFailedScan(null); setScanNotice(null); }}>
-                  <Text style={styles.secondaryButtonText}>Huỷ</Text>
+                <TouchableOpacity style={[styles.cancelButton, isRetrying && styles.buttonDisabled]} onPress={() => { setLastFailedScan(null); setScanNotice(null); }}>
+                  <Text style={styles.cancelButtonText}>Huỷ</Text>
                 </TouchableOpacity>
               </View>
             ) : null}
@@ -1353,6 +1353,10 @@ const styles = createThemedStyles((colors, radii) => ({
   textInput: { backgroundColor: colors.surfaceLifted, borderRadius: 8, padding: 14, color: colors.text, minHeight: 80, borderWidth: 1, borderColor: colors.border },
   analyzeButton: { backgroundColor: colors.accentCyan, borderRadius: 8, padding: 14, alignItems: 'center' },
   analyzeButtonText: { color: colors.textOnAccent, fontWeight: '800', fontSize: 16 },
+  retryButton: { backgroundColor: colors.accentMint, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  retryButtonText: { color: colors.textOnAccent, fontWeight: '700', fontSize: 14 },
+  cancelButton: { borderRadius: 8, paddingHorizontal: 14, paddingVertical: 10, alignItems: 'center', borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
+  cancelButtonText: { color: colors.text, fontWeight: '700', fontSize: 14 },
   previewImage: { width: '100%', height: 220, borderRadius: 8, marginBottom: 16 },
   scanningContainer: { alignItems: 'center', padding: 30, gap: 12 },
   scanningText: { color: colors.textMuted, fontSize: 15, marginTop: 8 },

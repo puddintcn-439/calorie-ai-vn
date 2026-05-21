@@ -801,13 +801,24 @@ Trả lời ngắn gọn, thân thiện bằng tiếng Việt. Không quá 3 câ
   }
 
   private createDeterministicModel() {
-    return this.genAI.getGenerativeModel({
-      model: 'gemini-2.5-flash',
-      generationConfig: {
-        temperature: 0.1,
-        topP: 0.2,
-      },
-    });
+    // If `genAI` was not instantiated because we're running in simulation mode,
+    // avoid calling into `getGenerativeModel()` which would throw. Return a
+    // lightweight stub model that matches the minimal interface used by
+    // `generateWithTiming()` to keep the code safe during local simulation.
+    if (this.genAI && typeof (this.genAI as any).getGenerativeModel === 'function') {
+      return this.genAI.getGenerativeModel({
+        model: 'gemini-2.5-flash',
+        generationConfig: {
+          temperature: 0.1,
+          topP: 0.2,
+        },
+      });
+    }
+
+    // Minimal stub model for simulation / test environments
+    return {
+      generateContent: async (_input: any) => ({ response: { text: () => '' } }),
+    } as unknown as any;
   }
 
   private async acquireProviderSlot(): Promise<void> {

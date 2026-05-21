@@ -2,6 +2,7 @@ import type { ComponentProps } from 'react';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Platform, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppTheme } from '../../components/theme';
 import { AnimatedIonicon } from '../../components/animated-icon';
 import { useI18n } from '../../components/i18n';
@@ -49,6 +50,8 @@ export default function TabsLayout() {
   const desktopTabWidth = Math.min(600, width - 80);
   const { colors } = useAppTheme();
   const { t } = useI18n();
+  const insets = useSafeAreaInsets();
+  const bottomInset = insets?.bottom ?? 0;
 
   return (
     <Tabs
@@ -58,11 +61,12 @@ export default function TabsLayout() {
           position: 'absolute',
           left: isDesktop ? Math.max(40, (width - desktopTabWidth) / 2) : isCompact ? 18 : 10,
           right: isDesktop ? 'auto' : isCompact ? 18 : 10,
-          bottom: isDesktop ? 10 : isCompact ? 8 : 10,
+          bottom: isDesktop ? 12 : isCompact ? 8 : 10,
           width: isDesktop ? desktopTabWidth : undefined,
-          height: isDesktop ? 52 : isCompact ? 64 : 66,
-          paddingTop: isDesktop ? 2 : isCompact ? 4 : 4,
-          paddingHorizontal: isDesktop ? 8 : isCompact ? 4 : 6,
+          height: (isDesktop ? 52 : isCompact ? 62 : 64) + bottomInset,
+          paddingTop: isDesktop ? 2 : isCompact ? 4 : 6,
+          paddingBottom: (isDesktop ? 2 : isCompact ? 6 : 8) + bottomInset,
+          paddingHorizontal: isDesktop ? 8 : 8,
           backgroundColor: colors.tabBar,
           borderColor: colors.border,
           borderWidth: 1,
@@ -78,14 +82,14 @@ export default function TabsLayout() {
           elevation: 6,
         },
         tabBarItemStyle: {
-          paddingVertical: isDesktop ? 3 : 4,
+          paddingVertical: isDesktop ? 4 : isCompact ? 4 : 6,
         },
         tabBarHideOnKeyboard: true,
         tabBarLabelStyle: {
-          fontSize: isCompact ? 9 : isDesktop ? 9 : 10,
-          lineHeight: isCompact ? 12 : 13,
+          fontSize: isCompact ? 10 : isDesktop ? 9 : 11,
+          lineHeight: isCompact ? 14 : isDesktop ? 13 : 15,
           fontWeight: '800',
-          paddingBottom: 0,
+          paddingBottom: isCompact ? 2 + Math.round(bottomInset / 2) : isDesktop ? 0 : 6 + Math.round(bottomInset / 2),
         },
         tabBarActiveTintColor: colors.accentMint,
         tabBarInactiveTintColor: colors.textMuted,
