@@ -1,0 +1,95 @@
+name: CI smoke tests (docker-compose)
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  smoke-tests:
+    name: Smoke tests (docker-compose)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Ensure tools available
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y jq postgresql-client
+
+      - name: Start Postgres service only
+        env:
+          NODE_ENV: 'development'
+        run: |
+          docker compose -f docker-compose.yml up -d postgres
+
+      - name: Wait for Postgres readiness
+        run: |
+          echo "Waiting for postgres to accept connections..."
+          for i in $(seq 1 40); do
+            pg_isready -h localhost -p 5432 -U postgres && break || true
+            echo "pg not ready, attempt $i"
+            sleep 3
+          done
+          pg_isready -h localhost -p 5432 -U postgres || (docker compose -f docker-compose.yml logs postgres || true; exit 1)
+
+      - name: Run DB migrations
+        env:
+          SUPABASE_DB_URL: 'postgres://postgres:postgres@localhost:5432/calorie_ai'
+        run: |
+          npm run migrate
+
+      - name: Start backend
+        env:
+          AI_SIMULATE_LOCAL_RESPONSE: 'true'
+          AI_SIMULATED_LATENCY_MS: '0'
+          NODE_ENV: 'development'
+        run: |
+          docker compose -f docker-compose.yml up -d --build backend
+
+      - name: Wait for backend /health
+        run: |
+          set -e
+          echo "Waiting for backend /health..."
+          resp=""
+          for i in $(seq 1 40); do
+            echo "Attempt $i"
+            resp=$(curl -sS http://localhost:3000/health || true)
+            if echo "$resp" | grep -q '"status"' ; then
+              echo "HEALTH OK: $resp"
+              break
+            fi
+            sleep 3
+          done
+          if [ -z "$resp" ]; then
+            docker compose -f docker-compose.yml logs backend || true
+            echo "Backend /health did not respond"
+            exit 1
+          fi
+
+      - name: Run AI debug smoke test
+        run: |
+          echo "Posting AI debug request"
+          body='{"text":"smoke test from CI"}'
+          resp=$(curl -sS -X POST -H "Content-Type: application/json" -d "$body" http://localhost:3000/ai-debug/scan/text || true)
+          echo "AI DEBUG RESPONSE: $resp"
+          ok=$(echo "$resp" | jq -r '.success' || echo "null")
+          if [ "$ok" != "true" ]; then
+            echo "AI debug endpoint did not return success:true"
+            exit 1
+          fi
+
+      - name: Tear down
+        if: always()
+        run: |
+          docker compose -f docker-compose.yml down --volumes --remove-orphans

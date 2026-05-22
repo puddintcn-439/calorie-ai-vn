@@ -61,6 +61,13 @@ export class AiService {
   ) {
     const simulateEnv = this.config.get('AI_SIMULATE_LOCAL_RESPONSE');
     const simulate = simulateEnv === true || String(simulateEnv ?? '').toLowerCase() === 'true' || String(simulateEnv) === '1';
+    const isProd = process.env.NODE_ENV === 'production' || String(this.config.get('NODE_ENV') ?? '').toLowerCase() === 'production';
+
+    if (isProd && simulate) {
+      this.logger.error('[AiService] AI_SIMULATE_LOCAL_RESPONSE=true is not allowed in production');
+      throw new Error('AI_SIMULATE_LOCAL_RESPONSE must not be enabled in production');
+    }
+
     if (!simulate) {
       this.genAI = new GoogleGenerativeAI(this.config.getOrThrow('GEMINI_API_KEY'));
     } else {
@@ -68,8 +75,9 @@ export class AiService {
       // generateWithTiming short-circuits when simulation is enabled.
       this.genAI = {} as unknown as GoogleGenerativeAI;
     }
-    this.providerTimeoutMs = Number(this.config.get('AI_PROVIDER_TIMEOUT_MS') ?? 5000);
-    this.providerRetries = Number(this.config.get('AI_PROVIDER_RETRIES') ?? 1);
+    // Production-tuned defaults (can be overridden via env)
+    this.providerTimeoutMs = Number(this.config.get('AI_PROVIDER_TIMEOUT_MS') ?? 15000);
+    this.providerRetries = Number(this.config.get('AI_PROVIDER_RETRIES') ?? 2);
     this.providerMaxConcurrency = Number(this.config.get('AI_PROVIDER_MAX_CONCURRENCY') ?? 3);
     // If AiQueueService is not injected (unit tests or legacy), provide a passthrough
     if (!this.aiQueue) {
@@ -920,31 +928,49 @@ Trả lời ngắn gọn, thân thiện bằng tiếng Việt. Không quá 3 câ
 
     const executeFn = async (): Promise<{ result: any; durationMs: number }> => {
       let lastErr: unknown = null;
-      for (let attempt = 0; attempt <= this.providerRetries; attempt += 1) {
-        try {
-          const genPromise = model.generateContent(input);
 
-          const result = await Promise.race([
-            genPromise,
-            new Promise((_, reject) => setTimeout(() => reject(new Error('AI_TIMEOUT')), this.providerTimeoutMs)),
-          ]);
+      // Ensure we don't exceed provider concurrency even when AiQueue is absent
+      await this.acquireProviderSlot();
+      try {
+        for (let attempt = 0; attempt <= this.providerRetries; attempt += 1) {
+          try {
+            const genPromise = model.generateContent(input);
 
-          const duration = Date.now() - t0;
-          this.logger.debug(`[AI-PROVIDER] ${opName} success duration_ms=${duration} attempt=${attempt + 1}`);
-          return { result, durationMs: duration };
-        } catch (err) {
-          lastErr = err;
-          const duration = Date.now() - t0;
-          const isTimeout = String(err ?? '').includes('AI_TIMEOUT');
-          this.logger.warn(`[AI-PROVIDER] ${opName} attempt=${attempt + 1} failed after ${duration}ms`, err as Error);
-          if (attempt < this.providerRetries && !isTimeout) {
-            const backoff = Math.pow(2, attempt) * 200;
-            await new Promise((r) => setTimeout(r, backoff));
-            continue;
+            const timeoutPromise = new Promise((_, reject) =>
+              setTimeout(() => reject(new Error('AI_TIMEOUT')), this.providerTimeoutMs),
+            );
+
+            const result = await Promise.race([genPromise, timeoutPromise]);
+
+            const duration = Date.now() - t0;
+            this.logger.debug(`[AI-PROVIDER] ${opName} success duration_ms=${duration} attempt=${attempt + 1}`);
+            return { result, durationMs: duration };
+          } catch (err) {
+            lastErr = err;
+            const duration = Date.now() - t0;
+            this.logger.warn(`[AI-PROVIDER] ${opName} attempt=${attempt + 1} failed after ${duration}ms`, err as Error);
+
+            // If the provider indicates quota/rate limiting, do not retry.
+            if (this.isQuotaOrRateLimitError(err)) {
+              this.logger.error(`[AI-PROVIDER] ${opName} unrecoverable quota/rate error: ${String(err)}`);
+              throw err;
+            }
+
+            // Retry on other transient errors (including timeouts), with exponential backoff + jitter
+            if (attempt < this.providerRetries) {
+              const baseBackoff = 200;
+              const backoff = Math.pow(2, attempt) * baseBackoff + Math.floor(Math.random() * 150);
+              this.logger.debug(`[AI-PROVIDER] ${opName} retrying in ${backoff}ms (attempt ${attempt + 1}/${this.providerRetries + 1})`);
+              await new Promise((r) => setTimeout(r, backoff));
+              continue;
+            }
+
+            this.logger.error(`[AI-PROVIDER] ${opName} failed after ${duration}ms attempts=${attempt + 1}`, err as Error);
+            throw err;
           }
-          this.logger.error(`[AI-PROVIDER] ${opName} failed after ${duration}ms attempts=${attempt + 1}`, err as Error);
-          throw err;
         }
+      } finally {
+        this.releaseProviderSlot();
       }
 
       // Should not reach here but throw last error if it does
