@@ -11,6 +11,11 @@ const { getSupabaseDbUrl } = require('./lib/env');
 const connectionString = getSupabaseDbUrl();
 
 const migrationSQL = `
+-- Ensure a minimal users table exists for CI/dev DBs so foreign keys succeed
+CREATE TABLE IF NOT EXISTS public.users (
+  id uuid primary key
+);
+
 CREATE TABLE IF NOT EXISTS public.user_daily_roadmap (
   id              uuid primary key default gen_random_uuid(),
   user_id         uuid not null references public.users(id) on delete cascade,
