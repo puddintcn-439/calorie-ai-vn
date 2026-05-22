@@ -18,57 +18,61 @@ export class ReminderSchedulerService {
    */
   @Cron(CronExpression.EVERY_MINUTE)
   async dispatchDueReminders() {
-    const now = new Date();
-    const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+    try {
+      const now = new Date();
+      const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
-    // Get all users with push notifications enabled whose any reminder fires now
-    const { data: prefs, error } = await this.supabase.db
-      .from('reminder_preferences')
-      .select('user_id, breakfast_reminder_enabled, breakfast_reminder_time, lunch_reminder_enabled, lunch_reminder_time, dinner_reminder_enabled, dinner_reminder_time, snack_reminder_enabled, snack_reminder_time, allow_push_notifications')
-      .eq('allow_push_notifications', true);
+      // Get all users with push notifications enabled whose any reminder fires now
+      const { data: prefs, error } = await this.supabase.db
+        .from('reminder_preferences')
+        .select('user_id, breakfast_reminder_enabled, breakfast_reminder_time, lunch_reminder_enabled, lunch_reminder_time, dinner_reminder_enabled, dinner_reminder_time, snack_reminder_enabled, snack_reminder_time, allow_push_notifications')
+        .eq('allow_push_notifications', true);
 
-    if (error || !prefs || prefs.length === 0) return;
+      if (error || !prefs || prefs.length === 0) return;
 
-    const mealTypes = ['breakfast', 'lunch', 'dinner', 'snack'] as const;
+      const mealTypes = ['breakfast', 'lunch', 'dinner', 'snack'] as const;
 
-    const dueUsers = prefs.filter((p) =>
-      mealTypes.some(
-        (meal) => p[`${meal}_reminder_enabled`] && p[`${meal}_reminder_time`] === currentTime,
-      ),
-    );
+      const dueUsers = prefs.filter((p) =>
+        mealTypes.some(
+          (meal) => p[`${meal}_reminder_enabled`] && p[`${meal}_reminder_time`] === currentTime,
+        ),
+      );
 
-    if (dueUsers.length === 0) return;
+      if (dueUsers.length === 0) return;
 
-    this.logger.log(`Dispatching reminders for ${dueUsers.length} user(s) at ${currentTime}`);
+      this.logger.log(`Dispatching reminders for ${dueUsers.length} user(s) at ${currentTime}`);
 
-    for (const pref of dueUsers) {
-      try {
-        const nudges = await this.reminderService.generateDueReminders(pref.user_id);
-        if (nudges.length === 0) continue;
+      for (const pref of dueUsers) {
+        try {
+          const nudges = await this.reminderService.generateDueReminders(pref.user_id);
+          if (nudges.length === 0) continue;
 
-        // Fetch user's push tokens
-        const { data: tokens } = await this.supabase.db
-          .from('push_notification_tokens')
-          .select('token')
-          .eq('user_id', pref.user_id);
+          // Fetch user's push tokens
+          const { data: tokens } = await this.supabase.db
+            .from('push_notification_tokens')
+            .select('token')
+            .eq('user_id', pref.user_id);
 
-        if (!tokens || tokens.length === 0) continue;
+          if (!tokens || tokens.length === 0) continue;
 
-        // Send via Expo Push API
-        const messages = nudges.flatMap((nudge) =>
-          tokens.map((t) => ({
-            to: t.token,
-            title: nudge.title,
-            body: nudge.body,
-            data: { mealType: nudge.mealType, type: nudge.type },
-            sound: 'default',
-          })),
-        );
+          // Send via Expo Push API
+          const messages = nudges.flatMap((nudge) =>
+            tokens.map((t) => ({
+              to: t.token,
+              title: nudge.title,
+              body: nudge.body,
+              data: { mealType: nudge.mealType, type: nudge.type },
+              sound: 'default',
+            })),
+          );
 
-        await this.sendExpoPushMessages(messages);
-      } catch (err) {
-        this.logger.error(`Failed to dispatch reminder for user ${pref.user_id}:`, err);
+          await this.sendExpoPushMessages(messages);
+        } catch (err) {
+          this.logger.error(`Failed to dispatch reminder for user ${pref.user_id}:`, err);
+        }
       }
+    } catch (err) {
+      this.logger.warn('dispatchDueReminders failed (non-fatal):', err);
     }
   }
 

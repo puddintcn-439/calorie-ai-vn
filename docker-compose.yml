@@ -27,20 +27,26 @@ services:
       dockerfile: apps/backend/Dockerfile
     container_name: calorie-ai-backend
     environment:
-      NODE_ENV: ${NODE_ENV:-production}
+      NODE_ENV: ${NODE_ENV:-development}
       PORT: 3000
       DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-calorie_ai}
+      # Do not default SUPABASE_URL to the Postgres listener. Leave empty
+      # so the app falls back to a safe stub in local dev unless explicitly
+      # provided via environment.
       SUPABASE_URL: ${SUPABASE_URL}
-      SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_KEY}
+      SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_KEY:-dev_service_key}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRY: ${JWT_EXPIRY:-7d}
       LOGS_DIR: /app/logs
+      AI_SIMULATE_LOCAL_RESPONSE: ${AI_SIMULATE_LOCAL_RESPONSE:-false}
       AI_PROVIDER_TIMEOUT_MS: ${AI_PROVIDER_TIMEOUT_MS:-15000}
       AI_PROVIDER_RETRIES: ${AI_PROVIDER_RETRIES:-2}
     ports:
       - '3000:3000'
     volumes:
       - ./apps/backend/logs:/app/logs
+      - ./tmp:/app/tmp
     depends_on:
       postgres:
         condition: service_healthy
