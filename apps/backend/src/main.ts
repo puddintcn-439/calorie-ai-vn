@@ -1,6 +1,32 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import * as util from 'util';
+import * as Sentry from '@sentry/node';
+
+// Global process-level handlers to capture unexpected rejections/exceptions
+// Initialize Sentry if DSN is provided
+const SENTRY_DSN = process.env.SENTRY_DSN;
+if (SENTRY_DSN) {
+  Sentry.init({ dsn: SENTRY_DSN, tracesSampleRate: Number(process.env.SENTRY_TRACES_SAMPLE_RATE ?? 0) });
+}
+
+process.on('unhandledRejection', (reason) => {
+  try {
+    console.error('UNHANDLED_REJECTION', util.inspect(reason, { depth: 6 }));
+    if (SENTRY_DSN) Sentry.captureException(reason);
+  } catch (e) {
+    console.error('UNHANDLED_REJECTION', reason);
+  }
+});
+process.on('uncaughtException', (err) => {
+  try {
+    console.error('UNCAUGHT_EXCEPTION', util.inspect(err, { depth: 6 }));
+    if (SENTRY_DSN) Sentry.captureException(err);
+  } catch (e) {
+    console.error('UNCAUGHT_EXCEPTION', err);
+  }
+});
 import { AppModule } from './app.module';
 import { RequestLoggingMiddleware } from './common/middleware/request-logging.middleware';
 import { MetricsService } from './common/metrics/metrics.service';

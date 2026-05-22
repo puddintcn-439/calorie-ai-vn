@@ -37,7 +37,7 @@ Open `apps/backend/.env` and replace:
 
 **Example:**
 ```
-GEMINI_API_KEY=AIzaSyD_6sNpZpIc5xVW4uRkzKjn8pVrKjZxAbC
+GEMINI_API_KEY=your_gemini_api_key_here
 ```
 
 ### Step 3: Restart Backend

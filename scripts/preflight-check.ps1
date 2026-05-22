@@ -1,3 +1,7 @@
+param(
+  [switch]$CheckSecrets
+)
+
 $root = Resolve-Path "$PSScriptRoot\.."
 $backendEnv = Join-Path $root 'apps\backend\.env'
 $mobileEnv = Join-Path $root 'apps\mobile\.env'
@@ -33,6 +37,48 @@ if (-not (Test-Path $mobileEnv)) {
   $ok = $false
 } else {
   Write-Output 'Found apps/mobile/.env'
+}
+
+if ($CheckSecrets) {
+  Write-Output 'Running secrets check...'
+  $required = @('GEMINI_API_KEY','SUPABASE_URL','SUPABASE_SERVICE_KEY','JWT_SECRET')
+  $missing = @()
+
+  # helper to read key from .env file
+  function Get-EnvFromFile($filePath, $key) {
+    if (-not (Test-Path $filePath)) { return $null }
+    $lines = Get-Content -Path $filePath -ErrorAction SilentlyContinue
+    foreach ($line in $lines) {
+      if ($line -match "^\s*${key}\s*=\s*(.+)$") {
+        return $matches[1].Trim()
+      }
+    }
+    return $null
+  }
+
+  foreach ($k in $required) {
+    $val = [Environment]::GetEnvironmentVariable($k, 'Process')
+    if (-not $val -or $val.Trim() -eq '') {
+      # try .env
+      $val = Get-EnvFromFile -filePath $backendEnv -key $k
+    }
+
+    if (-not $val -or $val.Trim() -eq '') {
+      $missing += $k
+    } else {
+      if ($val -match 'change|example|dev|placeholder|REPLACE_ME' ) {
+        Write-Output "Warning: $k has placeholder value in .env"
+        $missing += $k
+      }
+    }
+  }
+
+  if ($missing.Count -gt 0) {
+    Write-Output "Missing or placeholder secrets: $($missing -join ', ')"
+    $ok = $false
+  } else {
+    Write-Output 'Secrets check: OK'
+  }
 }
 
 $services = @(

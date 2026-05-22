@@ -399,6 +399,21 @@ Use this file to store compact lessons from real failures after they are fixed.
 
 ## 2026-05-12 - Expo web started on port 19006 (one dev session failed, new web server up)
 
+## 2026-05-22 - Backend restart loop from unhandled fetch failures during Supabase client init
+
+- Scope: backend (startup)
+- Error Signature: `UNHANDLED_REJECTION { message: 'TypeError: fetch failed', details: 'AggregateError (ECONNREFUSED)' }` appearing repeatedly during Nest bootstrap and causing container restart loops.
+- Trigger: `docker compose up` with default env in `docker-compose.yml` where `SUPABASE_URL` was set to `http://localhost:5432` (Postgres port) and `SUPABASE_SERVICE_KEY` present. Supabase client attempted HTTP fetches against a Postgres listener and failed.
+- Root Cause: The app created a Supabase JS client unconditionally on module init. In local setups that only run raw Postgres (no Supabase HTTP layer), the Supabase client issues background `fetch()` requests to the configured `SUPABASE_URL`. Pointing that URL to `localhost:5432` caused immediate ECONNREFUSED errors that surfaced as unhandled promise rejections and crashed the process.
+- Fix: Hardened `SupabaseService.onModuleInit()` to:
+	- use non-throwing config getters,
+	- validate `SUPABASE_URL` (skip client creation when it looks like a Postgres port or is an invalid URL),
+	- wrap `createClient()` in try/catch,
+	- provide a lightweight stub client (`db.from(...).select(...)` etc.) when Supabase is not configured or appears misconfigured to avoid background network activity and to let the server start for local AI/debug work.
+- Validation: Restarting the backend with the same compose env no longer produced the repeated `UNHANDLED_REJECTION` logs; the server boot sequence completes and health endpoints become reachable when Supabase is intentionally unavailable for local dev.
+- Prevention Rule: Do not default `SUPABASE_URL` to a raw Postgres listener (e.g., `http://localhost:5432`). Require an explicit Supabase HTTP endpoint or guard client creation; supply a stub client in dev to avoid background I/O during startup. When introducing third-party clients that may perform background network activity, validate the target URL early and fail gracefully in development.
+- Files: `apps/backend/src/common/supabase/supabase.service.ts`, `docker-compose.yml`
+
 - Scope: mobile tooling / dev-server
 - Error Signature: One running dev terminal showed `npm error Lifecycle script `dev` failed with error: npm error code 4294967295` while a new Expo web process was started and is listening on port 19006.
 - Trigger: Starting Expo dev (web) after freeing ports via helper script; observed when running `npm run dev` or the helper scripts that start Expo.
@@ -440,3 +455,15 @@ Backend build failed (exit ). Aborting.
 - Prevention Rule: In Windows PowerShell automation scripts for this repo, prefer inline invocation and `$LASTEXITCODE` checks for Node/npm CLIs instead of relying on `Start-Process -PassThru` for exit status across shells.
 - Files: `scripts/restart-verify.ps1`
 - Reuse Signal: Recheck this pattern whenever a PowerShell helper uses `Start-Process -PassThru` to run `npm`/`node` CLIs; prefer `$LASTEXITCODE` or capture stdout/stderr files.
+
+## 2026-05-22 - Supabase realtime WebSocket error on Node 20 in Docker
+
+- Scope: backend (Supabase client)
+- Error Signature: `/app/node_modules/@supabase/realtime-js/dist/main/lib/websocket-factory.js:103\nError: Node.js 20 detected without native WebSocket support.\nSuggested solution: For Node.js < 22, install "ws" package and provide it via the transport option: import ws from "ws" new RealtimeClient(url, { transport: ws })`
+- Trigger: Starting the backend inside the Docker image built from `node:20-alpine`.
+- Root Cause: `@supabase/supabase-js`'s realtime client requires an explicit WebSocket transport when running on Node.js versions that don't provide a global WebSocket implementation (Node < 22). Without a provided transport, the RealtimeClient throws synchronously during `createClient(...)` initialization.
+- Fix: Added `ws` to `apps/backend/package.json` and updated `apps/backend/src/common/supabase/supabase.service.ts` to detect and pass `ws` as the `realtime.transport` option when available (runtime `require('ws')`). This prevents the synchronous error and allows the Supabase client to initialize in Node 20 container images.
+- Validation: Rebuilt the backend image and restarted the container; backend logs no longer show the WebSocket constructor error and Nest routes map successfully.
+- Prevention Rule: In Node < 22 environments, ensure `ws` is present and pass it to `createClient(url, key, { realtime: { transport: ws } })`. Add a short integration smoke test in CI that starts the backend image and asserts `/health` responds to catch this early.
+- Files: `apps/backend/package.json`, `apps/backend/src/common/supabase/supabase.service.ts`, `docker-compose.yml`
+
