@@ -54,6 +54,9 @@ jobs:
           AI_SIMULATE_LOCAL_RESPONSE: 'true'
           AI_SIMULATED_LATENCY_MS: '0'
           NODE_ENV: 'development'
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
           docker compose -f docker-compose.yml up -d --build backend
 
