@@ -53,14 +53,53 @@ CREATE INDEX IF NOT EXISTS user_daily_roadmap_user_task ON public.user_daily_roa
     
     console.log('✓ Connected successfully');
     console.log('🚀 Running migration...');
-    
-    await client.query(migrationSQL);
-    
-    console.log('✅ Migration completed successfully!');
-    console.log('✓ Table user_daily_roadmap created');
-    console.log('✓ RLS enabled');
-    console.log('✓ Security policy configured');
-    console.log('✓ Indexes created');
+
+    // Create tables (fail hard if core table creation fails)
+    const createUsers = `CREATE TABLE IF NOT EXISTS public.users (id uuid primary key);`;
+    const createRoadmap = `
+CREATE TABLE IF NOT EXISTS public.user_daily_roadmap (
+  id              uuid primary key default gen_random_uuid(),
+  user_id         uuid not null references public.users(id) on delete cascade,
+  logged_date     date not null,
+  task_id         text not null,
+  task_title      text not null,
+  activity_type   text not null,
+  duration_min    integer not null default 30,
+  estimated_kcal  integer not null default 0,
+  is_custom       boolean default false,
+  is_removed      boolean default false,
+  is_completed    boolean default false,
+  created_at      timestamptz default now(),
+  updated_at      timestamptz default now()
+);
+`;
+
+    await client.query(createUsers);
+    await client.query(createRoadmap);
+
+    // RLS and policies: may not exist on plain Postgres (no Supabase auth schema).
+    try {
+      await client.query('ALTER TABLE public.user_daily_roadmap ENABLE ROW LEVEL SECURITY;');
+    } catch (err) {
+      console.warn('⚠️ Could not enable RLS (non-fatal):', err.message);
+    }
+
+    try {
+      await client.query('DROP POLICY IF EXISTS "Users manage own roadmap" ON public.user_daily_roadmap;');
+      await client.query(`CREATE POLICY "Users manage own roadmap"
+        ON public.user_daily_roadmap FOR ALL
+        USING (auth.uid() = user_id)
+        WITH CHECK (auth.uid() = user_id);`);
+    } catch (err) {
+      console.warn('⚠️ Could not create policy (likely missing auth schema) - skipping:', err.message);
+    }
+
+    // Indexes
+    await client.query('CREATE INDEX IF NOT EXISTS user_daily_roadmap_user_date ON public.user_daily_roadmap (user_id, logged_date);');
+    await client.query('CREATE INDEX IF NOT EXISTS user_daily_roadmap_user_task ON public.user_daily_roadmap (user_id, task_id);');
+
+    console.log('✅ Migration completed (some non-fatal steps may have been skipped).');
+    console.log('✓ Table user_daily_roadmap created or already exists');
     
     client.release();
     process.exit(0);
