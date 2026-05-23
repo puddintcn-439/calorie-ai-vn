@@ -7,6 +7,7 @@ const IGNORE = new Set([
   'node_modules',
   '.git',
   '.github/workflows',
+  'docs',
   'coverage',
   'dist',
   'tmp',
