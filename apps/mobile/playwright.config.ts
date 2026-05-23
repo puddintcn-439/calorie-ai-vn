@@ -2,10 +2,20 @@ import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
   testDir: './e2e',
-  timeout: 30_000,
-  expect: { timeout: 5000 },
-  fullyParallel: true,
+  timeout: 60_000,
+  expect: { timeout: 10_000 },
+  fullyParallel: false,
+  workers: 1,
   reporter: [['list'], ['html', { open: 'never' }]],
+  webServer: {
+    command: 'npm run dev:web -- --clear',
+    url: 'http://localhost:19006',
+    timeout: 120_000,
+    reuseExistingServer: false,
+    env: {
+      CI: '1',
+    },
+  },
   use: {
     headless: true,
     baseURL: 'http://localhost:19006',

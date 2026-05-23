@@ -5,13 +5,13 @@
   "main": "expo-router/entry",
   "scripts": {
     "dev": "expo start",
-    "dev:web": "expo start --web --port 19006 --non-interactive",
+    "dev:web": "expo start --web --port 19006",
     "android": "expo run:android",
     "ios": "expo run:ios",
     "build": "eas build",
     "e2e:setup": "npx playwright install",
     "e2e": "npx playwright test",
-    "e2e:ci": "npm run dev:web --silent & npx wait-on http://localhost:19006 && npx playwright test --reporter=list",
+    "e2e:ci": "npx playwright test --reporter=list",
     "build:android:preview": "npm exec eas-cli build -- --platform android --profile preview",
     "build:ios:preview": "npm exec eas-cli build -- --platform ios --profile preview",
     "lint": "tsc --noEmit"

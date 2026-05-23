@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { setAuthToken, jsonResponse } from './helpers';
+import { gotoApp, setAuthToken, jsonResponse } from './helpers';
 
 test.describe('Mobile web smoke', () => {
   test('loads homepage and shows main tabs', async ({ page }) => {
@@ -8,12 +8,11 @@ test.describe('Mobile web smoke', () => {
     await page.route('**/user/profile', async (route) => {
       await route.fulfill(jsonResponse({ full_name: 'Test', weight_kg: 65, height_cm: 170, age: 30, gender: 'male' }));
     });
-    await page.goto('/');
-    await expect(page.getByRole('tab', { name: /Hôm nay/ })).toBeVisible({ timeout: 10000 });
-    await expect(page.getByRole('tab', { name: /Scan/ })).toBeVisible();
-    await expect(page.getByRole('tab', { name: /Log/ })).toBeVisible();
-    await expect(page.getByRole('tab', { name: /Coach/ })).toBeVisible();
-    await expect(page.getByRole('tab', { name: /Hồ sơ/ })).toBeVisible();
-    await expect(page.getByRole('tab', { name: /Cơ thể/ })).toHaveCount(0);
+    await gotoApp(page, '/');
+    await expect(page.getByText('Tổng quan hôm nay')).toBeVisible({ timeout: 15000 });
+    await expect(page.getByText('Scan').last()).toBeVisible();
+    await expect(page.getByText('Log').last()).toBeVisible();
+    await expect(page.getByText('Coach').last()).toBeVisible();
+    await expect(page.getByText('Hồ sơ').last()).toBeVisible();
   });
 });

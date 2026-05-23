@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { setAuthToken, jsonResponse } from './helpers';
+import { gotoApp, setAuthToken, jsonResponse } from './helpers';
 
 test.describe('Profile flows', () => {
   test('edit and save profile triggers PATCH to backend', async ({ page }) => {
@@ -19,7 +19,7 @@ test.describe('Profile flows', () => {
       }
     });
 
-    await page.goto('/profile');
+    await gotoApp(page, '/profile');
 
     // Wait for the profile header to be visible and expand the basic info section
     const header = page.getByText('Thiết lập thông tin thể trạng');

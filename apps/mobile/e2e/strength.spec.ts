@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { setAuthToken, jsonResponse } from './helpers';
+import { gotoApp, setAuthToken, jsonResponse } from './helpers';
 
 test.describe('Strength session', () => {
   test('create strength session and POST to /log/activity', async ({ page }) => {
@@ -23,7 +23,7 @@ test.describe('Strength session', () => {
       }
     });
 
-    await page.goto('/strength');
+    await gotoApp(page, '/strength');
 
     await page.getByPlaceholder('Ghi chú buổi tập...').fill('Felt strong today');
     await page.getByPlaceholder('Bài tập #1').fill('Squat');

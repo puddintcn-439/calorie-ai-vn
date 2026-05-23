@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { jsonResponse } from './helpers';
+import { gotoApp, jsonResponse } from './helpers';
 
 test.describe('Auth flows', () => {
   test('register stores token in localStorage', async ({ page }) => {
@@ -13,7 +13,7 @@ test.describe('Auth flows', () => {
     });
 
       // Ensure page has an origin so relative fetch() resolves, then exercise the register API
-      await page.goto('/');
+      await gotoApp(page, '/');
       // Instead of navigating UI (root layout redirects during tests), exercise the register API
       await page.evaluate(async () => {
         const res = await fetch('/auth/register', {
@@ -43,7 +43,7 @@ test.describe('Auth flows', () => {
       await route.fulfill(jsonResponse({ access_token: 'login-token', user_id: 'user-1' }));
     });
 
-    await page.goto('/login');
+    await gotoApp(page, '/login');
 
     await page.getByRole('textbox', { name: 'Email' }).fill('test@example.com');
     await page.getByRole('textbox', { name: 'Mật khẩu' }).fill('password123');
