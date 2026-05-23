@@ -94,6 +94,20 @@ jobs:
           echo "AI INTEGRATION RESULT: success=$success provider=$provider provider_duration_ms=$provider_duration_ms processing_ms=$processing_ms total_calories=$total_calories protein_g=$total_protein_g carbs_g=$total_carbs_g fat_g=$total_fat_g"
           if [ "$success" != "true" ]; then
             msg=$(echo "$resp" | jq -r '.error // .message // ""' | tr '\n' ' ' | sed 's/[[:space:]]\+/ /g')
+            status_code=$(echo "$resp" | jq -r '.statusCode // "unknown"' || echo "unknown")
+            raw_ai_response=$(echo "$resp" | jq -r '.raw_ai_response // ""' 2>/dev/null | head -c 1200 || true)
+            echo "AI_INTEGRATION_HTTP_STATUS: $status_code"
+            if [ -n "$msg" ]; then
+              echo "AI_INTEGRATION_MESSAGE: $msg"
+            fi
+            if [ -n "$raw_ai_response" ]; then
+              echo "AI_INTEGRATION_RAW_AI_RESPONSE_BEGIN"
+              echo "$raw_ai_response"
+              echo "AI_INTEGRATION_RAW_AI_RESPONSE_END"
+            fi
+            echo "AI_INTEGRATION_BACKEND_LOGS_BEGIN"
+            docker compose -f docker-compose.yml logs --no-color backend 2>/dev/null | tail -n 200 || true
+            echo "AI_INTEGRATION_BACKEND_LOGS_END"
             if echo "$msg" | grep -qi '401\|unauthor' ; then
               echo "AI_INTEGRATION_ERROR_CATEGORY: Auth/credentials"
             elif echo "$msg" | grep -qi 'timeout\|timed out\|502\|504' ; then
