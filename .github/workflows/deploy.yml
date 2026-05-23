@@ -100,6 +100,9 @@ jobs:
     name: Deploy to Production
     needs: [build-and-push, smoke-tests]
     if: success()
+    permissions:
+      contents: read
+      deployments: write
     environment:
       name: production
 
