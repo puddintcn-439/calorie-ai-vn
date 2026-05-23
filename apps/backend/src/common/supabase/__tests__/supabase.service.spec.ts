@@ -8,9 +8,10 @@ jest.mock('@supabase/supabase-js', () => ({
 
 function makeConfig(url = 'https://test.supabase.co', key = 'service-key') {
   return {
-    getOrThrow: jest.fn().mockImplementation((k: string) => {
+    get: jest.fn().mockImplementation((k: string) => {
       if (k === 'SUPABASE_URL') return url;
       if (k === 'SUPABASE_SERVICE_KEY') return key;
+      if (k === 'NODE_ENV') return 'test';
       throw new Error(`Unknown config key: ${k}`);
     }),
   } as unknown as ConfigService;
@@ -48,13 +49,31 @@ describe('SupabaseService', () => {
     expect(createClient).toHaveBeenCalled();
   });
 
-  it('throws when SUPABASE_URL is missing', () => {
+  it('uses a stub client when SUPABASE_URL is missing outside production', async () => {
     const config = {
-      getOrThrow: jest.fn().mockImplementation(() => {
-        throw new Error('SUPABASE_URL is not defined');
+      get: jest.fn().mockImplementation((k: string) => {
+        if (k === 'NODE_ENV') return 'test';
+        return undefined;
       }),
     } as unknown as ConfigService;
     const service = new SupabaseService(config);
-    expect(() => service.onModuleInit()).toThrow('SUPABASE_URL is not defined');
+    expect(() => service.onModuleInit()).not.toThrow();
+    expect(createClient).not.toHaveBeenCalled();
+
+    await expect(service.db.from('users').select('*').limit(1)).resolves.toEqual({
+      data: null,
+      error: null,
+    });
+  });
+
+  it('throws when Supabase config is missing in production', () => {
+    const config = {
+      get: jest.fn().mockImplementation((k: string) => {
+        if (k === 'NODE_ENV') return 'production';
+        return undefined;
+      }),
+    } as unknown as ConfigService;
+    const service = new SupabaseService(config);
+    expect(() => service.onModuleInit()).toThrow('SUPABASE_URL or SUPABASE_SERVICE_KEY not set in production');
   });
 });

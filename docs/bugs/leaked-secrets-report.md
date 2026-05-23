@@ -28,3 +28,17 @@ Recommended immediate actions (rotate now):
 Notes
 - Do NOT commit rotated secrets back into the repository. Keep placeholders in `.env.example` only.
 - Use the `scripts/find_potential_secrets.js` scanner to validate the repo after rotations.
+
+Rotation log — 2026-05-23
+
+- GitHub Actions secrets updated: `GEMINI_API_KEY`, `SUPABASE_SERVICE_KEY`, `JWT_SECRET` (values not recorded here).
+- CI smoke-tests rerun (run id: 26322625574) completed successfully; AI debug returned `success:true`.
+- Action taken: GitHub secrets were set using `gh secret set` and the repository helper scripts (`scripts/rotate_github_secrets.sh` / `scripts/rotate_github_secrets.ps1`).
+- Required next step: revoke the old provider-side keys in provider consoles (do NOT delete until new keys are deployed and verified):
+   - Supabase: Project → Settings → API — regenerate or create replacement `service_role` key, update secrets, verify staging, then remove old key.
+   - Google Cloud (Gemini): Console → APIs & Services → Credentials — create a new API key (or service account key), restrict it to the necessary APIs, update secrets, verify, then delete the old API key.
+   - Tavily: Dashboard → API keys — create new key, update secrets, verify, then delete old key.
+- Verification: run `node ./scripts/find_potential_secrets.js` and run CI smoke-tests (or `scripts/smoke_backend_test.ps1`) to confirm services operate with new keys.
+- Notes: Do NOT commit rotated secrets back into the repo. Record the revocation event (who/when) in the incident log after provider-side deletion.
+- Tracking issue: https://github.com/puddintcn-439/calorie-ai-vn/issues/3
+- Current blocker: provider-side key deletion in Supabase / Google Cloud / Tavily is still required before this incident can be marked fully closed.
