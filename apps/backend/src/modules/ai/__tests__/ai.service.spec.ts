@@ -11,9 +11,13 @@ jest.mock('@google/generative-ai', () => ({
   })),
 }));
 
-function makeConfig(apiKey = 'test-key'): ConfigService {
+function makeConfig(primaryKey?: string, backupKey?: string): ConfigService {
   return {
-    getOrThrow: jest.fn().mockReturnValue(apiKey),
+    getOrThrow: jest.fn().mockImplementation((k: string) => {
+      if (k === 'GEMINI_API_KEY_PRIMARY' || k === 'GEMINI_API_KEY') return primaryKey ?? 'test-key';
+      if (k === 'GEMINI_API_KEY_BACKUP') return backupKey;
+      throw new Error(`missing config ${k}`);
+    }),
     get: jest.fn().mockImplementation((key: string) => {
       const defaults: Record<string, string> = {
         IMAGE_WEB_EVIDENCE_ENABLED: 'false',
@@ -23,6 +27,9 @@ function makeConfig(apiKey = 'test-key'): ConfigService {
         GOOGLE_SEARCH_CX: '',
         TAVILY_API_KEY: '',
       };
+      if (key === 'GEMINI_API_KEY_PRIMARY') return primaryKey;
+      if (key === 'GEMINI_API_KEY_BACKUP') return backupKey;
+      if (key === 'GEMINI_API_KEY') return primaryKey ?? 'test-key';
       return defaults[key];
     }),
   } as unknown as ConfigService;
@@ -205,6 +212,89 @@ describe('AiService.scanText', () => {
     }));
     const svc = makeService();
     await expect(svc.scanText('phở')).rejects.toThrow('network error');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Provider fallback behaviour (primary / backup keys)
+// ─────────────────────────────────────────────────────────────────────────────
+describe('AiService provider fallback', () => {
+  it('uses primary key when available', async () => {
+    const rawJson = JSON.stringify({ items: [] });
+    const { GoogleGenerativeAI } = require('@google/generative-ai');
+    (GoogleGenerativeAI as jest.Mock).mockImplementation(() => ({
+      getGenerativeModel: jest.fn().mockReturnValue({
+        generateContent: jest.fn().mockResolvedValue({ response: { text: () => rawJson } }),
+      }),
+    }));
+
+    const svc = new AiService(makeConfig('primary-key', undefined), makeMetrics());
+    const result = await svc.scanText('test');
+    expect(result.success).toBe(true);
+  });
+
+  it('falls back to backup on quota error', async () => {
+    const rawJson = JSON.stringify({ items: [] });
+    const { GoogleGenerativeAI } = require('@google/generative-ai');
+    (GoogleGenerativeAI as jest.Mock).mockImplementation((apiKey: string) => {
+      if (apiKey === 'primary-key') {
+        return {
+          getGenerativeModel: jest.fn().mockReturnValue({
+            generateContent: jest.fn().mockRejectedValue(new Error('429 Too Many Requests: quota exceeded')),
+          }),
+        };
+      }
+      if (apiKey === 'backup-key') {
+        return {
+          getGenerativeModel: jest.fn().mockReturnValue({
+            generateContent: jest.fn().mockResolvedValue({ response: { text: () => rawJson } }),
+          }),
+        };
+      }
+      return { getGenerativeModel: jest.fn().mockReturnValue({ generateContent: jest.fn() }) };
+    });
+
+    const svc = new AiService(makeConfig('primary-key', 'backup-key'), makeMetrics());
+    const result = await svc.scanText('test');
+    expect(result.success).toBe(true);
+  });
+
+  it('throws when both primary and backup fail', async () => {
+    const { GoogleGenerativeAI } = require('@google/generative-ai');
+    (GoogleGenerativeAI as jest.Mock).mockImplementation(() => ({
+      getGenerativeModel: jest.fn().mockReturnValue({
+        generateContent: jest.fn().mockRejectedValue(new Error('API error')),
+      }),
+    }));
+
+    const svc = new AiService(makeConfig('primary-key', 'backup-key'), makeMetrics());
+    await expect(svc.scanText('test')).rejects.toThrow('API error');
+  });
+
+  it('retries with backup when primary key is invalid', async () => {
+    const rawJson = JSON.stringify({ items: [] });
+    const { GoogleGenerativeAI } = require('@google/generative-ai');
+    (GoogleGenerativeAI as jest.Mock).mockImplementation((apiKey: string) => {
+      if (apiKey === 'primary-key') {
+        return {
+          getGenerativeModel: jest.fn().mockReturnValue({
+            generateContent: jest.fn().mockRejectedValue(new Error('400 Bad Request: API key not valid')),
+          }),
+        };
+      }
+      if (apiKey === 'backup-key') {
+        return {
+          getGenerativeModel: jest.fn().mockReturnValue({
+            generateContent: jest.fn().mockResolvedValue({ response: { text: () => rawJson } }),
+          }),
+        };
+      }
+      return { getGenerativeModel: jest.fn().mockReturnValue({ generateContent: jest.fn() }) };
+    });
+
+    const svc = new AiService(makeConfig('primary-key', 'backup-key'), makeMetrics());
+    const result = await svc.scanText('test');
+    expect(result.success).toBe(true);
   });
 });
 

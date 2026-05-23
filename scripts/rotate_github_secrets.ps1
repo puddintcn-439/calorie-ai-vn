@@ -4,9 +4,12 @@ Param(
 )
 
 # Usage:
-#   $env:GEMINI_API_KEY = '...'; ./scripts/rotate_github_secrets.ps1 -Repo 'myorg/myrepo'
+#   $env:GEMINI_API_KEY_PRIMARY = '...'; $env:GEMINI_API_KEY_BACKUP = '...'; ./scripts/rotate_github_secrets.ps1 -Repo 'myorg/myrepo'
 
 $secrets = @(
+  'GEMINI_API_KEY_PRIMARY',
+  'GEMINI_API_KEY_BACKUP',
+  # Backwards-compat
   'GEMINI_API_KEY',
   'SUPABASE_URL',
   'SUPABASE_SERVICE_KEY',

@@ -9,7 +9,8 @@ Mục tiêu: bảo vệ secrets (API keys, DB keys, JWT secrets) — không comm
 - Truy cập secrets theo biến môi trường trong runtime (`process.env.GEMINI_API_KEY`, ...).
 
 2) Tên biến khuyến nghị (consistent across CI/infra)
-- `GEMINI_API_KEY` — key cho provider AI
+- `GEMINI_API_KEY_PRIMARY` — primary key for the AI provider (preferred)
+- `GEMINI_API_KEY_BACKUP` — optional backup key for automatic fallback
 - `SUPABASE_URL`, `SUPABASE_SERVICE_KEY` — supabase project
 - `SUPABASE_DB_URL` — optional for direct DB migrations
 - `JWT_SECRET` — signing secret
@@ -47,8 +48,8 @@ Mục tiêu: bảo vệ secrets (API keys, DB keys, JWT secrets) — không comm
 
 Usage (example):
 1. Export secret values into environment locally (do NOT commit them):
-	 - Bash: `export GEMINI_API_KEY="..."`
-	 - PowerShell: `$env:GEMINI_API_KEY = '...'
+	- Bash: `export GEMINI_API_KEY_PRIMARY="..."`
+	- PowerShell: `$env:GEMINI_API_KEY_PRIMARY = '...'
 2. Run the script: `./scripts/rotate_github_secrets.sh myorg/myrepo` or `./scripts/rotate_github_secrets.ps1 -Repo myorg/myrepo`
 
 These helpers call `gh secret set` and require `gh` CLI authenticated with a user that has repo-write permission. After rotation, run smoke tests on staging and then promote secrets to production.

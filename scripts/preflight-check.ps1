@@ -41,7 +41,7 @@ if (-not (Test-Path $mobileEnv)) {
 
 if ($CheckSecrets) {
   Write-Output 'Running secrets check...'
-  $required = @('GEMINI_API_KEY','SUPABASE_URL','SUPABASE_SERVICE_KEY','JWT_SECRET')
+  $required = @('GEMINI_API_KEY_PRIMARY','SUPABASE_URL','SUPABASE_SERVICE_KEY','JWT_SECRET')
   $missing = @()
 
   # helper to read key from .env file
@@ -64,7 +64,21 @@ if ($CheckSecrets) {
     }
 
     if (-not $val -or $val.Trim() -eq '') {
-      $missing += $k
+      # Special-case: accept legacy GEMINI_API_KEY if GEMINI_API_KEY_PRIMARY is missing
+      if ($k -eq 'GEMINI_API_KEY_PRIMARY') {
+        $legacy = [Environment]::GetEnvironmentVariable('GEMINI_API_KEY', 'Process')
+        if (-not $legacy -or $legacy.Trim() -eq '') {
+          # try .env for legacy
+          $legacy = Get-EnvFromFile -filePath $backendEnv -key 'GEMINI_API_KEY'
+        }
+        if (-not $legacy -or $legacy.Trim() -eq '') {
+          $missing += $k
+          continue
+        }
+      } else {
+        $missing += $k
+        continue
+      }
     } else {
       if ($val -match 'change|example|dev|placeholder|REPLACE_ME' ) {
         Write-Output "Warning: $k has placeholder value in .env"

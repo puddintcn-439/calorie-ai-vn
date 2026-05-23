@@ -35,6 +35,8 @@ services:
       # provided via environment.
       SUPABASE_URL: ${SUPABASE_URL}
       SUPABASE_SERVICE_KEY: ${SUPABASE_SERVICE_KEY:-dev_service_key}
+      GEMINI_API_KEY_PRIMARY: ${GEMINI_API_KEY_PRIMARY:-}
+      GEMINI_API_KEY_BACKUP: ${GEMINI_API_KEY_BACKUP:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       JWT_SECRET: ${JWT_SECRET}
       JWT_EXPIRY: ${JWT_EXPIRY:-7d}

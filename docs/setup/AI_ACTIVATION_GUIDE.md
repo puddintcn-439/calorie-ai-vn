@@ -8,7 +8,7 @@
 
 ## Current Production-Like Setup (Verified)
 
-1. `GEMINI_API_KEY` is configured in `apps/backend/.env`
+1. `GEMINI_API_KEY_PRIMARY` (and optional `GEMINI_API_KEY_BACKUP`) are configured in `apps/backend/.env`
 2. Backend AI module uses `gemini-2.5-flash`
 3. Backend health endpoint returns `200 OK`
 4. API E2E passed (`/auth/register -> /auth/login -> /ai/coach`)
@@ -31,13 +31,15 @@ Open `apps/backend/.env` and replace:
 # ===========================
 # Gemini AI
 # ===========================
--GEMINI_API_KEY=your_gemini_api_key_here
-+GEMINI_API_KEY=your_actual_api_key_from_step_1
+GEMINI_API_KEY_PRIMARY=your_actual_api_key_from_step_1
+# Optional backup key (recommended):
+GEMINI_API_KEY_BACKUP=your_backup_api_key_here
 ```
 
 **Example:**
 ```
-GEMINI_API_KEY=your_gemini_api_key_here
+GEMINI_API_KEY_PRIMARY=your_gemini_api_key_here
+GEMINI_API_KEY_BACKUP=your_gemini_api_key_backup_here
 ```
 
 ### Step 3: Restart Backend
@@ -148,7 +150,7 @@ Expected response:
 
 ## Production Checklist
 
-- [ ] GEMINI_API_KEY set and valid in production .env
+- [ ] GEMINI_API_KEY_PRIMARY set and valid in production .env
 - [ ] Active model confirmed as `gemini-2.5-flash` (or another validated model)
 - [ ] API key has no rotation scheduled
 - [ ] Rate limits acceptable for expected traffic

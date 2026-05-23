@@ -4,7 +4,8 @@ set -euo pipefail
 # Usage: OWNER/REPO (e.g. myorg/myrepo)
 # Expects the secret values to be present in the environment before running (do NOT commit them)
 # Example:
-#   export GEMINI_API_KEY="..."
+#   export GEMINI_API_KEY_PRIMARY="..."
+#   export GEMINI_API_KEY_BACKUP="..."  # optional
 #   ./scripts/rotate_github_secrets.sh myorg/myrepo
 
 if [ "$#" -lt 1 ]; then
@@ -16,6 +17,9 @@ REPO="$1"
 shift || true
 
 secrets=(
+  GEMINI_API_KEY_PRIMARY
+  GEMINI_API_KEY_BACKUP
+  # Backwards-compat
   GEMINI_API_KEY
   SUPABASE_URL
   SUPABASE_SERVICE_KEY

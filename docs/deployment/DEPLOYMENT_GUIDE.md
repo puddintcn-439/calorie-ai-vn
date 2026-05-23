@@ -30,6 +30,8 @@ Required repository secrets:
 - `PRODUCTION_ROLLBACK_WEBHOOK_URL`: endpoint that rolls back to the previous image.
 - `PRODUCTION_URL`: public API base URL used for health checks.
 - `DEPLOY_TOKEN`: bearer token accepted by health/deploy/rollback endpoints.
+- `GEMINI_API_KEY_PRIMARY`: primary Google Generative API key used by the AI provider.
+- `GEMINI_API_KEY_BACKUP`: optional backup key; automatically retried if the primary is rate-limited, quota-exceeded, invalid, or times out.
 
 Deploy payload:
 

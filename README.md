@@ -50,6 +50,7 @@ Progress, Insights, and Achievements are secondary screens linked from Today/Pro
 - Supabase project
 - Gemini API key
 - Expo/EAS account for native preview builds
+  - Gemini API keys: `GEMINI_API_KEY_PRIMARY` (required) and optional `GEMINI_API_KEY_BACKUP` (used as automatic fallback)
 
 ### Install
 

@@ -24,7 +24,8 @@ interface WebEvidence {
 @Injectable()
 export class AiService {
   private readonly logger = new Logger(AiService.name);
-  private genAI: GoogleGenerativeAI;
+  private genAIPrimary?: GoogleGenerativeAI;
+  private genAIBackup?: GoogleGenerativeAI;
   private providerTimeoutMs: number;
   private providerRetries: number;
   private providerMaxConcurrency: number;
@@ -69,15 +70,24 @@ export class AiService {
     }
 
     if (!simulate) {
-      this.genAI = new GoogleGenerativeAI(this.config.getOrThrow('GEMINI_API_KEY'));
+      // Support new primary/backup env names while remaining backward-compatible
+      const primaryKey = this.config.get<string>('GEMINI_API_KEY_PRIMARY') ?? this.config.get<string>('GEMINI_API_KEY');
+      const backupKey = this.config.get<string>('GEMINI_API_KEY_BACKUP');
+
+      if (primaryKey) this.genAIPrimary = new GoogleGenerativeAI(primaryKey);
+      if (backupKey) this.genAIBackup = new GoogleGenerativeAI(backupKey);
     } else {
       // In simulation mode we avoid instantiating the real provider client.
       // generateWithTiming short-circuits when simulation is enabled.
-      this.genAI = {} as unknown as GoogleGenerativeAI;
+      this.genAIPrimary = undefined;
+      this.genAIBackup = undefined;
     }
     // Production-tuned defaults (can be overridden via env)
+    // Production-tuned defaults (can be overridden via env)
+    // Timeout: 15s (safe). Overall retry policy: one retry (fallback to backup key),
+    // so providerRetries defaults to 0 here to avoid duplicate retries at the same provider.
     this.providerTimeoutMs = Number(this.config.get('AI_PROVIDER_TIMEOUT_MS') ?? 15000);
-    this.providerRetries = Number(this.config.get('AI_PROVIDER_RETRIES') ?? 2);
+    this.providerRetries = Number(this.config.get('AI_PROVIDER_RETRIES') ?? 0);
     this.providerMaxConcurrency = Number(this.config.get('AI_PROVIDER_MAX_CONCURRENCY') ?? 3);
     // If AiQueueService is not injected (unit tests or legacy), provide a passthrough
     if (!this.aiQueue) {
@@ -102,7 +112,7 @@ export class AiService {
     const prompt = FOOD_SCAN_PROMPT;
 
     try {
-      const { result: firstPassResult, durationMs: firstPassMs } = await this.generateWithTiming(
+      const { result: firstPassResult, durationMs: firstPassMs, providerLabel: firstPassProvider } = await this.generateWithTiming(
         model,
         [prompt, imagePart],
         'scanImage:first_pass',
@@ -112,6 +122,7 @@ export class AiService {
         cache_hit: false,
         cache_key: cacheKey.slice(0, 12),
         provider_duration_ms: firstPassMs,
+        provider: firstPassProvider,
       });
 
       const shouldUseWebEvidence = this.shouldUseImageWebEvidence() && firstPassResponse.items.length > 0;
@@ -145,7 +156,7 @@ export class AiService {
           webEvidence.digest,
         );
 
-        const { result: secondPassResult, durationMs: secondPassMs } = await this.generateWithTiming(
+        const { result: secondPassResult, durationMs: secondPassMs, providerLabel: secondPassProvider } = await this.generateWithTiming(
           model,
           [enhancedPrompt, imagePart],
           'scanImage:second_pass',
@@ -158,6 +169,7 @@ export class AiService {
           web_provider: webEvidence.provider,
           web_sources: webEvidence.sources,
           provider_duration_ms: secondPassMs,
+          provider: secondPassProvider,
         });
 
         this.setCachedImageScan(cacheKey, responseWithEvidence);
@@ -168,13 +180,16 @@ export class AiService {
         const fallbackResponse = this.cloneResponseWithMetadata(firstPassResponse, {
           web_evidence_used: false,
           web_provider_attempted: webEvidence.provider,
+          provider: firstPassProvider,
         });
         this.setCachedImageScan(cacheKey, fallbackResponse);
         this.metrics.recordAiScan(true);
         return fallbackResponse;
       }
     } catch (error) {
-      this.logger.error('Gemini scan failed', error);
+      const msg = String(error ?? '').toLowerCase();
+      const category = this.isQuotaOrRateLimitError(error) ? 'quota_or_rate_limit' : msg.includes('timeout') ? 'timeout' : 'error';
+      this.logger.error(`[AI-PROVIDER] scanImage error_category=${category}`);
       this.metrics.recordAiScan(false);
       const isTimeout = String(error ?? '').includes('AI_TIMEOUT');
       if (isTimeout) {
@@ -208,19 +223,22 @@ export class AiService {
     const prompt = this.withWebEvidencePrompt(`${FOOD_TEXT_PROMPT}\n\nNgười dùng nhập: "${textInput}"`, webEvidence?.digest);
 
     try {
-      const { result, durationMs } = await this.generateWithTiming(model, prompt, 'scanText');
+      const { result, durationMs, providerLabel } = await this.generateWithTiming(model, prompt, 'scanText');
       const text = result.response.text();
       const response = this.parseAIResponse(text, Date.now() - start, {
         web_evidence_used: Boolean(webEvidence),
         web_provider: webEvidence?.provider,
         web_sources: webEvidence?.sources,
         provider_duration_ms: durationMs,
+        provider: providerLabel,
       });
       this.setCachedTextScan(cacheKey, response);
       this.metrics.recordAiScan(true);
       return response;
     } catch (error) {
-      this.logger.error('Gemini text scan failed', error);
+      const msg = String(error ?? '').toLowerCase();
+      const category = this.isQuotaOrRateLimitError(error) ? 'quota_or_rate_limit' : msg.includes('timeout') ? 'timeout' : 'error';
+      this.logger.error(`[AI-PROVIDER] scanText error_category=${category}`);
       this.metrics.recordAiScan(false);
       const isTimeout = String(error ?? '').includes('AI_TIMEOUT');
       if (isTimeout) {
@@ -268,15 +286,18 @@ Context:
 User transcript: "${sanitizedTranscript}"`;
 
     try {
-      const { result, durationMs } = await this.generateWithTiming(model, prompt, 'scanVoice');
+      const { result, durationMs, providerLabel } = await this.generateWithTiming(model, prompt, 'scanVoice');
       const text = result.response.text();
       return this.parseAIResponse(text, Date.now() - start, {
         parse_mode: 'voice_transcript',
         locale_used: options?.locale,
         provider_duration_ms: durationMs,
+        provider: providerLabel,
       });
     } catch (error) {
-      this.logger.error('Gemini voice scan failed', error);
+      const msg = String(error ?? '').toLowerCase();
+      const category = this.isQuotaOrRateLimitError(error) ? 'quota_or_rate_limit' : msg.includes('timeout') ? 'timeout' : 'error';
+      this.logger.error(`[AI-PROVIDER] scanVoice error_category=${category}`);
       const isTimeout = String(error ?? '').includes('AI_TIMEOUT');
       if (isTimeout) {
         return this.buildAiUnavailableScanResponse(Date.now() - start, {
@@ -323,7 +344,7 @@ Context:
 - meal_hint: ${options?.meal_hint ?? 'unknown'}`;
 
     try {
-      const { result, durationMs } = await this.generateWithTiming(model, [prompt, imagePart], 'scanReceipt');
+      const { result, durationMs, providerLabel } = await this.generateWithTiming(model, [prompt, imagePart], 'scanReceipt');
       const text = result.response.text();
       return this.parseAIResponse(text, Date.now() - start, {
         parse_mode: 'receipt_ocr',
@@ -331,9 +352,12 @@ Context:
         currency: options?.currency,
         merchant: options?.merchant_hint,
         provider_duration_ms: durationMs,
+        provider: providerLabel,
       });
     } catch (error) {
-      this.logger.error('Gemini receipt scan failed', error);
+      const msg = String(error ?? '').toLowerCase();
+      const category = this.isQuotaOrRateLimitError(error) ? 'quota_or_rate_limit' : msg.includes('timeout') ? 'timeout' : 'error';
+      this.logger.error(`[AI-PROVIDER] scanReceipt error_category=${category}`);
       const isTimeout = String(error ?? '').includes('AI_TIMEOUT');
       if (isTimeout) {
         return this.buildAiUnavailableScanResponse(Date.now() - start, {
@@ -372,16 +396,19 @@ Thông tin bổ sung: "${context}"
 Điều chỉnh lại ước lượng dựa trên thông tin bổ sung.`, webEvidence?.digest);
 
     try {
-      const { result, durationMs } = await this.generateWithTiming(model, prompt, 'refineScan');
+      const { result, durationMs, providerLabel } = await this.generateWithTiming(model, prompt, 'refineScan');
       const text = result.response.text();
       return this.parseAIResponse(text, Date.now() - start, {
         web_evidence_used: Boolean(webEvidence),
         web_provider: webEvidence?.provider,
         web_sources: webEvidence?.sources,
         provider_duration_ms: durationMs,
+        provider: providerLabel,
       });
     } catch (error) {
-      this.logger.error('Gemini refine scan failed', error);
+      const msg = String(error ?? '').toLowerCase();
+      const category = this.isQuotaOrRateLimitError(error) ? 'quota_or_rate_limit' : msg.includes('timeout') ? 'timeout' : 'error';
+      this.logger.error(`[AI-PROVIDER] refineScan error_category=${category}`);
       const isTimeout = String(error ?? '').includes('AI_TIMEOUT');
       if (isTimeout) {
         return this.buildAiUnavailableScanResponse(Date.now() - start, {
@@ -583,7 +610,7 @@ Yeu cau bo sung:
     message: string,
     context: { today_calories: number; target_calories: number },
   ): Promise<AICoachResponse> {
-    const model = this.genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+    const model = this.createDeterministicModel();
 
     const prompt = `${COACH_SYSTEM_PROMPT}
 
@@ -597,7 +624,7 @@ Người dùng hỏi: "${message}"
 Trả lời ngắn gọn, thân thiện bằng tiếng Việt. Không quá 3 câu.`;
 
     try {
-      const { result, durationMs } = await this.generateWithTiming(model, prompt, 'getCoachReply');
+      const { result, durationMs, providerLabel } = await this.generateWithTiming(model, prompt, 'getCoachReply');
       const text = result.response.text();
       this.logger.debug(`[AI-PROVIDER] coach duration_ms=${durationMs}`);
 
@@ -606,7 +633,7 @@ Trả lời ngắn gọn, thân thiện bằng tiếng Việt. Không quá 3 câ
         suggestions: [],
       };
     } catch (error) {
-      this.logger.error('Gemini coach failed', error);
+      this.logger.error(`[AI-PROVIDER] coach error_category=${this.isQuotaOrRateLimitError(error) ? 'quota_or_rate_limit' : 'error'}`);
 
       const isTimeout = String(error ?? '').includes('AI_TIMEOUT');
       // Prevent UI-breaking 500 responses when Gemini key is valid but quota is unavailable or timeout
@@ -809,23 +836,83 @@ Trả lời ngắn gọn, thân thiện bằng tiếng Việt. Không quá 3 câ
   }
 
   private createDeterministicModel() {
-    // If `genAI` was not instantiated because we're running in simulation mode,
-    // avoid calling into `getGenerativeModel()` which would throw. Return a
-    // lightweight stub model that matches the minimal interface used by
-    // `generateWithTiming()` to keep the code safe during local simulation.
-    if (this.genAI && typeof (this.genAI as any).getGenerativeModel === 'function') {
-      return this.genAI.getGenerativeModel({
+    // If the real provider clients were not instantiated (simulation or missing keys),
+    // return a lightweight stub model that matches the minimal interface used by
+    // `generateWithTiming()` to keep the code safe during local simulation and tests.
+    const makeRealModel = (client: GoogleGenerativeAI | undefined) => {
+      if (!client || typeof (client as any).getGenerativeModel !== 'function') return null;
+      return client.getGenerativeModel({
         model: 'gemini-2.5-flash',
-        generationConfig: {
-          temperature: 0.1,
-          topP: 0.2,
-        },
+        generationConfig: { temperature: 0.1, topP: 0.2 },
       });
+    };
+
+    const primaryModel = makeRealModel(this.genAIPrimary);
+    const backupModel = makeRealModel(this.genAIBackup);
+
+    // If neither primary nor backup provider is available, return a stub model.
+    if (!primaryModel && !backupModel) {
+      return {
+        generateContent: async (_input: any) => ({ response: { text: () => '' } }),
+      } as unknown as any;
     }
 
-    // Minimal stub model for simulation / test environments
+    // Return a wrapper model that implements automatic fallback between primary
+    // and backup providers. The wrapper accepts an optional second arg (opName)
+    // when invoked from `generateWithTiming()` to include in logs.
     return {
-      generateContent: async (_input: any) => ({ response: { text: () => '' } }),
+      generateContent: async (input: any, opName?: string) => {
+        const providers: Array<{ name: 'primary' | 'backup'; model: any }> = [];
+        if (primaryModel) providers.push({ name: 'primary', model: primaryModel });
+        if (backupModel) providers.push({ name: 'backup', model: backupModel });
+
+        const start = Date.now();
+
+        // Try primary first, then backup once if configured and error is retriable
+        for (let idx = 0; idx < providers.length; idx += 1) {
+          const p = providers[idx];
+          try {
+            const genPromise = p.model.generateContent(input);
+            const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('AI_TIMEOUT')), this.providerTimeoutMs));
+            const result = await Promise.race([genPromise, timeoutPromise]);
+            const duration = Date.now() - start;
+            this.logger.debug(`[AI-PROVIDER] ${opName ?? 'op'} provider=${p.name} success duration_ms=${duration}`);
+            // Wrap provider label with the original result so the caller can
+            // attribute which key served the request without leaking secret values.
+            return { __provider: p.name, __result: result };
+          } catch (err) {
+            const duration = Date.now() - start;
+            const errStr = String(err ?? '').toLowerCase();
+            let category = 'unknown';
+            if (this.isQuotaOrRateLimitError(err)) category = 'quota_or_rate_limit';
+            else if (errStr.includes('api key') || errStr.includes('not valid') || errStr.includes('invalid')) category = 'invalid_key';
+            else if (errStr.includes('timeout') || errStr.includes('ai_timeout')) category = 'timeout';
+            else if (errStr.includes('500') || errStr.includes('503') || errStr.includes('internal')) category = 'temporary';
+
+            this.logger.warn(`[AI-PROVIDER] ${opName ?? 'op'} provider=${p.name} attempt=${idx + 1} failed duration_ms=${duration} error_category=${category}`);
+
+            // If this was the primary and we have a backup configured, and the
+            // error category is one we should fallback on, then wait a short
+            // backoff and try the backup once.
+            const shouldFallback = idx === 0 && providers.length > 1 && (
+              category === 'quota_or_rate_limit' || category === 'invalid_key' || category === 'timeout' || category === 'temporary'
+            );
+
+            if (shouldFallback) {
+              const baseBackoff = 200;
+              const backoff = baseBackoff * Math.pow(2, 0) + Math.floor(Math.random() * 150);
+              this.logger.debug(`[AI-PROVIDER] ${opName ?? 'op'} falling back to backup in ${backoff}ms`);
+              await new Promise((r) => setTimeout(r, backoff));
+              continue; // try next provider (backup)
+            }
+
+            // Otherwise rethrow the original error
+            throw err;
+          }
+        }
+
+        throw new Error('AI provider failed');
+      },
     } as unknown as any;
   }
 
@@ -864,7 +951,7 @@ Trả lời ngắn gọn, thân thiện bằng tiếng Việt. Không quá 3 câ
     });
   }
 
-  private async generateWithTiming(model: any, input: any, opName: string): Promise<{ result: any; durationMs: number }> {
+  private async generateWithTiming(model: any, input: any, opName: string): Promise<{ result: any; durationMs: number; providerLabel?: string }> {
     const t0 = Date.now();
     // Dev-only simulation mode: if enabled, return a cached debug response
     // to avoid calling the real provider during local tests.
@@ -926,7 +1013,7 @@ Trả lời ngắn gọn, thân thiện bằng tiếng Việt. Không quá 3 câ
       this.logger.warn('AI simulation failed, falling back to real provider', e as Error);
     }
 
-    const executeFn = async (): Promise<{ result: any; durationMs: number }> => {
+    const executeFn = async (): Promise<{ result: any; durationMs: number; providerLabel?: string }> => {
       let lastErr: unknown = null;
 
       // Ensure we don't exceed provider concurrency even when AiQueue is absent
@@ -934,25 +1021,44 @@ Trả lời ngắn gọn, thân thiện bằng tiếng Việt. Không quá 3 câ
       try {
         for (let attempt = 0; attempt <= this.providerRetries; attempt += 1) {
           try {
-            const genPromise = model.generateContent(input);
+            const genPromise = model.generateContent(input, opName);
 
             const timeoutPromise = new Promise((_, reject) =>
               setTimeout(() => reject(new Error('AI_TIMEOUT')), this.providerTimeoutMs),
             );
 
-            const result = await Promise.race([genPromise, timeoutPromise]);
+            const rawResult = await Promise.race([genPromise, timeoutPromise]);
+
+            // If a wrapper returned provider metadata, unwrap it.
+            let providerLabel: string | undefined = undefined;
+            let result: any = rawResult;
+            try {
+              if (rawResult && typeof rawResult === 'object' && ('__result' in rawResult) && ('__provider' in rawResult)) {
+                providerLabel = (rawResult as any).__provider;
+                result = (rawResult as any).__result;
+              }
+            } catch (e) {
+              // ignore
+            }
 
             const duration = Date.now() - t0;
-            this.logger.debug(`[AI-PROVIDER] ${opName} success duration_ms=${duration} attempt=${attempt + 1}`);
-            return { result, durationMs: duration };
+            this.logger.debug(`[AI-PROVIDER] ${opName} success duration_ms=${duration} attempt=${attempt + 1} provider=${providerLabel ?? 'unknown'}`);
+            return { result, durationMs: duration, providerLabel };
           } catch (err) {
             lastErr = err;
             const duration = Date.now() - t0;
-            this.logger.warn(`[AI-PROVIDER] ${opName} attempt=${attempt + 1} failed after ${duration}ms`, err as Error);
+            const msg = String(err ?? '').toLowerCase();
+            let category = 'unknown';
+            if (this.isQuotaOrRateLimitError(err)) category = 'quota_or_rate_limit';
+            else if (msg.includes('api key') || msg.includes('not valid') || msg.includes('invalid')) category = 'invalid_key';
+            else if (msg.includes('timeout') || msg.includes('ai_timeout')) category = 'timeout';
+            else if (msg.includes('500') || msg.includes('503') || msg.includes('internal')) category = 'temporary';
+
+            this.logger.warn(`[AI-PROVIDER] ${opName} attempt=${attempt + 1} failed after ${duration}ms error_category=${category}`);
 
             // If the provider indicates quota/rate limiting, do not retry.
-            if (this.isQuotaOrRateLimitError(err)) {
-              this.logger.error(`[AI-PROVIDER] ${opName} unrecoverable quota/rate error: ${String(err)}`);
+            if (category === 'quota_or_rate_limit') {
+              this.logger.error(`[AI-PROVIDER] ${opName} unrecoverable error_category=${category}`);
               throw err;
             }
 
@@ -965,7 +1071,7 @@ Trả lời ngắn gọn, thân thiện bằng tiếng Việt. Không quá 3 câ
               continue;
             }
 
-            this.logger.error(`[AI-PROVIDER] ${opName} failed after ${duration}ms attempts=${attempt + 1}`, err as Error);
+            this.logger.error(`[AI-PROVIDER] ${opName} failed after ${duration}ms attempts=${attempt + 1} error_category=${category}`);
             throw err;
           }
         }
