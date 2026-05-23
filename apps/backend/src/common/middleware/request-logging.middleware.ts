@@ -16,27 +16,19 @@ export interface RequestLog {
 
 @Injectable()
 export class RequestLoggingMiddleware implements NestMiddleware {
-  private logStream: fs.WriteStream;
+  private logStream?: fs.WriteStream;
+  private fileLoggingDisabled = false;
   private readonly logsDir = process.env.LOGS_DIR || './logs';
 
   constructor(private readonly metricsService: MetricsService) {
-    // Ensure logs directory exists
-    if (!fs.existsSync(this.logsDir)) {
-      fs.mkdirSync(this.logsDir, { recursive: true });
-    }
-
-    // Create writable stream for request logs
-    const logFilePath = path.join(
-      this.logsDir,
-      `requests-${new Date().toISOString().split('T')[0]}.jsonl`,
-    );
-    this.logStream = fs.createWriteStream(logFilePath, { flags: 'a' });
+    this.initializeFileLogging();
   }
 
   use(req: Request, res: Response, next: NextFunction) {
     const startTime = Date.now();
     const logStream = this.logStream;
     const metricsService = this.metricsService;
+    const middleware = this;
 
     // Capture original send
     const originalSend = res.send;
@@ -53,11 +45,8 @@ export class RequestLoggingMiddleware implements NestMiddleware {
         user_id: (req.user as any)?.id,
       };
 
-      // Write to file as JSON lines format
-      try {
+      if (logStream && !middleware.fileLoggingDisabled) {
         logStream.write(JSON.stringify(log) + '\n');
-      } catch (err) {
-        console.error('Failed to write request log:', err);
       }
 
       // Record HTTP metric
@@ -80,6 +69,30 @@ export class RequestLoggingMiddleware implements NestMiddleware {
   onModuleDestroy() {
     if (this.logStream) {
       this.logStream.end();
+    }
+  }
+
+  private initializeFileLogging(): void {
+    try {
+      if (!fs.existsSync(this.logsDir)) {
+        fs.mkdirSync(this.logsDir, { recursive: true });
+      }
+
+      const logFilePath = path.join(
+        this.logsDir,
+        `requests-${new Date().toISOString().split('T')[0]}.jsonl`,
+      );
+      this.logStream = fs.createWriteStream(logFilePath, { flags: 'a' });
+      this.logStream.on('error', (err) => {
+        this.fileLoggingDisabled = true;
+        this.logStream?.destroy();
+        this.logStream = undefined;
+        console.error('Request file logging disabled:', err.message);
+      });
+    } catch (err) {
+      this.fileLoggingDisabled = true;
+      const message = err instanceof Error ? err.message : String(err);
+      console.error('Request file logging disabled:', message);
     }
   }
 }
