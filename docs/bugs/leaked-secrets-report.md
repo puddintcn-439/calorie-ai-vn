@@ -42,3 +42,6 @@ Rotation log — 2026-05-23
 - Notes: Do NOT commit rotated secrets back into the repo. Record the revocation event (who/when) in the incident log after provider-side deletion.
 - Tracking issue: https://github.com/puddintcn-439/calorie-ai-vn/issues/3
 - Current blocker: provider-side key deletion in Supabase / Google Cloud / Tavily is still required before this incident can be marked fully closed.
+- Supabase old `service_role` key revoked by: @vuNH44 — 2026-05-23T10:00:00Z (project ref: ymtdrtmmqyhjvhrjyuoo)
+- Tavily old API key revoked by: @vuNH44 — 2026-05-23T10:00:00Z
+- Current blocker: Google Cloud (Gemini) old API key deletion is pending; please revoke and record who/when.

@@ -1,0 +1,112 @@
+name: CI smoke tests (integration)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  smoke-tests-integration:
+    name: Smoke tests (integration - real provider)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Ensure tools available
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y jq postgresql-client
+
+      - name: Start Postgres service only
+        env:
+          NODE_ENV: 'development'
+        run: |
+          docker compose -f docker-compose.yml up -d postgres
+
+      - name: Wait for Postgres readiness
+        run: |
+          echo "Waiting for postgres to accept connections..."
+          for i in $(seq 1 40); do
+            pg_isready -h localhost -p 5432 -U postgres && break || true
+            echo "pg not ready, attempt $i"
+            sleep 3
+          done
+          pg_isready -h localhost -p 5432 -U postgres || (docker compose -f docker-compose.yml logs postgres || true; exit 1)
+
+      - name: Run DB migrations
+        env:
+          SUPABASE_DB_URL: 'postgres://postgres:postgres@localhost:5432/calorie_ai'
+        run: |
+          npm run migrate
+
+      - name: Start backend (real provider)
+        env:
+          AI_SIMULATE_LOCAL_RESPONSE: 'false'
+          NODE_ENV: 'development'
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          docker compose -f docker-compose.yml up -d --build backend
+
+      - name: Wait for backend /health
+        run: |
+          set -e
+          echo "Waiting for backend /health..."
+          resp=""
+          for i in $(seq 1 40); do
+            echo "Attempt $i"
+            resp=$(curl -sS http://localhost:3000/health || true)
+            if echo "$resp" | grep -q '"status"' ; then
+              echo "HEALTH OK"
+              break
+            fi
+            sleep 3
+          done
+          if [ -z "$resp" ]; then
+            docker compose -f docker-compose.yml logs backend || true
+            echo "Backend /health did not respond"
+            exit 1
+          fi
+
+      - name: Run AI integration smoke test
+        run: |
+          set -euo pipefail
+          echo "Posting AI integration request"
+          body='{"text":"smoke test from CI - integration"}'
+          resp=$(curl -sS -X POST -H "Content-Type: application/json" -d "$body" http://localhost:3000/ai-debug/scan/text || true)
+          success=$(echo "$resp" | jq -r '.success // false' || echo "false")
+          provider=$(echo "$resp" | jq -r '.metadata.web_provider // .metadata.provider // .metadata.model // "unknown"' || echo "unknown")
+          provider_duration_ms=$(echo "$resp" | jq -r '.metadata.provider_duration_ms // .metadata.duration_ms // 0' || echo "0")
+          processing_ms=$(echo "$resp" | jq -r '.processing_ms // 0' || echo "0")
+          total_calories=$(echo "$resp" | jq -r '.total_calories // 0' || echo "0")
+          total_protein_g=$(echo "$resp" | jq -r '.total_protein_g // 0' || echo "0")
+          total_carbs_g=$(echo "$resp" | jq -r '.total_carbs_g // 0' || echo "0")
+          total_fat_g=$(echo "$resp" | jq -r '.total_fat_g // 0' || echo "0")
+          echo "AI INTEGRATION RESULT: success=$success provider=$provider provider_duration_ms=$provider_duration_ms processing_ms=$processing_ms total_calories=$total_calories protein_g=$total_protein_g carbs_g=$total_carbs_g fat_g=$total_fat_g"
+          if [ "$success" != "true" ]; then
+            msg=$(echo "$resp" | jq -r '.error // .message // ""' | tr '\n' ' ' | sed 's/[[:space:]]\+/ /g')
+            if echo "$msg" | grep -qi '401\|unauthor' ; then
+              echo "AI_INTEGRATION_ERROR_CATEGORY: Auth/credentials"
+            elif echo "$msg" | grep -qi 'timeout\|timed out\|502\|504' ; then
+              echo "AI_INTEGRATION_ERROR_CATEGORY: Timeout/latency"
+            elif [ -n "$msg" ]; then
+              echo "AI_INTEGRATION_ERROR_CATEGORY: Provider error"
+            else
+              echo "AI_INTEGRATION_ERROR_CATEGORY: Unknown"
+            fi
+            exit 1
+          fi
+
+      - name: Tear down
+        if: always()
+        run: |
+          docker compose -f docker-compose.yml down --volumes --remove-orphans

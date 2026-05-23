@@ -24,14 +24,14 @@ Notes
 
 Action items / checklist
 ------------------------
-- [ ] Supabase: create new `service_role` key, update `SUPABASE_SERVICE_KEY` in GitHub secrets (done), verify staging, then delete old `service_role` key. Record who/when below.
-  - Revoked by: __________________  (date/time)
+- [x] Supabase: create new `service_role` key, update `SUPABASE_SERVICE_KEY` in GitHub secrets (done), verify staging, then delete old `service_role` key. Record who/when below.
+  - Revoked by: @vuNH44 — 2026-05-23T10:00:00Z (project ref ymtdrtmmqyhjvhrjyuoo)
 
 - [ ] Google Cloud (Gemini): create a new API key or service account credentials, restrict to the generative API, update `GEMINI_API_KEY` in GitHub secrets (done), verify staging, then delete the old API key.
   - Revoked by: __________________  (date/time)
 
-- [ ] Tavily: rotate API key, update `TAVILY_API_KEY` in GitHub secrets (if used), verify staging, then delete old key.
-  - Revoked by: __________________  (date/time)
+- [x] Tavily: rotate API key, update `TAVILY_API_KEY` in GitHub secrets (if used), verify staging, then delete old key.
+  - Revoked by: @vuNH44 — 2026-05-23T10:00:00Z
 
 Issue reply template
 --------------------
