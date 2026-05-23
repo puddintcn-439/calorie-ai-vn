@@ -81,7 +81,7 @@ jobs:
         run: |
           set -euo pipefail
           echo "Posting AI integration request"
-          body='{"text":"smoke test from CI - integration"}'
+          body='{"text":"1 to pho bo"}'
           resp=$(curl -sS -X POST -H "Content-Type: application/json" -d "$body" http://localhost:3000/ai-debug/scan/text || true)
           success=$(echo "$resp" | jq -r '.success // false' || echo "false")
           provider=$(echo "$resp" | jq -r '.metadata.web_provider // .metadata.provider // .metadata.model // "unknown"' || echo "unknown")

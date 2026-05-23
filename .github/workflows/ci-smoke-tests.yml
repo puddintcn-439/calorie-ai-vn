@@ -49,6 +49,13 @@ jobs:
         run: |
           npm run migrate
 
+      - name: Prepare simulated AI response
+        run: |
+          mkdir -p tmp
+          cat > tmp/ai_debug_response.json <<'JSON'
+          {"items":[{"name":"pho bo","name_vi":"pho bo","category":"noodle","quantity":1,"unit":"to","estimated_grams":500,"calories":500,"calories_min":400,"calories_max":600,"protein_g":30,"carbs_g":60,"fat_g":20,"fiber_g":4,"sugar_g":3,"saturated_fat_g":8,"sodium_mg":1500,"confidence":0.8}]}
+          JSON
+
       - name: Start backend
         env:
           AI_SIMULATE_LOCAL_RESPONSE: 'true'
@@ -83,7 +90,7 @@ jobs:
       - name: Run AI debug smoke test
         run: |
           echo "Posting AI debug request"
-          body='{"text":"smoke test from CI"}'
+          body='{"text":"1 to pho bo"}'
           resp=$(curl -sS -X POST -H "Content-Type: application/json" -d "$body" http://localhost:3000/ai-debug/scan/text || true)
           echo "AI DEBUG RESPONSE: $resp"
           ok=$(echo "$resp" | jq -r '.success' || echo "null")
