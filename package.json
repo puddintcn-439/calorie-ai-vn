@@ -17,8 +17,8 @@
     "health": "powershell -ExecutionPolicy Bypass -File ./scripts/health-check.ps1",
     "dev:ports:clean": "powershell -ExecutionPolicy Bypass -File ./scripts/kill-dev-ports.ps1",
     "dev:backend:ready": "powershell -ExecutionPolicy Bypass -File ./scripts/start-backend-dev.ps1",
-    "dev:mobile:web:ready": "powershell -ExecutionPolicy Bypass -File ./scripts/start-mobile-web.ps1"
-    ,"migrate": "node ./scripts/apply-migration.js"
+    "dev:mobile:web:ready": "powershell -ExecutionPolicy Bypass -File ./scripts/start-mobile-web.ps1",
+    "migrate": "node ./scripts/apply-migration.js"
   },
   "devDependencies": {
     "pg": "^8.20.0",
@@ -30,12 +30,30 @@
     "node": ">=20.0.0",
     "npm": ">=10.0.0"
   },
+  "overrides": {
+    "@expo/config-plugins": {
+      "@expo/plist": "0.7.0"
+    },
+    "@expo/plist": {
+      ".": "0.7.0",
+      "@xmldom/xmldom": "0.9.10"
+    },
+    "@xmldom/xmldom": "0.9.10",
+    "@nestjs/common": "$@nestjs/common",
+    "@nestjs/core": "$@nestjs/core",
+    "lodash": "4.18.1",
+    "node-emoji": {
+      "lodash": "4.18.1"
+    }
+  },
   "dependencies": {
+    "@nestjs/common": "^11.1.23",
+    "@nestjs/core": "^11.1.23",
+    "@sentry/node": "^8.12.0",
     "expo-linking": "^8.0.12",
+    "prom-client": "^14.0.0",
     "react-native-reanimated": "~4.1.1",
     "react-native-worklets": "^0.8.3",
-    "react-native-worklets-core": "^1.6.3",
-    "@sentry/node": "^8.12.0",
-    "prom-client": "^14.0.0"
+    "react-native-worklets-core": "^1.6.3"
   }
 }
