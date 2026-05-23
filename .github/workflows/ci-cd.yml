@@ -11,6 +11,11 @@ env:
   TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
   TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
 
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
 jobs:
   # Job 1: Lint & Type Check
   lint-and-typecheck:
@@ -130,7 +135,7 @@ jobs:
         run: npm run build --workspace=backend
 
       - name: Upload backend build
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: backend-build
           path: apps/backend/dist/
@@ -274,35 +279,66 @@ jobs:
     runs-on: ubuntu-latest
     name: Mobile EAS Android Preview Build
     needs: [mobile-e2e]
-    if: ${{ secrets.EXPO_TOKEN != '' }}
     steps:
       - uses: actions/checkout@v4
 
+      - name: Detect optional EAS secrets
+        id: eas-config
+        shell: bash
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$EXPO_TOKEN" ]; then
+            echo "expo_token_present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "expo_token_present=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          if [ -n "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "android_keystore_present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "android_keystore_present=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Skip optional EAS build when EXPO_TOKEN is missing
+        if: ${{ steps.eas-config.outputs.expo_token_present != 'true' }}
+        run: echo "EXPO_TOKEN is not set; skipping optional EAS Android preview build."
+
       - name: Setup Node.js
+        if: ${{ steps.eas-config.outputs.expo_token_present == 'true' }}
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
 
       - name: Install dependencies
+        if: ${{ steps.eas-config.outputs.expo_token_present == 'true' }}
         run: npm ci
 
       - name: Configure expo token
+        if: ${{ steps.eas-config.outputs.expo_token_present == 'true' }}
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |
           echo "EXPO_TOKEN is set"
 
       - name: Restore Android keystore (from secrets)
-        if: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+        if: ${{ steps.eas-config.outputs.expo_token_present == 'true' && steps.eas-config.outputs.android_keystore_present == 'true' }}
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           echo "Restoring Android keystore from secrets"
-          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > ./android.keystore
-          echo "ANDROID_KEYSTORE_PASSWORD=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}" >> $GITHUB_ENV
-          echo "ANDROID_KEY_ALIAS=${{ secrets.ANDROID_KEY_ALIAS }}" >> $GITHUB_ENV
-          echo "ANDROID_KEY_PASSWORD=${{ secrets.ANDROID_KEY_PASSWORD }}" >> $GITHUB_ENV
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 --decode > ./android.keystore
+          echo "ANDROID_KEYSTORE_PASSWORD=$ANDROID_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+          echo "ANDROID_KEY_ALIAS=$ANDROID_KEY_ALIAS" >> "$GITHUB_ENV"
+          echo "ANDROID_KEY_PASSWORD=$ANDROID_KEY_PASSWORD" >> "$GITHUB_ENV"
 
       - name: Run EAS Android preview build
+        if: ${{ steps.eas-config.outputs.expo_token_present == 'true' }}
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
         run: |

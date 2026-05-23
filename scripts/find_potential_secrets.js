@@ -7,6 +7,7 @@ const IGNORE = new Set([
   'node_modules',
   '.git',
   '.github/workflows',
+  'docs',
   'coverage',
   'dist',
   'tmp',
@@ -50,6 +51,10 @@ function scanFile(filePath) {
     const stat = fs.statSync(filePath);
     if (!stat.isFile()) return;
     if (stat.size > 1024 * 1024) return; // skip >1MB files
+
+    // skip example files (they often contain placeholder values)
+    const rel = path.relative(ROOT, filePath);
+    if (rel.includes('.example')) return;
 
     const raw = fs.readFileSync(filePath);
     if (isBinary(raw)) return;

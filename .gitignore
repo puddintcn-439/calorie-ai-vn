@@ -34,3 +34,6 @@ Thumbs.db
 
 # Turbo
 .turbo/
+
+# Temporary files
+tmp/

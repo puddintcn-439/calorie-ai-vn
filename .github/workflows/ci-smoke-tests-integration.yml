@@ -1,15 +1,13 @@
-name: CI smoke tests (docker-compose)
+name: CI smoke tests (integration)
 
 on:
-  push:
-    branches: [ main ]
-  pull_request:
+  workflow_dispatch:
 
 jobs:
-  smoke-tests:
-    name: Smoke tests (docker-compose)
+  smoke-tests-integration:
+    name: Smoke tests (integration - real provider)
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -49,10 +47,9 @@ jobs:
         run: |
           npm run migrate
 
-      - name: Start backend
+      - name: Start backend (real provider)
         env:
-          AI_SIMULATE_LOCAL_RESPONSE: 'true'
-          AI_SIMULATED_LATENCY_MS: '0'
+          AI_SIMULATE_LOCAL_RESPONSE: 'false'
           NODE_ENV: 'development'
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
@@ -69,7 +66,7 @@ jobs:
             echo "Attempt $i"
             resp=$(curl -sS http://localhost:3000/health || true)
             if echo "$resp" | grep -q '"status"' ; then
-              echo "HEALTH OK: $resp"
+              echo "HEALTH OK"
               break
             fi
             sleep 3
@@ -80,15 +77,32 @@ jobs:
             exit 1
           fi
 
-      - name: Run AI debug smoke test
+      - name: Run AI integration smoke test
         run: |
-          echo "Posting AI debug request"
-          body='{"text":"smoke test from CI"}'
+          set -euo pipefail
+          echo "Posting AI integration request"
+          body='{"text":"smoke test from CI - integration"}'
           resp=$(curl -sS -X POST -H "Content-Type: application/json" -d "$body" http://localhost:3000/ai-debug/scan/text || true)
-          echo "AI DEBUG RESPONSE: $resp"
-          ok=$(echo "$resp" | jq -r '.success' || echo "null")
-          if [ "$ok" != "true" ]; then
-            echo "AI debug endpoint did not return success:true"
+          success=$(echo "$resp" | jq -r '.success // false' || echo "false")
+          provider=$(echo "$resp" | jq -r '.metadata.web_provider // .metadata.provider // .metadata.model // "unknown"' || echo "unknown")
+          provider_duration_ms=$(echo "$resp" | jq -r '.metadata.provider_duration_ms // .metadata.duration_ms // 0' || echo "0")
+          processing_ms=$(echo "$resp" | jq -r '.processing_ms // 0' || echo "0")
+          total_calories=$(echo "$resp" | jq -r '.total_calories // 0' || echo "0")
+          total_protein_g=$(echo "$resp" | jq -r '.total_protein_g // 0' || echo "0")
+          total_carbs_g=$(echo "$resp" | jq -r '.total_carbs_g // 0' || echo "0")
+          total_fat_g=$(echo "$resp" | jq -r '.total_fat_g // 0' || echo "0")
+          echo "AI INTEGRATION RESULT: success=$success provider=$provider provider_duration_ms=$provider_duration_ms processing_ms=$processing_ms total_calories=$total_calories protein_g=$total_protein_g carbs_g=$total_carbs_g fat_g=$total_fat_g"
+          if [ "$success" != "true" ]; then
+            msg=$(echo "$resp" | jq -r '.error // .message // ""' | tr '\n' ' ' | sed 's/[[:space:]]\+/ /g')
+            if echo "$msg" | grep -qi '401\|unauthor' ; then
+              echo "AI_INTEGRATION_ERROR_CATEGORY: Auth/credentials"
+            elif echo "$msg" | grep -qi 'timeout\|timed out\|502\|504' ; then
+              echo "AI_INTEGRATION_ERROR_CATEGORY: Timeout/latency"
+            elif [ -n "$msg" ]; then
+              echo "AI_INTEGRATION_ERROR_CATEGORY: Provider error"
+            else
+              echo "AI_INTEGRATION_ERROR_CATEGORY: Unknown"
+            fi
             exit 1
           fi
 

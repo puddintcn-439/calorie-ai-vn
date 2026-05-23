@@ -1,0 +1,19 @@
+name: Load test
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_url:
+        description: 'Target base URL (e.g. https://staging.example.com)'
+        required: true
+
+jobs:
+  k6-load:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run k6 load test
+        run: |
+          docker run --rm -v ${{ github.workspace }}/tests/load:/scripts -e TARGET_URL=${{ github.event.inputs.target_url }} loadimpact/k6 run /scripts/k6/basic.js
