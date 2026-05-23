@@ -939,16 +939,42 @@ export default function ScanScreen() {
 
         {/* ── Camera / Gallery modes ── */}
         {mode === 'camera' && (
-          <TouchableOpacity style={styles.captureButton} onPress={handleCameraCapture}>
-            <AnimatedIonicon name="camera" size={40} color={theme.colors.success} motion="pulse" />
-            <Text style={styles.captureText} i18nKey="screen.tabs.scan.text.015" />
-          </TouchableOpacity>
+          scannedImage ? (
+            <View style={styles.selectedImageBar}>
+              <View style={styles.selectedImageLabel}>
+                <Ionicons name="image-outline" size={18} color={theme.colors.success} />
+                <Text style={styles.selectedImageText}>Ảnh đã chọn</Text>
+              </View>
+              <TouchableOpacity style={styles.selectedImageAction} onPress={handleCameraCapture}>
+                <Ionicons name="camera-outline" size={16} color={theme.colors.text} />
+                <Text style={styles.selectedImageActionText}>Chụp lại</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <TouchableOpacity style={styles.captureButton} onPress={handleCameraCapture}>
+              <AnimatedIonicon name="camera" size={40} color={theme.colors.success} motion="pulse" />
+              <Text style={styles.captureText} i18nKey="screen.tabs.scan.text.015" />
+            </TouchableOpacity>
+          )
         )}
         {mode === 'gallery' && (
-          <TouchableOpacity style={styles.captureButton} onPress={handleGalleryPick}>
-            <AnimatedIonicon name="images" size={40} color={theme.colors.success} motion="float" />
-            <Text style={styles.captureText} i18nKey="screen.tabs.scan.text.016" />
-          </TouchableOpacity>
+          scannedImage ? (
+            <View style={styles.selectedImageBar}>
+              <View style={styles.selectedImageLabel}>
+                <Ionicons name="image-outline" size={18} color={theme.colors.success} />
+                <Text style={styles.selectedImageText}>Ảnh đã chọn</Text>
+              </View>
+              <TouchableOpacity style={styles.selectedImageAction} onPress={handleGalleryPick}>
+                <Ionicons name="images-outline" size={16} color={theme.colors.text} />
+                <Text style={styles.selectedImageActionText}>Đổi ảnh</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <TouchableOpacity style={styles.captureButton} onPress={handleGalleryPick}>
+              <AnimatedIonicon name="images" size={40} color={theme.colors.success} motion="float" />
+              <Text style={styles.captureText} i18nKey="screen.tabs.scan.text.016" />
+            </TouchableOpacity>
+          )
         )}
 
         {/* ── Text Mode ── */}
@@ -1349,6 +1375,34 @@ const styles = createThemedStyles((colors, radii) => ({
   searchItemCard: { marginBottom: 10 },
   captureButton: { backgroundColor: colors.surfaceLifted, borderRadius: 8, padding: 30, alignItems: 'center', gap: 12, marginBottom: 14, borderWidth: 1, borderColor: colors.borderStrong },
   captureText: { color: colors.textSoft, fontSize: 15, fontWeight: '700' },
+  selectedImageBar: {
+    minHeight: 44,
+    marginBottom: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceAlt,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  selectedImageLabel: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1 },
+  selectedImageText: { color: colors.textSoft, fontSize: 13, fontWeight: '800' },
+  selectedImageAction: {
+    minHeight: 34,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    backgroundColor: colors.surfaceLifted,
+    borderWidth: 1,
+    borderColor: colors.border,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  selectedImageActionText: { color: colors.text, fontSize: 12, fontWeight: '800' },
   textInputContainer: { gap: 10, marginBottom: 16 },
   textInput: { backgroundColor: colors.surfaceLifted, borderRadius: 8, padding: 14, color: colors.text, minHeight: 80, borderWidth: 1, borderColor: colors.border },
   analyzeButton: { backgroundColor: colors.accentCyan, borderRadius: 8, padding: 14, alignItems: 'center' },
