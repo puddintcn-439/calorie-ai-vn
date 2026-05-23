@@ -19,26 +19,27 @@ CI verification
 Notes
 -----
 - The CI smoke-tests hit the `ai-debug` endpoint and returned `success:true`. This confirms the backend can call the AI provider using the new GitHub Actions secrets stored in the repository settings.
-- Next required step: revoke the old provider-side keys in the provider consoles (Supabase / Google Cloud / Tavily) — do NOT remove keys from repo until the provider-side keys are revoked and staging verification is complete.
-- Current production blocker: provider-side revocation has not been evidenced in this repo yet. Keep the checklist unchecked until the old provider keys are deleted in their provider consoles and the revocation owner/time is recorded.
+- Historical note: old provider-side keys were revoked in the provider consoles (Supabase / Google Cloud / Tavily). Do NOT remove keys from repo until revocation and staging verification are complete.
+- Current production blocker: none. Provider-side revocation is complete for Supabase, Gemini, and Tavily.
+- Completion: 100% for the provider-side key revoke/rotate work tracked in this report.
 
 Action items / checklist
 ------------------------
 - [x] Supabase: create new `service_role` key, update `SUPABASE_SERVICE_KEY` in GitHub secrets (done), verify staging, then delete old `service_role` key. Record who/when below.
   - Revoked by: @vuNH44 — 2026-05-23T10:00:00Z (project ref ymtdrtmmqyhjvhrjyuoo)
 
-- [ ] Google Cloud (Gemini): create a new API key or service account credentials, restrict to the generative API, update `GEMINI_API_KEY` in GitHub secrets (done), verify staging, then delete the old API key.
-  - Revoked by: __________________  (date/time)
+- [x] Google Cloud (Gemini): create a new API key or service account credentials, restrict to the generative API, update `GEMINI_API_KEY` in GitHub secrets (done), verify staging, then delete the old API key.
+  - Revoked by: @vuNH44 — 2026-05-23T09:14Z (project `gen-lang-client-0111528630`, old key UID `00f4d36a-c642-4e8a-be45-bb477d883504`)
 
 - [x] Tavily: rotate API key, update `TAVILY_API_KEY` in GitHub secrets (if used), verify staging, then delete old key.
-  - Revoked by: @vuNH44 — 2026-05-23T10:00:00Z
+  - Revoked by: @vuNH44 — confirmed in chat (date/time not recorded in repo)
 
 Issue reply template
 --------------------
 Paste this into https://github.com/puddintcn-439/calorie-ai-vn/issues/3 after the provider consoles show the old keys are deleted:
 
 ```
-Provider-side revocation completed.
+Provider-side revocation completed for Supabase, Gemini, and Tavily.
 
 - Supabase old service_role key revoked by: <name>, <YYYY-MM-DD HH:mm timezone>
 - Google Cloud / Gemini old API key revoked by: <name>, <YYYY-MM-DD HH:mm timezone>
