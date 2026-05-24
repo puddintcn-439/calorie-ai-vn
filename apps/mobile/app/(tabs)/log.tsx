@@ -30,6 +30,46 @@ const MEAL_LABELS: Record<MealType, string> = {
   snack: 'screen.tabs.log.meal.snack',
 };
 
+type SavedMealNutrientKey = 'calories' | 'protein_g' | 'carbs_g' | 'fat_g';
+
+function toFiniteNumber(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') return null;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
+function sumSavedMealItems(meal: SavedMeal, key: SavedMealNutrientKey): number | null {
+  if (!Array.isArray(meal.items) || meal.items.length === 0) return null;
+
+  let hasValue = false;
+  const total = meal.items.reduce((sum, item) => {
+    const value = toFiniteNumber(item[key]);
+    if (value === null) return sum;
+    hasValue = true;
+    return sum + value;
+  }, 0);
+
+  return hasValue ? total : null;
+}
+
+function getSavedMealDisplayTotals(meal: SavedMeal) {
+  const calories = toFiniteNumber((meal as Partial<SavedMeal>).total_calories) ?? sumSavedMealItems(meal, 'calories');
+  const protein = toFiniteNumber((meal as Partial<SavedMeal>).total_protein_g) ?? sumSavedMealItems(meal, 'protein_g');
+  const carbs = toFiniteNumber((meal as Partial<SavedMeal>).total_carbs_g) ?? sumSavedMealItems(meal, 'carbs_g');
+  const fat = toFiniteNumber((meal as Partial<SavedMeal>).total_fat_g) ?? sumSavedMealItems(meal, 'fat_g');
+
+  return {
+    calories: calories === null ? null : Math.round(calories),
+    protein: protein === null ? null : Math.round(protein),
+    carbs: carbs === null ? null : Math.round(carbs),
+    fat: fat === null ? null : Math.round(fat),
+  };
+}
+
+function formatSavedMealNumber(value: number | null): string {
+  return value === null ? '--' : String(value);
+}
+
 type BodyStatus = 'underweight' | 'normal' | 'overweight' | 'obese';
 type WeightRecommendation = 'increase' | 'maintain' | 'decrease';
 
@@ -246,9 +286,10 @@ export default function LogScreen() {
   const netCalories = loggedCalories - burnedCalories;
 
   const handleQuickLog = (meal: SavedMeal) => {
+    const totals = getSavedMealDisplayTotals(meal);
     Alert.alert(
       t('screen.tabs.log.alert.quickLogTitle', { name: meal.name }),
-      t('screen.tabs.log.alert.quickLogMealPrompt', { calories: meal.total_calories }),
+      t('screen.tabs.log.alert.quickLogMealPrompt', { calories: formatSavedMealNumber(totals.calories) }),
       (['breakfast', 'lunch', 'dinner', 'snack'] as MealType[]).map((m) => ({
         text: tx(MEAL_LABELS[m]),
         onPress: async () => {
@@ -701,19 +742,24 @@ export default function LogScreen() {
           <View style={styles.savedSection}>
             <Text style={styles.savedTitle} i18nKey="screen.tabs.log.text.008" />
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.savedList}>
-              {savedMeals.map((meal) => (
-                <TouchableOpacity key={meal.id} style={styles.savedCard} onPress={() => handleQuickLog(meal)}>
-                  <Text style={styles.savedName} numberOfLines={1}>{meal.name}</Text>
-                  <Text style={styles.savedCalorie}>{meal.total_calories} kcal</Text>
-                  <Text style={styles.savedMacro}>P:{Math.round(meal.total_protein_g)} C:{Math.round(meal.total_carbs_g)} F:{Math.round(meal.total_fat_g)}</Text>
-                  <TouchableOpacity style={styles.savedEdit} onPress={() => openEditSavedMeal(meal)}>
-                    <Ionicons name="create-outline" size={15} color={theme.colors.textMuted} />
+              {savedMeals.map((meal) => {
+                const totals = getSavedMealDisplayTotals(meal);
+                return (
+                  <TouchableOpacity key={meal.id} style={styles.savedCard} onPress={() => handleQuickLog(meal)}>
+                    <Text style={styles.savedName} numberOfLines={1}>{meal.name}</Text>
+                    <Text style={styles.savedCalorie}>{formatSavedMealNumber(totals.calories)} kcal</Text>
+                    <Text style={styles.savedMacro}>
+                      P:{formatSavedMealNumber(totals.protein)} C:{formatSavedMealNumber(totals.carbs)} F:{formatSavedMealNumber(totals.fat)}
+                    </Text>
+                    <TouchableOpacity style={styles.savedEdit} onPress={() => openEditSavedMeal(meal)}>
+                      <Ionicons name="create-outline" size={15} color={theme.colors.textMuted} />
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.savedDelete} onPress={() => handleDeleteSaved(meal)}>
+                      <Ionicons name="close-circle" size={16} color={theme.colors.textDisabled} />
+                    </TouchableOpacity>
                   </TouchableOpacity>
-                  <TouchableOpacity style={styles.savedDelete} onPress={() => handleDeleteSaved(meal)}>
-                    <Ionicons name="close-circle" size={16} color={theme.colors.textDisabled} />
-                  </TouchableOpacity>
-                </TouchableOpacity>
-              ))}
+                );
+              })}
             </ScrollView>
           </View>
         )}

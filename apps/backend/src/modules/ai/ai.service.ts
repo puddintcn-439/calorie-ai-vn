@@ -26,7 +26,11 @@ export class AiService {
   private readonly logger = new Logger(AiService.name);
   private genAIPrimary?: GoogleGenerativeAI;
   private genAIBackup?: GoogleGenerativeAI;
+  private modelName: string;
+  private imageModelName: string;
   private providerTimeoutMs: number;
+  private imageProviderTimeoutMs: number;
+  private providerMaxOutputTokens: number;
   private providerRetries: number;
   private providerMaxConcurrency: number;
   private providerCurrent = 0;
@@ -82,11 +86,17 @@ export class AiService {
       this.genAIPrimary = undefined;
       this.genAIBackup = undefined;
     }
-    // Production-tuned defaults (can be overridden via env)
-    // Production-tuned defaults (can be overridden via env)
-    // Timeout: 15s (safe). Overall retry policy: one retry (fallback to backup key),
+    // Production-tuned defaults (can be overridden via env).
+    // Text timeout stays tight; image/receipt scans need more room for complex plates.
+    // Overall retry policy: one retry (fallback to backup key),
     // so providerRetries defaults to 0 here to avoid duplicate retries at the same provider.
+    this.modelName = this.config.get<string>('AI_MODEL') ?? 'gemini-2.5-flash';
+    this.imageModelName = this.config.get<string>('AI_IMAGE_MODEL') ?? 'gemini-2.5-flash-lite';
     this.providerTimeoutMs = Number(this.config.get('AI_PROVIDER_TIMEOUT_MS') ?? 15000);
+    this.imageProviderTimeoutMs = Number(
+      this.config.get('AI_IMAGE_PROVIDER_TIMEOUT_MS') ?? Math.max(this.providerTimeoutMs, 25000),
+    );
+    this.providerMaxOutputTokens = Number(this.config.get('AI_MAX_OUTPUT_TOKENS') ?? 2048);
     this.providerRetries = Number(this.config.get('AI_PROVIDER_RETRIES') ?? 0);
     this.providerMaxConcurrency = Number(this.config.get('AI_PROVIDER_MAX_CONCURRENCY') ?? 3);
     // If AiQueueService is not injected (unit tests or legacy), provide a passthrough
@@ -98,7 +108,7 @@ export class AiService {
 
   async scanImage(imageBase64: string, mimeType = 'image/jpeg'): Promise<AIScanResponse> {
     const start = Date.now();
-    const model = this.createDeterministicModel();
+    const model = this.createDeterministicModel('vision');
     const cacheKey = this.buildImageCacheKey(imageBase64, mimeType);
     const cached = this.getCachedImageScan(cacheKey);
     if (cached) {
@@ -196,7 +206,7 @@ export class AiService {
         return this.buildAiUnavailableScanResponse(Date.now() - start, {
           reason: 'timeout',
           parse_mode: 'image',
-          provider_duration_ms: this.providerTimeoutMs,
+          provider_duration_ms: this.getProviderTimeoutMs('scanImage:first_pass'),
         });
       }
       if (this.isQuotaOrRateLimitError(error)) {
@@ -329,7 +339,7 @@ User transcript: "${sanitizedTranscript}"`;
     },
   ): Promise<AIScanResponse> {
     const start = Date.now();
-    const model = this.createDeterministicModel();
+    const model = this.createDeterministicModel('vision');
 
     const imagePart: Part = {
       inlineData: { data: imageBase64, mimeType },
@@ -665,6 +675,8 @@ Trả lời ngắn gọn, thân thiện bằng tiếng Việt. Không quá 3 câ
     processingMs: number,
     metadata?: Record<string, unknown>,
   ): AIScanResponse {
+    const reason = typeof metadata?.reason === 'string' ? metadata.reason : 'unavailable';
+
     return {
       success: false,
       scan_id: randomUUID(),
@@ -677,7 +689,7 @@ Trả lời ngắn gọn, thân thiện bằng tiếng Việt. Không quá 3 câ
       total_fat_g: 0,
       ai_confidence: 0,
       metadata: {
-        ai_fallback: 'quota_or_rate_limited',
+        ai_fallback: reason,
         ...(metadata ?? {}),
       },
       processing_ms: processingMs,
@@ -835,15 +847,27 @@ Trả lời ngắn gọn, thân thiện bằng tiếng Việt. Không quá 3 câ
     return Math.max(min, Math.min(max, Math.round(n)));
   }
 
-  private createDeterministicModel() {
+  private createDeterministicModel(profile: 'default' | 'vision' = 'default') {
     // If the real provider clients were not instantiated (simulation or missing keys),
     // return a lightweight stub model that matches the minimal interface used by
     // `generateWithTiming()` to keep the code safe during local simulation and tests.
     const makeRealModel = (client: GoogleGenerativeAI | undefined) => {
       if (!client || typeof (client as any).getGenerativeModel !== 'function') return null;
+      const modelName = profile === 'vision' ? this.imageModelName : this.modelName;
+      const generationConfig: any = {
+        temperature: 0.1,
+        topP: 0.2,
+        maxOutputTokens: this.providerMaxOutputTokens,
+        responseMimeType: 'application/json',
+      };
+
+      if (modelName.includes('2.5-flash')) {
+        generationConfig.thinkingConfig = { thinkingBudget: 0 };
+      }
+
       return client.getGenerativeModel({
-        model: 'gemini-2.5-flash',
-        generationConfig: { temperature: 0.1, topP: 0.2 },
+        model: modelName,
+        generationConfig,
       });
     };
 
@@ -861,6 +885,7 @@ Trả lời ngắn gọn, thân thiện bằng tiếng Việt. Không quá 3 câ
     // and backup providers. The wrapper accepts an optional second arg (opName)
     // when invoked from `generateWithTiming()` to include in logs.
     return {
+      __handlesProviderTimeouts: true,
       generateContent: async (input: any, opName?: string) => {
         const providers: Array<{ name: 'primary' | 'backup'; model: any }> = [];
         if (primaryModel) providers.push({ name: 'primary', model: primaryModel });
@@ -873,7 +898,8 @@ Trả lời ngắn gọn, thân thiện bằng tiếng Việt. Không quá 3 câ
           const p = providers[idx];
           try {
             const genPromise = p.model.generateContent(input);
-            const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('AI_TIMEOUT')), this.providerTimeoutMs));
+            const timeoutMs = this.getProviderTimeoutMs(opName);
+            const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('AI_TIMEOUT')), timeoutMs));
             const result = await Promise.race([genPromise, timeoutPromise]);
             const duration = Date.now() - start;
             this.logger.debug(`[AI-PROVIDER] ${opName ?? 'op'} provider=${p.name} success duration_ms=${duration}`);
@@ -895,7 +921,7 @@ Trả lời ngắn gọn, thân thiện bằng tiếng Việt. Không quá 3 câ
             // error category is one we should fallback on, then wait a short
             // backoff and try the backup once.
             const shouldFallback = idx === 0 && providers.length > 1 && (
-              category === 'quota_or_rate_limit' || category === 'invalid_key' || category === 'timeout' || category === 'temporary'
+              category === 'quota_or_rate_limit' || category === 'invalid_key' || category === 'temporary'
             );
 
             if (shouldFallback) {
@@ -1021,13 +1047,15 @@ Trả lời ngắn gọn, thân thiện bằng tiếng Việt. Không quá 3 câ
       try {
         for (let attempt = 0; attempt <= this.providerRetries; attempt += 1) {
           try {
-            const genPromise = model.generateContent(input, opName);
-
-            const timeoutPromise = new Promise((_, reject) =>
-              setTimeout(() => reject(new Error('AI_TIMEOUT')), this.providerTimeoutMs),
-            );
-
-            const rawResult = await Promise.race([genPromise, timeoutPromise]);
+            const handlesProviderTimeouts = Boolean(model?.__handlesProviderTimeouts);
+            const rawResult = handlesProviderTimeouts
+              ? await model.generateContent(input, opName)
+              : await Promise.race([
+                model.generateContent(input, opName),
+                new Promise((_, reject) =>
+                  setTimeout(() => reject(new Error('AI_TIMEOUT')), this.getProviderTimeoutMs(opName)),
+                ),
+              ]);
 
             // If a wrapper returned provider metadata, unwrap it.
             let providerLabel: string | undefined = undefined;
@@ -1084,6 +1112,14 @@ Trả lời ngắn gọn, thân thiện bằng tiếng Việt. Không quá 3 câ
     };
 
     return (this.aiQueue as AiQueueService).execute(opName, executeFn);
+  }
+
+  private getProviderTimeoutMs(opName?: string): number {
+    if (opName?.startsWith('scanImage') || opName?.startsWith('scanReceipt')) {
+      return this.imageProviderTimeoutMs;
+    }
+
+    return this.providerTimeoutMs;
   }
 
   private buildImageCacheKey(imageBase64: string, mimeType: string): string {
@@ -1163,6 +1199,8 @@ Quy tắc:
 - category phải là 1 trong: rice_dish, noodle, meat, seafood, vegetable, fruit, drink, snack, dessert, fast_food, other
 - confidence từ 0 đến 1
 - Luon tra ve calories_min va calories_max cho tung item (khoang uoc luong hop ly)
+- Với ảnh nhiều thành phần như sushi set, lẩu, mẹt đồ ăn, combo hoặc bàn tiệc: nhóm các miếng lặp lại theo loại món, nhưng vẫn tách các nhóm thực phẩm chính để người dùng có thể chỉnh từng món.
+- Nếu thấy đồ ăn rõ nhưng không chắc tên chính xác, hãy trả về món gần đúng với confidence thấp thay vì trả items rỗng.
 - Có thể thêm fiber_g, sugar_g, saturated_fat_g, sodium_mg khi có nhãn dinh dưỡng hoặc ước lượng đáng tin; nếu không chắc thì bỏ qua trường đó
 - Nếu không thấy đồ ăn, trả về items: []`;
 

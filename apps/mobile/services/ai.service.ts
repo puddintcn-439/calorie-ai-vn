@@ -25,7 +25,7 @@ export interface ScanReceiptPayload {
 export async function scanImageFromUri(uri: string): Promise<AIScanResponse> {
   const formData = new FormData();
   // Resize & compress on the client to reduce upload size and provider cost
-  const file = await prepareImageForUpload(uri, 'food.jpg');
+  const file = await prepareImageForUpload(uri, 'food.jpg', 768, 0.64);
 
   if (Platform.OS === 'web') {
     formData.append('image', file as Blob, 'food.jpg');
@@ -35,7 +35,7 @@ export async function scanImageFromUri(uri: string): Promise<AIScanResponse> {
 
   const res = await withRetry(() => apiClient.post<AIScanResponse>('/ai/scan/image', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
-    timeout: 30000,
+    timeout: 45000,
   }));
 
   return res.data;
@@ -67,7 +67,7 @@ export async function scanReceipt(payload: ScanReceiptPayload): Promise<AIScanRe
 
   const res = await withRetry(() => apiClient.post<AIScanResponse>('/ai/scan/receipt', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
-    timeout: 30000,
+    timeout: 45000,
   }));
 
   return res.data;

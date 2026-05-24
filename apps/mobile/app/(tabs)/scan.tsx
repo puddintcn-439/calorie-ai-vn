@@ -80,11 +80,23 @@ function formatCalorieRange(min: number, max: number): string {
   return `${roundedMin}-${roundedMax} kcal`;
 }
 
-function isQuotaFallbackResult(result: AIScanResponse): boolean {
-  return (
-    result.success === false
-    && result.metadata?.ai_fallback === 'quota_or_rate_limited'
-  );
+function getAiFallbackReason(result: AIScanResponse): string | null {
+  if (result.success !== false) return null;
+  const metadata = result.metadata ?? {};
+  const reason = metadata.ai_fallback ?? metadata.reason;
+  return typeof reason === 'string' ? reason : 'unavailable';
+}
+
+function getAiFallbackNotice(reason: string): string {
+  if (reason === 'timeout') {
+    return 'AI xử lý ảnh hơi lâu, thường gặp với ảnh nhiều món hoặc ảnh quá lớn. Vui lòng thử lại hoặc chụp gần món chính hơn.';
+  }
+
+  if (reason === 'quota_or_rate_limited' || reason === 'quota_or_rate_limit') {
+    return 'AI đang bận do quota/rate limit. Vui lòng thử lại sau vài phút.';
+  }
+
+  return 'Tạm thời chưa có kết quả AI. Vui lòng thử lại sau ít phút.';
 }
 
 export default function ScanScreen() {
@@ -150,10 +162,11 @@ export default function ScanScreen() {
   const totalFat = currentItems.reduce((s, i) => s + i.fat_g, 0);
 
   const applyScanResult = (result: AIScanResponse) => {
-    if (isQuotaFallbackResult(result)) {
+    const fallbackReason = getAiFallbackReason(result);
+    if (fallbackReason) {
       setScanResult(null);
       setEditableItems([]);
-      setScanNotice('AI đang bận do quota/rate limit. Vui lòng thử lại sau vài phút.');
+      setScanNotice(getAiFallbackNotice(fallbackReason));
       Alert.alert(
         'screen.tabs.scan.alert.001',
         'screen.tabs.scan.alert.002',
@@ -162,6 +175,7 @@ export default function ScanScreen() {
     }
 
     setScanNotice(null);
+    setLastFailedScan(null);
     setScanResult(result);
     setEditableItems(result.items.map((item) => ({ ...item })));
     
@@ -381,6 +395,7 @@ export default function ScanScreen() {
     void telemetryService.emitLogAttempted('image');
     try {
       const result = await scanImageFromUri(uri);
+      if (!result.success) setLastFailedScan({ mode: mode === 'gallery' ? 'gallery' : 'camera', payload: uri });
       applyScanResult(result);
       void telemetryService.emitLogParsed('image', {
         elapsed_ms: Date.now() - startedAt,
@@ -406,6 +421,7 @@ export default function ScanScreen() {
     void telemetryService.emitLogAttempted('text');
     try {
       const result = await scanText(textInput.trim());
+      if (!result.success) setLastFailedScan({ mode: 'text', payload: textInput.trim() });
       applyScanResult(result);
       void telemetryService.emitLogParsed('text', {
         elapsed_ms: Date.now() - startedAt,
@@ -438,6 +454,7 @@ export default function ScanScreen() {
         locale: 'vi-VN',
         context: { source: 'mobile_voice', device_language: 'vi' },
       });
+      if (!result.success) setLastFailedScan({ mode: 'voice', payload: transcript });
       applyScanResult(result);
       void telemetryService.emitLogParsed('voice', {
         elapsed_ms: Date.now() - startedAt,
@@ -467,6 +484,7 @@ export default function ScanScreen() {
         locale: 'vi-VN',
         meal_hint: selectedMeal,
       });
+      if (!result.success) setLastFailedScan({ mode: 'receipt', payload: uri });
       applyScanResult(result);
       void telemetryService.emitLogParsed('receipt', {
         elapsed_ms: Date.now() - startedAt,
@@ -600,6 +618,7 @@ export default function ScanScreen() {
     try {
       switch (lastFailedScan.mode) {
         case 'camera':
+        case 'gallery':
           await runImageScan(lastFailedScan.payload);
           break;
         case 'receipt':
