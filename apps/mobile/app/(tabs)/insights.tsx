@@ -16,6 +16,7 @@ import { BodyText, Eyebrow, HeroTitle, ScreenShell, SurfaceCard } from '../../co
 import { createThemedStyles, theme, useAppTheme } from '../../components/theme';
 import { Text } from '../../components/i18n-text';
 import { Alert } from '../../components/i18n-alert';
+import { formatKcal, formatMacro, formatNumberVi, formatPercent, safeNumber } from '../../services/number-format';
 
 const screenWidth = Dimensions.get('window').width;
 
@@ -69,7 +70,10 @@ export default function InsightsScreen() {
   }
 
   const data = weeklyInsights;
-  const selectedDayData = selectedDay !== null ? data.daily_insights[selectedDay] : null;
+  const dailyInsights = Array.isArray(data.daily_insights) ? data.daily_insights : [];
+  const macroBreakdown = (data.macro_breakdown ?? {}) as Partial<typeof data.macro_breakdown>;
+  const mealBreakdown = (data.meal_breakdown ?? {}) as Partial<typeof data.meal_breakdown>;
+  const selectedDayData = selectedDay !== null ? dailyInsights[selectedDay] : null;
 
   return (
     <ScreenShell>
@@ -82,14 +86,14 @@ export default function InsightsScreen() {
         <View style={styles.summaryGrid}>
           <SurfaceCard style={styles.summaryCard}>
             <Text style={styles.summaryLabel} i18nKey="screen.tabs.insights.text.004" />
-            <Text style={styles.summaryValue}>{data.average_calories_per_day}</Text>
+            <Text style={styles.summaryValue}>{formatNumberVi(data.average_calories_per_day)}</Text>
             <Text style={styles.summaryUnit} i18nKey="screen.tabs.insights.text.005" />
           </SurfaceCard>
 
           <SurfaceCard style={styles.summaryCard}>
             <Text style={styles.summaryLabel} i18nKey="screen.tabs.insights.text.006" />
-            <Text style={styles.summaryValue}>{data.weekly_adherence_percentage}%</Text>
-            {data.weekly_adherence_percentage >= 90 && data.weekly_adherence_percentage <= 110 ? (
+            <Text style={styles.summaryValue}>{formatPercent(data.weekly_adherence_percentage)}</Text>
+            {safeNumber(data.weekly_adherence_percentage) >= 90 && safeNumber(data.weekly_adherence_percentage) <= 110 ? (
               <Text style={styles.summaryUnitGood} i18nKey="screen.tabs.insights.text.007" />
             ) : (
               <Text style={styles.summaryUnit} i18nKey="screen.tabs.insights.text.008" />
@@ -100,17 +104,17 @@ export default function InsightsScreen() {
         <View style={styles.summaryGrid}>
           <SurfaceCard style={styles.summaryCard}>
             <Text style={styles.summaryLabel} i18nKey="screen.tabs.insights.text.009" />
-            <Text style={styles.summaryValue}>{data.days_on_target}</Text>
+            <Text style={styles.summaryValue}>{formatNumberVi(data.days_on_target)}</Text>
             <Text style={styles.summaryUnit} i18nKey="screen.tabs.insights.text.010" />
           </SurfaceCard>
 
           <SurfaceCard style={styles.summaryCard}>
             <Text style={styles.summaryLabel} i18nKey="screen.tabs.insights.text.011" />
-            <Text style={[styles.summaryValue, data.trend_vs_last_week <= 0 ? styles.trendPositive : styles.trendNegative]}>
-              {data.trend_vs_last_week > 0 ? '+' : ''}{data.trend_vs_last_week}%
+            <Text style={[styles.summaryValue, safeNumber(data.trend_vs_last_week) <= 0 ? styles.trendPositive : styles.trendNegative]}>
+              {safeNumber(data.trend_vs_last_week) > 0 ? '+' : ''}{formatPercent(data.trend_vs_last_week)}
             </Text>
             <Text style={styles.summaryUnit}>
-              {data.trend_vs_last_week <= 0 ? '📉 Tốt' : '📈 Tăng'}
+              {safeNumber(data.trend_vs_last_week) <= 0 ? '📉 Tốt' : '📈 Tăng'}
             </Text>
           </SurfaceCard>
         </View>
@@ -118,13 +122,13 @@ export default function InsightsScreen() {
         {/* ─── Daily Breakdown ─── */}
         <Text style={styles.sectionTitle} i18nKey="screen.tabs.insights.text.012" />
         <View style={styles.dailyGrid}>
-          {data.daily_insights.map((day, idx) => (
+          {dailyInsights.map((day, idx) => (
             <TouchableOpacity
               key={`${day.date}-${idx}`}
               style={[
                 styles.dayCard,
                 selectedDay === idx && styles.dayCardActive,
-                day.adherence_percentage >= 90 && day.adherence_percentage <= 110 && styles.dayCardGood,
+                safeNumber(day.adherence_percentage) >= 90 && safeNumber(day.adherence_percentage) <= 110 && styles.dayCardGood,
               ]}
               onPress={() => setSelectedDay(selectedDay === idx ? null : idx)}
             >
@@ -134,11 +138,11 @@ export default function InsightsScreen() {
                 <View
                   style={[
                     styles.adherenceFill,
-                    { width: `${Math.min(100, day.adherence_percentage)}%` },
+                    { width: `${Math.min(100, safeNumber(day.adherence_percentage))}%` },
                   ]}
                 />
               </View>
-              <Text style={styles.dayCalories}>{day.calories}kcal</Text>
+              <Text style={styles.dayCalories}>{formatKcal(day.calories)}</Text>
               {day.meal_count === 0 && <Text style={styles.noData}>-</Text>}
             </TouchableOpacity>
           ))}
@@ -160,14 +164,14 @@ export default function InsightsScreen() {
               <View style={styles.detailRow}>
                 <Text style={styles.detailLabel} i18nKey="screen.tabs.insights.text.013" />
                 <Text style={styles.detailValue}>
-                  {selectedDayData.calories} / {selectedDayData.calorie_target} kcal
+                  {formatNumberVi(selectedDayData.calories)} / {formatKcal(selectedDayData.calorie_target)}
                 </Text>
               </View>
 
               <View style={styles.detailRow}>
                 <Text style={styles.detailLabel} i18nKey="screen.tabs.insights.text.006" />
-                <Text style={[styles.detailValue, selectedDayData.adherence_percentage >= 90 && selectedDayData.adherence_percentage <= 110 ? styles.goodValue : styles.neutralValue]}>
-                  {selectedDayData.adherence_percentage}%
+                <Text style={[styles.detailValue, safeNumber(selectedDayData.adherence_percentage) >= 90 && safeNumber(selectedDayData.adherence_percentage) <= 110 ? styles.goodValue : styles.neutralValue]}>
+                  {formatPercent(selectedDayData.adherence_percentage)}
                 </Text>
               </View>
 
@@ -179,7 +183,7 @@ export default function InsightsScreen() {
               <View style={styles.detailRow}>
                 <Text style={styles.detailLabel} i18nKey="screen.tabs.insights.text.015" />
                 <Text style={styles.detailValue}>
-                  P: {Math.round(selectedDayData.protein_g)} | C: {Math.round(selectedDayData.carbs_g)} | F: {Math.round(selectedDayData.fat_g)}
+                  P: {formatMacro(selectedDayData.protein_g)} | C: {formatMacro(selectedDayData.carbs_g)} | F: {formatMacro(selectedDayData.fat_g)}
                 </Text>
               </View>
             </View>
@@ -190,21 +194,21 @@ export default function InsightsScreen() {
         <Text style={styles.sectionTitle} i18nKey="screen.tabs.insights.text.016" />
         <SurfaceCard style={styles.macroCard}>
           <View style={styles.macroCircle}>
-            <Text style={styles.macroPercentage}>{data.macro_breakdown.protein_percentage}%</Text>
+            <Text style={styles.macroPercentage}>{formatPercent(macroBreakdown.protein_percentage)}</Text>
             <Text style={styles.macroLabel} i18nKey="screen.tabs.insights.text.017" />
-            <Text style={styles.macroValue}>{data.macro_breakdown.protein_grams}g</Text>
+            <Text style={styles.macroValue}>{formatMacro(macroBreakdown.protein_grams)}</Text>
           </View>
 
           <View style={styles.macroCircle}>
-            <Text style={styles.macroPercentage}>{data.macro_breakdown.carbs_percentage}%</Text>
+            <Text style={styles.macroPercentage}>{formatPercent(macroBreakdown.carbs_percentage)}</Text>
             <Text style={styles.macroLabel} i18nKey="screen.tabs.insights.text.018" />
-            <Text style={styles.macroValue}>{data.macro_breakdown.carbs_grams}g</Text>
+            <Text style={styles.macroValue}>{formatMacro(macroBreakdown.carbs_grams)}</Text>
           </View>
 
           <View style={styles.macroCircle}>
-            <Text style={styles.macroPercentage}>{data.macro_breakdown.fat_percentage}%</Text>
+            <Text style={styles.macroPercentage}>{formatPercent(macroBreakdown.fat_percentage)}</Text>
             <Text style={styles.macroLabel} i18nKey="screen.tabs.insights.text.019" />
-            <Text style={styles.macroValue}>{data.macro_breakdown.fat_grams}g</Text>
+            <Text style={styles.macroValue}>{formatMacro(macroBreakdown.fat_grams)}</Text>
           </View>
         </SurfaceCard>
 
@@ -213,26 +217,26 @@ export default function InsightsScreen() {
         <SurfaceCard style={styles.mealBreakdownCard}>
           <MealBreakdownRow
             label="screen.tabs.insights.label.001"
-            calories={data.meal_breakdown.breakfast_calories}
-            count={data.meal_breakdown.breakfast_count}
+            calories={mealBreakdown.breakfast_calories}
+            count={mealBreakdown.breakfast_count}
             total={data.weekly_calories_total}
           />
           <MealBreakdownRow
             label="screen.tabs.insights.label.002"
-            calories={data.meal_breakdown.lunch_calories}
-            count={data.meal_breakdown.lunch_count}
+            calories={mealBreakdown.lunch_calories}
+            count={mealBreakdown.lunch_count}
             total={data.weekly_calories_total}
           />
           <MealBreakdownRow
             label="screen.tabs.insights.label.003"
-            calories={data.meal_breakdown.dinner_calories}
-            count={data.meal_breakdown.dinner_count}
+            calories={mealBreakdown.dinner_calories}
+            count={mealBreakdown.dinner_count}
             total={data.weekly_calories_total}
           />
           <MealBreakdownRow
             label="screen.tabs.insights.label.004"
-            calories={data.meal_breakdown.snack_calories}
-            count={data.meal_breakdown.snack_count}
+            calories={mealBreakdown.snack_calories}
+            count={mealBreakdown.snack_count}
             total={data.weekly_calories_total}
           />
         </SurfaceCard>
@@ -242,15 +246,15 @@ export default function InsightsScreen() {
         <SurfaceCard style={styles.highlightCard}>
           <View style={styles.highlightRow}>
             <Text style={styles.highlightLabel} i18nKey="screen.tabs.insights.text.022" />
-            <Text style={styles.highlightValue}>{data.best_day_calories} kcal</Text>
+            <Text style={styles.highlightValue}>{formatKcal(data.best_day_calories)}</Text>
           </View>
           <View style={styles.highlightRow}>
             <Text style={styles.highlightLabel} i18nKey="screen.tabs.insights.text.023" />
-            <Text style={styles.highlightValue}>{data.worst_day_calories} kcal</Text>
+            <Text style={styles.highlightValue}>{formatKcal(data.worst_day_calories)}</Text>
           </View>
           <View style={styles.highlightRow}>
             <Text style={styles.highlightLabel} i18nKey="screen.tabs.insights.text.024" />
-            <Text style={styles.highlightValue}>{data.total_meals_logged} bữa</Text>
+            <Text style={styles.highlightValue}>{formatNumberVi(data.total_meals_logged)} bữa</Text>
           </View>
         </SurfaceCard>
 
@@ -267,10 +271,10 @@ export default function InsightsScreen() {
           {recommendations ? (
             <>
               <Text style={styles.planMeta}>
-                Remaining hôm nay: {recommendations.remaining_calories} kcal · Adherence TB: {recommendations.weekly_insights.average_adherence}%
+                Remaining hôm nay: {formatKcal(recommendations.remaining_calories)} · Adherence TB: {formatPercent(recommendations.weekly_insights?.average_adherence)}
               </Text>
 
-              {recommendations.meals.map((meal) => (
+              {(Array.isArray(recommendations.meals) ? recommendations.meals : []).map((meal) => (
                 <View key={meal.meal_type} style={styles.planMealRow}>
                   <View style={styles.planMealLeft}>
                     <Text style={styles.planMealLabel}>
@@ -284,13 +288,13 @@ export default function InsightsScreen() {
                     </Text>
                     <Text style={styles.planMealTip}>{meal.tips}</Text>
                   </View>
-                  <Text style={styles.planMealCal}>{meal.recommended_calories} kcal</Text>
+                  <Text style={styles.planMealCal}>{formatKcal(meal.recommended_calories)}</Text>
                 </View>
               ))}
 
               <View style={styles.planSuggestionBox}>
                 <Text style={styles.planSuggestionTitle} i18nKey="screen.tabs.insights.text.027" />
-                <Text style={styles.planSuggestionText}>{recommendations.weekly_insights.suggestion}</Text>
+                <Text style={styles.planSuggestionText}>{recommendations.weekly_insights?.suggestion ?? 'Chưa đủ dữ liệu để gợi ý tuần này.'}</Text>
               </View>
             </>
           ) : (
@@ -315,17 +319,19 @@ function MealBreakdownRow({
   count: number;
   total: number;
 }) {
-  const percentage = total > 0 ? (calories / total) * 100 : 0;
+  const safeCalories = safeNumber(calories);
+  const safeTotal = safeNumber(total);
+  const percentage = safeTotal > 0 ? (safeCalories / safeTotal) * 100 : 0;
   return (
     <View style={styles.breakdownRow}>
       <View style={styles.breakdownLeft}>
         <Text style={styles.breakdownLabel}>{label}</Text>
-        <Text style={styles.breakdownMeta}>{count} bữa</Text>
+        <Text style={styles.breakdownMeta}>{formatNumberVi(count)} bữa</Text>
       </View>
       <View style={styles.breakdownBar}>
-        <View style={[styles.breakdownFill, { width: `${Math.max(5, percentage)}%` }]} />
+        <View style={[styles.breakdownFill, { width: `${Math.max(5, Math.min(100, percentage))}%` }]} />
       </View>
-      <Text style={styles.breakdownValue}>{calories}kcal</Text>
+      <Text style={styles.breakdownValue}>{formatKcal(safeCalories)}</Text>
     </View>
   );
 }

@@ -16,6 +16,7 @@ import { ScreenShell, SurfaceCard } from '../../components/ui-shell';
 import { EmptyState } from '../../components/empty-state';
 import { createThemedStyles, theme, useAppTheme } from '../../components/theme';
 import { apiClient } from '../../services/api';
+import { formatKcal, formatMacro, safeNumber, safeRound, toFiniteNumber } from '../../services/number-format';
 import { VisualHeroCard } from '../../components/visual-hero-card';
 import { AnimatedIonicon } from '../../components/animated-icon';
 import { RewardToast, RewardToastData } from '../../components/reward-toast';
@@ -31,12 +32,6 @@ const MEAL_LABELS: Record<MealType, string> = {
 };
 
 type SavedMealNutrientKey = 'calories' | 'protein_g' | 'carbs_g' | 'fat_g';
-
-function toFiniteNumber(value: unknown): number | null {
-  if (value === null || value === undefined || value === '') return null;
-  const numeric = Number(value);
-  return Number.isFinite(numeric) ? numeric : null;
-}
 
 function sumSavedMealItems(meal: SavedMeal, key: SavedMealNutrientKey): number | null {
   if (!Array.isArray(meal.items) || meal.items.length === 0) return null;
@@ -59,10 +54,10 @@ function getSavedMealDisplayTotals(meal: SavedMeal) {
   const fat = toFiniteNumber((meal as Partial<SavedMeal>).total_fat_g) ?? sumSavedMealItems(meal, 'fat_g');
 
   return {
-    calories: calories === null ? null : Math.round(calories),
-    protein: protein === null ? null : Math.round(protein),
-    carbs: carbs === null ? null : Math.round(carbs),
-    fat: fat === null ? null : Math.round(fat),
+    calories: calories === null ? null : safeRound(calories),
+    protein: protein === null ? null : safeRound(protein),
+    carbs: carbs === null ? null : safeRound(carbs),
+    fat: fat === null ? null : safeRound(fat),
   };
 }
 
@@ -280,9 +275,9 @@ export default function LogScreen() {
     },
     {} as Record<MealType, FoodLog[]>,
   );
-  const loggedCalories = dailyLog?.total_calories ?? 0;
-  const targetCalories = dailyLog?.target_calories ?? Object.values(perMealTargets).reduce((sum, value) => sum + value, 0);
-  const burnedCalories = activityLogs.reduce((sum, item) => sum + item.calories_burned, 0);
+  const loggedCalories = safeNumber(dailyLog?.total_calories);
+  const targetCalories = safeNumber(dailyLog?.target_calories, Object.values(perMealTargets).reduce((sum, value) => sum + safeNumber(value), 0));
+  const burnedCalories = activityLogs.reduce((sum, item) => sum + safeNumber(item.calories_burned), 0);
   const netCalories = loggedCalories - burnedCalories;
 
   const handleQuickLog = (meal: SavedMeal) => {
@@ -345,11 +340,11 @@ export default function LogScreen() {
     setEditingLog(log);
     setEditMealType(log.meal_type);
     setEditName(log.name_vi ?? log.name);
-    setEditGrams(String(Math.round(log.estimated_grams)));
-    setEditCalories(String(Math.round(log.calories)));
-    setEditProtein(String(Math.round(log.protein_g)));
-    setEditCarbs(String(Math.round(log.carbs_g)));
-    setEditFat(String(Math.round(log.fat_g)));
+    setEditGrams(String(safeRound(log.estimated_grams)));
+    setEditCalories(String(safeRound(log.calories)));
+    setEditProtein(String(safeRound(log.protein_g)));
+    setEditCarbs(String(safeRound(log.carbs_g)));
+    setEditFat(String(safeRound(log.fat_g)));
     setEditNotes(log.notes ?? '');
   };
 
@@ -361,10 +356,10 @@ export default function LogScreen() {
     if (!Number.isFinite(grams) || grams < 0 || editingLog.estimated_grams <= 0) return;
 
     const ratio = grams / editingLog.estimated_grams;
-    setEditCalories(String(Math.round(editingLog.calories * ratio)));
-    setEditProtein(String(Number((editingLog.protein_g * ratio).toFixed(1))));
-    setEditCarbs(String(Number((editingLog.carbs_g * ratio).toFixed(1))));
-    setEditFat(String(Number((editingLog.fat_g * ratio).toFixed(1))));
+    setEditCalories(String(safeRound(safeNumber(editingLog.calories) * ratio)));
+    setEditProtein(String(safeRound(safeNumber(editingLog.protein_g) * ratio)));
+    setEditCarbs(String(safeRound(safeNumber(editingLog.carbs_g) * ratio)));
+    setEditFat(String(safeRound(safeNumber(editingLog.fat_g) * ratio)));
   };
 
   const handleSaveEditedLog = async () => {
@@ -396,7 +391,7 @@ export default function LogScreen() {
       setEditingLog(null);
       setReward({
         title: 'Log updated',
-        body: `${editName || editingLog.name} · ${Math.round(calories)} kcal`,
+        body: `${editName || editingLog.name} · ${formatKcal(calories)}`,
         icon: 'create',
       });
     } catch {
@@ -409,7 +404,7 @@ export default function LogScreen() {
       const deleted = await removeLog(log.id);
       setReward({
         title: 'Log deleted',
-        body: `${log.name_vi ?? log.name} · ${Math.round(log.calories)} kcal`,
+        body: `${log.name_vi ?? log.name} · ${formatKcal(log.calories)}`,
         icon: 'trash',
       });
       if (deleted) {
@@ -440,10 +435,11 @@ export default function LogScreen() {
     }
 
     try {
-      await addActivity({ activity_type: activityType, duration_min: Math.round(mins) });
+      const minutes = safeRound(mins);
+      await addActivity({ activity_type: activityType, duration_min: minutes });
       setReward({
         title: 'screen.tabs.log.reward.activityTitle',
-        body: t('screen.tabs.log.reward.activityBody', { activity: ACTIVITY_LABELS[activityType], minutes: Math.round(mins) }),
+        body: t('screen.tabs.log.reward.activityBody', { activity: ACTIVITY_LABELS[activityType], minutes }),
         icon: 'checkmark-circle',
       });
     } catch {
@@ -720,19 +716,19 @@ export default function LogScreen() {
       <SurfaceCard style={styles.logSummaryCard}>
         <View style={styles.logSummaryItem}>
           <Text style={styles.logSummaryLabel} i18nKey="screen.tabs.log.text.004" />
-          <Text style={styles.logSummaryValue}>{loggedCalories}</Text>
+          <Text style={styles.logSummaryValue}>{formatKcal(loggedCalories).replace(' kcal', '')}</Text>
           <Text style={styles.logSummaryUnit} i18nKey="screen.tabs.log.text.005" />
         </View>
         <View style={styles.logSummaryDivider} />
         <View style={styles.logSummaryItem}>
           <Text style={styles.logSummaryLabel} i18nKey="screen.tabs.log.text.006" />
-          <Text style={[styles.logSummaryValue, netCalories > targetCalories && styles.logSummaryValueWarn]}>{netCalories}</Text>
-          <Text style={styles.logSummaryUnit}>/{targetCalories}</Text>
+          <Text style={[styles.logSummaryValue, netCalories > targetCalories && styles.logSummaryValueWarn]}>{formatKcal(netCalories).replace(' kcal', '')}</Text>
+          <Text style={styles.logSummaryUnit}>/{formatKcal(targetCalories).replace(' kcal', '')}</Text>
         </View>
         <View style={styles.logSummaryDivider} />
         <View style={styles.logSummaryItem}>
           <Text style={styles.logSummaryLabel} i18nKey="screen.tabs.log.text.007" />
-          <Text style={styles.logSummaryValueBurned}>-{burnedCalories}</Text>
+          <Text style={styles.logSummaryValueBurned}>-{formatKcal(burnedCalories).replace(' kcal', '')}</Text>
           <Text style={styles.logSummaryUnit} i18nKey="screen.tabs.log.text.005" />
         </View>
       </SurfaceCard>
@@ -767,21 +763,22 @@ export default function LogScreen() {
         {/* ---- Daily Logs by Meal ---- */}
         {(['breakfast', 'lunch', 'dinner', 'snack'] as MealType[]).map((meal) => {
           const logs = logsByMeal[meal] ?? [];
-          const total = logs.reduce((s, l) => s + l.calories, 0);
+          const total = logs.reduce((s, l) => s + safeNumber(l.calories), 0);
+          const mealTarget = safeNumber(perMealTargets[meal], 1);
           return (
             <SurfaceCard key={meal} style={styles.mealSection}>
               <View style={styles.mealHeader}>
                 <Text style={styles.mealLabel}>{MEAL_LABELS[meal]}</Text>
                 <View style={styles.mealHeaderRight}>
-                  {total > 0 && <Text style={styles.mealTotal}>{total} kcal</Text>}
-                  <Text style={styles.mealTarget}>/{perMealTargets[meal]}</Text>
+                  {total > 0 && <Text style={styles.mealTotal}>{formatKcal(total)}</Text>}
+                  <Text style={styles.mealTarget}>/{formatKcal(mealTarget).replace(' kcal', '')}</Text>
                 </View>
               </View>
               {total > 0 && (
                 <View style={styles.mealProgressBar}>
                   <View style={[styles.mealProgressFill, {
-                    width: `${Math.min(total / perMealTargets[meal] * 100, 100)}%` as any,
-                    backgroundColor: total > perMealTargets[meal] ? theme.colors.danger : theme.colors.success,
+                    width: `${Math.min(total / Math.max(mealTarget, 1) * 100, 100)}%` as any,
+                    backgroundColor: total > mealTarget ? theme.colors.danger : theme.colors.success,
                   }]} />
                 </View>
               )}
@@ -790,11 +787,11 @@ export default function LogScreen() {
                   <View style={styles.logInfo}>
                     <Text style={styles.logName}>{log.name_vi ?? log.name}</Text>
                     <Text style={styles.logDetail}>
-                      {log.estimated_grams}g · P:{Math.round(log.protein_g)}g C:{Math.round(log.carbs_g)}g F:{Math.round(log.fat_g)}g
+                      {formatMacro(log.estimated_grams)} · P:{formatMacro(log.protein_g)} C:{formatMacro(log.carbs_g)} F:{formatMacro(log.fat_g)}
                     </Text>
                   </View>
                   <View style={styles.logRight}>
-                    <Text style={styles.logCalorie}>{log.calories} kcal</Text>
+                    <Text style={styles.logCalorie}>{formatKcal(log.calories)}</Text>
                     <View style={styles.logActions}>
                       <TouchableOpacity onPress={() => openEditLog(log)}>
                         <Ionicons name="create-outline" size={18} color={theme.colors.accentCyan} />
@@ -854,7 +851,7 @@ export default function LogScreen() {
           )}
           {activityLogs.length > 0 && (
             <Text style={styles.activityBurned}>
-              Đã đốt: {activityLogs.reduce((s, a) => s + a.calories_burned, 0)} kcal
+              Đã đốt: {formatKcal(activityLogs.reduce((s, a) => s + safeNumber(a.calories_burned), 0))}
             </Text>
           )}
         </SurfaceCard>

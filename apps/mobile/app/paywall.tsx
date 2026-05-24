@@ -15,6 +15,13 @@ import { createThemedStyles, theme, useAppTheme } from '../components/theme';
 import { Text } from '../components/i18n-text';
 import { Alert } from '../components/i18n-alert';
 import { useI18n } from '../components/i18n';
+import { toFiniteNumber } from '../services/number-format';
+
+function formatPrice(value: unknown): string {
+  const price = toFiniteNumber(value);
+  if (price === null || price <= 0) return 'Miễn phí';
+  return `$${price.toFixed(2)}`;
+}
 
 export default function PaywallScreen() {
   useAppTheme();
@@ -91,7 +98,7 @@ export default function PaywallScreen() {
       >
         {tiers.map((tier) => {
           const tierInfo = SUBSCRIPTION_TIERS[tier];
-          const price = billingCycle === 'monthly' ? tierInfo.price_usd_monthly : tierInfo.price_usd_yearly;
+          const price = toFiniteNumber(billingCycle === 'monthly' ? tierInfo.price_usd_monthly : tierInfo.price_usd_yearly) ?? 0;
           const isCurrentTier = currentTier === tier;
           const isPopular = tierInfo.tag === 'Most Popular';
 
@@ -118,7 +125,7 @@ export default function PaywallScreen() {
 
               <View style={styles.priceContainer}>
                 <Text style={styles.price}>
-                  {price === 0 ? 'Miễn phí' : `$${price.toFixed(2)}`}
+                  {formatPrice(price)}
                 </Text>
                 {price > 0 && (
                   <Text style={styles.billingPeriod}>

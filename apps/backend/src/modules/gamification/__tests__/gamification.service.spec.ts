@@ -3,13 +3,13 @@ import { SupabaseService } from '../../../common/supabase/supabase.service';
 
 function today() {
   const d = new Date();
-  d.setHours(0, 0, 0, 0);
+  d.setUTCHours(12, 0, 0, 0);
   return d;
 }
 
 function daysAgo(n: number) {
   const d = today();
-  d.setDate(d.getDate() - n);
+  d.setUTCDate(d.getUTCDate() - n);
   return d.toISOString();
 }
 
@@ -18,6 +18,7 @@ function makeSumo(foodLogs: Array<{ logged_at: string }>, activityLogs: Array<{ 
     from: jest.fn().mockImplementation((table: string) => ({
       select: jest.fn().mockReturnThis(),
       eq: jest.fn().mockReturnThis(),
+      is: jest.fn().mockReturnThis(),
       gte: jest.fn().mockResolvedValue(
         table === 'food_logs'
           ? { data: foodLogs, error: null, count: foodCount }
@@ -41,6 +42,15 @@ describe('GamificationService.getSummary', () => {
     expect(summary.badges.every(b => !b.unlocked)).toBe(true);
   });
 
+  it('calculates a one-day streak when user logged today', async () => {
+    const supabase = makeSumo([{ logged_at: daysAgo(0) }], [], 1, 0);
+    const service = new GamificationService(supabase);
+    const summary = await service.getSummary('u1');
+
+    expect(summary.current_streak).toBe(1);
+    expect(summary.longest_streak).toBe(1);
+  });
+
   it('calculates current streak when user logged today and yesterday', async () => {
     const foodLogs = [
       { logged_at: daysAgo(0) },
@@ -53,6 +63,16 @@ describe('GamificationService.getSummary', () => {
 
     expect(summary.current_streak).toBe(3);
     expect(summary.longest_streak).toBe(3);
+  });
+
+  it('calculates a seven-day current streak from consecutive logs', async () => {
+    const foodLogs = Array.from({ length: 7 }, (_, index) => ({ logged_at: daysAgo(index) }));
+    const supabase = makeSumo(foodLogs, [], 7, 0);
+    const service = new GamificationService(supabase);
+    const summary = await service.getSummary('u1');
+
+    expect(summary.current_streak).toBe(7);
+    expect(summary.longest_streak).toBe(7);
   });
 
   it('calculates streak correctly when user missed today', async () => {
@@ -81,6 +101,31 @@ describe('GamificationService.getSummary', () => {
 
     expect(summary.current_streak).toBe(1);
     expect(summary.longest_streak).toBe(2);
+  });
+
+  it('resets current streak to zero when latest log is older than yesterday', async () => {
+    const foodLogs = [
+      { logged_at: daysAgo(2) },
+      { logged_at: daysAgo(3) },
+    ];
+    const supabase = makeSumo(foodLogs, [], 2, 0);
+    const service = new GamificationService(supabase);
+    const summary = await service.getSummary('u1');
+
+    expect(summary.current_streak).toBe(0);
+    expect(summary.longest_streak).toBe(2);
+  });
+
+  it('maps late-night UTC logs to the client local day before calculating streak', async () => {
+    const now = new Date();
+    const todayLocalKey = new Date(now.getTime() - (-420 * 60_000)).toISOString().slice(0, 10);
+    const [year, month, day] = todayLocalKey.split('-').map(Number);
+    const lateNightUtc = new Date(Date.UTC(year, month - 1, day - 1, 18, 30, 0)).toISOString();
+    const supabase = makeSumo([{ logged_at: lateNightUtc }], [], 1, 0);
+    const service = new GamificationService(supabase);
+    const summary = await service.getSummary('u1', -420);
+
+    expect(summary.current_streak).toBe(1);
   });
 
   it('unlocks first_log badge when food_logs count >= 1', async () => {
@@ -122,6 +167,7 @@ describe('GamificationService.getSummary', () => {
       from: jest.fn().mockImplementation((table: string) => ({
         select: jest.fn().mockReturnThis(),
         eq: jest.fn().mockReturnThis(),
+        is: jest.fn().mockReturnThis(),
         gte: jest.fn().mockResolvedValue(
           table === 'food_logs'
             ? { data: null, error: new Error('food query fail') }
@@ -138,6 +184,7 @@ describe('GamificationService.getSummary', () => {
       from: jest.fn().mockImplementation((table: string) => ({
         select: jest.fn().mockReturnThis(),
         eq: jest.fn().mockReturnThis(),
+        is: jest.fn().mockReturnThis(),
         gte: jest.fn().mockResolvedValue(
           table === 'activity_logs'
             ? { data: null, error: new Error('activity query fail') }

@@ -11,6 +11,7 @@ import { UiInput } from '../../components/ui-input';
 import { createThemedStyles, theme, useAppTheme } from '../../components/theme';
 import { useLogStore } from '../../store/log.store';
 import { loadPresets, savePreset as savePresetService, removePreset as removePresetService } from '../../services/presets.service';
+import { formatNumberVi } from '../../services/number-format';
 import { Text } from '../../components/i18n-text';
 import { Alert } from '../../components/i18n-alert';
 
@@ -171,7 +172,7 @@ export default function StrengthLogScreen() {
           <Text style={styles.statLabel} i18nKey="screen.tabs.strength.text.002" />
         </View>
         <View style={styles.statTileWide}>
-          <Text style={styles.statValue}>{Math.round(stats.totalVolume).toLocaleString('vi-VN')} kg</Text>
+          <Text style={styles.statValue}>{formatNumberVi(stats.totalVolume)} kg</Text>
           <Text style={styles.statLabel} i18nKey="screen.tabs.strength.text.003" />
         </View>
       </View>

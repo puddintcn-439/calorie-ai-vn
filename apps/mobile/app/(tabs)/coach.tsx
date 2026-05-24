@@ -18,6 +18,7 @@ import { VisualHeroCard } from '../../components/visual-hero-card';
 import { createThemedStyles, theme, useAppTheme } from '../../components/theme';
 import { Text } from '../../components/i18n-text';
 import { Locale, useI18n } from '../../components/i18n';
+import { formatPercent, safeRound, toFiniteNumber } from '../../services/number-format';
 
 const coachHeroIllustration = require('../../assets/images/coach-hero.jpg') as number;
 
@@ -170,19 +171,13 @@ function localizeInsightTextForLocale(text: string | null | undefined, locale: L
 void getInsightTypeLabel;
 void localizeInsightText;
 
-function finiteNumber(value: unknown): number | null {
-  const numeric = Number(value);
-  return Number.isFinite(numeric) ? numeric : null;
-}
-
 function formatSummaryNumber(value: unknown, fallback = '--') {
-  const numeric = finiteNumber(value);
-  return numeric === null ? fallback : String(Math.round(numeric));
+  const numeric = toFiniteNumber(value);
+  return numeric === null ? fallback : String(safeRound(numeric));
 }
 
 function formatSummaryPercent(value: unknown) {
-  const numeric = finiteNumber(value);
-  return numeric === null ? '--' : `${Math.round(numeric)}%`;
+  return formatPercent(value);
 }
 
 function getCoachErrorMessage(error: unknown): string {

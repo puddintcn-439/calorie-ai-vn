@@ -635,7 +635,7 @@ export default function ProfileScreen() {
   const highlightAnim = React.useRef(new Animated.Value(0)).current;
   const highlightLoopRef = React.useRef<Animated.CompositeAnimation | null>(null);
   const useNativeHighlightDriver = Platform.OS !== 'web';
-  const basicIncomplete = !profile.weight_kg || !profile.height_cm || !profile.age;
+  const basicIncomplete = !profile.weight_kg || !profile.height_cm || !profile.age || !profile.gender;
   const isDesktop = width >= 900;
   const selectedHealthFlags = normaliseHealthFlags(profile.health_flags);
   const activeGoalPlan = profile.goal_plan ?? null;
@@ -693,11 +693,20 @@ export default function ProfileScreen() {
     {
       key: 'basic',
       label: 'Thể trạng',
-      detail: profile.weight_kg && profile.height_cm && profile.age
-        ? `${profile.weight_kg} kg · ${profile.height_cm} cm · ${profile.age} tuổi`
-        : 'Thiếu số đo chính',
-      done: Boolean(profile.weight_kg && profile.height_cm && profile.age),
+      detail: profile.weight_kg && profile.height_cm && profile.age && profile.gender
+        ? `${profile.weight_kg} kg · ${profile.height_cm} cm · ${profile.age} tuổi · ${profile.gender === 'male' ? 'Nam' : 'Nữ'}`
+        : 'Thiếu số đo hoặc giới tính',
+      done: Boolean(profile.weight_kg && profile.height_cm && profile.age && profile.gender),
       icon: 'monitor-weight',
+    },
+    {
+      key: 'safety',
+      label: 'An toàn',
+      detail: Array.isArray(profile.health_flags)
+        ? (selectedHealthFlags.length > 0 ? `${selectedHealthFlags.length} yếu tố cần lưu ý` : 'Đã xác nhận không có yếu tố rủi ro')
+        : 'Chưa xác nhận yếu tố sức khỏe',
+      done: Array.isArray(profile.health_flags),
+      icon: 'health-and-safety',
     },
     {
       key: 'goal',
@@ -727,10 +736,13 @@ export default function ProfileScreen() {
     profile.age,
     profile.daily_calorie_target,
     profile.goal,
+    profile.gender,
+    profile.health_flags,
     profile.height_cm,
     profile.weight_kg,
     reminders.allow_push_notifications,
     roadmap.length,
+    selectedHealthFlags.length,
   ]);
   const completedSetupCount = setupSteps.filter((step) => step.done).length;
   const setupProgressPct = Math.round((completedSetupCount / setupSteps.length) * 100);
@@ -742,7 +754,7 @@ export default function ProfileScreen() {
   const userWeight = profile.weight_kg ?? 65;
 
   const openSetupStep = (key: typeof setupSteps[number]['key']) => {
-    if (key === 'basic') {
+    if (key === 'basic' || key === 'safety') {
       setBasicCollapsed(false);
       setAssessmentCollapsed(false);
       return;

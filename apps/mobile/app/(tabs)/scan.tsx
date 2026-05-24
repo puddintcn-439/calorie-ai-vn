@@ -21,6 +21,7 @@ import {
 import { useLogStore } from '../../store/log.store';
 import { useContextStore } from '../../store/context.store';
 import { apiClient } from '../../services/api';
+import { formatKcal, formatMacro, formatPercent, roundTo, safeNumber, safePositiveNumber, safeRound } from '../../services/number-format';
 
 const IMAGE_MEDIA_TYPES = ['images'] as any;
 import { telemetryService } from '../../services/telemetry.service';
@@ -72,10 +73,10 @@ const PRIMARY_INPUT_MODES: InputMode[] = ['camera', 'text', 'search'];
 const SECONDARY_INPUT_MODES: InputMode[] = ['gallery', 'voice', 'receipt', 'barcode'];
 
 function formatCalorieRange(min: number, max: number): string {
-  const roundedMin = Math.round(min);
-  const roundedMax = Math.round(max);
+  const roundedMin = safeRound(min);
+  const roundedMax = safeRound(max);
   if (roundedMin === roundedMax) {
-    return `${roundedMin} kcal`;
+    return formatKcal(roundedMin);
   }
   return `${roundedMin}-${roundedMax} kcal`;
 }
@@ -154,12 +155,12 @@ export default function ScanScreen() {
   const { addLog, removeLog, saveMeal } = useLogStore();
   // Always prefer editableItems if we have a scan result, even if empty
   const currentItems = scanResult ? editableItems : [];
-  const totalCalories = currentItems.reduce((s, i) => s + i.calories, 0);
-  const totalCaloriesMin = currentItems.reduce((s, i) => s + (i.calories_min ?? i.calories), 0);
-  const totalCaloriesMax = currentItems.reduce((s, i) => s + (i.calories_max ?? i.calories), 0);
-  const totalProtein = currentItems.reduce((s, i) => s + i.protein_g, 0);
-  const totalCarbs = currentItems.reduce((s, i) => s + i.carbs_g, 0);
-  const totalFat = currentItems.reduce((s, i) => s + i.fat_g, 0);
+  const totalCalories = currentItems.reduce((s, i) => s + safeNumber(i.calories), 0);
+  const totalCaloriesMin = currentItems.reduce((s, i) => s + safeNumber(i.calories_min ?? i.calories), 0);
+  const totalCaloriesMax = currentItems.reduce((s, i) => s + safeNumber(i.calories_max ?? i.calories), 0);
+  const totalProtein = currentItems.reduce((s, i) => s + safeNumber(i.protein_g), 0);
+  const totalCarbs = currentItems.reduce((s, i) => s + safeNumber(i.carbs_g), 0);
+  const totalFat = currentItems.reduce((s, i) => s + safeNumber(i.fat_g), 0);
 
   const applyScanResult = (result: AIScanResponse) => {
     const fallbackReason = getAiFallbackReason(result);
@@ -180,7 +181,7 @@ export default function ScanScreen() {
     setEditableItems(result.items.map((item) => ({ ...item })));
     
     // Flag low confidence scans for telemetry
-    if (result.ai_confidence < 0.6) {
+    if (safeNumber(result.ai_confidence) < 0.6) {
       const summary = result.items.map(i => i.name_vi ?? i.name).join(', ');
       telemetryService.emitLowConfidenceFlag(summary, result.ai_confidence);
     }
@@ -189,22 +190,22 @@ export default function ScanScreen() {
   const updateItemGrams = (index: number, nextGramsRaw: number) => {
     setEditableItems((prev) => {
       if (!prev[index]) return prev;
-      const nextGrams = Math.max(5, Math.round(nextGramsRaw));
+      const nextGrams = Math.max(5, safeRound(nextGramsRaw));
       const old = prev[index];
-      const ratio = nextGrams / Math.max(1, old.estimated_grams);
+      const ratio = nextGrams / Math.max(1, safePositiveNumber(old.estimated_grams, 1));
       const updated: AIDetectedItem = {
         ...old,
         estimated_grams: nextGrams,
-        calories: Math.max(0, Math.round(old.calories * ratio)),
-        calories_min: old.calories_min != null ? Math.max(0, Math.round(old.calories_min * ratio)) : undefined,
-        calories_max: old.calories_max != null ? Math.max(0, Math.round(old.calories_max * ratio)) : undefined,
-        protein_g: Number((old.protein_g * ratio).toFixed(1)),
-        carbs_g: Number((old.carbs_g * ratio).toFixed(1)),
-        fat_g: Number((old.fat_g * ratio).toFixed(1)),
-        fiber_g: old.fiber_g != null ? Number((old.fiber_g * ratio).toFixed(1)) : undefined,
-        sugar_g: old.sugar_g != null ? Number((old.sugar_g * ratio).toFixed(1)) : undefined,
-        saturated_fat_g: old.saturated_fat_g != null ? Number((old.saturated_fat_g * ratio).toFixed(1)) : undefined,
-        sodium_mg: old.sodium_mg != null ? Math.round(old.sodium_mg * ratio) : undefined,
+        calories: Math.max(0, safeRound(safeNumber(old.calories) * ratio)),
+        calories_min: old.calories_min != null ? Math.max(0, safeRound(safeNumber(old.calories_min) * ratio)) : undefined,
+        calories_max: old.calories_max != null ? Math.max(0, safeRound(safeNumber(old.calories_max) * ratio)) : undefined,
+        protein_g: roundTo(safeNumber(old.protein_g) * ratio, 1),
+        carbs_g: roundTo(safeNumber(old.carbs_g) * ratio, 1),
+        fat_g: roundTo(safeNumber(old.fat_g) * ratio, 1),
+        fiber_g: old.fiber_g != null ? roundTo(safeNumber(old.fiber_g) * ratio, 1) : undefined,
+        sugar_g: old.sugar_g != null ? roundTo(safeNumber(old.sugar_g) * ratio, 1) : undefined,
+        saturated_fat_g: old.saturated_fat_g != null ? roundTo(safeNumber(old.saturated_fat_g) * ratio, 1) : undefined,
+        sodium_mg: old.sodium_mg != null ? safeRound(safeNumber(old.sodium_mg) * ratio) : undefined,
       };
       telemetryService.emitPortionAdjustment(
         old.name_vi ?? old.name,
@@ -551,10 +552,10 @@ export default function ScanScreen() {
       }
       setReward({
         title: 'Đã log bữa ăn',
-        body: `${currentItems.length} món · ${Math.round(totalCalories)} kcal`,
+        body: `${currentItems.length} món · ${formatKcal(totalCalories)}`,
         icon: 'checkmark-circle',
       });
-      promptAfterLog(createdLogs, `${currentItems.length} items · ${Math.round(totalCalories)} kcal`);
+      promptAfterLog(createdLogs, `${currentItems.length} items · ${formatKcal(totalCalories)}`);
     } catch { Alert.alert('screen.tabs.scan.alert.025', 'screen.tabs.scan.alert.026'); }
     finally { setIsLogging(false); }
   };
@@ -594,7 +595,7 @@ export default function ScanScreen() {
     try {
       const result = (await apiClient.get(`/food/barcode/${barcode}`)).data;
       setBarcodeResult(result);
-      setBarcodeGrams(String(Math.round(result.serving_size_g ?? 100)));
+      setBarcodeGrams(String(safeRound(result.serving_size_g ?? 100)));
     }
     catch (err) { 
       console.error('handleBarcodeScan error', err);
@@ -658,22 +659,22 @@ export default function ScanScreen() {
       const created = await addLog({
         name: barcodeResult.name_vi ?? barcodeResult.name,
         meal_type: selectedMeal,
-        calories: Math.round((barcodeResult.calories_per_100g ?? 0) * ratio),
-        protein_g: Number(((barcodeResult.protein_g ?? 0) * ratio).toFixed(1)),
-        carbs_g: Number(((barcodeResult.carbs_g ?? 0) * ratio).toFixed(1)),
-        fat_g: Number(((barcodeResult.fat_g ?? 0) * ratio).toFixed(1)),
-        fiber_g: barcodeResult.fiber_g != null ? Number((barcodeResult.fiber_g * ratio).toFixed(1)) : undefined,
-        sugar_g: barcodeResult.sugar_g != null ? Number((barcodeResult.sugar_g * ratio).toFixed(1)) : undefined,
-        saturated_fat_g: barcodeResult.saturated_fat_g != null ? Number((barcodeResult.saturated_fat_g * ratio).toFixed(1)) : undefined,
-        sodium_mg: barcodeResult.sodium_mg != null ? Math.round(barcodeResult.sodium_mg * ratio) : undefined,
+        calories: safeRound(safeNumber(barcodeResult.calories_per_100g) * ratio),
+        protein_g: roundTo(safeNumber(barcodeResult.protein_g) * ratio, 1),
+        carbs_g: roundTo(safeNumber(barcodeResult.carbs_g) * ratio, 1),
+        fat_g: roundTo(safeNumber(barcodeResult.fat_g) * ratio, 1),
+        fiber_g: barcodeResult.fiber_g != null ? roundTo(safeNumber(barcodeResult.fiber_g) * ratio, 1) : undefined,
+        sugar_g: barcodeResult.sugar_g != null ? roundTo(safeNumber(barcodeResult.sugar_g) * ratio, 1) : undefined,
+        saturated_fat_g: barcodeResult.saturated_fat_g != null ? roundTo(safeNumber(barcodeResult.saturated_fat_g) * ratio, 1) : undefined,
+        sodium_mg: barcodeResult.sodium_mg != null ? safeRound(safeNumber(barcodeResult.sodium_mg) * ratio) : undefined,
         estimated_grams: grams,
       });
       setReward({
         title: 'Đã log sản phẩm',
-        body: `${barcodeResult.name_vi ?? barcodeResult.name} · ${Math.round((barcodeResult.calories_per_100g ?? 0) * ratio)} kcal`,
+        body: `${barcodeResult.name_vi ?? barcodeResult.name} · ${formatKcal(safeNumber(barcodeResult.calories_per_100g) * ratio)}`,
         icon: 'checkmark-circle',
       });
-      promptAfterLog([created], `${barcodeResult.name_vi ?? barcodeResult.name} · ${Math.round((barcodeResult.calories_per_100g ?? 0) * ratio)} kcal`);
+      promptAfterLog([created], `${barcodeResult.name_vi ?? barcodeResult.name} · ${formatKcal(safeNumber(barcodeResult.calories_per_100g) * ratio)}`);
     } catch { Alert.alert('screen.tabs.scan.alert.031', 'screen.tabs.scan.alert.032'); }
     finally { setIsLogging(false); }
   };
@@ -686,7 +687,7 @@ export default function ScanScreen() {
       const res = await apiClient.get<Food[]>(`/food/search?q=${encodeURIComponent(q)}`);
       const foods = res.data ?? [];
       setSearchResults(foods);
-      setSearchGramsById(Object.fromEntries(foods.map((food) => [food.id, String(Math.round(food.serving_size_g ?? 100))])));
+      setSearchGramsById(Object.fromEntries(foods.map((food) => [food.id, String(safeRound(food.serving_size_g ?? 100))])));
     } catch {
       Alert.alert('screen.tabs.scan.alert.033', 'screen.tabs.scan.alert.034');
     } finally {
@@ -707,22 +708,22 @@ export default function ScanScreen() {
       const created = await addLog({
         name: food.name_vi ?? food.name,
         meal_type: selectedMeal,
-        calories: Math.round((food.calories_per_100g ?? 0) * ratio),
-        protein_g: Number(((food.protein_g ?? 0) * ratio).toFixed(1)),
-        carbs_g: Number(((food.carbs_g ?? 0) * ratio).toFixed(1)),
-        fat_g: Number(((food.fat_g ?? 0) * ratio).toFixed(1)),
-        fiber_g: food.fiber_g != null ? Number((food.fiber_g * ratio).toFixed(1)) : undefined,
-        sugar_g: food.sugar_g != null ? Number((food.sugar_g * ratio).toFixed(1)) : undefined,
-        saturated_fat_g: food.saturated_fat_g != null ? Number((food.saturated_fat_g * ratio).toFixed(1)) : undefined,
-        sodium_mg: food.sodium_mg != null ? Math.round(food.sodium_mg * ratio) : undefined,
+        calories: safeRound(safeNumber(food.calories_per_100g) * ratio),
+        protein_g: roundTo(safeNumber(food.protein_g) * ratio, 1),
+        carbs_g: roundTo(safeNumber(food.carbs_g) * ratio, 1),
+        fat_g: roundTo(safeNumber(food.fat_g) * ratio, 1),
+        fiber_g: food.fiber_g != null ? roundTo(safeNumber(food.fiber_g) * ratio, 1) : undefined,
+        sugar_g: food.sugar_g != null ? roundTo(safeNumber(food.sugar_g) * ratio, 1) : undefined,
+        saturated_fat_g: food.saturated_fat_g != null ? roundTo(safeNumber(food.saturated_fat_g) * ratio, 1) : undefined,
+        sodium_mg: food.sodium_mg != null ? safeRound(safeNumber(food.sodium_mg) * ratio) : undefined,
         estimated_grams: grams,
       });
       setReward({
         title: 'Đã log món ăn',
-        body: `${food.name_vi ?? food.name} · ${Math.round((food.calories_per_100g ?? 0) * ratio)} kcal`,
+        body: `${food.name_vi ?? food.name} · ${formatKcal(safeNumber(food.calories_per_100g) * ratio)}`,
         icon: 'checkmark-circle',
       });
-      promptAfterLog([created], `${food.name_vi ?? food.name} · ${Math.round((food.calories_per_100g ?? 0) * ratio)} kcal`);
+      promptAfterLog([created], `${food.name_vi ?? food.name} · ${formatKcal(safeNumber(food.calories_per_100g) * ratio)}`);
     } catch {
       Alert.alert('screen.tabs.scan.alert.035', 'screen.tabs.scan.alert.036');
     } finally { setIsLogging(false); }
@@ -832,19 +833,19 @@ export default function ScanScreen() {
             {searchResults.map((food) => {
               const grams = Number(searchGramsById[food.id] ?? food.serving_size_g ?? 100);
               const ratio = Number.isFinite(grams) && grams > 0 ? grams / 100 : 1;
-              const kcal = Math.round((food.calories_per_100g ?? 0) * ratio);
+              const kcal = safeRound(safeNumber(food.calories_per_100g) * ratio);
               return (
               <SurfaceCard key={food.id} style={styles.searchItemCard}>
                 <View style={styles.resultHeader}>
                   <Text style={styles.resultName}>{food.name_vi ?? food.name}</Text>
-                  <Text style={styles.resultCalorie}>{kcal} kcal</Text>
+                  <Text style={styles.resultCalorie}>{formatKcal(kcal)}</Text>
                 </View>
-                <Text style={styles.resultDetail}>Khẩu phần mặc định: {food.serving_size_g ?? 100}g</Text>
+                <Text style={styles.resultDetail}>Khẩu phần mặc định: {formatMacro(food.serving_size_g ?? 100)}</Text>
                 <View style={styles.portionRow}>
                   <Text style={styles.portionLabel}>Grams</Text>
                   <TextInput
                     style={styles.portionInput}
-                    value={searchGramsById[food.id] ?? String(Math.round(food.serving_size_g ?? 100))}
+                    value={searchGramsById[food.id] ?? String(safeRound(food.serving_size_g ?? 100))}
                     onChangeText={(value) => setSearchGramsById((prev) => ({ ...prev, [food.id]: value }))}
                     keyboardType="numeric"
                     placeholder="100"
@@ -852,7 +853,7 @@ export default function ScanScreen() {
                   />
                 </View>
                 <Text style={styles.resultMacros}>
-                  P: {Number(((food.protein_g ?? 0) * ratio).toFixed(1))}g  C: {Number(((food.carbs_g ?? 0) * ratio).toFixed(1))}g  F: {Number(((food.fat_g ?? 0) * ratio).toFixed(1))}g
+                  P: {formatMacro(roundTo(safeNumber(food.protein_g) * ratio, 1))}  C: {formatMacro(roundTo(safeNumber(food.carbs_g) * ratio, 1))}  F: {formatMacro(roundTo(safeNumber(food.fat_g) * ratio, 1))}
                 </Text>
                 <TouchableOpacity style={[styles.saveButton, isLogging && styles.buttonDisabled]} onPress={() => handleLogSearchedFood(food)} disabled={isLogging}>
                   <Text style={styles.saveButtonText}>{isLogging ? 'Logging...' : 'Log food'}</Text>
@@ -927,9 +928,9 @@ export default function ScanScreen() {
                 return (
                   <>
                     <Text style={styles.totalLabel} i18nKey="screen.tabs.scan.text.012" />
-                    <Text style={styles.totalCalorie}>{Math.round((barcodeResult.calories_per_100g ?? 0) * ratio)} kcal</Text>
+                    <Text style={styles.totalCalorie}>{formatKcal(safeNumber(barcodeResult.calories_per_100g) * ratio)}</Text>
                     <Text style={styles.totalMacros}>
-                      P: {Number(((barcodeResult.protein_g ?? 0) * ratio).toFixed(1))}g  C: {Number(((barcodeResult.carbs_g ?? 0) * ratio).toFixed(1))}g  F: {Number(((barcodeResult.fat_g ?? 0) * ratio).toFixed(1))}g
+                      P: {formatMacro(roundTo(safeNumber(barcodeResult.protein_g) * ratio, 1))}  C: {formatMacro(roundTo(safeNumber(barcodeResult.carbs_g) * ratio, 1))}  F: {formatMacro(roundTo(safeNumber(barcodeResult.fat_g) * ratio, 1))}
                     </Text>
                   </>
                 );
@@ -1115,16 +1116,16 @@ export default function ScanScreen() {
         {/* ── AI Scan Results ── */}
         {scanResult && !isScanning && (
           <View>
-            {scanResult.ai_confidence < 0.6 && (
+            {safeNumber(scanResult.ai_confidence) < 0.6 && (
               <SurfaceCard style={styles.lowConfidenceBanner}>
                 <Text style={styles.lowConfidenceTitle} i18nKey="screen.tabs.scan.text.024" />
                 <Text style={styles.lowConfidenceBody}>
-                  Độ tin cậy tổng thể {Math.round(scanResult.ai_confidence * 100)}%. Kiểm tra kỹ từng món và điều chỉnh nếu cần trước khi lưu.
+                  Độ tin cậy tổng thể {formatPercent(safeNumber(scanResult.ai_confidence) * 100)}. Kiểm tra kỹ từng món và điều chỉnh nếu cần trước khi lưu.
                 </Text>
               </SurfaceCard>
             )}
             <Text style={styles.sectionTitle}>
-              Kết quả ({Math.round(scanResult.ai_confidence * 100)}% độ tin cậy)
+              Kết quả ({formatPercent(safeNumber(scanResult.ai_confidence) * 100)} độ tin cậy)
             </Text>
             <MealPicker selected={selectedMeal} onSelect={setSelectedMeal} />
             {currentItems.map((item, i) => (
@@ -1147,9 +1148,9 @@ export default function ScanScreen() {
             ) : null}
             <SurfaceCard style={styles.totalCard}>
               <Text style={styles.totalLabel} i18nKey="screen.tabs.scan.text.026" />
-              <Text style={styles.totalCalorie}>{Math.round(totalCalories)} kcal</Text>
+              <Text style={styles.totalCalorie}>{formatKcal(totalCalories)}</Text>
               <Text style={styles.totalRange}>Khoảng: {formatCalorieRange(totalCaloriesMin, totalCaloriesMax)}</Text>
-              <Text style={styles.totalMacros}>P: {Math.round(totalProtein)}g  C: {Math.round(totalCarbs)}g  F: {Math.round(totalFat)}g</Text>
+              <Text style={styles.totalMacros}>P: {formatMacro(totalProtein)}  C: {formatMacro(totalCarbs)}  F: {formatMacro(totalFat)}</Text>
             </SurfaceCard>
             <TouchableOpacity style={[styles.saveButton, isLogging && styles.buttonDisabled]} onPress={handleSaveLog} disabled={isLogging}>
               <Text style={styles.saveButtonText}>{isLogging ? 'Logging...' : 'Log meal'}</Text>
@@ -1266,19 +1267,20 @@ function ScanResultItem({
   const [editingName, setEditingName] = useState(false);
   const [nameInput, setNameInput] = useState(item.name_vi ?? item.name);
 
+  const confidence = safeNumber(item.confidence);
   const confidenceColor =
-    item.confidence >= 0.8 ? theme.colors.success : item.confidence >= 0.6 ? theme.colors.warning : theme.colors.danger;
+    confidence >= 0.8 ? theme.colors.success : confidence >= 0.6 ? theme.colors.warning : theme.colors.danger;
   const confidenceLabel =
-    item.confidence >= 0.8 ? 'Cao' : item.confidence >= 0.6 ? 'Trung bình' : 'Thấp';
+    confidence >= 0.8 ? 'Cao' : confidence >= 0.6 ? 'Trung bình' : 'Thấp';
 
   return (
     <SurfaceCard style={[
       styles.resultItem,
-      item.confidence < 0.6 && styles.resultItemLowConf,
+      confidence < 0.6 && styles.resultItemLowConf,
     ]}>
       <View style={styles.confidenceRow}>
         <Text style={[styles.confidenceBadge, { color: confidenceColor }]}>
-          ● {Math.round(item.confidence * 100)}% {confidenceLabel}
+          ● {formatPercent(confidence * 100)} {confidenceLabel}
         </Text>
         <TouchableOpacity onPress={onRemove} style={styles.removeBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
           <Text style={styles.removeBtnText} i18nKey="screen.tabs.scan.text.032" />
@@ -1312,14 +1314,14 @@ function ScanResultItem({
             <Text style={styles.editHint}>✏️</Text>
           </TouchableOpacity>
           <View style={styles.calorieColumn}>
-            <Text style={styles.resultCalorie}>{item.calories} kcal</Text>
+            <Text style={styles.resultCalorie}>{formatKcal(item.calories)}</Text>
             <Text style={styles.resultRange}>{formatCalorieRange(item.calories_min ?? item.calories, item.calories_max ?? item.calories)}</Text>
           </View>
         </View>
       )}
 
-      <Text style={styles.resultDetail}>{item.quantity} {item.unit} (~{item.estimated_grams}g)</Text>
-      <Text style={styles.resultMacros}>P: {Math.round(item.protein_g)}g  C: {Math.round(item.carbs_g)}g  F: {Math.round(item.fat_g)}g</Text>
+      <Text style={styles.resultDetail}>{safeNumber(item.quantity)} {item.unit} (~{formatMacro(item.estimated_grams)})</Text>
+      <Text style={styles.resultMacros}>P: {formatMacro(item.protein_g)}  C: {formatMacro(item.carbs_g)}  F: {formatMacro(item.fat_g)}</Text>
       <View style={styles.adjustRow}>
         <TouchableOpacity style={styles.adjustBtn} onPress={onDecrease}>
           <Text style={styles.adjustBtnText} i18nKey="screen.tabs.scan.text.033" />

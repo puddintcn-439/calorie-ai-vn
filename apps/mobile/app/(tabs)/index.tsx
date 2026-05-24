@@ -9,7 +9,7 @@ import {
 import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import Svg, { Circle } from 'react-native-svg';
-import { ACTIVITY_MET, ActivityPreference, ActivityType, FoodLog, GoalPlan, MealType, User, UserGoal } from '@calorie-ai/types';
+import { ACTIVITY_MET, ActivityLog, ActivityPreference, ActivityType, FoodLog, GoalPlan, MealType, User, UserGoal } from '@calorie-ai/types';
 import { BodyText, Eyebrow, ScreenShell, SurfaceCard } from '../../components/ui-shell';
 import { EmptyState } from '../../components/empty-state';
 import { createThemedStyles, theme, useAppTheme } from '../../components/theme';
@@ -19,6 +19,7 @@ import { useCalorieTargetStore } from '../../store/calorie-target.store';
 import { useInsightsStore } from '../../store/insights.store';
 import { apiClient } from '../../services/api';
 import { estimateExerciseCalories } from '../../services/exercise.service';
+import { formatNumberVi, safeNumber, safePositiveNumber, toFiniteNumber } from '../../services/number-format';
 import { AnimatedIonicon } from '../../components/animated-icon';
 import { RewardToast, RewardToastData } from '../../components/reward-toast';
 import { Text } from '../../components/i18n-text';
@@ -57,24 +58,8 @@ type DailyFocusItem = {
   progress: number;
 };
 
-function toFiniteNumber(value: unknown): number | null {
-  if (value === null || value === undefined || value === '') return null;
-  const numeric = Number(value);
-  return Number.isFinite(numeric) ? numeric : null;
-}
-
-function safeNumber(value: unknown, fallback = 0): number {
-  return toFiniteNumber(value) ?? fallback;
-}
-
-function safePositiveNumber(value: unknown, fallback: number): number {
-  const numeric = toFiniteNumber(value);
-  return numeric !== null && numeric > 0 ? numeric : fallback;
-}
-
 function formatNumber(value: unknown, fallback = '0') {
-  const numeric = toFiniteNumber(value);
-  return numeric === null ? fallback : Math.round(numeric).toLocaleString('vi-VN');
+  return formatNumberVi(value, fallback);
 }
 
 function groupLogsByMeal(logs: FoodLog[]) {
@@ -352,7 +337,7 @@ const QUICK_GOAL_OPTIONS: QuickGoalOption[] = [
   { key: 'gain_0.25', label: 'Tăng 0.25 kg/tuần', type: 'gain', kgPerWeek: 0.25 },
 ];
 
-type DashboardProfileMeta = Pick<User, 'age' | 'height_cm' | 'weight_kg' | 'health_flags' | 'activity_level' | 'goal_plan' | 'daily_calorie_target' | 'goal'>;
+type DashboardProfileMeta = Pick<User, 'age' | 'gender' | 'height_cm' | 'weight_kg' | 'health_flags' | 'activity_level' | 'goal_plan' | 'daily_calorie_target' | 'goal'>;
 
 function goalFromQuickOption(type: QuickGoalOption['type']): UserGoal {
   if (type === 'loss') return 'lose_weight';
@@ -386,6 +371,27 @@ function statusLabel(status?: GoalPlan['safety_status']) {
   if (status === 'maintenance_only') return 'Maintenance';
   if (status === 'incomplete') return 'Thiếu hồ sơ';
   return 'Đang dùng';
+}
+
+function getMissingProfileFields(profile: DashboardProfileMeta): string[] {
+  const missing: string[] = [];
+  if (!safePositiveNumber(profile.age, 0)) missing.push('tuổi');
+  if (!profile.gender) missing.push('giới tính');
+  if (!safePositiveNumber(profile.height_cm, 0)) missing.push('chiều cao');
+  if (!safePositiveNumber(profile.weight_kg, 0)) missing.push('cân nặng');
+  if (!profile.goal) missing.push('mục tiêu');
+  if (!profile.activity_level) missing.push('mức vận động');
+  if (!safePositiveNumber(profile.daily_calorie_target, 0) && !safePositiveNumber(profile.goal_plan?.computed_daily_calorie_target, 0)) {
+    missing.push('mục tiêu kcal');
+  }
+  return missing;
+}
+
+function getDisplayStreak(summary: { current_streak?: unknown } | null | undefined, logs: FoodLog[], activityLogs: ActivityLog[]) {
+  const currentStreak = safeNumber(summary?.current_streak);
+  const hasFoodLogToday = logs.some((log) => !log.deleted_at && !!log.logged_at);
+  const hasActivityLogToday = activityLogs.some((log) => !!log.logged_at);
+  return Math.max(currentStreak, hasFoodLogToday || hasActivityLogToday ? 1 : 0);
 }
 
 type MovementPlan = {
@@ -579,6 +585,7 @@ export default function DashboardScreen() {
     const res = await apiClient.get<User>('/user/profile');
     setProfileMeta({
       age: res.data.age,
+      gender: res.data.gender,
       height_cm: res.data.height_cm,
       weight_kg: res.data.weight_kg,
       health_flags: res.data.health_flags,
@@ -609,6 +616,7 @@ export default function DashboardScreen() {
 
   const logs = dailyLog?.logs ?? [];
   const logsByMeal = useMemo(() => groupLogsByMeal(logs), [logs]);
+  const displayStreak = getDisplayStreak(summary, logs, activityLogs);
   const consumed = safeNumber(dailyLog?.total_calories);
   const burned = activityLogs.reduce((sum, item) => sum + safeNumber(item.calories_burned), 0);
   const activityMinutes = activityLogs.reduce((sum, item) => sum + safeNumber(item.duration_min), 0);
@@ -687,17 +695,25 @@ export default function DashboardScreen() {
 
     const flagsKnown = Array.isArray(profileMeta.health_flags);
     const flags = flagsKnown ? profileMeta.health_flags ?? [] : [];
-    const missingBasics = !safePositiveNumber(profileMeta.age, 0)
-      || !safePositiveNumber(profileMeta.height_cm, 0)
-      || !safePositiveNumber(profileMeta.weight_kg, 0);
+    const missingFields = getMissingProfileFields(profileMeta);
 
-    if (missingBasics || !flagsKnown) {
+    if (missingFields.length > 0) {
       return {
         tone: 'setup' as const,
         icon: 'shield-checkmark' as const,
-        title: 'Hoàn thiện hồ sơ an toàn',
-        body: 'Thêm tuổi, số đo và yếu tố sức khỏe để app giữ mục tiêu bảo thủ khi cần.',
-        action: 'Mở Profile',
+        title: 'Thiếu thông tin tính mục tiêu',
+        body: `Bổ sung ${missingFields.join(', ')} để app tính kcal và gợi ý vận động chính xác hơn.`,
+        action: 'Cập nhật Profile',
+      };
+    }
+
+    if (!flagsKnown) {
+      return {
+        tone: 'setup' as const,
+        icon: 'shield-checkmark' as const,
+        title: 'Xác nhận yếu tố sức khỏe',
+        body: 'Mở Profile và chọn các yếu tố sức khỏe nếu có, hoặc lưu hồ sơ để xác nhận không có yếu tố rủi ro.',
+        action: 'Xác nhận an toàn',
       };
     }
 
@@ -728,6 +744,7 @@ export default function DashboardScreen() {
       });
       setProfileMeta({
         age: res.data.age,
+        gender: res.data.gender,
         height_cm: res.data.height_cm,
         weight_kg: res.data.weight_kg,
         health_flags: res.data.health_flags,
@@ -877,7 +894,7 @@ export default function DashboardScreen() {
         </View>
         <TouchableOpacity style={[styles.streakPill, isCompact && styles.streakPillCompact]} onPress={() => router.push('/achievements' as never)}>
           <AnimatedIonicon name="flame" size={16} color={theme.colors.accentAmber} motion="pulse" />
-          <Text style={styles.streakText}>{formatNumber(summary?.current_streak)} ngày</Text>
+          <Text style={styles.streakText}>{formatNumber(displayStreak)} ngày</Text>
         </TouchableOpacity>
       </View>
 

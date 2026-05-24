@@ -6,6 +6,7 @@ import {
 import { SurfaceCard } from './ui-shell';
 import { useAppTheme } from './theme';
 import { Text } from './i18n-text';
+import { formatMacro, formatNumberVi, formatPercent, roundTo, safeNumber, safePositiveNumber, safeRound, toFiniteNumber } from '../services/number-format';
 
 type NutritionTargets = {
   fiber_g_min: number;
@@ -62,26 +63,29 @@ const PROTEIN_G_PER_KG: Record<string, number> = {
 };
 
 function computeMacros(daily: number, weightKg: number | undefined, goal?: string) {
+  const safeDaily = safePositiveNumber(daily, 0);
+  const safeWeightKg = safePositiveNumber(weightKg, 70);
   const protein_g_per_kg = PROTEIN_G_PER_KG[goal ?? 'maintain'] ?? 1.6;
-  const protein_target_g = Math.round(protein_g_per_kg * (weightKg ?? 70));
+  const protein_target_g = safeRound(protein_g_per_kg * safeWeightKg);
   const fat_pct = 25;
-  const fat_kcal = Math.round((fat_pct / 100) * daily);
-  const fat_g = Math.round(fat_kcal / 9);
+  const fat_kcal = safeRound((fat_pct / 100) * safeDaily);
+  const fat_g = safeRound(fat_kcal / 9);
   const protein_kcal = protein_target_g * 4;
-  const remaining_kcal = Math.max(0, daily - (protein_kcal + fat_kcal));
-  const carbs_g = Math.round(remaining_kcal / 4);
-  const carbs_pct = Math.round(((carbs_g * 4) / Math.max(1, daily)) * 100);
+  const remaining_kcal = Math.max(0, safeDaily - (protein_kcal + fat_kcal));
+  const carbs_g = safeRound(remaining_kcal / 4);
+  const carbs_pct = safeRound(((carbs_g * 4) / Math.max(1, safeDaily)) * 100);
 
   return { protein_target_g, protein_g_per_kg, fat_pct, fat_g, carbs_g, carbs_pct };
 }
 
 function computeNutritionTargets(daily: number): NutritionTargets {
+  const safeDaily = safePositiveNumber(daily, 1800);
   return {
-    fiber_g_min: Math.round((daily / 1000) * 14),
+    fiber_g_min: safeRound((safeDaily / 1000) * 14),
     sodium_mg_max: 2300,
-    free_sugar_g_max: Math.round((daily * 0.1) / 4),
-    added_sugar_g_max: Math.round((daily * 0.1) / 4),
-    saturated_fat_g_max: Math.round((daily * 0.1) / 9),
+    free_sugar_g_max: safeRound((safeDaily * 0.1) / 4),
+    added_sugar_g_max: safeRound((safeDaily * 0.1) / 4),
+    saturated_fat_g_max: safeRound((safeDaily * 0.1) / 9),
     free_sugar_pct_max: 10,
     saturated_fat_pct_max: 10,
     basis: 'Mục tiêu tổng quát: fiber 14 g/1000 kcal, sodium <2300 mg/ngày, đường tự do/added sugar <10% kcal, saturated fat <10% kcal.',
@@ -90,14 +94,14 @@ function computeNutritionTargets(daily: number): NutritionTargets {
 
 export default function MacrosCard({ target, daily_calorie_target, weight_kg, goal }: Props) {
   const { colors } = useAppTheme();
-  const daily = target?.daily_calorie_target ?? daily_calorie_target ?? 0;
+  const daily = safeNumber(target?.daily_calorie_target ?? daily_calorie_target);
 
-  let protein_target_g = target?.protein_target_g ?? null;
-  let protein_g_per_kg = target?.protein_g_per_kg ?? null;
-  let fat_pct = target?.fat_pct ?? null;
-  let fat_g = target?.fat_g ?? null;
-  let carbs_g = target?.carbs_g ?? null;
-  let carbs_pct = target?.carbs_pct ?? null;
+  let protein_target_g = toFiniteNumber(target?.protein_target_g);
+  let protein_g_per_kg = toFiniteNumber(target?.protein_g_per_kg);
+  let fat_pct = toFiniteNumber(target?.fat_pct);
+  let fat_g = toFiniteNumber(target?.fat_g);
+  let carbs_g = toFiniteNumber(target?.carbs_g);
+  let carbs_pct = toFiniteNumber(target?.carbs_pct);
 
   if ((!protein_target_g || !fat_g || !carbs_g) && daily && weight_kg) {
     const computed = computeMacros(daily, weight_kg, goal);
@@ -126,12 +130,12 @@ export default function MacrosCard({ target, daily_calorie_target, weight_kg, go
       <View style={styles.row}>
         <View style={styles.col}>
           <Text style={[styles.label, { color: colors.textSoft }]} i18nKey="screen.components.macrosCard.text.003" />
-          <Text style={[styles.value, { color: colors.text }]}>{daily} kcal</Text>
+          <Text style={[styles.value, { color: colors.text }]}>{formatNumberVi(daily)} kcal</Text>
         </View>
         <View style={styles.col}>
           <Text style={[styles.label, { color: colors.textSoft }]} i18nKey="screen.components.macrosCard.text.004" />
           <Text style={[styles.value, { color: colors.text }]}>
-            {protein_target_g ?? '-'} g {protein_g_per_kg ? `(${protein_g_per_kg} g/kg)` : ''}
+            {protein_target_g !== null ? formatMacro(protein_target_g) : '-'} {protein_g_per_kg ? `(${roundTo(protein_g_per_kg, 1)} g/kg)` : ''}
           </Text>
         </View>
       </View>
@@ -139,21 +143,21 @@ export default function MacrosCard({ target, daily_calorie_target, weight_kg, go
       <View style={styles.row}>
         <View style={styles.col}>
           <Text style={[styles.label, { color: colors.textSoft }]} i18nKey="screen.components.macrosCard.text.005" />
-          <Text style={[styles.value, { color: colors.text }]}>{fat_pct ?? '-'}% · {fat_g ?? '-'} g</Text>
+          <Text style={[styles.value, { color: colors.text }]}>{fat_pct !== null ? formatPercent(fat_pct) : '-'} · {fat_g !== null ? formatMacro(fat_g) : '-'}</Text>
         </View>
         <View style={styles.col}>
           <Text style={[styles.label, { color: colors.textSoft }]} i18nKey="screen.components.macrosCard.text.006" />
-          <Text style={[styles.value, { color: colors.text }]}>{carbs_g ?? '-'} g · {carbs_pct ?? '-'}%</Text>
+          <Text style={[styles.value, { color: colors.text }]}>{carbs_g !== null ? formatMacro(carbs_g) : '-'} · {carbs_pct !== null ? formatPercent(carbs_pct) : '-'}</Text>
         </View>
       </View>
 
       <View style={[styles.qualityBlock, { borderTopColor: colors.borderSubtle }]}>
         <Text style={[styles.qualityTitle, { color: colors.text }]} i18nKey="screen.components.macrosCard.text.007" />
         <View style={styles.qualityGrid}>
-          <Metric label="screen.components.macrosCard.label.001" value={`>= ${nutrition.fiber_g_min} g`} tone="good" />
-          <Metric label="screen.components.macrosCard.label.002" value={`< ${nutrition.sodium_mg_max} mg`} tone="limit" />
-          <Metric label="screen.components.macrosCard.label.003" value={`< ${nutrition.free_sugar_g_max} g`} tone="limit" />
-          <Metric label="screen.components.macrosCard.label.004" value={`< ${nutrition.saturated_fat_g_max} g`} tone="limit" />
+          <Metric label="screen.components.macrosCard.label.001" value={`>= ${formatMacro(nutrition.fiber_g_min)}`} tone="good" />
+          <Metric label="screen.components.macrosCard.label.002" value={`< ${formatNumberVi(nutrition.sodium_mg_max)} mg`} tone="limit" />
+          <Metric label="screen.components.macrosCard.label.003" value={`< ${formatMacro(nutrition.free_sugar_g_max)}`} tone="limit" />
+          <Metric label="screen.components.macrosCard.label.004" value={`< ${formatMacro(nutrition.saturated_fat_g_max)}`} tone="limit" />
         </View>
         <Text style={[styles.qualityNote, { color: colors.textMuted }]}>
           Đường trên nhãn/barcode có thể là total sugar; app chưa luôn phân biệt được free sugar và added sugar.
