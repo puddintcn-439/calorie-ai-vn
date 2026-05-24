@@ -1,3 +1,5 @@
+import { GoalPlanDirection } from './user.types';
+
 export interface BodyProgressEntry {
   id: number;
   user_id: string;
@@ -30,6 +32,27 @@ export interface CreateBodyProgressDto {
   energy_level?: 1 | 2 | 3 | 4 | 5;
 }
 
+export type BodyProgressDataStatus =
+  | 'ready'
+  | 'no_logs'
+  | 'no_weight'
+  | 'missing_goal'
+  | 'insufficient_data';
+
+export interface BodyProgressSummary {
+  period_days: number;
+  logged_days: number;
+  weeks_with_logs: number;
+  average_weekly_adherence_pct: number | null;
+  average_daily_calories: number | null;
+  calorie_target: number | null;
+  weight_delta_kg: number | null;
+  weight_goal_kg: number | null;
+  weight_goal_direction: GoalPlanDirection | null;
+  weight_goal_progress_pct: number | null;
+  data_status: BodyProgressDataStatus;
+}
+
 export interface BodyProgressTrend {
   entries: BodyProgressEntry[];
   weight_change_kg: number | null;    // vs first entry
@@ -38,4 +61,5 @@ export interface BodyProgressTrend {
   days_tracked: number;
   latest_entry: BodyProgressEntry | null;
   first_entry: BodyProgressEntry | null;
+  progress_summary?: BodyProgressSummary;
 }

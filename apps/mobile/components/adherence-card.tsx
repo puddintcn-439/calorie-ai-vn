@@ -9,6 +9,7 @@ import { SurfaceCard } from './ui-shell';
 import { UiButton } from './ui-button';
 import { useAppTheme } from './theme';
 import { apiClient } from '../services/api';
+import { formatNumberVi, formatPercent, safeNumber } from '../services/number-format';
 import { Text } from './i18n-text';
 
 type WeeklySummary = {
@@ -52,7 +53,7 @@ export default function AdherenceCard() {
     );
   }
 
-  if (!summary) {
+  if (!summary || safeNumber(summary.logs_count) <= 0) {
     return (
       <SurfaceCard style={[styles.card, { borderColor: colors.borderInfo }]}>
         <Text style={[styles.title, { color: colors.text }]} i18nKey="screen.components.adherenceCard.text.001" />
@@ -69,11 +70,11 @@ export default function AdherenceCard() {
       <View style={styles.row}>
         <View style={styles.col}>
           <Text style={[styles.label, { color: colors.textSoft }]} i18nKey="screen.components.adherenceCard.text.002" />
-          <Text style={[styles.value, { color: colors.accentMint }]}>{summary.adherence_percentage}%</Text>
+          <Text style={[styles.value, { color: colors.accentMint }]}>{formatPercent(summary.adherence_percentage)}</Text>
         </View>
         <View style={styles.col}>
           <Text style={[styles.label, { color: colors.textSoft }]} i18nKey="screen.components.adherenceCard.text.003" />
-          <Text style={[styles.value, { color: colors.accentMint }]}>{summary.logs_count}</Text>
+          <Text style={[styles.value, { color: colors.accentMint }]}>{formatNumberVi(summary.logs_count, '0')}</Text>
         </View>
       </View>
 

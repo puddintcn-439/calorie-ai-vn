@@ -8,7 +8,7 @@ import {
   RefreshControl
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { BodyProgressEntry, BodyProgressTrend, CreateBodyProgressDto } from '@calorie-ai/types';
+import { BodyProgressEntry, BodyProgressSummary, BodyProgressTrend, CreateBodyProgressDto } from '@calorie-ai/types';
 import { ScreenShell, SurfaceCard, Eyebrow, HeroTitle, BodyText } from '../../components/ui-shell';
 import { UiButton } from '../../components/ui-button';
 import MacrosCard from '../../components/macros-card';
@@ -17,22 +17,85 @@ import { createThemedStyles, theme, useAppTheme } from '../../components/theme';
 import { apiClient } from '../../services/api';
 import { calorieTargetService, WeeklyAdaptiveResult } from '../../services/calorie-target.service';
 import { getLocalDateYmd } from '../../services/date';
+import { formatNumberVi, formatPercent, safeNumber, toFiniteNumber } from '../../services/number-format';
 import { Text } from '../../components/i18n-text';
 import { TextInput } from '../../components/i18n-text-input';
 import { Alert } from '../../components/i18n-alert';
 
+function formatDecimal(value: unknown, fallback = '--') {
+  const numeric = toFiniteNumber(value);
+  return numeric === null ? fallback : numeric.toLocaleString('vi-VN', { maximumFractionDigits: 1 });
+}
+
+function parseOptionalInput(value: string): number | undefined {
+  const numeric = toFiniteNumber(value.replace(',', '.'));
+  return numeric === null ? undefined : numeric;
+}
+
 const ENERGY_LABELS = ['', '😴 Rất mệt', '😐 Mệt', '😊 Bình thường', '😄 Tốt', '🔥 Xuất sắc'];
 
 function DeltaBadge({ value, unit, lowerIsBetter = false }: { value: number | null; unit: string; lowerIsBetter?: boolean }) {
+  const numeric = toFiniteNumber(value);
+  if (numeric === null) return null;
   if (value === null) return null;
-  const isPositive = value > 0;
+  const isPositive = numeric > 0;
   const isGood = lowerIsBetter ? !isPositive : isPositive;
-  const color = value === 0 ? theme.colors.textMuted : isGood ? theme.colors.accentMint : theme.colors.danger;
+  const color = numeric === 0 ? theme.colors.textMuted : isGood ? theme.colors.accentMint : theme.colors.danger;
   const arrow = value > 0 ? '▲' : value < 0 ? '▼' : '—';
   return (
     <Text style={[styles.deltaBadge, { color }]}>
       {arrow} {Math.abs(value)}{unit}
     </Text>
+  );
+}
+
+function progressStatusText(summary?: BodyProgressSummary) {
+  if (!summary) return 'Chua tai duoc du lieu tien trinh.';
+  if (summary.data_status === 'no_logs') return 'Chua co log an uong trong 90 ngay gan day nen chua tinh tuan thu.';
+  if (summary.data_status === 'no_weight') return 'Thieu it nhat 2 moc can nang de tinh da thay doi.';
+  if (summary.data_status === 'missing_goal') return 'Thieu muc tieu can nang cu the nen chua tinh phan tram hoan thanh.';
+  if (summary.data_status === 'insufficient_data') return 'Du lieu dang co nhung chua du day de ket luan dai han.';
+  return 'Du lieu 90 ngay da du de theo doi xu huong.';
+}
+
+function ProgressMetric({ label, value, hint }: { label: string; value: string; hint?: string }) {
+  return (
+    <View style={styles.progressMetric}>
+      <Text style={styles.progressMetricLabel}>{label}</Text>
+      <Text style={styles.progressMetricValue}>{value}</Text>
+      {hint ? <Text style={styles.progressMetricHint}>{hint}</Text> : null}
+    </View>
+  );
+}
+
+function ProgressSummaryCard({ summary }: { summary?: BodyProgressSummary }) {
+  return (
+    <SurfaceCard style={styles.progressSummaryCard}>
+      <Text style={styles.trendTitle}>Tuan thu & muc tieu 90 ngay</Text>
+      <View style={styles.progressSummaryGrid}>
+        <ProgressMetric
+          label="Tuan thu TB tuan"
+          value={summary?.average_weekly_adherence_pct == null ? '--' : formatPercent(summary.average_weekly_adherence_pct)}
+          hint={summary?.average_weekly_adherence_pct == null ? 'Chua co log de tinh' : `${safeNumber(summary?.weeks_with_logs)} tuan co du lieu`}
+        />
+        <ProgressMetric
+          label="Ngay da log"
+          value={summary ? formatNumberVi(summary.logged_days, '0') : '--'}
+          hint={`Trong ${summary?.period_days ?? 90} ngay`}
+        />
+        <ProgressMetric
+          label="Doi can"
+          value={summary?.weight_delta_kg == null ? '--' : `${formatDecimal(summary.weight_delta_kg)} kg`}
+          hint={summary?.weight_delta_kg == null ? 'Can it nhat 2 lan can' : 'So voi moc dau'}
+        />
+        <ProgressMetric
+          label="Tien do muc tieu"
+          value={summary?.weight_goal_progress_pct == null ? '--' : formatPercent(summary.weight_goal_progress_pct)}
+          hint={summary?.weight_goal_kg ? `Muc tieu ${formatDecimal(summary.weight_goal_kg)} kg` : 'Chua co muc tieu kg'}
+        />
+      </View>
+      <Text style={styles.progressStatus}>{progressStatusText(summary)}</Text>
+    </SurfaceCard>
   );
 }
 
@@ -147,7 +210,12 @@ export default function BodyProgressScreen() {
   };
 
   const handleSave = async () => {
-    if (!weightKg && !waistCm) {
+    const parsedWeight = parseOptionalInput(weightKg);
+    const parsedWaist = parseOptionalInput(waistCm);
+    const parsedHip = parseOptionalInput(hipCm);
+    const parsedBodyFat = parseOptionalInput(bodyFatPct);
+
+    if (parsedWeight === undefined && parsedWaist === undefined) {
       Alert.alert('screen.tabs.progress.alert.012', 'screen.tabs.progress.alert.013');
       return;
     }
@@ -158,10 +226,10 @@ export default function BodyProgressScreen() {
         recorded_at: getLocalDateYmd(),
         energy_level: energyLevel,
       };
-      if (weightKg) dto.weight_kg = parseFloat(weightKg);
-      if (waistCm) dto.waist_cm = parseFloat(waistCm);
-      if (hipCm) dto.hip_cm = parseFloat(hipCm);
-      if (bodyFatPct) dto.body_fat_pct = parseFloat(bodyFatPct);
+      if (parsedWeight !== undefined) dto.weight_kg = parsedWeight;
+      if (parsedWaist !== undefined) dto.waist_cm = parsedWaist;
+      if (parsedHip !== undefined) dto.hip_cm = parsedHip;
+      if (parsedBodyFat !== undefined) dto.body_fat_pct = parsedBodyFat;
       if (note.trim()) dto.note = note.trim();
 
       await apiClient.post('/body-progress', dto);
@@ -208,6 +276,7 @@ export default function BodyProgressScreen() {
   }
 
   const latest = trend?.latest_entry;
+  const progressSummary = trend?.progress_summary;
 
   return (
     <ScreenShell>
@@ -229,32 +298,34 @@ export default function BodyProgressScreen() {
               <View style={styles.trendItem}>
                 <Text style={styles.trendLabel} i18nKey="screen.tabs.progress.text.002" />
                 <Text style={styles.trendValue}>
-                  {latest?.weight_kg != null ? `${latest.weight_kg} kg` : '—'}
+                  {latest?.weight_kg != null ? `${formatDecimal(latest.weight_kg)} kg` : '--'}
                 </Text>
                 <DeltaBadge value={trend.weight_change_7d} unit="kg" lowerIsBetter />
               </View>
               <View style={styles.trendItem}>
                 <Text style={styles.trendLabel} i18nKey="screen.tabs.progress.text.003" />
                 <Text style={styles.trendValue}>
-                  {latest?.waist_cm != null ? `${latest.waist_cm} cm` : '—'}
+                  {latest?.waist_cm != null ? `${formatDecimal(latest.waist_cm)} cm` : '--'}
                 </Text>
                 <DeltaBadge value={trend.waist_change_cm} unit="cm" lowerIsBetter />
               </View>
               <View style={styles.trendItem}>
                 <Text style={styles.trendLabel} i18nKey="screen.tabs.progress.text.004" />
-                <Text style={styles.trendValue}>{trend.days_tracked}</Text>
+                <Text style={styles.trendValue}>{formatNumberVi(trend.days_tracked, '0')}</Text>
               </View>
             </View>
             {trend.weight_change_kg !== null && (
               <Text style={styles.totalChange}>
                 Tổng thay đổi cân nặng:{' '}
-                <Text style={{ color: (trend.weight_change_kg ?? 0) < 0 ? theme.colors.accentMint : theme.colors.danger }}>
-                  {(trend.weight_change_kg ?? 0) > 0 ? '+' : ''}{trend.weight_change_kg} kg
+                <Text style={{ color: safeNumber(trend.weight_change_kg) < 0 ? theme.colors.accentMint : theme.colors.danger }}>
+                  {safeNumber(trend.weight_change_kg) > 0 ? '+' : ''}{formatDecimal(trend.weight_change_kg)} kg
                 </Text>
               </Text>
             )}
           </SurfaceCard>
         )}
+
+        <ProgressSummaryCard summary={progressSummary} />
 
         {/* ── Why This Target (Preview) ── */}
         <SurfaceCard style={styles.previewCard}>
@@ -479,6 +550,21 @@ const styles = createThemedStyles((colors, radii) => ({
   emptyText: { color: colors.textMuted, fontSize: 14, textAlign: 'center', lineHeight: 21 },
   previewCard: { marginBottom: 14, borderColor: colors.borderInfo, backgroundColor: colors.surface },
   previewRow: { color: colors.textSoft, fontSize: 13, marginTop: 4 },
+  progressSummaryCard: { marginBottom: 14, borderColor: colors.borderInfo, backgroundColor: colors.surface },
+  progressSummaryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  progressMetric: {
+    flex: 1,
+    minWidth: 140,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceAlt,
+    borderRadius: radii.lg,
+    padding: 10,
+  },
+  progressMetricLabel: { color: colors.textSoft, fontSize: 11, fontWeight: '700' },
+  progressMetricValue: { color: colors.text, fontSize: 18, fontWeight: '900', marginTop: 4 },
+  progressMetricHint: { color: colors.textMuted, fontSize: 11, lineHeight: 15, marginTop: 3 },
+  progressStatus: { color: colors.textMuted, fontSize: 12, lineHeight: 18, marginTop: 10 },
 }));
 
 
