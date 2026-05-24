@@ -57,8 +57,24 @@ type DailyFocusItem = {
   progress: number;
 };
 
-function formatNumber(value: number) {
-  return Math.round(value).toLocaleString('vi-VN');
+function toFiniteNumber(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') return null;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
+function safeNumber(value: unknown, fallback = 0): number {
+  return toFiniteNumber(value) ?? fallback;
+}
+
+function safePositiveNumber(value: unknown, fallback: number): number {
+  const numeric = toFiniteNumber(value);
+  return numeric !== null && numeric > 0 ? numeric : fallback;
+}
+
+function formatNumber(value: unknown, fallback = '0') {
+  const numeric = toFiniteNumber(value);
+  return numeric === null ? fallback : Math.round(numeric).toLocaleString('vi-VN');
 }
 
 function groupLogsByMeal(logs: FoodLog[]) {
@@ -77,11 +93,12 @@ function hasVeg(logs: FoodLog[]) {
 }
 
 function buildNutritionTargets(target: number) {
+  const safeTarget = safePositiveNumber(target, 1800);
   return {
-    fiber_g_min: Math.round((target / 1000) * 14),
+    fiber_g_min: Math.round((safeTarget / 1000) * 14),
     sodium_mg_max: 2300,
-    sugar_g_max: Math.round((target * 0.1) / 4),
-    saturated_fat_g_max: Math.round((target * 0.1) / 9),
+    sugar_g_max: Math.round((safeTarget * 0.1) / 4),
+    saturated_fat_g_max: Math.round((safeTarget * 0.1) / 9),
   };
 }
 
@@ -91,7 +108,7 @@ function clampProgress(value: number) {
 }
 
 function buildProteinTarget(goal?: UserGoal, direction?: GoalPlan['direction'], weightKg = 65) {
-  const kg = Math.max(35, weightKg);
+  const kg = Math.max(35, safePositiveNumber(weightKg, 65));
   if (goal === 'gain_muscle' || direction === 'gain') return Math.round(kg * 1.6);
   if (goal === 'lose_weight' || direction === 'loss') return Math.round(kg * 1.4);
   return Math.round(kg * 1.2);
@@ -119,17 +136,26 @@ function buildDailyFocusItems(args: {
   goalDirection?: GoalPlan['direction'];
   weightKg?: number;
 }): DailyFocusItem[] {
-  const netKcal = Math.max(0, args.consumedKcal - args.burnedKcal);
-  const remaining = args.targetKcal - netKcal;
-  const calorieRatio = netKcal / Math.max(args.targetKcal, 1);
+  const consumedKcal = safeNumber(args.consumedKcal);
+  const burnedKcal = safeNumber(args.burnedKcal);
+  const targetKcal = safePositiveNumber(args.targetKcal, 1800);
+  const proteinG = safeNumber(args.proteinG);
+  const fiberG = safeNumber(args.fiberG);
+  const sodiumMg = safeNumber(args.sodiumMg);
+  const sugarG = safeNumber(args.sugarG);
+  const activityMinutes = safeNumber(args.activityMinutes);
+  const qualityCoverageItems = safeNumber(args.qualityCoverageItems);
+  const netKcal = Math.max(0, consumedKcal - burnedKcal);
+  const remaining = targetKcal - netKcal;
+  const calorieRatio = netKcal / Math.max(targetKcal, 1);
   const proteinTarget = buildProteinTarget(args.goal, args.goalDirection, args.weightKg);
-  const proteinGap = Math.max(0, proteinTarget - args.proteinG);
+  const proteinGap = Math.max(0, proteinTarget - proteinG);
   const items: DailyFocusItem[] = [
     {
       key: 'calories',
       label: 'Net kcal',
       value: remaining >= 0 ? `còn ${formatNumber(remaining)}` : `dư ${formatNumber(Math.abs(remaining))}`,
-      hint: args.consumedKcal <= 0
+      hint: consumedKcal <= 0
         ? 'Log bữa đầu để mục tiêu rõ hơn'
         : remaining >= 0
           ? calorieRatio >= 0.75
@@ -143,53 +169,53 @@ function buildDailyFocusItems(args: {
     {
       key: 'protein',
       label: 'Protein',
-      value: `${Math.round(args.proteinG)}/${proteinTarget}g`,
+      value: `${formatNumber(proteinG)}/${proteinTarget}g`,
       hint: proteinGap <= 0 ? 'Đủ nền phục hồi' : `Cần thêm khoảng ${Math.round(proteinGap)}g`,
       icon: 'barbell-outline',
       tone: proteinGap <= 0 ? 'good' : 'info',
-      progress: clampProgress(args.proteinG / Math.max(proteinTarget, 1)),
+      progress: clampProgress(proteinG / Math.max(proteinTarget, 1)),
     },
   ];
 
-  if (args.activityMinutes < 25) {
+  if (activityMinutes < 25) {
     items.push({
       key: 'movement',
       label: 'Vận động',
-      value: `${args.activityMinutes}/25p`,
+      value: `${formatNumber(activityMinutes)}/25p`,
       hint: 'Đi bộ ngắn là đủ',
       icon: 'walk-outline',
       tone: 'info',
-      progress: clampProgress(args.activityMinutes / 25),
+      progress: clampProgress(activityMinutes / 25),
     });
-  } else if (args.qualityCoverageItems > 0 && args.sodiumMg > args.qualityTargets.sodium_mg_max) {
+  } else if (qualityCoverageItems > 0 && sodiumMg > args.qualityTargets.sodium_mg_max) {
     items.push({
       key: 'sodium',
       label: 'Muối',
-      value: `${formatNumber(args.sodiumMg)}mg`,
+      value: `${formatNumber(sodiumMg)}mg`,
       hint: 'Bữa sau giảm đồ mặn',
       icon: 'water-outline',
       tone: 'warn',
-      progress: clampProgress(args.qualityTargets.sodium_mg_max / Math.max(args.sodiumMg, 1)),
+      progress: clampProgress(args.qualityTargets.sodium_mg_max / Math.max(sodiumMg, 1)),
     });
-  } else if (args.qualityCoverageItems > 0 && args.sugarG > args.qualityTargets.sugar_g_max) {
+  } else if (qualityCoverageItems > 0 && sugarG > args.qualityTargets.sugar_g_max) {
     items.push({
       key: 'sugar',
       label: 'Đường',
-      value: `${Math.round(args.sugarG)}g`,
+      value: `${formatNumber(sugarG)}g`,
       hint: 'Ưu tiên nước lọc',
       icon: 'ice-cream-outline',
       tone: 'warn',
-      progress: clampProgress(args.qualityTargets.sugar_g_max / Math.max(args.sugarG, 1)),
+      progress: clampProgress(args.qualityTargets.sugar_g_max / Math.max(sugarG, 1)),
     });
-  } else if (args.qualityCoverageItems > 0) {
+  } else if (qualityCoverageItems > 0) {
     items.push({
       key: 'fiber',
       label: 'Chất xơ',
-      value: `${Math.round(args.fiberG)}/${args.qualityTargets.fiber_g_min}g`,
-      hint: args.fiberG >= args.qualityTargets.fiber_g_min ? 'Fiber ổn' : 'Thêm rau/đậu/trái cây',
+      value: `${formatNumber(fiberG)}/${args.qualityTargets.fiber_g_min}g`,
+      hint: fiberG >= args.qualityTargets.fiber_g_min ? 'Fiber ổn' : 'Thêm rau/đậu/trái cây',
       icon: 'leaf-outline',
-      tone: args.fiberG >= args.qualityTargets.fiber_g_min ? 'good' : 'info',
-      progress: clampProgress(args.fiberG / Math.max(args.qualityTargets.fiber_g_min, 1)),
+      tone: fiberG >= args.qualityTargets.fiber_g_min ? 'good' : 'info',
+      progress: clampProgress(fiberG / Math.max(args.qualityTargets.fiber_g_min, 1)),
     });
   } else {
     items.push({
@@ -220,10 +246,20 @@ function buildNutritionNudges(
     coverage_items: number;
   },
 ) {
-  const fatCalories = fat * 9;
+  const safeProtein = safeNumber(protein);
+  const safeFat = safeNumber(fat);
+  const safeCalories = safeNumber(calories);
+  const safeTarget = safePositiveNumber(target, 1800);
+  const safeQuality = {
+    fiber_g: safeNumber(quality.fiber_g),
+    sugar_g: safeNumber(quality.sugar_g),
+    sodium_mg: safeNumber(quality.sodium_mg),
+    coverage_items: safeNumber(quality.coverage_items),
+  };
+  const fatCalories = safeFat * 9;
   const items: { title: string; body: string; tone: NudgeTone; icon: keyof typeof Ionicons.glyphMap }[] = [];
 
-  if (protein >= 75) {
+  if (safeProtein >= 75) {
     items.push({ title: 'Ăn đủ protein', body: 'Bữa tới giữ rau và nước là ổn.', tone: 'good', icon: 'checkmark-circle' });
   } else {
     items.push({ title: 'Thêm protein', body: '+1 trứng, sữa chua hoặc đậu hũ.', tone: 'info', icon: 'barbell' });
@@ -233,23 +269,23 @@ function buildNutritionNudges(
     items.push({ title: 'Thiếu rau', body: 'Thêm canh hoặc rau luộc ở bữa kế.', tone: 'warn', icon: 'leaf' });
   }
 
-  if (calories > 0 && fatCalories / Math.max(calories, 1) > 0.38) {
+  if (safeCalories > 0 && fatCalories / Math.max(safeCalories, 1) > 0.38) {
     items.push({ title: 'Fat hơi lệch', body: 'Ưu tiên hấp, luộc hoặc nướng.', tone: 'warn', icon: 'flame' });
   }
 
-  if (quality.coverage_items > 0 && quality.sodium_mg > quality.targets.sodium_mg_max) {
+  if (safeQuality.coverage_items > 0 && safeQuality.sodium_mg > quality.targets.sodium_mg_max) {
     items.push({ title: 'Sodium cao', body: 'Bữa sau giảm đồ mặn/đồ đóng gói.', tone: 'warn', icon: 'water' });
   }
 
-  if (quality.coverage_items > 0 && quality.sugar_g > quality.targets.sugar_g_max) {
+  if (safeQuality.coverage_items > 0 && safeQuality.sugar_g > quality.targets.sugar_g_max) {
     items.push({ title: 'Đường hơi cao', body: 'Đổi sang nước lọc hoặc trái cây nguyên miếng.', tone: 'warn', icon: 'ice-cream' });
   }
 
-  if (quality.coverage_items > 0 && calories > target * 0.45 && quality.fiber_g < quality.targets.fiber_g_min * 0.45) {
+  if (safeQuality.coverage_items > 0 && safeCalories > safeTarget * 0.45 && safeQuality.fiber_g < quality.targets.fiber_g_min * 0.45) {
     items.push({ title: 'Fiber còn thấp', body: 'Thêm rau, đậu hoặc trái cây ít ngọt.', tone: 'info', icon: 'leaf' });
   }
 
-  if (target - calories > 350) {
+  if (safeTarget - safeCalories > 350) {
     items.push({ title: 'Còn dư calo đẹp', body: 'Chọn bữa sau đủ đạm, ít dầu.', tone: 'good', icon: 'sparkles' });
   }
 
@@ -261,9 +297,12 @@ function CaloriesRing({ consumed, burned, target, compact = false }: { consumed:
   const stroke = compact ? 12 : 14;
   const radius = (size - stroke) / 2;
   const circumference = 2 * Math.PI * radius;
-  const net = Math.max(0, consumed - burned);
-  const progress = Math.min(net / Math.max(target, 1), 1);
-  const remaining = target - net;
+  const safeConsumed = safeNumber(consumed);
+  const safeBurned = safeNumber(burned);
+  const safeTarget = safePositiveNumber(target, 1800);
+  const net = Math.max(0, safeConsumed - safeBurned);
+  const progress = clampProgress(net / Math.max(safeTarget, 1));
+  const remaining = safeTarget - net;
 
   return (
     <View style={[styles.ringWrap, { width: size, height: size }]}>
@@ -337,8 +376,8 @@ function describeGoalPlan(plan: GoalPlan) {
   }
 
   const verb = plan.direction === 'gain' ? 'Tăng' : 'Giảm';
-  const targetKg = plan.target_kg ?? 0;
-  const durationWeeks = plan.duration_weeks ?? 0;
+  const targetKg = safeNumber(plan.target_kg);
+  const durationWeeks = safeNumber(plan.duration_weeks);
   return `${verb} ${targetKg} kg${durationWeeks ? ` trong ${durationWeeks} tuần` : ''}`;
 }
 
@@ -365,8 +404,10 @@ type PreferredActivity = Pick<ActivityPreference, 'id' | 'title' | 'activity_typ
 
 function estimateDurationForBurn(activityType: ActivityType, targetKcal: number, weightKg: number) {
   const met = ACTIVITY_MET[activityType] ?? 5;
-  const kcalPerMinute = Math.max(1, (met * weightKg) / 60);
-  const rawMinutes = targetKcal / kcalPerMinute;
+  const safeTargetKcal = Math.max(0, safeNumber(targetKcal));
+  const safeWeightKg = safePositiveNumber(weightKg, 65);
+  const kcalPerMinute = Math.max(1, (met * safeWeightKg) / 60);
+  const rawMinutes = safeTargetKcal / kcalPerMinute;
   const roundedToFive = Math.round(rawMinutes / 5) * 5;
   return Math.max(10, Math.min(60, roundedToFive));
 }
@@ -403,7 +444,8 @@ function buildMovementPlan(
   burnedKcal: number,
   targetKcal: number,
 ): MovementPlan | null {
-  if (!profile?.weight_kg) return null;
+  const weightKg = toFiniteNumber(profile?.weight_kg);
+  if (weightKg === null || weightKg <= 0) return null;
 
   const flags = Array.isArray(profile.health_flags) ? profile.health_flags : [];
   const caution = (!!profile.age && profile.age < 18) || flags.length > 0;
@@ -415,9 +457,13 @@ function buildMovementPlan(
     : planDirection === 'gain'
       ? 'gain_muscle'
       : goal;
-  const remainingToBase = Math.max(0, 25 - completedMin);
-  const netKcal = consumedKcal - burnedKcal;
-  const gapToTarget = targetKcal - netKcal;
+  const safeCompletedMin = safeNumber(completedMin);
+  const safeConsumedKcal = safeNumber(consumedKcal);
+  const safeBurnedKcal = safeNumber(burnedKcal);
+  const safeTargetKcal = safePositiveNumber(targetKcal, 1800);
+  const remainingToBase = Math.max(0, 25 - safeCompletedMin);
+  const netKcal = safeConsumedKcal - safeBurnedKcal;
+  const gapToTarget = safeTargetKcal - netKcal;
   const overTarget = Math.max(0, -gapToTarget);
   const surplusBurnTarget = overTarget > 75
     ? Math.min(overTarget, effectiveGoal === 'lose_weight' ? 320 : 220)
@@ -439,7 +485,7 @@ function buildMovementPlan(
       ? Math.max(preferredActivity.duration_min, Math.min(30, remainingToBase))
       : preferredActivity.duration_min;
     durationMin = surplusBurnTarget > 0
-      ? estimateDurationForBurn(activityType, surplusBurnTarget, profile.weight_kg)
+      ? estimateDurationForBurn(activityType, surplusBurnTarget, weightKg)
       : healthMinutes;
     title = preferredActivity.title;
     detail = overTarget > 75
@@ -461,7 +507,7 @@ function buildMovementPlan(
         : activityLevel === 'active' || activityLevel === 'very_active'
           ? 'running'
           : 'walking';
-      durationMin = estimateDurationForBurn(activityType, targetBurn, profile.weight_kg);
+      durationMin = estimateDurationForBurn(activityType, targetBurn, weightKg);
       title = activityType === 'running' ? 'Cardio vừa sức' : 'Đi bộ nhanh';
     }
     detail = overTarget > targetBurn + 80
@@ -500,7 +546,7 @@ function buildMovementPlan(
     calorie_status: calorieStatus,
     activity_type: activityType,
     duration_min: durationMin,
-    estimated_kcal: estimateExerciseCalories(activityType, durationMin, profile.weight_kg),
+    estimated_kcal: estimateExerciseCalories(activityType, durationMin, weightKg),
     daily_minutes_target: 25,
     tone,
   };
@@ -563,10 +609,10 @@ export default function DashboardScreen() {
 
   const logs = dailyLog?.logs ?? [];
   const logsByMeal = useMemo(() => groupLogsByMeal(logs), [logs]);
-  const consumed = dailyLog?.total_calories ?? 0;
-  const burned = activityLogs.reduce((sum, item) => sum + item.calories_burned, 0);
-  const activityMinutes = activityLogs.reduce((sum, item) => sum + item.duration_min, 0);
-  const target = dailyLog?.target_calories ?? 1800;
+  const consumed = safeNumber(dailyLog?.total_calories);
+  const burned = activityLogs.reduce((sum, item) => sum + safeNumber(item.calories_burned), 0);
+  const activityMinutes = activityLogs.reduce((sum, item) => sum + safeNumber(item.duration_min), 0);
+  const target = safePositiveNumber(dailyLog?.target_calories, 1800);
   const movementPlan = useMemo(
     () => buildMovementPlan(profileMeta, activityPreferences, activityMinutes, consumed, burned, target),
     [activityMinutes, activityPreferences, burned, consumed, profileMeta, target],
@@ -576,20 +622,20 @@ export default function DashboardScreen() {
     const linkedPrefix = movementPlan.preference_id ? `ROADMAP_TASK:${movementPlan.preference_id}|` : `MOVEMENT_PLAN:${movementPlan.title}`;
     return activityLogs.some((log) => (log.notes ?? '').startsWith(linkedPrefix));
   }, [activityLogs, movementPlan]);
-  const protein = dailyLog?.total_protein_g ?? 0;
-  const carbs = dailyLog?.total_carbs_g ?? 0;
-  const fat = dailyLog?.total_fat_g ?? 0;
-  const fiber = dailyLog?.total_fiber_g ?? 0;
-  const sugar = dailyLog?.total_sugar_g ?? 0;
-  const sodium = dailyLog?.total_sodium_mg ?? 0;
-  const saturatedFat = dailyLog?.total_saturated_fat_g ?? 0;
+  const protein = safeNumber(dailyLog?.total_protein_g);
+  const carbs = safeNumber(dailyLog?.total_carbs_g);
+  const fat = safeNumber(dailyLog?.total_fat_g);
+  const fiber = safeNumber(dailyLog?.total_fiber_g);
+  const sugar = safeNumber(dailyLog?.total_sugar_g);
+  const sodium = safeNumber(dailyLog?.total_sodium_mg);
+  const saturatedFat = safeNumber(dailyLog?.total_saturated_fat_g);
   const qualityTargets = useMemo(() => buildNutritionTargets(target), [target]);
   const qualityCoverageItems = dailyLog?.nutrition_quality_coverage
     ? Math.max(
-        dailyLog.nutrition_quality_coverage.fiber_items,
-        dailyLog.nutrition_quality_coverage.sugar_items,
-        dailyLog.nutrition_quality_coverage.sodium_items,
-        dailyLog.nutrition_quality_coverage.saturated_fat_items,
+        safeNumber(dailyLog.nutrition_quality_coverage.fiber_items),
+        safeNumber(dailyLog.nutrition_quality_coverage.sugar_items),
+        safeNumber(dailyLog.nutrition_quality_coverage.sodium_items),
+        safeNumber(dailyLog.nutrition_quality_coverage.saturated_fat_items),
       )
     : 0;
   const dailyFocusItems = useMemo(() => buildDailyFocusItems({
@@ -641,7 +687,9 @@ export default function DashboardScreen() {
 
     const flagsKnown = Array.isArray(profileMeta.health_flags);
     const flags = flagsKnown ? profileMeta.health_flags ?? [] : [];
-    const missingBasics = !profileMeta.age || !profileMeta.height_cm || !profileMeta.weight_kg;
+    const missingBasics = !safePositiveNumber(profileMeta.age, 0)
+      || !safePositiveNumber(profileMeta.height_cm, 0)
+      || !safePositiveNumber(profileMeta.weight_kg, 0);
 
     if (missingBasics || !flagsKnown) {
       return {
@@ -693,7 +741,7 @@ export default function DashboardScreen() {
         fetchRecommendations().catch(() => {}),
         fetchWeeklyInsights().catch(() => {}),
       ]);
-      const savedTarget = res.data.daily_calorie_target ?? target;
+      const savedTarget = safePositiveNumber(res.data.daily_calorie_target, target);
       const planWarnings = res.data.goal_plan?.warnings?.[0];
       Alert.alert('screen.tabs.index.alert.001', t('screen.tabs.index.alert.savedTargetBody', { target: formatNumber(savedTarget), warnings: planWarnings ? `\n${planWarnings}` : '' }));
     } catch (e: any) {
@@ -733,7 +781,7 @@ export default function DashboardScreen() {
   }
 
   const movementProgressPct = movementPlan
-    ? Math.min(activityMinutes / movementPlan.daily_minutes_target, 1) * 100
+    ? clampProgress(activityMinutes / Math.max(safeNumber(movementPlan.daily_minutes_target), 1)) * 100
     : 0;
   const movementSourceLabel = movementPlan?.preference_id ? 'Từ Profile' : 'Gợi ý sức khỏe';
   const movementButtonLabel = movementPlanCompleted
@@ -829,7 +877,7 @@ export default function DashboardScreen() {
         </View>
         <TouchableOpacity style={[styles.streakPill, isCompact && styles.streakPillCompact]} onPress={() => router.push('/achievements' as never)}>
           <AnimatedIonicon name="flame" size={16} color={theme.colors.accentAmber} motion="pulse" />
-          <Text style={styles.streakText}>{summary?.current_streak ?? 0} ngày</Text>
+          <Text style={styles.streakText}>{formatNumber(summary?.current_streak)} ngày</Text>
         </TouchableOpacity>
       </View>
 
@@ -891,9 +939,9 @@ export default function DashboardScreen() {
         </View>
 
         <View style={[styles.macroRow, isCompact && styles.macroRowCompact]}>
-          <MacroPill label="screen.tabs.index.label.001" value={`${Math.round(protein)}g`} color={theme.colors.accentCoral} />
-          <MacroPill label="screen.tabs.index.label.002" value={`${Math.round(carbs)}g`} color={theme.colors.accentCyan} />
-          <MacroPill label="screen.tabs.index.label.003" value={`${Math.round(fat)}g`} color={theme.colors.accentAmber} />
+          <MacroPill label="screen.tabs.index.label.001" value={`${formatNumber(protein)}g`} color={theme.colors.accentCoral} />
+          <MacroPill label="screen.tabs.index.label.002" value={`${formatNumber(carbs)}g`} color={theme.colors.accentCyan} />
+          <MacroPill label="screen.tabs.index.label.003" value={`${formatNumber(fat)}g`} color={theme.colors.accentAmber} />
         </View>
 
         <View style={styles.focusStrip}>
@@ -903,10 +951,10 @@ export default function DashboardScreen() {
         </View>
 
         <View style={styles.qualityRow}>
-          <QualityPill label="screen.tabs.index.label.004" value={`${Math.round(fiber)} / ${qualityTargets.fiber_g_min}g`} active={qualityCoverageItems > 0} />
-          <QualityPill label="screen.tabs.index.label.005" value={`${Math.round(sodium)} / ${qualityTargets.sodium_mg_max}mg`} active={qualityCoverageItems > 0} over={sodium > qualityTargets.sodium_mg_max} />
-          <QualityPill label="screen.tabs.index.label.006" value={`${Math.round(sugar)} / ${qualityTargets.sugar_g_max}g`} active={qualityCoverageItems > 0} over={sugar > qualityTargets.sugar_g_max} />
-          <QualityPill label="screen.tabs.index.label.007" value={`${Math.round(saturatedFat)} / ${qualityTargets.saturated_fat_g_max}g`} active={qualityCoverageItems > 0} over={saturatedFat > qualityTargets.saturated_fat_g_max} />
+          <QualityPill label="screen.tabs.index.label.004" value={`${formatNumber(fiber)} / ${qualityTargets.fiber_g_min}g`} active={qualityCoverageItems > 0} />
+          <QualityPill label="screen.tabs.index.label.005" value={`${formatNumber(sodium)} / ${qualityTargets.sodium_mg_max}mg`} active={qualityCoverageItems > 0} over={sodium > qualityTargets.sodium_mg_max} />
+          <QualityPill label="screen.tabs.index.label.006" value={`${formatNumber(sugar)} / ${qualityTargets.sugar_g_max}g`} active={qualityCoverageItems > 0} over={sugar > qualityTargets.sugar_g_max} />
+          <QualityPill label="screen.tabs.index.label.007" value={`${formatNumber(saturatedFat)} / ${qualityTargets.saturated_fat_g_max}g`} active={qualityCoverageItems > 0} over={saturatedFat > qualityTargets.saturated_fat_g_max} />
         </View>
         {qualityCoverageItems === 0 && (
           <Text style={styles.qualityCoverageNote} i18nKey="screen.tabs.index.text.007" />
@@ -1023,7 +1071,7 @@ export default function DashboardScreen() {
                 </View>
                 <View style={styles.movementMetaPill}>
                   <Ionicons name="flame-outline" size={13} color={theme.colors.accentAmber} />
-                  <Text style={styles.movementMetaText}>~{movementPlan.estimated_kcal} kcal</Text>
+                  <Text style={styles.movementMetaText}>~{formatNumber(movementPlan.estimated_kcal)} kcal</Text>
                 </View>
               </View>
             </View>
@@ -1033,7 +1081,7 @@ export default function DashboardScreen() {
 
             <View style={styles.movementProgressHeader}>
               <Text style={styles.movementProgressLabel} i18nKey="screen.tabs.index.text.015" />
-              <Text style={styles.movementMetric}>{activityMinutes}/{movementPlan.daily_minutes_target} phút</Text>
+              <Text style={styles.movementMetric}>{formatNumber(activityMinutes)}/{formatNumber(movementPlan.daily_minutes_target)} phút</Text>
             </View>
             <View style={styles.movementProgressBar}>
               <View style={[styles.movementProgressFill, { width: `${movementProgressPct}%` as any }]} />
@@ -1111,7 +1159,7 @@ export default function DashboardScreen() {
         <View style={styles.mealList}>
           {MEAL_ORDER.map((meal) => {
             const mealLogs = logsByMeal[meal];
-            const mealCalories = mealLogs.reduce((sum, log) => sum + log.calories, 0);
+            const mealCalories = mealLogs.reduce((sum, log) => sum + safeNumber(log.calories), 0);
             return (
               <SurfaceCard key={meal} style={styles.mealCard}>
                 <Image source={mealIllustration} style={styles.mealImage} resizeMode="cover" />
