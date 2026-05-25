@@ -11,19 +11,36 @@ import {
   View,
   ViewStyle
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAppTheme } from './theme';
 import { Text } from './i18n-text';
+
+export function useBottomNavContentPadding(extraGap = 24) {
+  const { width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const isCompact = width < 480;
+  const isDesktop = width >= 900;
+  const bottomInset = insets?.bottom ?? 0;
+  const tabHeight = isDesktop ? 52 : isCompact ? 62 : 64;
+  const bottomOffset = isDesktop ? 12 : isCompact ? 8 : 10;
+  const desktopGap = Math.min(extraGap, 20);
+
+  return tabHeight + bottomInset + bottomOffset + (isDesktop ? desktopGap : extraGap);
+}
 
 export function ScreenShell({
   children,
   scroll = true,
   contentStyle,
+  scrollContentStyle,
+  reserveBottomNav = true,
 }: {
   children: ReactNode;
   scroll?: boolean;
   contentStyle?: StyleProp<ViewStyle>;
+  scrollContentStyle?: StyleProp<ViewStyle>;
+  reserveBottomNav?: boolean;
 }) {
   const { width } = useWindowDimensions();
   const isDesktop = width >= 900;
@@ -31,6 +48,8 @@ export function ScreenShell({
   const translate = useRef(new Animated.Value(18)).current;
   const useNativeDriver = Platform.OS !== 'web';
   const { colors } = useAppTheme();
+  const bottomNavPadding = useBottomNavContentPadding();
+  const bottomNavStyle = reserveBottomNav ? { paddingBottom: bottomNavPadding } : null;
 
   useEffect(() => {
     Animated.parallel([
@@ -65,12 +84,17 @@ export function ScreenShell({
         {scroll ? (
           <ScrollView
             showsVerticalScrollIndicator={false}
-            contentContainerStyle={[styles.scrollContent, isDesktop && styles.scrollContentDesktop]}
+            contentContainerStyle={[
+              styles.scrollContent,
+              isDesktop && styles.scrollContentDesktop,
+              bottomNavStyle,
+              scrollContentStyle,
+            ]}
           >
             {content}
           </ScrollView>
         ) : (
-          <View style={[styles.noScrollContent, isDesktop && styles.noScrollContentDesktop]}>{content}</View>
+          <View style={[styles.noScrollContent, isDesktop && styles.noScrollContentDesktop, bottomNavStyle]}>{content}</View>
         )}
       </SafeAreaView>
     </LinearGradient>
@@ -149,10 +173,10 @@ export function BodyText({ children, style }: { children: ReactNode; style?: Sty
 const styles = StyleSheet.create({
   gradient: { flex: 1 },
   safeArea: { flex: 1 },
-  scrollContent: { padding: 14, paddingBottom: 128 },
-  scrollContentDesktop: { padding: 16, paddingBottom: 112 },
-  noScrollContent: { flex: 1, paddingHorizontal: 18, paddingBottom: 96 },
-  noScrollContentDesktop: { paddingBottom: 84 },
+  scrollContent: { padding: 14 },
+  scrollContentDesktop: { padding: 16 },
+  noScrollContent: { flex: 1, paddingHorizontal: 18 },
+  noScrollContentDesktop: {},
   inner: {
     width: '100%',
     maxWidth: 1080,

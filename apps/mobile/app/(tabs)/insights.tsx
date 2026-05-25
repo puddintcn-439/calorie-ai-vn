@@ -12,7 +12,7 @@ import { useFocusEffect } from 'expo-router';
 import { WeeklyInsights } from '@calorie-ai/types';
 import { useInsightsStore } from '../../store/insights.store';
 import { useCalorieTargetStore } from '../../store/calorie-target.store';
-import { BodyText, Eyebrow, HeroTitle, ScreenShell, SurfaceCard } from '../../components/ui-shell';
+import { BodyText, Eyebrow, HeroTitle, ScreenShell, SurfaceCard, useBottomNavContentPadding } from '../../components/ui-shell';
 import { createThemedStyles, theme, useAppTheme } from '../../components/theme';
 import { Text } from '../../components/i18n-text';
 import { Alert } from '../../components/i18n-alert';
@@ -22,6 +22,7 @@ const screenWidth = Dimensions.get('window').width;
 
 export default function InsightsScreen() {
   useAppTheme();
+  const bottomContentPadding = useBottomNavContentPadding();
   const { weeklyInsights, isLoading, fetchWeeklyInsights } = useInsightsStore();
   const {
     recommendations,
@@ -76,8 +77,8 @@ export default function InsightsScreen() {
   const selectedDayData = selectedDay !== null ? dailyInsights[selectedDay] : null;
 
   return (
-    <ScreenShell>
-      <ScrollView>
+    <ScreenShell scroll={false} reserveBottomNav={false}>
+      <ScrollView contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomContentPadding }]}>
         <Eyebrow>Thống kê tuần</Eyebrow>
         <HeroTitle>Bạn đã tiến bộ bao nhiêu tuần này?</HeroTitle>
         <BodyText style={styles.periodText}>{data.period}</BodyText>
@@ -302,7 +303,6 @@ export default function InsightsScreen() {
           )}
         </SurfaceCard>
 
-        <View style={styles.bottomPadding} />
       </ScrollView>
     </ScreenShell>
   );
@@ -337,6 +337,7 @@ function MealBreakdownRow({
 }
 
 const styles = createThemedStyles((colors, radii) => ({
+  scrollContent: { paddingTop: 14 },
   centerContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', minHeight: 200 },
   loadingText: { color: colors.textMuted, marginTop: 12, fontSize: 14 },
   errorText: { color: colors.danger, fontSize: 14, marginBottom: 12 },
@@ -419,7 +420,6 @@ const styles = createThemedStyles((colors, radii) => ({
   planSuggestionText: { color: colors.textSoft, fontSize: 12, lineHeight: 18 },
   planEmpty: { color: colors.textMuted, fontSize: 12 },
 
-  bottomPadding: { height: 40 },
 }));
 
 

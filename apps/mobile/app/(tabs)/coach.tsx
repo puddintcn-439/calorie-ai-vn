@@ -7,7 +7,7 @@ import {
   RefreshControl,
 } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
-import { ScreenShell, SurfaceCard } from '../../components/ui-shell';
+import { ScreenShell, SurfaceCard, useBottomNavContentPadding } from '../../components/ui-shell';
 import { UiButton } from '../../components/ui-button';
 import { UiInput } from '../../components/ui-input';
 import { askCoach } from '../../services/ai.service';
@@ -213,6 +213,7 @@ function getCoachErrorMessage(error: unknown): string {
 
 export default function CoachScreen() {
   useAppTheme();
+  const bottomContentPadding = useBottomNavContentPadding();
   const { locale, t } = useI18n();
   const { dailyLog, fetchDailyLog } = useLogStore();
   const [input, setInput] = useState('');
@@ -357,9 +358,10 @@ export default function CoachScreen() {
   );
 
   return (
-    <ScreenShell>
+    <ScreenShell scroll={false} reserveBottomNav={false}>
       <ScrollView
         showsVerticalScrollIndicator={false}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomContentPadding }]}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
         <VisualHeroCard
@@ -479,6 +481,9 @@ export default function CoachScreen() {
 }
 
 const styles = createThemedStyles((colors, radii) => ({
+  scrollContent: {
+    paddingTop: 14,
+  },
   heroBody: {
     marginBottom: 14,
     maxWidth: 720,

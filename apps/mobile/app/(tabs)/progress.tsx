@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { BodyProgressEntry, BodyProgressSummary, BodyProgressTrend, CreateBodyProgressDto } from '@calorie-ai/types';
-import { ScreenShell, SurfaceCard, Eyebrow, HeroTitle, BodyText } from '../../components/ui-shell';
+import { ScreenShell, SurfaceCard, Eyebrow, HeroTitle, BodyText, useBottomNavContentPadding } from '../../components/ui-shell';
 import { UiButton } from '../../components/ui-button';
 import MacrosCard from '../../components/macros-card';
 import AdherenceCard from '../../components/adherence-card';
@@ -101,6 +101,7 @@ function ProgressSummaryCard({ summary }: { summary?: BodyProgressSummary }) {
 
 export default function BodyProgressScreen() {
   useAppTheme();
+  const bottomContentPadding = useBottomNavContentPadding();
   const [trend, setTrend] = useState<BodyProgressTrend | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -279,9 +280,10 @@ export default function BodyProgressScreen() {
   const progressSummary = trend?.progress_summary;
 
   return (
-    <ScreenShell>
+    <ScreenShell scroll={false} reserveBottomNav={false}>
       <ScrollView
         showsVerticalScrollIndicator={false}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomContentPadding }]}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
         <Eyebrow>Theo dõi cơ thể</Eyebrow>
@@ -498,6 +500,7 @@ export default function BodyProgressScreen() {
 
 const styles = createThemedStyles((colors, radii) => ({
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  scrollContent: { paddingTop: 14 },
   heroBody: { marginBottom: 16, maxWidth: 720 },
   trendCard: { marginBottom: 14, borderColor: colors.border, backgroundColor: colors.surfaceAlt },
   trendTitle: { color: colors.text, fontSize: 15, fontWeight: '800', marginBottom: 12 },
