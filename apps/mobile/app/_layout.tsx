@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { Stack, router, useSegments } from 'expo-router';
 import { useAuthStore } from '../store/auth.store';
+import '../services/web-warning-filter';
 
 export default function RootLayout() {
   const { token, isLoading, loadToken } = useAuthStore();
