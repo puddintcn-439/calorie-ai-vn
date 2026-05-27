@@ -15,6 +15,7 @@
     "mobile": "turbo dev --filter=mobile",
     "preflight": "powershell -ExecutionPolicy Bypass -File ./scripts/preflight-check.ps1",
     "health": "powershell -ExecutionPolicy Bypass -File ./scripts/health-check.ps1",
+    "monitor:metrics": "node ./scripts/check-production-metrics.js",
     "dev:ports:clean": "powershell -ExecutionPolicy Bypass -File ./scripts/kill-dev-ports.ps1",
     "dev:backend:ready": "powershell -ExecutionPolicy Bypass -File ./scripts/start-backend-dev.ps1",
     "dev:mobile:web:ready": "powershell -ExecutionPolicy Bypass -File ./scripts/start-mobile-web.ps1",

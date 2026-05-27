@@ -101,7 +101,36 @@ Poll `/health` every minute. Alert if `database.latency_ms > 1000`.
 2. Alert if response is not 200 OR `status !== "healthy"` for 2+ consecutive checks
 3. Alert channel: Telegram / email
 
-### Option B: Custom polling script (cron)
+### Option B: Built-in polling script (cron / GitHub Actions)
+
+The repo includes `scripts/check-production-metrics.js`, which polls `/health/metrics`,
+checks `alerts[].fired`, and exits with:
+
+- `0`: no alert fired
+- `1`: metrics endpoint or notification failure
+- `2`: at least one production alert fired
+
+Generic webhook:
+
+```bash
+METRICS_URL=https://api.calorieai.vn/health/metrics \
+ALERT_WEBHOOK_URL=https://hooks.example.com/calorie-ai-alerts \
+npm run monitor:metrics
+```
+
+Telegram:
+
+```bash
+METRICS_URL=https://api.calorieai.vn/health/metrics \
+TELEGRAM_BOT_TOKEN=... \
+TELEGRAM_CHAT_ID=... \
+npm run monitor:metrics
+```
+
+Recommended cron cadence: every 1 minute. Configure the scheduler to notify on
+non-zero exit, and keep the webhook credentials in the scheduler secret store.
+
+Legacy shell equivalent:
 
 ```bash
 #!/bin/bash
