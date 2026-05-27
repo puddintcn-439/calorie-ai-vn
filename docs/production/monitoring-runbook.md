@@ -25,6 +25,9 @@ No authentication required (internal-network read only — restrict in reverse p
     "auth_register_failure": 1,
     "ai_scan_success": 95,
     "ai_scan_failure": 5,
+    "ai_scan_latency_count": 100,
+    "ai_scan_latency_total_ms": 84200,
+    "ai_scan_latency_max_ms": 3100,
     "activity_sync_success": 40,
     "activity_sync_failure": 2,
     "http_requests_total": 540,
@@ -33,7 +36,8 @@ No authentication required (internal-network read only — restrict in reverse p
   },
   "rates": {
     "auth_failure_rate_pct": 6.9,
-    "ai_scan_success_rate_pct": 95.0
+    "ai_scan_success_rate_pct": 95.0,
+    "ai_scan_avg_latency_ms": 842
   },
   "alerts": [
     {
@@ -51,6 +55,14 @@ No authentication required (internal-network read only — restrict in reverse p
       "threshold": 70,
       "unit": "%",
       "description": "AI food scan success rate is below acceptable threshold"
+    },
+    {
+      "name": "high_ai_scan_average_latency",
+      "fired": false,
+      "value": 842,
+      "threshold": 15000,
+      "unit": "ms",
+      "description": "Average AI scan latency exceeds threshold"
     },
     {
       "name": "high_5xx_error_count",

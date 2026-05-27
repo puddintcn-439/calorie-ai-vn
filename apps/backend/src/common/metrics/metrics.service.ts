@@ -7,6 +7,9 @@ export interface MetricCounters {
   auth_register_failure: number;
   ai_scan_success: number;
   ai_scan_failure: number;
+  ai_scan_latency_count: number;
+  ai_scan_latency_total_ms: number;
+  ai_scan_latency_max_ms: number;
   activity_sync_success: number;
   activity_sync_failure: number;
   http_requests_total: number;
@@ -19,6 +22,7 @@ export interface MetricSnapshot {
   rates: {
     auth_failure_rate_pct: number | null;
     ai_scan_success_rate_pct: number | null;
+    ai_scan_avg_latency_ms: number | null;
   };
   alerts: AlertStatus[];
   process: {
@@ -38,11 +42,11 @@ export interface AlertStatus {
   description: string;
 }
 
-/** Alert thresholds — tune per SLO */
 const ALERT_THRESHOLDS = {
-  auth_failure_rate_pct: 25,    // >25% of auth attempts failing → alert
-  ai_scan_success_rate_pct: 70, // <70% success rate → alert
-  http_5xx_total: 50,           // >50 server errors since start → alert
+  auth_failure_rate_pct: 25,
+  ai_scan_success_rate_pct: 70,
+  ai_scan_avg_latency_ms: 15000,
+  http_5xx_total: 50,
 } as const;
 
 @Injectable()
@@ -56,14 +60,15 @@ export class MetricsService {
     auth_register_failure: 0,
     ai_scan_success: 0,
     ai_scan_failure: 0,
+    ai_scan_latency_count: 0,
+    ai_scan_latency_total_ms: 0,
+    ai_scan_latency_max_ms: 0,
     activity_sync_success: 0,
     activity_sync_failure: 0,
     http_requests_total: 0,
     http_errors_5xx: 0,
     http_errors_4xx: 0,
   };
-
-  // ── Increment helpers ──────────────────────────────────────────────────────
 
   inc(key: keyof MetricCounters, by = 1): void {
     this.counters[key] += by;
@@ -77,8 +82,15 @@ export class MetricsService {
     this.inc(type === 'login' ? 'auth_login_failure' : 'auth_register_failure');
   }
 
-  recordAiScan(success: boolean): void {
+  recordAiScan(success: boolean, durationMs?: number): void {
     this.inc(success ? 'ai_scan_success' : 'ai_scan_failure');
+
+    if (typeof durationMs === 'number' && Number.isFinite(durationMs) && durationMs >= 0) {
+      const rounded = Math.round(durationMs);
+      this.inc('ai_scan_latency_count');
+      this.inc('ai_scan_latency_total_ms', rounded);
+      this.counters.ai_scan_latency_max_ms = Math.max(this.counters.ai_scan_latency_max_ms, rounded);
+    }
   }
 
   recordActivitySync(success: boolean): void {
@@ -91,8 +103,6 @@ export class MetricsService {
     else if (statusCode >= 400) this.inc('http_errors_4xx');
   }
 
-  // ── Snapshot ───────────────────────────────────────────────────────────────
-
   getSnapshot(): MetricSnapshot {
     const c = this.counters;
 
@@ -102,6 +112,9 @@ export class MetricsService {
 
     const totalAiScans = c.ai_scan_success + c.ai_scan_failure;
     const aiSuccessRate = totalAiScans > 0 ? (c.ai_scan_success / totalAiScans) * 100 : null;
+    const aiAverageLatency = c.ai_scan_latency_count > 0
+      ? c.ai_scan_latency_total_ms / c.ai_scan_latency_count
+      : null;
 
     const mem = process.memoryUsage();
 
@@ -109,7 +122,7 @@ export class MetricsService {
       {
         name: 'high_auth_failure_rate',
         fired: authFailureRate !== null && authFailureRate > ALERT_THRESHOLDS.auth_failure_rate_pct,
-        value: authFailureRate,
+        value: authFailureRate !== null ? Math.round(authFailureRate * 10) / 10 : null,
         threshold: ALERT_THRESHOLDS.auth_failure_rate_pct,
         unit: '%',
         description: 'Authentication failure rate exceeds threshold',
@@ -117,10 +130,18 @@ export class MetricsService {
       {
         name: 'low_ai_scan_success_rate',
         fired: aiSuccessRate !== null && aiSuccessRate < ALERT_THRESHOLDS.ai_scan_success_rate_pct,
-        value: aiSuccessRate,
+        value: aiSuccessRate !== null ? Math.round(aiSuccessRate * 10) / 10 : null,
         threshold: ALERT_THRESHOLDS.ai_scan_success_rate_pct,
         unit: '%',
         description: 'AI food scan success rate is below acceptable threshold',
+      },
+      {
+        name: 'high_ai_scan_average_latency',
+        fired: aiAverageLatency !== null && aiAverageLatency > ALERT_THRESHOLDS.ai_scan_avg_latency_ms,
+        value: aiAverageLatency !== null ? Math.round(aiAverageLatency) : null,
+        threshold: ALERT_THRESHOLDS.ai_scan_avg_latency_ms,
+        unit: 'ms',
+        description: 'Average AI scan latency exceeds threshold',
       },
       {
         name: 'high_5xx_error_count',
@@ -137,6 +158,7 @@ export class MetricsService {
       rates: {
         auth_failure_rate_pct: authFailureRate !== null ? Math.round(authFailureRate * 10) / 10 : null,
         ai_scan_success_rate_pct: aiSuccessRate !== null ? Math.round(aiSuccessRate * 10) / 10 : null,
+        ai_scan_avg_latency_ms: aiAverageLatency !== null ? Math.round(aiAverageLatency) : null,
       },
       alerts,
       process: {

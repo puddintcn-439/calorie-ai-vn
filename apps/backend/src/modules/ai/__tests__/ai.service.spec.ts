@@ -203,6 +203,22 @@ describe('AiService.scanText', () => {
     expect(result.success).toBe(true);
   });
 
+  it('records failed scan metrics when provider returns unparseable text', async () => {
+    const { GoogleGenerativeAI } = require('@google/generative-ai');
+    (GoogleGenerativeAI as jest.Mock).mockImplementation(() => ({
+      getGenerativeModel: jest.fn().mockReturnValue({
+        generateContent: jest.fn().mockResolvedValue({ response: { text: () => 'not json' } }),
+      }),
+    }));
+    const metrics = makeMetrics();
+    const svc = new AiService(makeConfig(), metrics);
+
+    const result = await svc.scanText('pho');
+
+    expect(result.success).toBe(false);
+    expect(metrics.recordAiScan).toHaveBeenCalledWith(false, expect.any(Number));
+  });
+
   it('throws when Gemini API call fails', async () => {
     const { GoogleGenerativeAI } = require('@google/generative-ai');
     (GoogleGenerativeAI as jest.Mock).mockImplementation(() => ({

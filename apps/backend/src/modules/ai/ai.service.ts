@@ -138,8 +138,7 @@ export class AiService {
       const shouldUseWebEvidence = this.shouldUseImageWebEvidence() && firstPassResponse.items.length > 0;
       if (!shouldUseWebEvidence) {
         this.setCachedImageScan(cacheKey, firstPassResponse);
-        this.metrics.recordAiScan(true);
-        return firstPassResponse;
+        return this.recordAiScanResponse(firstPassResponse, start);
       }
 
       const evidenceQuery = this.buildImageEvidenceQuery(firstPassResponse.items);
@@ -152,8 +151,7 @@ export class AiService {
           web_evidence_used: false,
         });
         this.setCachedImageScan(cacheKey, responseWithoutEvidence);
-        this.metrics.recordAiScan(true);
-        return responseWithoutEvidence;
+        return this.recordAiScanResponse(responseWithoutEvidence, start);
       }
 
       try {
@@ -183,8 +181,7 @@ export class AiService {
         });
 
         this.setCachedImageScan(cacheKey, responseWithEvidence);
-        this.metrics.recordAiScan(true);
-        return responseWithEvidence;
+        return this.recordAiScanResponse(responseWithEvidence, start);
       } catch (evidenceError) {
         this.logger.warn('Image second pass with web evidence failed, fallback to first pass', evidenceError as Error);
         const fallbackResponse = this.cloneResponseWithMetadata(firstPassResponse, {
@@ -193,28 +190,27 @@ export class AiService {
           provider: firstPassProvider,
         });
         this.setCachedImageScan(cacheKey, fallbackResponse);
-        this.metrics.recordAiScan(true);
-        return fallbackResponse;
+        return this.recordAiScanResponse(fallbackResponse, start);
       }
     } catch (error) {
       const msg = String(error ?? '').toLowerCase();
       const category = this.isQuotaOrRateLimitError(error) ? 'quota_or_rate_limit' : msg.includes('timeout') ? 'timeout' : 'error';
       this.logger.error(`[AI-PROVIDER] scanImage error_category=${category}`);
-      this.metrics.recordAiScan(false);
       const isTimeout = String(error ?? '').includes('AI_TIMEOUT');
       if (isTimeout) {
-        return this.buildAiUnavailableScanResponse(Date.now() - start, {
+        return this.recordAiScanResponse(this.buildAiUnavailableScanResponse(Date.now() - start, {
           reason: 'timeout',
           parse_mode: 'image',
           provider_duration_ms: this.getProviderTimeoutMs('scanImage:first_pass'),
-        });
+        }), start);
       }
       if (this.isQuotaOrRateLimitError(error)) {
-        return this.buildAiUnavailableScanResponse(Date.now() - start, {
+        return this.recordAiScanResponse(this.buildAiUnavailableScanResponse(Date.now() - start, {
           reason: 'quota_or_rate_limited',
           parse_mode: 'image',
-        });
+        }), start);
       }
+      this.recordAiScanFailure(start);
       throw error;
     }
   }
@@ -243,31 +239,30 @@ export class AiService {
         provider: providerLabel,
       });
       this.setCachedTextScan(cacheKey, response);
-      this.metrics.recordAiScan(true);
-      return response;
+      return this.recordAiScanResponse(response, start);
     } catch (error) {
       const msg = String(error ?? '').toLowerCase();
       const category = this.isQuotaOrRateLimitError(error) ? 'quota_or_rate_limit' : msg.includes('timeout') ? 'timeout' : 'error';
       this.logger.error(`[AI-PROVIDER] scanText error_category=${category}`);
-      this.metrics.recordAiScan(false);
       const isTimeout = String(error ?? '').includes('AI_TIMEOUT');
       if (isTimeout) {
-        return this.buildAiUnavailableScanResponse(Date.now() - start, {
+        return this.recordAiScanResponse(this.buildAiUnavailableScanResponse(Date.now() - start, {
           reason: 'timeout',
           parse_mode: 'text',
           provider_duration_ms: this.providerTimeoutMs,
           web_evidence_used: Boolean(webEvidence),
           web_provider: webEvidence?.provider,
-        });
+        }), start);
       }
       if (this.isQuotaOrRateLimitError(error)) {
-        return this.buildAiUnavailableScanResponse(Date.now() - start, {
+        return this.recordAiScanResponse(this.buildAiUnavailableScanResponse(Date.now() - start, {
           reason: 'quota_or_rate_limited',
           parse_mode: 'text',
           web_evidence_used: Boolean(webEvidence),
           web_provider: webEvidence?.provider,
-        });
+        }), start);
       }
+      this.recordAiScanFailure(start);
       throw error;
     }
   }
@@ -298,32 +293,33 @@ User transcript: "${sanitizedTranscript}"`;
     try {
       const { result, durationMs, providerLabel } = await this.generateWithTiming(model, prompt, 'scanVoice');
       const text = result.response.text();
-      return this.parseAIResponse(text, Date.now() - start, {
+      return this.recordAiScanResponse(this.parseAIResponse(text, Date.now() - start, {
         parse_mode: 'voice_transcript',
         locale_used: options?.locale,
         provider_duration_ms: durationMs,
         provider: providerLabel,
-      });
+      }), start);
     } catch (error) {
       const msg = String(error ?? '').toLowerCase();
       const category = this.isQuotaOrRateLimitError(error) ? 'quota_or_rate_limit' : msg.includes('timeout') ? 'timeout' : 'error';
       this.logger.error(`[AI-PROVIDER] scanVoice error_category=${category}`);
       const isTimeout = String(error ?? '').includes('AI_TIMEOUT');
       if (isTimeout) {
-        return this.buildAiUnavailableScanResponse(Date.now() - start, {
+        return this.recordAiScanResponse(this.buildAiUnavailableScanResponse(Date.now() - start, {
           reason: 'timeout',
           parse_mode: 'voice_transcript',
           locale_used: options?.locale,
           provider_duration_ms: this.providerTimeoutMs,
-        });
+        }), start);
       }
       if (this.isQuotaOrRateLimitError(error)) {
-        return this.buildAiUnavailableScanResponse(Date.now() - start, {
+        return this.recordAiScanResponse(this.buildAiUnavailableScanResponse(Date.now() - start, {
           reason: 'quota_or_rate_limited',
           parse_mode: 'voice_transcript',
           locale_used: options?.locale,
-        });
+        }), start);
       }
+      this.recordAiScanFailure(start);
       throw error;
     }
   }
@@ -356,34 +352,35 @@ Context:
     try {
       const { result, durationMs, providerLabel } = await this.generateWithTiming(model, [prompt, imagePart], 'scanReceipt');
       const text = result.response.text();
-      return this.parseAIResponse(text, Date.now() - start, {
+      return this.recordAiScanResponse(this.parseAIResponse(text, Date.now() - start, {
         parse_mode: 'receipt_ocr',
         locale_used: options?.locale,
         currency: options?.currency,
         merchant: options?.merchant_hint,
         provider_duration_ms: durationMs,
         provider: providerLabel,
-      });
+      }), start);
     } catch (error) {
       const msg = String(error ?? '').toLowerCase();
       const category = this.isQuotaOrRateLimitError(error) ? 'quota_or_rate_limit' : msg.includes('timeout') ? 'timeout' : 'error';
       this.logger.error(`[AI-PROVIDER] scanReceipt error_category=${category}`);
       const isTimeout = String(error ?? '').includes('AI_TIMEOUT');
       if (isTimeout) {
-        return this.buildAiUnavailableScanResponse(Date.now() - start, {
+        return this.recordAiScanResponse(this.buildAiUnavailableScanResponse(Date.now() - start, {
           reason: 'timeout',
           parse_mode: 'receipt_ocr',
           locale_used: options?.locale,
           provider_duration_ms: this.providerTimeoutMs,
-        });
+        }), start);
       }
       if (this.isQuotaOrRateLimitError(error)) {
-        return this.buildAiUnavailableScanResponse(Date.now() - start, {
+        return this.recordAiScanResponse(this.buildAiUnavailableScanResponse(Date.now() - start, {
           reason: 'quota_or_rate_limited',
           parse_mode: 'receipt_ocr',
           locale_used: options?.locale,
-        });
+        }), start);
       }
+      this.recordAiScanFailure(start);
       throw error;
     }
   }
@@ -408,35 +405,36 @@ Thông tin bổ sung: "${context}"
     try {
       const { result, durationMs, providerLabel } = await this.generateWithTiming(model, prompt, 'refineScan');
       const text = result.response.text();
-      return this.parseAIResponse(text, Date.now() - start, {
+      return this.recordAiScanResponse(this.parseAIResponse(text, Date.now() - start, {
         web_evidence_used: Boolean(webEvidence),
         web_provider: webEvidence?.provider,
         web_sources: webEvidence?.sources,
         provider_duration_ms: durationMs,
         provider: providerLabel,
-      });
+      }), start);
     } catch (error) {
       const msg = String(error ?? '').toLowerCase();
       const category = this.isQuotaOrRateLimitError(error) ? 'quota_or_rate_limit' : msg.includes('timeout') ? 'timeout' : 'error';
       this.logger.error(`[AI-PROVIDER] refineScan error_category=${category}`);
       const isTimeout = String(error ?? '').includes('AI_TIMEOUT');
       if (isTimeout) {
-        return this.buildAiUnavailableScanResponse(Date.now() - start, {
+        return this.recordAiScanResponse(this.buildAiUnavailableScanResponse(Date.now() - start, {
           reason: 'timeout',
           parse_mode: 'refine',
           web_evidence_used: Boolean(webEvidence),
           web_provider: webEvidence?.provider,
           provider_duration_ms: this.providerTimeoutMs,
-        });
+        }), start);
       }
       if (this.isQuotaOrRateLimitError(error)) {
-        return this.buildAiUnavailableScanResponse(Date.now() - start, {
+        return this.recordAiScanResponse(this.buildAiUnavailableScanResponse(Date.now() - start, {
           reason: 'quota_or_rate_limited',
           parse_mode: 'refine',
           web_evidence_used: Boolean(webEvidence),
           web_provider: webEvidence?.provider,
-        });
+        }), start);
       }
+      this.recordAiScanFailure(start);
       throw error;
     }
   }
@@ -659,6 +657,18 @@ Trả lời ngắn gọn, thân thiện bằng tiếng Việt. Không quá 3 câ
 
       throw error;
     }
+  }
+
+  private recordAiScanResponse(response: AIScanResponse, startedAt: number): AIScanResponse {
+    const duration = typeof response.processing_ms === 'number' && Number.isFinite(response.processing_ms)
+      ? response.processing_ms
+      : Date.now() - startedAt;
+    this.metrics.recordAiScan(response.success === true, duration);
+    return response;
+  }
+
+  private recordAiScanFailure(startedAt: number): void {
+    this.metrics.recordAiScan(false, Date.now() - startedAt);
   }
 
   private isQuotaOrRateLimitError(error: unknown): boolean {
