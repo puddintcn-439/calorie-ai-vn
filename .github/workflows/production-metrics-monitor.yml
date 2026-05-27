@@ -1,0 +1,36 @@
+name: Production metrics monitor
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+    inputs:
+      metrics_url:
+        description: 'Override metrics URL for this run'
+        required: false
+        type: string
+
+jobs:
+  check-production-metrics:
+    name: Poll /health/metrics and route alerts
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    env:
+      METRICS_URL: ${{ inputs.metrics_url || vars.PRODUCTION_METRICS_URL }}
+      ALERT_WEBHOOK_URL: ${{ secrets.PRODUCTION_ALERT_WEBHOOK_URL }}
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Skip when metrics URL is not configured
+        if: ${{ env.METRICS_URL == '' }}
+        run: |
+          echo "PRODUCTION_METRICS_URL is not configured; skipping production metrics monitor."
+
+      - name: Run metrics monitor
+        if: ${{ env.METRICS_URL != '' }}
+        run: node scripts/check-production-metrics.js

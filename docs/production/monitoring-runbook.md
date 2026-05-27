@@ -130,6 +130,14 @@ npm run monitor:metrics
 Recommended cron cadence: every 1 minute. Configure the scheduler to notify on
 non-zero exit, and keep the webhook credentials in the scheduler secret store.
 
+GitHub Actions path:
+
+- Workflow: `.github/workflows/production-metrics-monitor.yml`
+- Schedule: every 5 minutes
+- Required variable: `PRODUCTION_METRICS_URL=https://api.calorieai.vn/health/metrics`
+- Optional alert secrets: `PRODUCTION_ALERT_WEBHOOK_URL`, or `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID`
+- If no alert secret is configured, a fired metric still fails the workflow so GitHub can notify maintainers.
+
 Legacy shell equivalent:
 
 ```bash
