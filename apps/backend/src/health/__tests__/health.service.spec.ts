@@ -5,9 +5,10 @@ import { SupabaseService } from '../../common/supabase/supabase.service';
 describe('HealthService', () => {
   let service: HealthService;
   let supabaseService: SupabaseService;
+  let module: TestingModule;
 
   beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
+    module = await Test.createTestingModule({
       providers: [
         HealthService,
         {
@@ -28,6 +29,10 @@ describe('HealthService', () => {
 
     service = module.get<HealthService>(HealthService);
     supabaseService = module.get<SupabaseService>(SupabaseService);
+  });
+
+  afterEach(async () => {
+    await module.close();
   });
 
   it('should be defined', () => {

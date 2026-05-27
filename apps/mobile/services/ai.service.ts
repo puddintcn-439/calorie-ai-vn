@@ -35,8 +35,8 @@ export async function scanImageFromUri(uri: string): Promise<AIScanResponse> {
 
   const res = await withRetry(() => apiClient.post<AIScanResponse>('/ai/scan/image', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
-    timeout: 45000,
-  }));
+    timeout: 30000,
+  }), 2, 500);
 
   return res.data;
 }
@@ -67,8 +67,8 @@ export async function scanReceipt(payload: ScanReceiptPayload): Promise<AIScanRe
 
   const res = await withRetry(() => apiClient.post<AIScanResponse>('/ai/scan/receipt', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
-    timeout: 45000,
-  }));
+    timeout: 30000,
+  }), 2, 500);
 
   return res.data;
 }

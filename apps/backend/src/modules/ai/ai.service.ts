@@ -899,8 +899,7 @@ Trả lời ngắn gọn, thân thiện bằng tiếng Việt. Không quá 3 câ
           try {
             const genPromise = p.model.generateContent(input);
             const timeoutMs = this.getProviderTimeoutMs(opName);
-            const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('AI_TIMEOUT')), timeoutMs));
-            const result = await Promise.race([genPromise, timeoutPromise]);
+            const result = await this.withProviderTimeout(genPromise, timeoutMs);
             const duration = Date.now() - start;
             this.logger.debug(`[AI-PROVIDER] ${opName ?? 'op'} provider=${p.name} success duration_ms=${duration}`);
             // Wrap provider label with the original result so the caller can
@@ -1050,12 +1049,7 @@ Trả lời ngắn gọn, thân thiện bằng tiếng Việt. Không quá 3 câ
             const handlesProviderTimeouts = Boolean(model?.__handlesProviderTimeouts);
             const rawResult = handlesProviderTimeouts
               ? await model.generateContent(input, opName)
-              : await Promise.race([
-                model.generateContent(input, opName),
-                new Promise((_, reject) =>
-                  setTimeout(() => reject(new Error('AI_TIMEOUT')), this.getProviderTimeoutMs(opName)),
-                ),
-              ]);
+              : await this.withProviderTimeout(model.generateContent(input, opName), this.getProviderTimeoutMs(opName));
 
             // If a wrapper returned provider metadata, unwrap it.
             let providerLabel: string | undefined = undefined;
@@ -1112,6 +1106,21 @@ Trả lời ngắn gọn, thân thiện bằng tiếng Việt. Không quá 3 câ
     };
 
     return (this.aiQueue as AiQueueService).execute(opName, executeFn);
+  }
+
+  private async withProviderTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutId = setTimeout(() => reject(new Error('AI_TIMEOUT')), timeoutMs);
+      const maybeNodeTimer = timeoutId as ReturnType<typeof setTimeout> & { unref?: () => void };
+      maybeNodeTimer.unref?.();
+    });
+
+    try {
+      return await Promise.race([promise, timeoutPromise]);
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId);
+    }
   }
 
   private getProviderTimeoutMs(opName?: string): number {

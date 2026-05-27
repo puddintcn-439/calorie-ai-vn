@@ -11,7 +11,7 @@ export default defineConfig({
     command: 'npm run dev:web -- --clear',
     url: 'http://localhost:19006',
     timeout: 120_000,
-    reuseExistingServer: false,
+    reuseExistingServer: !process.env.CI,
     env: {
       CI: '1',
     },

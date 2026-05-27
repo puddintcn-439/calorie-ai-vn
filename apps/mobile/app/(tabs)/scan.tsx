@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View,
   StyleSheet,
@@ -138,6 +138,7 @@ export default function ScanScreen() {
   const [scanNotice, setScanNotice] = useState<string | null>(null);
   const [lastFailedScan, setLastFailedScan] = useState<{ mode: InputMode; payload?: any } | null>(null);
   const [isRetrying, setIsRetrying] = useState(false);
+  const [scanElapsedSeconds, setScanElapsedSeconds] = useState(0);
 
   // Context state
   const { activeContexts, toggleContext } = useContextStore();
@@ -153,6 +154,7 @@ export default function ScanScreen() {
   const [reward, setReward] = useState<RewardToastData | null>(null);
 
   const { addLog, removeLog, saveMeal } = useLogStore();
+  const isAiScanning = isScanning || isReceiptScanning;
   // Always prefer editableItems if we have a scan result, even if empty
   const currentItems = scanResult ? editableItems : [];
   const totalCalories = currentItems.reduce((s, i) => s + safeNumber(i.calories), 0);
@@ -161,6 +163,26 @@ export default function ScanScreen() {
   const totalProtein = currentItems.reduce((s, i) => s + safeNumber(i.protein_g), 0);
   const totalCarbs = currentItems.reduce((s, i) => s + safeNumber(i.carbs_g), 0);
   const totalFat = currentItems.reduce((s, i) => s + safeNumber(i.fat_g), 0);
+
+  useEffect(() => {
+    if (!isAiScanning) {
+      setScanElapsedSeconds(0);
+      return undefined;
+    }
+
+    const startedAt = Date.now();
+    const timer = setInterval(() => {
+      setScanElapsedSeconds(Math.max(1, Math.round((Date.now() - startedAt) / 1000)));
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [isAiScanning]);
+
+  const getScanningHelpText = () => {
+    if (scanElapsedSeconds < 6) return 'Dang toi uu anh va gui AI phan tich.';
+    if (scanElapsedSeconds < 14) return 'Anh nhieu mon co the lau hon mot chut. Ban co the chup can mon chinh neu can.';
+    return 'AI van dang xu ly. Neu mang cham hoac anh qua phuc tap, hay nhap mo ta nhanh de co ket qua som hon.';
+  };
 
   const applyScanResult = (result: AIScanResponse) => {
     const fallbackReason = getAiFallbackReason(result);
@@ -408,7 +430,7 @@ export default function ScanScreen() {
     catch (err) {
       void telemetryService.emitLogFailed('image', 'scan_api_error', Date.now() - startedAt);
       setScanNotice('Không thể phân tích ảnh lúc này. Vui lòng thử lại sau ít phút.');
-      setLastFailedScan({ mode: 'camera', payload: uri });
+      setLastFailedScan({ mode: mode === 'gallery' ? 'gallery' : 'camera', payload: uri });
       console.error('runImageScan error', err);
       Alert.alert('screen.tabs.scan.alert.012', 'screen.tabs.scan.alert.013');
     }
@@ -1003,8 +1025,14 @@ export default function ScanScreen() {
             <TextInput style={styles.textInput} value={textInput} onChangeText={setTextInput}
               placeholder="screen.tabs.scan.placeholder.003"
               placeholderTextColor={theme.colors.textDisabled} multiline />
-            <TouchableOpacity style={styles.analyzeButton} onPress={handleTextScan}>
-              <Text style={styles.analyzeButtonText} i18nKey="screen.tabs.scan.text.017" />
+            <TouchableOpacity
+              style={[styles.analyzeButton, (!textInput.trim() || isScanning) && styles.buttonDisabled]}
+              onPress={handleTextScan}
+              disabled={!textInput.trim() || isScanning}
+            >
+              <Text style={styles.analyzeButtonText}>
+                {isScanning ? 'Dang phan tich...' : 'Phan tich'}
+              </Text>
             </TouchableOpacity>
           </View>
         )}
@@ -1106,10 +1134,11 @@ export default function ScanScreen() {
         )}
 
         {/* Loading spinner for AI scan */}
-        {(isScanning || isReceiptScanning) && mode !== 'barcode' && (
+        {isAiScanning && mode !== 'barcode' && (
           <View style={styles.scanningContainer}>
             <ActivityIndicator size="large" color={theme.colors.success} />
             <Text style={styles.scanningText}>{mode === 'receipt' ? 'AI đang đọc hóa đơn...' : 'AI đang phân tích...'}</Text>
+            <Text style={styles.scanningHelpText}>{getScanningHelpText()}</Text>
           </View>
         )}
 
@@ -1435,6 +1464,7 @@ const styles = createThemedStyles((colors, radii) => ({
   previewImage: { width: '100%', height: 220, borderRadius: 8, marginBottom: 16 },
   scanningContainer: { alignItems: 'center', padding: 30, gap: 12 },
   scanningText: { color: colors.textMuted, fontSize: 15, marginTop: 8 },
+  scanningHelpText: { color: colors.textSoft, fontSize: 13, lineHeight: 19, textAlign: 'center', maxWidth: 420 },
   sectionTitle: { fontSize: 18, fontWeight: '700', color: colors.text, marginBottom: 12 },
   mealPicker: { flexDirection: 'row', gap: 8, marginBottom: 12 },
   mealChip: { flex: 1, padding: 10, borderRadius: 8, backgroundColor: colors.surfaceAlt, alignItems: 'center', borderWidth: 1, borderColor: colors.border },
