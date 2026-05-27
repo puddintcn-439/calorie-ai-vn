@@ -12,26 +12,52 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Check required secrets
+        id: secret_check
+        env:
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          GEMINI_API_KEY_PRIMARY: ${{ secrets.GEMINI_API_KEY_PRIMARY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          set -euo pipefail
+          missing=""
+          if [ -z "$JWT_SECRET" ]; then missing="$missing JWT_SECRET"; fi
+          if [ -z "$SUPABASE_SERVICE_KEY" ]; then missing="$missing SUPABASE_SERVICE_KEY"; fi
+          if [ -z "$GEMINI_API_KEY_PRIMARY" ] && [ -z "$GEMINI_API_KEY" ]; then missing="$missing GEMINI_API_KEY_PRIMARY_or_GEMINI_API_KEY"; fi
+          if [ -n "$missing" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Skipping real-provider AI smoke test because required secrets are missing:$missing"
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+            echo "Required secrets are configured."
+          fi
+
       - name: Setup Node
+        if: steps.secret_check.outputs.configured == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
       - name: Install dependencies
+        if: steps.secret_check.outputs.configured == 'true'
         run: npm ci
 
       - name: Ensure tools available
+        if: steps.secret_check.outputs.configured == 'true'
         run: |
           sudo apt-get update -y
           sudo apt-get install -y jq postgresql-client
 
       - name: Start Postgres service only
+        if: steps.secret_check.outputs.configured == 'true'
         env:
           NODE_ENV: 'development'
         run: |
           docker compose -f docker-compose.yml up -d postgres
 
       - name: Wait for Postgres readiness
+        if: steps.secret_check.outputs.configured == 'true'
         run: |
           echo "Waiting for postgres to accept connections..."
           for i in $(seq 1 40); do
@@ -42,12 +68,14 @@ jobs:
           pg_isready -h localhost -p 5432 -U postgres || (docker compose -f docker-compose.yml logs postgres || true; exit 1)
 
       - name: Run DB migrations
+        if: steps.secret_check.outputs.configured == 'true'
         env:
           SUPABASE_DB_URL: 'postgres://postgres:postgres@localhost:5432/calorie_ai'
         run: |
           npm run migrate
 
       - name: Start backend (real provider)
+        if: steps.secret_check.outputs.configured == 'true'
         env:
           AI_SIMULATE_LOCAL_RESPONSE: 'false'
           NODE_ENV: 'development'
@@ -61,6 +89,7 @@ jobs:
           docker compose -f docker-compose.yml up -d --build backend
 
       - name: Wait for backend /health
+        if: steps.secret_check.outputs.configured == 'true'
         run: |
           set -e
           echo "Waiting for backend /health..."
@@ -81,6 +110,7 @@ jobs:
           fi
 
       - name: Run AI integration smoke test
+        if: steps.secret_check.outputs.configured == 'true'
         run: |
           set -euo pipefail
           echo "Posting AI integration request"
@@ -124,6 +154,6 @@ jobs:
           fi
 
       - name: Tear down
-        if: always()
+        if: always() && steps.secret_check.outputs.configured == 'true'
         run: |
           docker compose -f docker-compose.yml down --volumes --remove-orphans

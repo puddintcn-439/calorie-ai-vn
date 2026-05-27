@@ -88,7 +88,11 @@ function getAiFallbackReason(result: AIScanResponse): string | null {
   return typeof reason === 'string' ? reason : 'unavailable';
 }
 
-function getAiFallbackNotice(reason: string): string {
+function getAiFallbackNotice(reason: string, parseMode?: string): string {
+  if (reason === 'timeout' && parseMode !== 'image' && parseMode !== 'receipt') {
+    return 'AI dang xu ly hoi lau. Vui long thu lai, hoac nhap mo ta ngan gon hon de co ket qua som hon.';
+  }
+
   if (reason === 'timeout') {
     return 'AI xử lý ảnh hơi lâu, thường gặp với ảnh nhiều món hoặc ảnh quá lớn. Vui lòng thử lại hoặc chụp gần món chính hơn.';
   }
@@ -187,9 +191,12 @@ export default function ScanScreen() {
   const applyScanResult = (result: AIScanResponse) => {
     const fallbackReason = getAiFallbackReason(result);
     if (fallbackReason) {
+      const parseMode = typeof result.metadata?.parse_mode === 'string'
+        ? result.metadata.parse_mode
+        : undefined;
       setScanResult(null);
       setEditableItems([]);
-      setScanNotice(getAiFallbackNotice(fallbackReason));
+      setScanNotice(getAiFallbackNotice(fallbackReason, parseMode));
       Alert.alert(
         'screen.tabs.scan.alert.001',
         'screen.tabs.scan.alert.002',
@@ -816,13 +823,13 @@ export default function ScanScreen() {
         {scanNotice ? (
           <SurfaceCard style={styles.scanNoticeCard}>
             <Text style={styles.scanNoticeTitle} i18nKey="screen.tabs.scan.text.002" />
-            <Text style={styles.scanNoticeBody}>{scanNotice}</Text>
+            <Text style={styles.scanNoticeBody} testID="scan-notice-body">{scanNotice}</Text>
             {lastFailedScan ? (
               <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
-                <TouchableOpacity style={[styles.retryButton, isRetrying && styles.buttonDisabled]} onPress={handleRetryLast} disabled={isRetrying}>
+                <TouchableOpacity testID="scan-retry-button" style={[styles.retryButton, isRetrying && styles.buttonDisabled]} onPress={handleRetryLast} disabled={isRetrying}>
                   <Text style={styles.retryButtonText}>{isRetrying ? 'Đang thử lại...' : 'Thử lại'}</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={[styles.cancelButton, isRetrying && styles.buttonDisabled]} onPress={() => { setLastFailedScan(null); setScanNotice(null); }}>
+                <TouchableOpacity testID="scan-cancel-notice-button" style={[styles.cancelButton, isRetrying && styles.buttonDisabled]} onPress={() => { setLastFailedScan(null); setScanNotice(null); }}>
                   <Text style={styles.cancelButtonText}>Huỷ</Text>
                 </TouchableOpacity>
               </View>
