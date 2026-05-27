@@ -766,6 +766,7 @@ export default function ScanScreen() {
         <View style={styles.modeTabs}>
           {PRIMARY_INPUT_MODES.map((m) => (
             <TouchableOpacity key={m} style={[styles.modeTab, mode === m && styles.modeTabActive]}
+              testID={`scan-mode-${m}`}
               onPress={() => selectInputMode(m)}>
               <AnimatedIonicon
                 name={MODE_ICONS[m]}
@@ -779,6 +780,7 @@ export default function ScanScreen() {
           ))}
           <TouchableOpacity
             style={[styles.modeTab, styles.modeMoreTab, (showMoreModes || SECONDARY_INPUT_MODES.includes(mode)) && styles.modeTabActive]}
+            testID="scan-mode-more"
             onPress={() => setShowMoreModes((value) => !value)}
           >
             <AnimatedIonicon
@@ -794,7 +796,7 @@ export default function ScanScreen() {
         {(showMoreModes || SECONDARY_INPUT_MODES.includes(mode)) && (
           <View style={styles.modeMorePanel}>
             {SECONDARY_INPUT_MODES.map((m) => (
-              <TouchableOpacity key={m} style={[styles.modeTab, styles.modeSecondaryTab, mode === m && styles.modeTabActive]} onPress={() => selectInputMode(m)}>
+              <TouchableOpacity key={m} style={[styles.modeTab, styles.modeSecondaryTab, mode === m && styles.modeTabActive]} testID={`scan-mode-${m}`} onPress={() => selectInputMode(m)}>
                 <AnimatedIonicon
                   name={MODE_ICONS[m]}
                   size={15}
