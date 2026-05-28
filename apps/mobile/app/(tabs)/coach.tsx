@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   StyleSheet,
+  TouchableOpacity,
   View,
   ScrollView,
   RefreshControl,
@@ -12,7 +13,7 @@ import { UiButton } from '../../components/ui-button';
 import { UiInput } from '../../components/ui-input';
 import { askCoach } from '../../services/ai.service';
 import { useLogStore } from '../../store/log.store';
-import { CoachingInsight, CoachingSummary } from '@calorie-ai/types';
+import { CoachingInsight, CoachingSummary, DailyLog } from '@calorie-ai/types';
 import { apiClient } from '../../services/api';
 import { VisualHeroCard } from '../../components/visual-hero-card';
 import { createThemedStyles, theme, useAppTheme } from '../../components/theme';
@@ -26,6 +27,140 @@ interface ChatMessage {
   id: string;
   role: 'user' | 'coach';
   text: string;
+}
+
+type ActivePlan = {
+  title: string;
+  body: string;
+  status: string;
+  tone: 'good' | 'warn' | 'info';
+  steps: string[];
+  prompts: string[];
+  primaryRoute: '/scan' | '/log' | '/progress';
+  primaryLabel: string;
+};
+
+const MEAL_ORDER = ['breakfast', 'lunch', 'dinner', 'snack'] as const;
+const MEAL_LABELS: Record<(typeof MEAL_ORDER)[number], string> = {
+  breakfast: 'sang',
+  lunch: 'trua',
+  dinner: 'toi',
+  snack: 'vat',
+};
+
+function getNextMealLabel(logs: Array<{ meal_type?: string }> = []) {
+  const loggedMeals = new Set(logs.map((log) => log.meal_type).filter(Boolean));
+  const nextMeal = MEAL_ORDER.find((meal) => !loggedMeals.has(meal)) ?? 'snack';
+  return MEAL_LABELS[nextMeal];
+}
+
+function buildActivePlan(dailyLog: DailyLog | null): ActivePlan {
+  const logs = dailyLog?.logs ?? [];
+  const consumed = toFiniteNumber(dailyLog?.total_calories) ?? 0;
+  const target = toFiniteNumber(dailyLog?.target_calories) ?? 1800;
+  const protein = toFiniteNumber(dailyLog?.total_protein_g) ?? 0;
+  const remaining = target - consumed;
+  const mealCount = logs.length;
+  const nextMeal = getNextMealLabel(logs);
+  const proteinTarget = Math.max(70, Math.round(target * 0.075 / 4));
+
+  if (mealCount === 0) {
+    return {
+      title: 'Bat dau bang 1 bua de app co du lieu',
+      body: 'Dung can nhap hoan hao. Uoc luong nhanh van tot hon de trong ngay.',
+      status: 'Chua log bua nao',
+      tone: 'info',
+      steps: [
+        'Log bua gan nhat bang anh hoac mo ta ngan.',
+        `Giu bua tiep theo quanh ${Math.round(target * 0.3)}-${Math.round(target * 0.4)} kcal.`,
+        'Them protein de tranh doi lai sau vai gio.',
+      ],
+      prompts: [
+        'Toi moi bat dau hom nay, nen an bua tiep theo the nao?',
+        `Lap ke hoach don gian cho muc tieu ${target} kcal hom nay.`,
+      ],
+      primaryRoute: '/scan',
+      primaryLabel: 'Log bua dau tien',
+    };
+  }
+
+  if (remaining < -150) {
+    return {
+      title: 'Hom nay da vuot muc tieu, tap trung cuu ngay',
+      body: 'Khong can bo bua. Giam do ngot/dau va them van dong nhe de ngay mai khong bi vo nhip.',
+      status: `Du ${Math.abs(Math.round(remaining))} kcal`,
+      tone: 'warn',
+      steps: [
+        'Bua sau chon mon nhieu rau, dam nac, it sot.',
+        'Di bo 15-25 phut neu suc khoe cho phep.',
+        'Dung an bu qua manh vao ngay mai.',
+      ],
+      prompts: [
+        'Hom nay toi vuot kcal, toi nen an gi cho bua tiep theo?',
+        'Goi y mot bua toi nhe nhung khong bi doi.',
+      ],
+      primaryRoute: '/log',
+      primaryLabel: 'Xem lai bua da log',
+    };
+  }
+
+  if (remaining > 450) {
+    return {
+      title: `Con room tot cho bua ${nextMeal}`,
+      body: 'Dung cat calo qua sau. Mot bua du dam se giup giam an vat ve toi.',
+      status: `Con ${Math.round(remaining)} kcal`,
+      tone: 'good',
+      steps: [
+        `Chon bua ${nextMeal} co dam nac va rau.`,
+        `Neu doi, dung khoang ${Math.min(450, Math.max(250, Math.round(remaining * 0.55)))} kcal truoc.`,
+        'Neu sap ngu, uu tien sua chua/trai cay it ngot/protein nhe.',
+      ],
+      prompts: [
+        `Toi con ${Math.round(remaining)} kcal, goi y bua ${nextMeal} de giam can.`,
+        'Goi y 3 mon Viet Nam de an no ma khong vuot kcal.',
+      ],
+      primaryRoute: '/scan',
+      primaryLabel: `Log bua ${nextMeal}`,
+    };
+  }
+
+  if (protein < proteinTarget * 0.65) {
+    return {
+      title: 'Can tang protein de do doi hon',
+      body: 'Calo dang on, nhung protein thap se lam de them an vat.',
+      status: `${Math.round(protein)}/${proteinTarget}g protein`,
+      tone: 'info',
+      steps: [
+        'Them trung, sua chua, dau hu, ga, ca hoac thit nac.',
+        'Giu tinh bot vua phai trong bua tiep theo.',
+        'Neu an vat, chon protein thay vi tra sua/banh ngot.',
+      ],
+      prompts: [
+        `Toi moi co ${Math.round(protein)}g protein, bua tiep theo nen an gi?`,
+        'Goi y snack giau protein, re va de mua.',
+      ],
+      primaryRoute: '/scan',
+      primaryLabel: 'Log mon protein',
+    };
+  }
+
+  return {
+    title: 'Hom nay dang di dung huong',
+    body: 'Giu nhip nay. Viec quan trong nhat la log tiep bua sau va khong toi uu qua muc.',
+    status: `Con ${Math.max(0, Math.round(remaining))} kcal`,
+    tone: 'good',
+    steps: [
+      `Log bua ${nextMeal} ngay sau khi an.`,
+      'Giu do uong khong calo neu dang them ngot.',
+      'Cuoi ngay xem Progress de biet co can chinh ngay mai khong.',
+    ],
+    prompts: [
+      'Danh gia nhanh ngay hom nay cua toi va noi buoc tiep theo.',
+      'Toi nen an gi de ket thuc ngay ma van giam can?',
+    ],
+    primaryRoute: '/scan',
+    primaryLabel: `Log bua ${nextMeal}`,
+  };
 }
 
 function getInsightContentKey(insight: Pick<CoachingInsight, 'title' | 'description' | 'action_suggestion'>): string {
@@ -286,6 +421,7 @@ export default function CoachScreen() {
       target_calories: target,
     };
   }, [dailyLog]);
+  const activePlan = useMemo(() => buildActivePlan(dailyLog), [dailyLog]);
   const summaryRecommendation = localizeInsightTextForLocale(summary?.recommended_action, locale) || t('screen.tabs.coach.summaryFallback')
     || 'Coach cần thêm dữ liệu log trong tuần để đưa ra gợi ý chính xác hơn.';
 
@@ -336,6 +472,10 @@ export default function CoachScreen() {
     }
   };
 
+  const handleUsePrompt = (prompt: string) => {
+    setInput(prompt);
+  };
+
   const renderInsightCard = (insight: CoachingInsight) => (
     <View key={insight.id} style={styles.insightCard}>
       <View style={styles.insightHeader}>
@@ -370,6 +510,64 @@ export default function CoachScreen() {
           title="screen.tabs.coach.title.001"
           body="screen.tabs.coach.body.001"
         />
+
+        <SurfaceCard
+          style={[
+            styles.activePlanCard,
+            activePlan.tone === 'good' && styles.activePlanGood,
+            activePlan.tone === 'warn' && styles.activePlanWarn,
+          ]}
+        >
+          <View style={styles.activePlanHeader}>
+            <View style={styles.activePlanCopy}>
+              <Text style={styles.activePlanEyebrow}>KE HOACH HOM NAY</Text>
+              <Text style={styles.activePlanTitle}>{activePlan.title}</Text>
+              <Text style={styles.activePlanBody}>{activePlan.body}</Text>
+            </View>
+            <View style={[
+              styles.activePlanStatusPill,
+              activePlan.tone === 'warn' && styles.activePlanStatusPillWarn,
+            ]}>
+              <Text style={[
+                styles.activePlanStatusText,
+                activePlan.tone === 'warn' && styles.activePlanStatusTextWarn,
+              ]}>
+                {activePlan.status}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.planSteps}>
+            {activePlan.steps.map((step, index) => (
+              <View key={`${step}-${index}`} style={styles.planStep}>
+                <Text style={styles.planStepIndex}>{index + 1}</Text>
+                <Text style={styles.planStepText}>{step}</Text>
+              </View>
+            ))}
+          </View>
+
+          <View style={styles.planActions}>
+            <UiButton
+              label={activePlan.primaryLabel}
+              onPress={() => router.push(activePlan.primaryRoute)}
+              style={styles.planPrimaryAction}
+            />
+            <UiButton
+              label="Xem Today"
+              variant="secondary"
+              onPress={() => router.push('/')}
+              style={styles.planSecondaryAction}
+            />
+          </View>
+
+          <View style={styles.promptRow}>
+            {activePlan.prompts.map((prompt) => (
+              <TouchableOpacity key={prompt} style={styles.promptChip} onPress={() => handleUsePrompt(prompt)}>
+                <Text style={styles.promptChipText}>{prompt}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </SurfaceCard>
 
         {/* Weekly Summary */}
         {summary && (
@@ -487,6 +685,130 @@ const styles = createThemedStyles((colors, radii) => ({
   heroBody: {
     marginBottom: 14,
     maxWidth: 720,
+  },
+  activePlanCard: {
+    marginBottom: 12,
+    borderColor: colors.borderInfo,
+    backgroundColor: colors.surfaceInfo,
+  },
+  activePlanGood: {
+    borderColor: colors.borderSuccess,
+    backgroundColor: colors.surfaceSuccess,
+  },
+  activePlanWarn: {
+    borderColor: colors.borderWarning,
+    backgroundColor: colors.surfaceWarning,
+  },
+  activePlanHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 12,
+  },
+  activePlanCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  activePlanEyebrow: {
+    color: colors.textMuted,
+    fontSize: 11,
+    fontWeight: '900',
+    marginBottom: 4,
+  },
+  activePlanTitle: {
+    color: colors.text,
+    fontSize: 18,
+    lineHeight: 23,
+    fontWeight: '900',
+  },
+  activePlanBody: {
+    color: colors.textSoft,
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: 4,
+  },
+  activePlanStatusPill: {
+    minHeight: 30,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.borderInfo,
+    backgroundColor: colors.surface,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  activePlanStatusPillWarn: {
+    borderColor: colors.borderWarning,
+  },
+  activePlanStatusText: {
+    color: colors.accentCyan,
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  activePlanStatusTextWarn: {
+    color: colors.accentAmber,
+  },
+  planSteps: {
+    gap: 8,
+  },
+  planStep: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 9,
+  },
+  planStepIndex: {
+    width: 22,
+    height: 22,
+    borderRadius: 999,
+    overflow: 'hidden',
+    textAlign: 'center',
+    lineHeight: 22,
+    color: colors.textOnAccent,
+    backgroundColor: colors.accentMint,
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  planStepText: {
+    flex: 1,
+    color: colors.textSoft,
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  planActions: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 14,
+  },
+  planPrimaryAction: {
+    flex: 1.1,
+    paddingVertical: 11,
+  },
+  planSecondaryAction: {
+    flex: 0.9,
+    paddingVertical: 11,
+  },
+  promptRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 12,
+  },
+  promptChip: {
+    flexGrow: 1,
+    flexBasis: '46%',
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+  },
+  promptChipText: {
+    color: colors.textSoft,
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '800',
   },
   summaryCard: {
     marginBottom: 12,
