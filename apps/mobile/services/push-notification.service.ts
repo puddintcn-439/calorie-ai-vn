@@ -2,6 +2,7 @@ import type * as ExpoNotifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { apiClient } from './api';
+import { authStorage } from './auth-storage';
 
 type NotificationsModule = typeof ExpoNotifications;
 
@@ -30,16 +31,54 @@ function getNotificationsModule(): NotificationsModule | null {
 }
 
 class PushNotificationService {
+  private initPromise: Promise<string | null> | null = null;
+
   private getExpoProjectId(): string | null {
     return Constants.easConfig?.projectId
       ?? Constants.expoConfig?.extra?.eas?.projectId
       ?? null;
   }
 
+  private getRegistrationMetadata() {
+    const expoConfig = Constants.expoConfig;
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+    return {
+      platform: Platform.OS === 'ios' ? 'ios' : Platform.OS === 'android' ? 'android' : 'web',
+      device_id: Constants.sessionId ?? Constants.installationId ?? undefined,
+      app_version: expoConfig?.version ?? undefined,
+      timezone,
+      timezone_offset_minutes: new Date().getTimezoneOffset(),
+    };
+  }
+
+  private async ensureAndroidReminderChannel(Notifications: NotificationsModule) {
+    if (Platform.OS !== 'android') return;
+
+    await Notifications.setNotificationChannelAsync('reminders', {
+      name: 'Meal reminders',
+      description: 'Meal logging reminders and weight-loss plan nudges',
+      importance: Notifications.AndroidImportance.HIGH,
+      vibrationPattern: [0, 250, 250, 250],
+      lightColor: '#6ee7b7',
+      sound: 'default',
+    });
+  }
+
   /**
    * Initialize push notifications for the app
    */
   async initializePushNotifications(): Promise<string | null> {
+    if (this.initPromise) return this.initPromise;
+
+    this.initPromise = this.initializePushNotificationsInternal().finally(() => {
+      this.initPromise = null;
+    });
+
+    return this.initPromise;
+  }
+
+  private async initializePushNotificationsInternal(): Promise<string | null> {
     try {
       const Notifications = getNotificationsModule();
       // Web push needs VAPID setup; skip token registration on web to avoid noisy runtime errors.
@@ -47,9 +86,20 @@ class PushNotificationService {
         return null;
       }
 
-      // Request user permission for notifications
-      const { status } = await Notifications.requestPermissionsAsync();
-      if (status !== 'granted') {
+      await this.ensureAndroidReminderChannel(Notifications);
+
+      const existingPermissions = await Notifications.getPermissionsAsync();
+      const finalPermissions = existingPermissions.granted
+        ? existingPermissions
+        : await Notifications.requestPermissionsAsync({
+            ios: {
+              allowAlert: true,
+              allowBadge: true,
+              allowSound: true,
+            },
+          });
+
+      if (!finalPermissions.granted) {
         console.warn('[Push] User declined notification permissions');
         return null;
       }
@@ -62,34 +112,42 @@ class PushNotificationService {
 
       // Get push token (on physical device or simulator with proper setup)
       const token = (await Notifications.getExpoPushTokenAsync({ projectId })).data;
-      console.log('[Push] Expo push token:', token);
+      const cachedToken = await authStorage.getItemAsync('push_token');
 
-      // Register token with backend so server-side cron can send pushes
       try {
+        const metadata = this.getRegistrationMetadata();
         await apiClient.post('/reminders/push-token', {
           token,
-          platform: Platform.OS === 'ios' ? 'ios' : Platform.OS === 'android' ? 'android' : 'web',
+          ...metadata,
         });
+        if (cachedToken && cachedToken !== token) {
+          await this.unregisterPushToken(cachedToken, false);
+        }
+        await authStorage.setItemAsync('push_token', token);
         console.log('[Push] Token registered with backend');
       } catch (err) {
         console.warn('[Push] Failed to register token with backend:', err);
-      }
-
-      // Set up notification channels for Android
-      if (Platform.OS === 'android') {
-        await Notifications.setNotificationChannelAsync('reminders', {
-          name: 'Reminders',
-          importance: Notifications.AndroidImportance.HIGH,
-          vibrationPattern: [0, 250, 250, 250],
-          lightColor: '#6ee7b7',
-          sound: 'default',
-        });
       }
 
       return token;
     } catch (error) {
       console.warn('[Push] Failed to initialize notifications:', error);
       return null;
+    }
+  }
+
+  async unregisterPushToken(token?: string | null, clearLocalToken = true): Promise<void> {
+    const resolvedToken = token ?? await authStorage.getItemAsync('push_token');
+    if (!resolvedToken) return;
+
+    try {
+      await apiClient.delete('/reminders/push-token', { data: { token: resolvedToken } });
+    } catch (error) {
+      console.warn('[Push] Failed to unregister token with backend:', error);
+    } finally {
+      if (clearLocalToken) {
+        await authStorage.deleteItemAsync('push_token');
+      }
     }
   }
 

@@ -8,6 +8,8 @@ const REQUIRED_TABLES = [
   'correction_events',
   'user_subscriptions',
   'reminder_preferences',
+  'push_notification_tokens',
+  'reminder_notification_log',
   'logging_events',
 ] as const;
 

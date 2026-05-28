@@ -295,7 +295,6 @@ export class ReminderService {
     const prefs = await this.getReminderPreferences(userId);
     if (!prefs.allow_push_notifications) return [];
 
-    const summary = await this.gamificationService.getSummary(userId);
     const now = new Date();
     const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
@@ -308,45 +307,50 @@ export class ReminderService {
       const time = prefs[`${meal}_reminder_time`];
 
       if (enabled && time === currentTime) {
-        // Get today's calories for this meal type
-        const { data: logs, error } = await this.supabase.db
-          .from('food_logs')
-          .select('calories')
-          .eq('user_id', userId)
-          .eq('meal_type', meal)
-          .gte('logged_at', new Date().toISOString().split('T')[0] + 'T00:00:00');
-
-        if (error) continue;
-
-        const caloriesLogged = (logs ?? []).reduce((s, l) => s + l.calories, 0);
-
-        // Get user's daily target
-        const { data: userData } = await this.supabase.db
-          .from('users')
-          .select('daily_calorie_target')
-          .eq('id', userId)
-          .single();
-
-        const dailyTarget = userData?.daily_calorie_target ?? 1800;
-        const mealTarget = dailyTarget / 4; // Simple division by 4 meals
-
-        const nudge = this.generateNudgeMessage({
-          mealType: meal,
-          caloriesLogged,
-          calorieTarget: Math.round(mealTarget),
-          adherencePercentage: Math.round((caloriesLogged / mealTarget) * 100),
-          mealsLogged: logs?.length ?? 0,
-          motivationStyle: prefs.nudge_motivation_style,
-          currentStreak: summary.current_streak,
-          longestStreak: summary.longest_streak,
-          nextStreakMilestone: summary.next_streak_milestone,
-        });
-
-        dueReminders.push(nudge);
+        dueReminders.push(await this.generateMealReminder(userId, meal, prefs));
       }
     }
 
     return dueReminders;
+  }
+
+  async generateMealReminder(
+    userId: string,
+    meal: 'breakfast' | 'lunch' | 'dinner' | 'snack',
+    prefs?: ReminderPreferences,
+  ): Promise<NudgeMessage> {
+    const resolvedPrefs = prefs ?? await this.getReminderPreferences(userId);
+    const summary = await this.gamificationService.getSummary(userId);
+
+    const { data: logs, error } = await this.supabase.db
+      .from('food_logs')
+      .select('calories')
+      .eq('user_id', userId)
+      .eq('meal_type', meal)
+      .gte('logged_at', new Date().toISOString().split('T')[0] + 'T00:00:00');
+
+    const caloriesLogged = error ? 0 : (logs ?? []).reduce((s, l) => s + l.calories, 0);
+
+    const { data: userData } = await this.supabase.db
+      .from('users')
+      .select('daily_calorie_target')
+      .eq('id', userId)
+      .single();
+
+    const dailyTarget = userData?.daily_calorie_target ?? 1800;
+    const mealTarget = dailyTarget / 4;
+
+    return this.generateNudgeMessage({
+      mealType: meal,
+      caloriesLogged,
+      calorieTarget: Math.round(mealTarget),
+      adherencePercentage: Math.round((caloriesLogged / mealTarget) * 100),
+      mealsLogged: error ? 0 : logs?.length ?? 0,
+      motivationStyle: resolvedPrefs.nudge_motivation_style,
+      currentStreak: summary.current_streak,
+      longestStreak: summary.longest_streak,
+      nextStreakMilestone: summary.next_streak_milestone,
+    });
   }
 
   /**
@@ -432,16 +436,10 @@ export class ReminderService {
   }
 
   /**
-   * Send push notification to user's device(s) via Firebase
+   * Send push notification to user's Expo push token(s).
    */
   async sendPushNotification(userId: string, title: string, body: string, data?: Record<string, string>): Promise<boolean> {
     try {
-      if (!this.firebase.isAvailable()) {
-        console.debug('[Reminder] Firebase not available, skipping push');
-        return false;
-      }
-
-      // Get user's push tokens
       const { data: tokens, error } = await this.supabase.db
         .from('push_notification_tokens')
         .select('token')
@@ -458,27 +456,23 @@ export class ReminderService {
         return false;
       }
 
-      // Send to all tokens
       const tokenList = tokens.map((t) => t.token);
-      const results = await this.firebase.sendToMultiple(tokenList, {
+      const results = await this.sendExpoPushMessages(tokenList.map((token) => ({
+        to: token,
         title,
         body,
         data,
-      });
+        sound: 'default',
+      })));
 
-      // Mark failed/invalid tokens as inactive
-      const failedTokens = Object.entries(results)
-        .filter(([_, messageId]) => messageId === null)
-        .map(([token]) => token);
-
-      if (failedTokens.length > 0) {
+      if (results.invalidTokens.length > 0) {
         await this.supabase.db
           .from('push_notification_tokens')
-          .update({ active: false })
-          .in('token', failedTokens);
+          .update({ active: false, updated_at: new Date().toISOString() })
+          .in('token', results.invalidTokens);
       }
 
-      const successCount = Object.values(results).filter((m) => m !== null).length;
+      const successCount = results.successCount;
       console.log(`[Reminder] Sent push to ${successCount}/${tokenList.length} devices for user ${userId}`);
       return successCount > 0;
     } catch (error) {
@@ -495,6 +489,45 @@ export class ReminderService {
       type: nudgeMessage.type,
       mealType: nudgeMessage.mealType,
     });
+  }
+
+  private async sendExpoPushMessages(messages: object[]): Promise<{ successCount: number; invalidTokens: string[] }> {
+    let successCount = 0;
+    const invalidTokens: string[] = [];
+
+    for (let i = 0; i < messages.length; i += 100) {
+      const chunk = messages.slice(i, i + 100);
+      const response = await fetch('https://exp.host/--/api/v2/push/send', {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Accept-Encoding': 'gzip, deflate',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(chunk),
+      });
+
+      if (!response.ok) {
+        console.warn(`[Reminder] Expo push API returned ${response.status}`);
+        continue;
+      }
+
+      const payload: any = await response.json().catch(() => null);
+      const tickets = Array.isArray(payload?.data) ? payload.data : [];
+      tickets.forEach((ticket: any, index: number) => {
+        if (ticket?.status === 'ok') {
+          successCount++;
+          return;
+        }
+
+        if (ticket?.details?.error === 'DeviceNotRegistered') {
+          const message = chunk[index] as { to?: string };
+          if (message.to) invalidTokens.push(message.to);
+        }
+      });
+    }
+
+    return { successCount, invalidTokens };
   }
 }
 

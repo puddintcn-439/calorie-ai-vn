@@ -3,6 +3,7 @@ import {
   Get,
   Post,
   Put,
+  Delete,
   Body,
   Request,
   UseGuards,
@@ -90,6 +91,32 @@ class RegisterPushTokenDto {
   @ApiProperty({ enum: ['ios', 'android', 'web'] })
   @IsEnum(['ios', 'android', 'web'])
   platform!: 'ios' | 'android' | 'web';
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  device_id?: string;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  app_version?: string;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  timezone?: string;
+
+  @ApiProperty({ required: false, example: -420 })
+  @IsNumber()
+  @IsOptional()
+  timezone_offset_minutes?: number;
+}
+
+class UnregisterPushTokenDto {
+  @ApiProperty({ example: 'ExponentPushToken[xxxxxxxxxxxxxxxxxxxxxx]' })
+  @IsString()
+  token!: string;
 }
 
 @ApiTags('Reminders')
@@ -133,7 +160,18 @@ export class ReminderController {
     const { error } = await this.supabase.db
       .from('push_notification_tokens')
       .upsert(
-        { user_id: req.user.id ?? req.user.sub, token: body.token, platform: body.platform, updated_at: new Date().toISOString() },
+        {
+          user_id: req.user.id ?? req.user.sub,
+          token: body.token,
+          platform: body.platform,
+          device_id: body.device_id,
+          app_version: body.app_version,
+          timezone: body.timezone,
+          timezone_offset_minutes: body.timezone_offset_minutes,
+          active: true,
+          last_registered_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
         { onConflict: 'user_id,token' },
       );
 
@@ -145,6 +183,26 @@ export class ReminderController {
       throw error;
     }
     return { registered: true };
+  }
+
+  @Delete('push-token')
+  @ApiOperation({ summary: 'Deactivate device push token for the signed-in user' })
+  async unregisterPushToken(@Request() req: any, @Body() body: UnregisterPushTokenDto) {
+    const { error } = await this.supabase.db
+      .from('push_notification_tokens')
+      .update({ active: false, updated_at: new Date().toISOString() })
+      .eq('user_id', req.user.id ?? req.user.sub)
+      .eq('token', body.token);
+
+    if (error) {
+      const message = String(error?.message ?? error?.details ?? '');
+      if (message.includes('public.push_notification_tokens') && message.includes('schema cache')) {
+        return { unregistered: false, reason: 'push_token_table_missing' };
+      }
+      throw error;
+    }
+
+    return { unregistered: true };
   }
 
   @Post('push-test')
