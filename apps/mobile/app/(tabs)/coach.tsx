@@ -40,6 +40,18 @@ type ActivePlan = {
   primaryLabel: string;
 };
 
+type WeeklyPlan = {
+  title: string;
+  body: string;
+  status: string;
+  tone: 'good' | 'warn' | 'info';
+  days: Array<{
+    label: string;
+    title: string;
+    body: string;
+  }>;
+};
+
 const MEAL_ORDER = ['breakfast', 'lunch', 'dinner', 'snack'] as const;
 const MEAL_LABELS: Record<(typeof MEAL_ORDER)[number], string> = {
   breakfast: 'sang',
@@ -160,6 +172,117 @@ function buildActivePlan(dailyLog: DailyLog | null): ActivePlan {
     ],
     primaryRoute: '/scan',
     primaryLabel: `Log bua ${nextMeal}`,
+  };
+}
+
+function buildWeeklyPlan(summary: CoachingSummary | null, dailyLog: DailyLog | null): WeeklyPlan {
+  const logsCount = toFiniteNumber(summary?.logs_count) ?? 0;
+  const adherence = toFiniteNumber(summary?.adherence_percentage);
+  const averageDailyCalories = toFiniteNumber(summary?.average_daily_calories);
+  const target = toFiniteNumber(dailyLog?.target_calories) ?? 1800;
+  const todayLogs = dailyLog?.logs?.length ?? 0;
+
+  if (!summary || logsCount < 7) {
+    const missingLogs = Math.max(0, 7 - logsCount);
+    return {
+      title: 'Ke hoach quay lai nhip',
+      body: 'Muc tieu tuan nay la tao lai thoi quen, khong phai an hoan hao. Log thieu van co the cuu duoc.',
+      status: logsCount > 0 ? `Thieu ${missingLogs} bua log` : 'Can restart nhe',
+      tone: 'info',
+      days: [
+        {
+          label: 'Ngay 1-2',
+          title: 'Log 1 bua de mo lai da',
+          body: todayLogs > 0 ? 'Hom nay da co du lieu. Giu tiep 1 bua nua sau khi an.' : 'Dung camera/text de log bua gan nhat, uoc luong cung duoc.',
+        },
+        {
+          label: 'Ngay 3-4',
+          title: 'Lap lai bua de thanh nhanh hon',
+          body: 'Dung saved meal hoac mon da log gan day. Muc tieu la giam thao tac.',
+        },
+        {
+          label: 'Ngay 5-7',
+          title: 'Them 1 viec nho moi ngay',
+          body: 'Di bo 15 phut hoac them protein re: trung, dau hu, sua chua, ga/ca.',
+        },
+      ],
+    };
+  }
+
+  if (adherence !== null && adherence > 115) {
+    return {
+      title: 'Ke hoach 7 ngay de ha kcal mem',
+      body: 'Tuan truoc dang cao hon muc tieu. Dieu chinh nho se ben hon cat manh.',
+      status: `${Math.round(adherence)}% adherence`,
+      tone: 'warn',
+      days: [
+        {
+          label: 'Ngay 1-2',
+          title: 'Cat calories long',
+          body: 'Doi tra sua/nuoc ngot sang size nho, it duong hoac nuoc khong calo.',
+        },
+        {
+          label: 'Ngay 3-4',
+          title: 'Giu bua toi gon hon',
+          body: `Dat bua toi quanh ${Math.round(target * 0.28)}-${Math.round(target * 0.34)} kcal, uu tien rau va dam nac.`,
+        },
+        {
+          label: 'Ngay 5-7',
+          title: 'Di bo sau bua cao kcal',
+          body: 'Neu bua nao vuot ke hoach, them 15-25 phut di bo thay vi bo bua sau.',
+        },
+      ],
+    };
+  }
+
+  if (adherence !== null && adherence < 80) {
+    return {
+      title: 'Ke hoach 7 ngay de an du hon',
+      body: 'Tuan truoc co the qua thap hoac log chua du. Giam can ben can du nang luong nen.',
+      status: `${Math.round(adherence)}% adherence`,
+      tone: 'info',
+      days: [
+        {
+          label: 'Ngay 1-2',
+          title: 'Dung bo bua sang/trua',
+          body: 'Neu ban khong doi, van log nhanh mot bua nho de app khong hieu sai.',
+        },
+        {
+          label: 'Ngay 3-4',
+          title: 'Them protein gia re',
+          body: 'Trung, dau hu, sua chua, uc ga hoac ca hop giup no lau hon.',
+        },
+        {
+          label: 'Ngay 5-7',
+          title: 'Giu deficit vua phai',
+          body: `An gan ${Math.round(target * 0.85)}-${Math.round(target)} kcal thay vi cat qua sau.`,
+        },
+      ],
+    };
+  }
+
+  return {
+    title: 'Ke hoach 7 ngay giu da giam can',
+    body: 'Tuan nay uu tien lap lai nhung viec dang hieu qua thay vi doi qua nhieu.',
+    status: averageDailyCalories !== null ? `${Math.round(averageDailyCalories)} kcal/ngay` : 'Dang on dinh',
+    tone: 'good',
+    days: [
+      {
+        label: 'Ngay 1-2',
+        title: 'Giu bua neo',
+        body: 'Chon 1 bua de lap lai moi ngay: sang hoac trua, de giam quyet dinh.',
+      },
+      {
+        label: 'Ngay 3-4',
+        title: 'Chuan bi mon fallback',
+        body: 'Co san 1 mon re de cuu ngay: com ga nho, bun/pho it topping, salad them dam.',
+      },
+      {
+        label: 'Ngay 5-7',
+        title: 'Review va chinh nhe',
+        body: 'Neu 3 ngay lien tiep vuot target, giam do uong ngot hoac snack truoc khi cat bua chinh.',
+      },
+    ],
   };
 }
 
@@ -422,6 +545,7 @@ export default function CoachScreen() {
     };
   }, [dailyLog]);
   const activePlan = useMemo(() => buildActivePlan(dailyLog), [dailyLog]);
+  const weeklyPlan = useMemo(() => buildWeeklyPlan(summary, dailyLog), [summary, dailyLog]);
   const summaryRecommendation = localizeInsightTextForLocale(summary?.recommended_action, locale) || t('screen.tabs.coach.summaryFallback')
     || 'Coach cần thêm dữ liệu log trong tuần để đưa ra gợi ý chính xác hơn.';
 
@@ -565,6 +689,38 @@ export default function CoachScreen() {
               <TouchableOpacity key={prompt} style={styles.promptChip} onPress={() => handleUsePrompt(prompt)}>
                 <Text style={styles.promptChipText}>{prompt}</Text>
               </TouchableOpacity>
+            ))}
+          </View>
+        </SurfaceCard>
+
+        <SurfaceCard
+          style={[
+            styles.weeklyPlanCard,
+            weeklyPlan.tone === 'good' && styles.weeklyPlanGood,
+            weeklyPlan.tone === 'warn' && styles.weeklyPlanWarn,
+          ]}
+        >
+          <View style={styles.weeklyPlanHeader}>
+            <View style={styles.weeklyPlanCopy}>
+              <Text style={styles.weeklyPlanEyebrow}>KE HOACH 7 NGAY</Text>
+              <Text style={styles.weeklyPlanTitle}>{weeklyPlan.title}</Text>
+              <Text style={styles.weeklyPlanBody}>{weeklyPlan.body}</Text>
+            </View>
+            <Text style={[
+              styles.weeklyPlanStatus,
+              weeklyPlan.tone === 'warn' && styles.weeklyPlanStatusWarn,
+            ]}>
+              {weeklyPlan.status}
+            </Text>
+          </View>
+
+          <View style={styles.weeklyPlanGrid}>
+            {weeklyPlan.days.map((day) => (
+              <View key={day.label} style={styles.weeklyPlanDay}>
+                <Text style={styles.weeklyPlanDayLabel}>{day.label}</Text>
+                <Text style={styles.weeklyPlanDayTitle}>{day.title}</Text>
+                <Text style={styles.weeklyPlanDayBody}>{day.body}</Text>
+              </View>
             ))}
           </View>
         </SurfaceCard>
@@ -809,6 +965,85 @@ const styles = createThemedStyles((colors, radii) => ({
     fontSize: 12,
     lineHeight: 17,
     fontWeight: '800',
+  },
+  weeklyPlanCard: {
+    marginBottom: 12,
+    borderColor: colors.borderInfo,
+    backgroundColor: colors.surfaceInfo,
+  },
+  weeklyPlanGood: {
+    borderColor: colors.borderSuccess,
+    backgroundColor: colors.surfaceSuccess,
+  },
+  weeklyPlanWarn: {
+    borderColor: colors.borderWarning,
+    backgroundColor: colors.surfaceWarning,
+  },
+  weeklyPlanHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 12,
+  },
+  weeklyPlanCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  weeklyPlanEyebrow: {
+    color: colors.textMuted,
+    fontSize: 11,
+    fontWeight: '900',
+    marginBottom: 4,
+  },
+  weeklyPlanTitle: {
+    color: colors.text,
+    fontSize: 17,
+    lineHeight: 22,
+    fontWeight: '900',
+  },
+  weeklyPlanBody: {
+    color: colors.textSoft,
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: 4,
+  },
+  weeklyPlanStatus: {
+    color: colors.accentCyan,
+    fontSize: 12,
+    fontWeight: '900',
+    textAlign: 'right',
+    maxWidth: 128,
+  },
+  weeklyPlanStatusWarn: {
+    color: colors.accentAmber,
+  },
+  weeklyPlanGrid: {
+    gap: 8,
+  },
+  weeklyPlanDay: {
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    padding: 10,
+  },
+  weeklyPlanDayLabel: {
+    color: colors.accentCyan,
+    fontSize: 11,
+    fontWeight: '900',
+    marginBottom: 3,
+  },
+  weeklyPlanDayTitle: {
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  weeklyPlanDayBody: {
+    color: colors.textSoft,
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 3,
   },
   summaryCard: {
     marginBottom: 12,
