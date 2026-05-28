@@ -753,18 +753,51 @@ export default function ProfileScreen() {
   const catalogTypes = Object.keys(EXERCISE_ACTIVITY_LABELS) as ActivityType[];
   const userWeight = profile.weight_kg ?? 65;
 
+  // Refs for scrolling to sections
+  const scrollRef = React.useRef<any>(null);
+  const basicRef = React.useRef<any>(null);
+  const assessmentRef = React.useRef<any>(null);
+  const goalRef = React.useRef<any>(null);
+  const roadmapRef = React.useRef<any>(null);
+  const notificationsRef = React.useRef<any>(null);
+
+  const scrollToSection = (ref: any) => {
+    if (!ref || !ref.current || !scrollRef.current) return;
+    try {
+      // Native measure then scroll
+      (ref.current as any).measure((fx: any, fy: any, width: any, height: any, px: any, py: any) => {
+        try {
+          (scrollRef.current as any).scrollTo({ y: Math.max(0, py - 24), animated: true });
+        } catch (e) {
+          // ignore
+        }
+      });
+    } catch (e) {
+      // Fallback for web: try element scrollIntoView
+      try {
+        const el = (ref.current as any);
+        if (el && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } catch {}
+    }
+  };
+
   const openSetupStep = (key: typeof setupSteps[number]['key']) => {
     if (key === 'basic' || key === 'safety') {
       setBasicCollapsed(false);
       setAssessmentCollapsed(false);
+      // allow UI to expand then scroll
+      setTimeout(() => scrollToSection(key === 'basic' ? basicRef : assessmentRef), 160);
       return;
     }
     if (key === 'goal' || key === 'roadmap') {
       setGoalCollapsed(false);
+      // scroll to roadmap panel when roadmap requested
+      setTimeout(() => scrollToSection(key === 'goal' ? goalRef : roadmapRef), 160);
       return;
     }
     if (key === 'notifications') {
       setNotificationsCollapsed(false);
+      setTimeout(() => scrollToSection(notificationsRef), 160);
     }
   };
 
@@ -1105,14 +1138,14 @@ export default function ProfileScreen() {
 
   if (isLoading) {
     return (
-      <ScreenShell>
+      <ScreenShell scrollRef={scrollRef}>
         <ActivityIndicator color={theme.colors.success} style={{ marginTop: 80 }} />
       </ScreenShell>
     );
   }
 
   return (
-    <ScreenShell>
+    <ScreenShell scrollRef={scrollRef}>
       <Modal
         visible={roadmapCatalogVisible}
         animationType="slide"
@@ -1266,7 +1299,8 @@ export default function ProfileScreen() {
           </View>
         </SurfaceCard>
 
-        <SurfaceCard style={[styles.sectionCard, basicCollapsed && styles.sectionCardCompact]}>
+        <View ref={basicRef}>
+          <SurfaceCard style={[styles.sectionCard, basicCollapsed && styles.sectionCardCompact]}>
           <Animated.View style={[styles.highlightOverlay, styles.pointerEventsNone, { opacity: highlightAnim }]} />
           <TouchableOpacity onPress={() => setBasicCollapsed((s) => !s)} activeOpacity={0.8} style={styles.sectionHeaderRow}>
             <View>
@@ -1313,9 +1347,11 @@ export default function ProfileScreen() {
               </View>
             </>
           )}
-        </SurfaceCard>
+          </SurfaceCard>
+        </View>
 
-        <SurfaceCard style={[styles.sectionCard, assessmentCollapsed && styles.sectionCardCompact]}>
+        <View ref={assessmentRef}>
+          <SurfaceCard style={[styles.sectionCard, assessmentCollapsed && styles.sectionCardCompact]}>
           <TouchableOpacity onPress={() => setAssessmentCollapsed((s) => !s)} activeOpacity={0.8} style={styles.sectionHeaderRow}>
             <View>
               <Text style={styles.sectionTitle} i18nKey="screen.tabs.profile.text.006" />
@@ -1419,7 +1455,8 @@ export default function ProfileScreen() {
               )}
             </>
           )}
-        </SurfaceCard>
+          </SurfaceCard>
+        </View>
 
         <View style={[styles.summaryRow, isDesktop && styles.summaryRowDesktop]}>
           <SurfaceCard style={styles.summaryCard}>
@@ -1436,7 +1473,8 @@ export default function ProfileScreen() {
           </SurfaceCard>
         </View>
 
-      <SurfaceCard style={[styles.sectionCard, goalCollapsed && styles.sectionCardCompact]}>
+      <View ref={goalRef}>
+        <SurfaceCard style={[styles.sectionCard, goalCollapsed && styles.sectionCardCompact]}>
         <TouchableOpacity onPress={() => setGoalCollapsed((s) => !s)} activeOpacity={0.8} style={styles.sectionHeaderRow}>
           <View>
             <Text style={styles.sectionTitle} i18nKey="screen.tabs.profile.text.013" />
@@ -1496,7 +1534,7 @@ export default function ProfileScreen() {
                 )}
               </View>
 
-              <View style={styles.roadmapPanel}>
+              <View ref={roadmapRef} style={styles.roadmapPanel}>
                 <View style={styles.roadmapHeader}>
                   <View style={styles.roadmapPanelTitleRow}>
                     <Text style={styles.label} i18nKey="screen.tabs.profile.text.019" />
@@ -1564,7 +1602,8 @@ export default function ProfileScreen() {
             </View>
           </>
         )}
-      </SurfaceCard>
+        </SurfaceCard>
+      </View>
 
       <SurfaceCard style={[styles.sectionCard, calorieCollapsed && styles.sectionCardCompact]}>
         <TouchableOpacity onPress={() => setCalorieCollapsed((s) => !s)} activeOpacity={0.8} style={styles.sectionHeaderRow}>
@@ -1592,7 +1631,8 @@ export default function ProfileScreen() {
         )}
       </SurfaceCard>
 
-      <SurfaceCard style={[styles.sectionCard, notificationsCollapsed && styles.sectionCardCompact]}>
+      <View ref={notificationsRef}>
+        <SurfaceCard style={[styles.sectionCard, notificationsCollapsed && styles.sectionCardCompact]}>
         <View style={styles.sectionHeaderRow}>
           <TouchableOpacity onPress={() => setNotificationsCollapsed((s) => !s)} activeOpacity={0.8} style={{ flex: 1 }}>
             <View>
@@ -1715,7 +1755,8 @@ export default function ProfileScreen() {
             </View>
           </>
         )}
-      </SurfaceCard>
+        </SurfaceCard>
+      </View>
 
       <SurfaceCard style={styles.sectionCard}>
         <Text style={styles.sectionTitle} i18nKey="screen.tabs.profile.text.032" />

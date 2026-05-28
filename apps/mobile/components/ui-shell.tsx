@@ -35,12 +35,15 @@ export function ScreenShell({
   contentStyle,
   scrollContentStyle,
   reserveBottomNav = true,
+  scrollRef,
 }: {
   children: ReactNode;
   scroll?: boolean;
   contentStyle?: StyleProp<ViewStyle>;
   scrollContentStyle?: StyleProp<ViewStyle>;
   reserveBottomNav?: boolean;
+  // optional ref to the internal ScrollView so parent screens can call scrollTo
+  scrollRef?: any;
 }) {
   const { width } = useWindowDimensions();
   const isDesktop = width >= 900;
@@ -83,6 +86,7 @@ export function ScreenShell({
       <SafeAreaView style={styles.safeArea}>
         {scroll ? (
           <ScrollView
+            ref={scrollRef}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={[
               styles.scrollContent,
