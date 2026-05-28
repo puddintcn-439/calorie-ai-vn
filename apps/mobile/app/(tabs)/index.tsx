@@ -58,6 +58,13 @@ type DailyFocusItem = {
   progress: number;
 };
 
+type TodayCoachBridge = {
+  title: string;
+  body: string;
+  status: string;
+  tone: 'good' | 'warn' | 'info';
+};
+
 function formatNumber(value: unknown, fallback = '0') {
   return formatNumberVi(value, fallback);
 }
@@ -392,6 +399,68 @@ function getDisplayStreak(summary: { current_streak?: unknown } | null | undefin
   const hasFoodLogToday = logs.some((log) => !log.deleted_at && !!log.logged_at);
   const hasActivityLogToday = activityLogs.some((log) => !!log.logged_at);
   return Math.max(currentStreak, hasFoodLogToday || hasActivityLogToday ? 1 : 0);
+}
+
+function buildTodayCoachBridge(args: {
+  logsCount: number;
+  consumed: number;
+  burned: number;
+  target: number;
+  protein: number;
+  streak: number;
+}): TodayCoachBridge {
+  const logsCount = safeNumber(args.logsCount);
+  const consumed = safeNumber(args.consumed);
+  const burned = safeNumber(args.burned);
+  const target = safePositiveNumber(args.target, 1800);
+  const protein = safeNumber(args.protein);
+  const streak = safeNumber(args.streak);
+  const net = Math.max(0, consumed - burned);
+  const remaining = target - net;
+  const proteinTarget = Math.max(70, Math.round(target * 0.075 / 4));
+
+  if (logsCount === 0 && streak === 0) {
+    return {
+      title: 'Quay lai nhip trong 1 phut',
+      body: 'Coach da co ke hoach restart 7 ngay: log 1 bua truoc, roi moi toi uu calories.',
+      status: 'Restart nhe',
+      tone: 'info',
+    };
+  }
+
+  if (logsCount === 0) {
+    return {
+      title: 'Dung de trong ngay hom nay',
+      body: 'Mo Coach de chon buoc nho nhat: log bua gan nhat hoac lap ke hoach bua tiep theo.',
+      status: `${formatNumber(streak)} ngay streak`,
+      tone: 'info',
+    };
+  }
+
+  if (remaining < -150) {
+    return {
+      title: 'Can cuu ngay, khong can bo bua',
+      body: 'Coach se goi y bua tiep theo nhe hon va cach bu lai bang van dong vua phai.',
+      status: `Du ${formatNumber(Math.abs(remaining))} kcal`,
+      tone: 'warn',
+    };
+  }
+
+  if (protein < proteinTarget * 0.65) {
+    return {
+      title: 'Them protein de do them an vat',
+      body: 'Coach co goi y mon re, de mua, giu no lau cho muc tieu giam can.',
+      status: `${formatNumber(protein)}/${proteinTarget}g`,
+      tone: 'info',
+    };
+  }
+
+  return {
+    title: 'Hom nay dang on, giu dung da',
+    body: 'Coach da chuan bi ke hoach hom nay va 7 ngay de ban khong phai tu nghi tiep.',
+    status: `Con ${formatNumber(Math.max(0, remaining))} kcal`,
+    tone: 'good',
+  };
 }
 
 type MovementPlan = {
@@ -866,6 +935,14 @@ export default function DashboardScreen() {
       primaryLabel: 'Mở nhật ký',
     };
   }, [logs.length, movementButtonLabel, movementPlan, movementPlanCompleted, nudges, safetyCard]);
+  const coachBridge = useMemo(() => buildTodayCoachBridge({
+    logsCount: logs.length,
+    consumed,
+    burned,
+    target,
+    protein,
+    streak: displayStreak,
+  }), [burned, consumed, displayStreak, logs.length, protein, target]);
   const visibleNudges = nextAction.kind === 'nudge' ? nudges.slice(1) : nudges;
 
   const handleNextActionPress = () => {
@@ -922,6 +999,29 @@ export default function DashboardScreen() {
           disabled={nextAction.kind === 'movement' && (isLoggingMovement || movementPlanCompleted)}
         >
           <Text style={styles.nextActionButtonText}>{nextAction.primaryLabel}</Text>
+        </TouchableOpacity>
+      </SurfaceCard>
+
+      <SurfaceCard style={[
+        styles.coachBridgeCard,
+        coachBridge.tone === 'good' && styles.coachBridgeGood,
+        coachBridge.tone === 'warn' && styles.coachBridgeWarn,
+      ]}>
+        <View style={styles.coachBridgeCopy}>
+          <View style={styles.coachBridgeHeader}>
+            <Text style={styles.coachBridgeEyebrow}>TRO LY GIAM CAN</Text>
+            <Text style={[
+              styles.coachBridgeStatus,
+              coachBridge.tone === 'warn' && styles.coachBridgeStatusWarn,
+            ]}>
+              {coachBridge.status}
+            </Text>
+          </View>
+          <Text style={styles.coachBridgeTitle}>{coachBridge.title}</Text>
+          <Text style={styles.coachBridgeBody}>{coachBridge.body}</Text>
+        </View>
+        <TouchableOpacity style={styles.coachBridgeButton} onPress={() => router.push('/coach' as never)}>
+          <Text style={styles.coachBridgeButtonText}>Mo Coach</Text>
         </TouchableOpacity>
       </SurfaceCard>
 
@@ -1415,6 +1515,73 @@ const styles = createThemedStyles((colors, radii) => ({
     paddingHorizontal: 10,
   },
   nextActionButtonText: {
+    color: colors.textOnAccent,
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  coachBridgeCard: {
+    marginBottom: 12,
+    borderColor: colors.borderInfo,
+    backgroundColor: colors.surfaceInfo,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  coachBridgeGood: {
+    borderColor: colors.borderSuccess,
+    backgroundColor: colors.surfaceSuccess,
+  },
+  coachBridgeWarn: {
+    borderColor: colors.borderWarning,
+    backgroundColor: colors.surfaceWarning,
+  },
+  coachBridgeCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  coachBridgeHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    marginBottom: 4,
+  },
+  coachBridgeEyebrow: {
+    color: colors.textMuted,
+    fontSize: 11,
+    fontWeight: '900',
+  },
+  coachBridgeStatus: {
+    color: colors.accentCyan,
+    fontSize: 11,
+    fontWeight: '900',
+    textAlign: 'right',
+  },
+  coachBridgeStatusWarn: {
+    color: colors.accentAmber,
+  },
+  coachBridgeTitle: {
+    color: colors.text,
+    fontSize: 16,
+    lineHeight: 21,
+    fontWeight: '900',
+  },
+  coachBridgeBody: {
+    color: colors.textSoft,
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 3,
+  },
+  coachBridgeButton: {
+    minHeight: 38,
+    minWidth: 92,
+    borderRadius: radii.lg,
+    backgroundColor: colors.accentMint,
+    paddingHorizontal: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  coachBridgeButtonText: {
     color: colors.textOnAccent,
     fontSize: 12,
     fontWeight: '900',
