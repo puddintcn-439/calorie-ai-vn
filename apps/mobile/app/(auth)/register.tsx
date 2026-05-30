@@ -30,7 +30,7 @@ export default function RegisterScreen() {
   };
 
   return (
-    <ScreenShell scroll={false} contentStyle={styles.centeredContent}>
+    <ScreenShell contentStyle={styles.centeredContent} scrollContentStyle={styles.authScrollContent}>
       <View style={styles.heroBlock}>
         <Eyebrow>auth.register.eyebrow</Eyebrow>
         <HeroTitle>auth.register.title</HeroTitle>
@@ -69,6 +69,7 @@ export default function RegisterScreen() {
 }
 
 const styles = createThemedStyles((colors) => ({
+  authScrollContent: { flexGrow: 1, justifyContent: 'center' },
   centeredContent: { flex: 1, justifyContent: 'center', maxWidth: 560, alignSelf: 'center', width: '100%' },
   heroBlock: { marginBottom: 18, paddingHorizontal: 4 },
   formCard: { width: '100%', padding: 20 },

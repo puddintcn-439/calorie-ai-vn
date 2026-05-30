@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  KeyboardAvoidingView,
   Platform,
   StyleSheet,
   TouchableOpacity,
@@ -650,19 +649,14 @@ export default function CoachScreen() {
 
   return (
     <ScreenShell scroll={false} reserveBottomNav={false}>
-      <KeyboardAvoidingView
-        style={styles.keyboardAvoider}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
+      <ScrollView
+        ref={coachScrollRef}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomContentPadding }]}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
-        <ScrollView
-          ref={coachScrollRef}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
-          contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomContentPadding }]}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-        >
         <VisualHeroCard
           imageSource={coachHeroIllustration}
           eyebrow="screen.tabs.coach.eyebrow.001"
@@ -870,16 +864,12 @@ export default function CoachScreen() {
           <UiButton label="screen.tabs.coach.label.003" onPress={handleSend} loading={loading} />
           {loading ? <ActivityIndicator color={theme.colors.accentMint} style={styles.loading} /> : null}
         </SurfaceCard>
-        </ScrollView>
-      </KeyboardAvoidingView>
+      </ScrollView>
     </ScreenShell>
   );
 }
 
 const styles = createThemedStyles((colors, radii) => ({
-  keyboardAvoider: {
-    flex: 1,
-  },
   scrollContent: {
     flexGrow: 1,
     paddingTop: 14,

@@ -33,7 +33,7 @@ export default function LoginScreen() {
   };
 
   return (
-    <ScreenShell scroll={false} contentStyle={styles.centeredContent}>
+    <ScreenShell contentStyle={styles.centeredContent} scrollContentStyle={styles.authScrollContent}>
       <Image source={loginHeroImage} resizeMode="cover" style={[styles.heroImage, isCompact && styles.heroImageCompact]} />
       <View style={styles.heroBlock}>
         <Eyebrow>auth.login.eyebrow</Eyebrow>
@@ -73,6 +73,7 @@ export default function LoginScreen() {
 }
 
 const styles = createThemedStyles((colors, radii) => ({
+  authScrollContent: { flexGrow: 1, justifyContent: 'center' },
   centeredContent: { flex: 1, justifyContent: 'center', maxWidth: 560, alignSelf: 'center', width: '100%' },
   heroImage: {
     width: '100%',

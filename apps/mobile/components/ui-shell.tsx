@@ -2,6 +2,7 @@ import React, { ReactNode, useEffect, useRef } from 'react';
 import {
   Animated,
   Easing,
+  KeyboardAvoidingView,
   Platform,
   ScrollView,
   StyleProp,
@@ -84,22 +85,30 @@ export function ScreenShell({
       style={styles.gradient}
     >
       <SafeAreaView style={styles.safeArea}>
-        {scroll ? (
-          <ScrollView
-            ref={scrollRef}
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={[
-              styles.scrollContent,
-              isDesktop && styles.scrollContentDesktop,
-              bottomNavStyle,
-              scrollContentStyle,
-            ]}
-          >
-            {content}
-          </ScrollView>
-        ) : (
-          <View style={[styles.noScrollContent, isDesktop && styles.noScrollContentDesktop, bottomNavStyle]}>{content}</View>
-        )}
+        <KeyboardAvoidingView
+          style={styles.keyboardAvoider}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
+        >
+          {scroll ? (
+            <ScrollView
+              ref={scrollRef}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+              contentContainerStyle={[
+                styles.scrollContent,
+                isDesktop && styles.scrollContentDesktop,
+                bottomNavStyle,
+                scrollContentStyle,
+              ]}
+            >
+              {content}
+            </ScrollView>
+          ) : (
+            <View style={[styles.noScrollContent, isDesktop && styles.noScrollContentDesktop, bottomNavStyle]}>{content}</View>
+          )}
+        </KeyboardAvoidingView>
       </SafeAreaView>
     </LinearGradient>
   );
@@ -177,6 +186,7 @@ export function BodyText({ children, style }: { children: ReactNode; style?: Sty
 const styles = StyleSheet.create({
   gradient: { flex: 1 },
   safeArea: { flex: 1 },
+  keyboardAvoider: { flex: 1 },
   scrollContent: { padding: 14 },
   scrollContentDesktop: { padding: 16 },
   noScrollContent: { flex: 1, paddingHorizontal: 18 },
