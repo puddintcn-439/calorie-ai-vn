@@ -44,8 +44,8 @@
       ]
     },
     "plugins": [
-      "expo-dev-client",
       "expo-router",
+      "expo-font",
       "expo-secure-store",
       "expo-health-connect",
       [

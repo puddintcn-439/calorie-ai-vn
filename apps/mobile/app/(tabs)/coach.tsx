@@ -1,6 +1,8 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
   StyleSheet,
   TouchableOpacity,
   View,
@@ -471,6 +473,7 @@ function getCoachErrorMessage(error: unknown): string {
 
 export default function CoachScreen() {
   useAppTheme();
+  const coachScrollRef = useRef<ScrollView>(null);
   const bottomContentPadding = useBottomNavContentPadding();
   const { locale, t } = useI18n();
   const { dailyLog, fetchDailyLog } = useLogStore();
@@ -480,6 +483,7 @@ export default function CoachScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [insights, setInsights] = useState<CoachingInsight[]>([]);
   const [summary, setSummary] = useState<CoachingSummary | null>(null);
+  const [insightsError, setInsightsError] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: 'welcome',
@@ -499,14 +503,31 @@ export default function CoachScreen() {
   const loadInsights = useCallback(async () => {
     try {
       setLoadingInsights(true);
-      const [insightsRes, summaryRes] = await Promise.all([
+      setInsightsError(null);
+      const [insightsResult, summaryResult] = await Promise.allSettled([
         apiClient.get('/coaching/insights'),
         apiClient.get('/coaching/weekly-summary'),
       ]);
-      setInsights(dedupeInsights(insightsRes.data || []));
-      setSummary(summaryRes.data || null);
+
+      if (insightsResult.status === 'fulfilled') {
+        setInsights(dedupeInsights(insightsResult.value.data || []));
+      } else {
+        setInsights([]);
+        setInsightsError(getCoachErrorMessage(insightsResult.reason));
+      }
+
+      if (summaryResult.status === 'fulfilled') {
+        setSummary(summaryResult.value.data || null);
+      } else {
+        setSummary(null);
+        if (insightsResult.status === 'fulfilled') {
+          setInsightsError(getCoachErrorMessage(summaryResult.reason));
+        }
+      }
     } catch (error) {
-      console.error('Failed to load insights:', error);
+      setInsights([]);
+      setSummary(null);
+      setInsightsError(getCoachErrorMessage(error));
     } finally {
       setLoadingInsights(false);
     }
@@ -600,6 +621,12 @@ export default function CoachScreen() {
     setInput(prompt);
   };
 
+  const scrollToInput = useCallback(() => {
+    setTimeout(() => {
+      coachScrollRef.current?.scrollToEnd({ animated: true });
+    }, Platform.OS === 'ios' ? 280 : 180);
+  }, []);
+
   const renderInsightCard = (insight: CoachingInsight) => (
     <View key={insight.id} style={styles.insightCard}>
       <View style={styles.insightHeader}>
@@ -623,11 +650,19 @@ export default function CoachScreen() {
 
   return (
     <ScreenShell scroll={false} reserveBottomNav={false}>
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomContentPadding }]}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      <KeyboardAvoidingView
+        style={styles.keyboardAvoider}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
       >
+        <ScrollView
+          ref={coachScrollRef}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomContentPadding }]}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        >
         <VisualHeroCard
           imageSource={coachHeroIllustration}
           eyebrow="screen.tabs.coach.eyebrow.001"
@@ -754,6 +789,11 @@ export default function CoachScreen() {
           <View style={styles.loadingContainer}>
             <ActivityIndicator color={theme.colors.accentMint} size="large" />
           </View>
+        ) : insightsError ? (
+          <SurfaceCard style={styles.noInsightsCard}>
+            <Text style={styles.noInsightsText}>{insightsError}</Text>
+            <UiButton label="Thử lại" onPress={() => loadInsights().catch(() => {})} />
+          </SurfaceCard>
         ) : insights.length > 0 ? (
           <View style={styles.insightsContainer}>
             <Text style={styles.insightsTitle} i18nKey="screen.tabs.coach.text.005" />
@@ -824,18 +864,24 @@ export default function CoachScreen() {
             onChangeText={setInput}
             placeholder="screen.tabs.coach.placeholder.001"
             multiline
+            onFocus={scrollToInput}
             style={styles.input}
           />
           <UiButton label="screen.tabs.coach.label.003" onPress={handleSend} loading={loading} />
           {loading ? <ActivityIndicator color={theme.colors.accentMint} style={styles.loading} /> : null}
         </SurfaceCard>
-      </ScrollView>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </ScreenShell>
   );
 }
 
 const styles = createThemedStyles((colors, radii) => ({
+  keyboardAvoider: {
+    flex: 1,
+  },
   scrollContent: {
+    flexGrow: 1,
     paddingTop: 14,
   },
   heroBody: {
