@@ -4,7 +4,13 @@ import { I18nKey, useI18n } from './i18n';
 
 function translateNode(node: ReactNode, tx: (source: string) => string): ReactNode {
   if (typeof node === 'string') return tx(node);
+  if (typeof node === 'number') return tx(String(node));
   if (Array.isArray(node)) return node.map((child, index) => <React.Fragment key={index}>{translateNode(child, tx)}</React.Fragment>);
+  if (React.isValidElement(node)) {
+    const props: any = (node as any).props || {};
+    const translatedChildren = translateNode(props.children, tx);
+    return React.cloneElement(node as any, { ...props }, translatedChildren);
+  }
   return node;
 }
 
