@@ -27,7 +27,7 @@ export default function AdherenceCard() {
   const [loading, setLoading] = useState(true);
   const [summary, setSummary] = useState<WeeklySummary | null>(null);
   const { colors } = useAppTheme();
-  const { locale } = useI18n();
+  const { t } = useI18n();
 
   useEffect(() => {
     let mounted = true;
@@ -59,11 +59,7 @@ export default function AdherenceCard() {
     return (
       <SurfaceCard style={[styles.card, { borderColor: colors.borderInfo }]}>
         <Text style={[styles.title, { color: colors.text }]} i18nKey="screen.components.adherenceCard.text.001" />
-        <Text style={[styles.empty, { color: colors.textMuted }]}>
-          {locale === 'vi'
-            ? 'Chưa có dữ liệu tuần này. Ghi nhật ký ăn uống để nhận phân tích.'
-            : 'No weekly data yet. Log meals to unlock analysis.'}
-        </Text>
+        <Text style={[styles.empty, { color: colors.textMuted }]} i18nKey="screen.components.adherenceCard.empty" />
       </SurfaceCard>
     );
   }
@@ -83,9 +79,9 @@ export default function AdherenceCard() {
       </View>
 
       <View style={styles.rowSmall}>
-        <Text style={[styles.small, { color: colors.textSoft }]}>{locale === 'vi' ? 'Trên mục tiêu' : 'Above target'}: {summary.days_above_target}</Text>
-        <Text style={[styles.small, { color: colors.textSoft }]}>{locale === 'vi' ? 'Đúng đích' : 'On target'}: {summary.days_on_target}</Text>
-        <Text style={[styles.small, { color: colors.textSoft }]}>{locale === 'vi' ? 'Dưới mục tiêu' : 'Below target'}: {summary.days_below_target}</Text>
+        <Text style={[styles.small, { color: colors.textSoft }]}>{t('screen.components.adherenceCard.daysAbove')}: {summary.days_above_target}</Text>
+        <Text style={[styles.small, { color: colors.textSoft }]}>{t('screen.components.adherenceCard.daysOn')}: {summary.days_on_target}</Text>
+        <Text style={[styles.small, { color: colors.textSoft }]}>{t('screen.components.adherenceCard.daysBelow')}: {summary.days_below_target}</Text>
       </View>
 
       {summary.recommended_action ? (

@@ -19,7 +19,7 @@ import { apiClient } from '../../services/api';
 import { VisualHeroCard } from '../../components/visual-hero-card';
 import { createThemedStyles, theme, useAppTheme } from '../../components/theme';
 import { Text } from '../../components/i18n-text';
-import { Locale, useI18n } from '../../components/i18n';
+import { Locale, tr, translateText, useI18n } from '../../components/i18n';
 import { formatPercent, safeRound, toFiniteNumber } from '../../services/number-format';
 
 const coachHeroIllustration = require('../../assets/images/coach-hero.jpg') as number;
@@ -54,25 +54,17 @@ type WeeklyPlan = {
 };
 
 const MEAL_ORDER = ['breakfast', 'lunch', 'dinner', 'snack'] as const;
-const MEAL_LABELS: Record<Locale, Record<(typeof MEAL_ORDER)[number], string>> = {
-  vi: {
-    breakfast: 'sáng',
-    lunch: 'trưa',
-    dinner: 'tối',
-    snack: 'vặt',
-  },
-  en: {
-    breakfast: 'breakfast',
-    lunch: 'lunch',
-    dinner: 'dinner',
-    snack: 'snack',
-  },
+const MEAL_LABEL_KEYS: Record<(typeof MEAL_ORDER)[number], Parameters<typeof tr>[0]> = {
+  breakfast: 'screen.tabs.coach.meal.breakfast',
+  lunch: 'screen.tabs.coach.meal.lunch',
+  dinner: 'screen.tabs.coach.meal.dinner',
+  snack: 'screen.tabs.coach.meal.snack',
 };
 
 function getNextMealLabel(logs: Array<{ meal_type?: string }> = [], locale: Locale) {
   const loggedMeals = new Set(logs.map((log) => log.meal_type).filter(Boolean));
   const nextMeal = MEAL_ORDER.find((meal) => !loggedMeals.has(meal)) ?? 'snack';
-  return MEAL_LABELS[locale][nextMeal];
+  return tr(MEAL_LABEL_KEYS[nextMeal], locale);
 }
 
 function buildActivePlan(dailyLog: DailyLog | null, locale: Locale): ActivePlan {
@@ -87,145 +79,104 @@ function buildActivePlan(dailyLog: DailyLog | null, locale: Locale): ActivePlan 
 
   if (mealCount === 0) {
     return {
-      title: locale === 'vi' ? 'Bắt đầu bằng một bữa để app có dữ liệu' : 'Start with one meal so the app has context',
-      body: locale === 'vi'
-        ? 'Không cần nhập hoàn hảo. Ước lượng nhanh vẫn tốt hơn để trống cả ngày.'
-        : 'It does not need to be perfect. A quick estimate is still better than leaving the day blank.',
-      status: locale === 'vi' ? 'Chưa log bữa nào' : 'No meals logged',
+      title: tr('screen.tabs.coach.active.empty.title', locale),
+      body: tr('screen.tabs.coach.active.empty.body', locale),
+      status: tr('screen.tabs.coach.active.empty.status', locale),
       tone: 'info',
-      steps: locale === 'vi' ? [
-        'Log bữa gần nhất bằng ảnh hoặc mô tả ngắn.',
-        `Giữ bữa tiếp theo quanh ${Math.round(target * 0.3)}-${Math.round(target * 0.4)} kcal.`,
-        'Thêm protein để tránh đói lại sau vài giờ.',
-      ] : [
-        'Log your latest meal with a photo or a short description.',
-        `Keep the next meal around ${Math.round(target * 0.3)}-${Math.round(target * 0.4)} kcal.`,
-        'Add protein so you are less hungry again in a few hours.',
+      steps: [
+        tr('screen.tabs.coach.active.empty.step1', locale),
+        tr('screen.tabs.coach.active.empty.step2', locale, { min: Math.round(target * 0.3), max: Math.round(target * 0.4) }),
+        tr('screen.tabs.coach.active.empty.step3', locale),
       ],
-      prompts: locale === 'vi' ? [
-        'Tôi mới bắt đầu hôm nay, nên ăn bữa tiếp theo thế nào?',
-        `Lập kế hoạch đơn giản cho mục tiêu ${target} kcal hôm nay.`,
-      ] : [
-        'I am just starting today. What should my next meal look like?',
-        `Make a simple plan for my ${target} kcal target today.`,
+      prompts: [
+        tr('screen.tabs.coach.active.empty.prompt1', locale),
+        tr('screen.tabs.coach.active.empty.prompt2', locale, { target }),
       ],
       primaryRoute: '/scan',
-      primaryLabel: locale === 'vi' ? 'Log bữa đầu tiên' : 'Log first meal',
+      primaryLabel: tr('screen.tabs.coach.active.empty.primary', locale),
     };
   }
 
   if (remaining < -150) {
+    const kcal = Math.abs(Math.round(remaining));
     return {
-      title: locale === 'vi' ? 'Hôm nay đã vượt mục tiêu, tập trung cứu ngày' : 'You are over target today, focus on damage control',
-      body: locale === 'vi'
-        ? 'Không cần bỏ bữa. Giảm đồ ngọt/dầu và thêm vận động nhẹ để ngày mai không bị vỡ nhịp.'
-        : 'Do not skip meals. Reduce sweets/oil and add light movement so tomorrow stays on track.',
-      status: locale === 'vi' ? `Dư ${Math.abs(Math.round(remaining))} kcal` : `${Math.abs(Math.round(remaining))} kcal over`,
+      title: tr('screen.tabs.coach.active.over.title', locale),
+      body: tr('screen.tabs.coach.active.over.body', locale),
+      status: tr('screen.tabs.coach.active.over.status', locale, { kcal }),
       tone: 'warn',
-      steps: locale === 'vi' ? [
-        'Bữa sau chọn món nhiều rau, đạm nạc, ít sốt.',
-        'Đi bộ 15-25 phút nếu sức khỏe cho phép.',
-        'Đừng ăn bù quá mạnh vào ngày mai.',
-      ] : [
-        'For the next meal, choose vegetables, lean protein, and less sauce.',
-        'Walk 15-25 minutes if your health allows.',
-        'Avoid over-restricting tomorrow.',
+      steps: [
+        tr('screen.tabs.coach.active.over.step1', locale),
+        tr('screen.tabs.coach.active.over.step2', locale),
+        tr('screen.tabs.coach.active.over.step3', locale),
       ],
-      prompts: locale === 'vi' ? [
-        'Hôm nay tôi vượt kcal, tôi nên ăn gì cho bữa tiếp theo?',
-        'Gợi ý một bữa tối nhẹ nhưng không bị đói.',
-      ] : [
-        'I am over calories today. What should I eat next?',
-        'Suggest a light dinner that will still keep me full.',
+      prompts: [
+        tr('screen.tabs.coach.active.over.prompt1', locale),
+        tr('screen.tabs.coach.active.over.prompt2', locale),
       ],
       primaryRoute: '/log',
-      primaryLabel: locale === 'vi' ? 'Xem lại bữa đã log' : 'Review logged meals',
+      primaryLabel: tr('screen.tabs.coach.active.over.primary', locale),
     };
   }
 
   if (remaining > 450) {
+    const kcal = Math.round(remaining);
+    const snackKcal = Math.min(450, Math.max(250, Math.round(remaining * 0.55)));
     return {
-      title: locale === 'vi' ? `Còn room tốt cho bữa ${nextMeal}` : `Good room left for ${nextMeal}`,
-      body: locale === 'vi'
-        ? 'Đừng cắt calo quá sâu. Một bữa đủ đạm sẽ giúp giảm ăn vặt về tối.'
-        : 'Do not cut too aggressively. A protein-rich meal helps reduce snacking later.',
-      status: locale === 'vi' ? `Còn ${Math.round(remaining)} kcal` : `${Math.round(remaining)} kcal left`,
+      title: tr('screen.tabs.coach.active.room.title', locale, { meal: nextMeal }),
+      body: tr('screen.tabs.coach.active.room.body', locale),
+      status: tr('screen.tabs.coach.active.room.status', locale, { kcal }),
       tone: 'good',
-      steps: locale === 'vi' ? [
-        `Chọn bữa ${nextMeal} có đạm nạc và rau.`,
-        `Nếu đói, dùng khoảng ${Math.min(450, Math.max(250, Math.round(remaining * 0.55)))} kcal trước.`,
-        'Nếu sắp ngủ, ưu tiên sữa chua, trái cây ít ngọt hoặc protein nhẹ.',
-      ] : [
-        `Choose a ${nextMeal} with lean protein and vegetables.`,
-        `If hungry, use about ${Math.min(450, Math.max(250, Math.round(remaining * 0.55)))} kcal first.`,
-        'If it is close to bedtime, choose yogurt, low-sugar fruit, or a light protein option.',
+      steps: [
+        tr('screen.tabs.coach.active.room.step1', locale, { meal: nextMeal }),
+        tr('screen.tabs.coach.active.room.step2', locale, { kcal: snackKcal }),
+        tr('screen.tabs.coach.active.room.step3', locale),
       ],
-      prompts: locale === 'vi' ? [
-        `Tôi còn ${Math.round(remaining)} kcal, gợi ý bữa ${nextMeal} để giảm cân.`,
-        'Gợi ý 3 món Việt Nam ăn no mà không vượt kcal.',
-      ] : [
-        `I have ${Math.round(remaining)} kcal left. Suggest a ${nextMeal} for weight loss.`,
-        'Suggest 3 filling meals that do not exceed my calories.',
+      prompts: [
+        tr('screen.tabs.coach.active.room.prompt1', locale, { kcal, meal: nextMeal }),
+        tr('screen.tabs.coach.active.room.prompt2', locale),
       ],
       primaryRoute: '/scan',
-      primaryLabel: locale === 'vi' ? `Log bữa ${nextMeal}` : `Log ${nextMeal}`,
+      primaryLabel: tr('screen.tabs.coach.active.room.primary', locale, { meal: nextMeal }),
     };
   }
 
   if (protein < proteinTarget * 0.65) {
     return {
-      title: locale === 'vi' ? 'Cần tăng protein để đỡ đói hơn' : 'Add protein to stay full longer',
-      body: locale === 'vi'
-        ? 'Calo đang ổn, nhưng protein thấp sẽ làm dễ thèm ăn vặt.'
-        : 'Calories look fine, but low protein can make snacking more tempting.',
+      title: tr('screen.tabs.coach.active.protein.title', locale),
+      body: tr('screen.tabs.coach.active.protein.body', locale),
       status: `${Math.round(protein)}/${proteinTarget}g protein`,
       tone: 'info',
-      steps: locale === 'vi' ? [
-        'Thêm trứng, sữa chua, đậu hũ, gà, cá hoặc thịt nạc.',
-        'Giữ tinh bột vừa phải trong bữa tiếp theo.',
-        'Nếu ăn vặt, chọn protein thay vì trà sữa/bánh ngọt.',
-      ] : [
-        'Add eggs, yogurt, tofu, chicken, fish, or lean meat.',
-        'Keep carbs moderate in the next meal.',
-        'If snacking, choose protein instead of sweet drinks or cakes.',
+      steps: [
+        tr('screen.tabs.coach.active.protein.step1', locale),
+        tr('screen.tabs.coach.active.protein.step2', locale),
+        tr('screen.tabs.coach.active.protein.step3', locale),
       ],
-      prompts: locale === 'vi' ? [
-        `Tôi mới có ${Math.round(protein)}g protein, bữa tiếp theo nên ăn gì?`,
-        'Gợi ý snack giàu protein, rẻ và dễ mua.',
-      ] : [
-        `I only have ${Math.round(protein)}g protein. What should I eat next?`,
-        'Suggest high-protein snacks that are cheap and easy to buy.',
+      prompts: [
+        tr('screen.tabs.coach.active.protein.prompt1', locale, { protein: Math.round(protein) }),
+        tr('screen.tabs.coach.active.protein.prompt2', locale),
       ],
       primaryRoute: '/scan',
-      primaryLabel: locale === 'vi' ? 'Log món protein' : 'Log protein food',
+      primaryLabel: tr('screen.tabs.coach.active.protein.primary', locale),
     };
   }
 
+  const kcal = Math.max(0, Math.round(remaining));
   return {
-    title: locale === 'vi' ? 'Hôm nay đang đi đúng hướng' : 'Today is on track',
-    body: locale === 'vi'
-      ? 'Giữ nhịp này. Việc quan trọng nhất là log tiếp bữa sau và không tối ưu quá mức.'
-      : 'Keep this rhythm. The main job is to log the next meal and avoid over-optimizing.',
-    status: locale === 'vi' ? `Còn ${Math.max(0, Math.round(remaining))} kcal` : `${Math.max(0, Math.round(remaining))} kcal left`,
+    title: tr('screen.tabs.coach.active.track.title', locale),
+    body: tr('screen.tabs.coach.active.track.body', locale),
+    status: tr('screen.tabs.coach.active.track.status', locale, { kcal }),
     tone: 'good',
-    steps: locale === 'vi' ? [
-      `Log bữa ${nextMeal} ngay sau khi ăn.`,
-      'Giữ đồ uống không calo nếu đang thèm ngọt.',
-      'Cuối ngày xem Progress để biết có cần chỉnh ngày mai không.',
-    ] : [
-      `Log ${nextMeal} right after eating.`,
-      'Stick with zero-calorie drinks if you crave something sweet.',
-      'Check Progress tonight to see whether tomorrow needs adjustment.',
+    steps: [
+      tr('screen.tabs.coach.active.track.step1', locale, { meal: nextMeal }),
+      tr('screen.tabs.coach.active.track.step2', locale),
+      tr('screen.tabs.coach.active.track.step3', locale),
     ],
-    prompts: locale === 'vi' ? [
-      'Đánh giá nhanh ngày hôm nay của tôi và nói bước tiếp theo.',
-      'Tôi nên ăn gì để kết thúc ngày mà vẫn giảm cân?',
-    ] : [
-      'Quickly review my day and tell me the next step.',
-      'What should I eat to finish the day while still losing weight?',
+    prompts: [
+      tr('screen.tabs.coach.active.track.prompt1', locale),
+      tr('screen.tabs.coach.active.track.prompt2', locale),
     ],
     primaryRoute: '/scan',
-    primaryLabel: locale === 'vi' ? `Log bữa ${nextMeal}` : `Log ${nextMeal}`,
+    primaryLabel: tr('screen.tabs.coach.active.track.primary', locale, { meal: nextMeal }),
   };
 }
 
@@ -239,31 +190,29 @@ function buildWeeklyPlan(summary: CoachingSummary | null, dailyLog: DailyLog | n
   if (!summary || logsCount < 7) {
     const missingLogs = Math.max(0, 7 - logsCount);
     return {
-      title: locale === 'vi' ? 'Kế hoạch quay lại nhịp' : 'Plan to rebuild momentum',
-      body: locale === 'vi'
-        ? 'Mục tiêu tuần này là tạo lại thói quen, không phải ăn hoàn hảo. Log thiếu vẫn có thể cứu được.'
-        : 'This week is about rebuilding the habit, not eating perfectly. Missing logs can still be recovered.',
+      title: tr('screen.tabs.coach.week.restart.title', locale),
+      body: tr('screen.tabs.coach.week.restart.body', locale),
       status: logsCount > 0
-        ? (locale === 'vi' ? `Thiếu ${missingLogs} bữa log` : `${missingLogs} meal logs missing`)
-        : (locale === 'vi' ? 'Cần restart nhẹ' : 'Needs a light restart'),
+        ? tr('screen.tabs.coach.week.restart.statusMissing', locale, { count: missingLogs })
+        : tr('screen.tabs.coach.week.restart.statusEmpty', locale),
       tone: 'info',
       days: [
         {
-          label: locale === 'vi' ? 'Ngày 1-2' : 'Day 1-2',
-          title: locale === 'vi' ? 'Log 1 bữa để mở lại đà' : 'Log one meal to restart',
+          label: tr('screen.tabs.coach.week.restart.d1.label', locale),
+          title: tr('screen.tabs.coach.week.restart.d1.title', locale),
           body: todayLogs > 0
-            ? (locale === 'vi' ? 'Hôm nay đã có dữ liệu. Giữ tiếp 1 bữa nữa sau khi ăn.' : 'You already have data today. Log one more meal after eating.')
-            : (locale === 'vi' ? 'Dùng camera/text để log bữa gần nhất, ước lượng cũng được.' : 'Use camera or text to log the latest meal; an estimate is fine.'),
+            ? tr('screen.tabs.coach.week.restart.d1.bodyHasData', locale)
+            : tr('screen.tabs.coach.week.restart.d1.bodyEmpty', locale),
         },
         {
-          label: locale === 'vi' ? 'Ngày 3-4' : 'Day 3-4',
-          title: locale === 'vi' ? 'Lặp lại bữa để nhanh hơn' : 'Repeat meals to move faster',
-          body: locale === 'vi' ? 'Dùng saved meal hoặc món đã log gần đây. Mục tiêu là giảm thao tác.' : 'Use saved meals or recently logged foods. The goal is fewer steps.',
+          label: tr('screen.tabs.coach.week.restart.d2.label', locale),
+          title: tr('screen.tabs.coach.week.restart.d2.title', locale),
+          body: tr('screen.tabs.coach.week.restart.d2.body', locale),
         },
         {
-          label: locale === 'vi' ? 'Ngày 5-7' : 'Day 5-7',
-          title: locale === 'vi' ? 'Thêm 1 việc nhỏ mỗi ngày' : 'Add one small action per day',
-          body: locale === 'vi' ? 'Đi bộ 15 phút hoặc thêm protein rẻ: trứng, đậu hũ, sữa chua, gà/cá.' : 'Walk 15 minutes or add affordable protein: eggs, tofu, yogurt, chicken, or fish.',
+          label: tr('screen.tabs.coach.week.restart.d3.label', locale),
+          title: tr('screen.tabs.coach.week.restart.d3.title', locale),
+          body: tr('screen.tabs.coach.week.restart.d3.body', locale),
         },
       ],
     };
@@ -271,29 +220,25 @@ function buildWeeklyPlan(summary: CoachingSummary | null, dailyLog: DailyLog | n
 
   if (adherence !== null && adherence > 115) {
     return {
-      title: locale === 'vi' ? 'Kế hoạch 7 ngày để hạ kcal mềm' : '7-day plan to reduce calories gently',
-      body: locale === 'vi'
-        ? 'Tuần trước đang cao hơn mục tiêu. Điều chỉnh nhỏ sẽ bền hơn cắt mạnh.'
-        : 'Last week was above target. Small adjustments are more sustainable than hard restriction.',
-      status: locale === 'vi' ? `${Math.round(adherence)}% tuân thủ` : `${Math.round(adherence)}% adherence`,
+      title: tr('screen.tabs.coach.week.reduce.title', locale),
+      body: tr('screen.tabs.coach.week.reduce.body', locale),
+      status: tr('screen.tabs.coach.week.adherence', locale, { percent: Math.round(adherence) }),
       tone: 'warn',
       days: [
         {
-          label: locale === 'vi' ? 'Ngày 1-2' : 'Day 1-2',
-          title: locale === 'vi' ? 'Cắt calories lỏng' : 'Cut liquid calories',
-          body: locale === 'vi' ? 'Đổi trà sữa/nước ngọt sang size nhỏ, ít đường hoặc nước không calo.' : 'Switch sweet drinks to a smaller size, less sugar, or zero-calorie drinks.',
+          label: tr('screen.tabs.coach.week.restart.d1.label', locale),
+          title: tr('screen.tabs.coach.week.reduce.d1.title', locale),
+          body: tr('screen.tabs.coach.week.reduce.d1.body', locale),
         },
         {
-          label: locale === 'vi' ? 'Ngày 3-4' : 'Day 3-4',
-          title: locale === 'vi' ? 'Giữ bữa tối gọn hơn' : 'Keep dinner lighter',
-          body: locale === 'vi'
-            ? `Đặt bữa tối quanh ${Math.round(target * 0.28)}-${Math.round(target * 0.34)} kcal, ưu tiên rau và đạm nạc.`
-            : `Keep dinner around ${Math.round(target * 0.28)}-${Math.round(target * 0.34)} kcal with vegetables and lean protein.`,
+          label: tr('screen.tabs.coach.week.restart.d2.label', locale),
+          title: tr('screen.tabs.coach.week.reduce.d2.title', locale),
+          body: tr('screen.tabs.coach.week.reduce.d2.body', locale, { min: Math.round(target * 0.28), max: Math.round(target * 0.34) }),
         },
         {
-          label: locale === 'vi' ? 'Ngày 5-7' : 'Day 5-7',
-          title: locale === 'vi' ? 'Đi bộ sau bữa cao kcal' : 'Walk after high-calorie meals',
-          body: locale === 'vi' ? 'Nếu bữa nào vượt kế hoạch, thêm 15-25 phút đi bộ thay vì bỏ bữa sau.' : 'If a meal goes over plan, add a 15-25 minute walk instead of skipping the next meal.',
+          label: tr('screen.tabs.coach.week.restart.d3.label', locale),
+          title: tr('screen.tabs.coach.week.reduce.d3.title', locale),
+          body: tr('screen.tabs.coach.week.reduce.d3.body', locale),
         },
       ],
     };
@@ -301,58 +246,52 @@ function buildWeeklyPlan(summary: CoachingSummary | null, dailyLog: DailyLog | n
 
   if (adherence !== null && adherence < 80) {
     return {
-      title: locale === 'vi' ? 'Kế hoạch 7 ngày để ăn đủ hơn' : '7-day plan to eat enough',
-      body: locale === 'vi'
-        ? 'Tuần trước có thể quá thấp hoặc log chưa đủ. Giảm cân bền cần đủ năng lượng nền.'
-        : 'Last week may have been too low or under-logged. Sustainable weight loss still needs enough baseline energy.',
-      status: locale === 'vi' ? `${Math.round(adherence)}% tuân thủ` : `${Math.round(adherence)}% adherence`,
+      title: tr('screen.tabs.coach.week.enough.title', locale),
+      body: tr('screen.tabs.coach.week.enough.body', locale),
+      status: tr('screen.tabs.coach.week.adherence', locale, { percent: Math.round(adherence) }),
       tone: 'info',
       days: [
         {
-          label: locale === 'vi' ? 'Ngày 1-2' : 'Day 1-2',
-          title: locale === 'vi' ? 'Đừng bỏ bữa sáng/trưa' : 'Do not skip breakfast or lunch',
-          body: locale === 'vi' ? 'Nếu bạn không đói, vẫn log nhanh một bữa nhỏ để app không hiểu sai.' : 'If you are not hungry, still log a small meal so the app does not misread the day.',
+          label: tr('screen.tabs.coach.week.restart.d1.label', locale),
+          title: tr('screen.tabs.coach.week.enough.d1.title', locale),
+          body: tr('screen.tabs.coach.week.enough.d1.body', locale),
         },
         {
-          label: locale === 'vi' ? 'Ngày 3-4' : 'Day 3-4',
-          title: locale === 'vi' ? 'Thêm protein giá rẻ' : 'Add affordable protein',
-          body: locale === 'vi' ? 'Trứng, đậu hũ, sữa chua, ức gà hoặc cá hộp giúp no lâu hơn.' : 'Eggs, tofu, yogurt, chicken breast, or canned fish help you stay full longer.',
+          label: tr('screen.tabs.coach.week.restart.d2.label', locale),
+          title: tr('screen.tabs.coach.week.enough.d2.title', locale),
+          body: tr('screen.tabs.coach.week.enough.d2.body', locale),
         },
         {
-          label: locale === 'vi' ? 'Ngày 5-7' : 'Day 5-7',
-          title: locale === 'vi' ? 'Giữ deficit vừa phải' : 'Keep a moderate deficit',
-          body: locale === 'vi'
-            ? `Ăn gần ${Math.round(target * 0.85)}-${Math.round(target)} kcal thay vì cắt quá sâu.`
-            : `Aim for about ${Math.round(target * 0.85)}-${Math.round(target)} kcal instead of cutting too deeply.`,
+          label: tr('screen.tabs.coach.week.restart.d3.label', locale),
+          title: tr('screen.tabs.coach.week.enough.d3.title', locale),
+          body: tr('screen.tabs.coach.week.enough.d3.body', locale, { min: Math.round(target * 0.85), max: Math.round(target) }),
         },
       ],
     };
   }
 
   return {
-    title: locale === 'vi' ? 'Kế hoạch 7 ngày giữ đà giảm cân' : '7-day plan to keep weight-loss momentum',
-    body: locale === 'vi'
-      ? 'Tuần này ưu tiên lặp lại những việc đang hiệu quả thay vì đổi quá nhiều.'
-      : 'This week, repeat what is already working instead of changing too much.',
+    title: tr('screen.tabs.coach.week.momentum.title', locale),
+    body: tr('screen.tabs.coach.week.momentum.body', locale),
     status: averageDailyCalories !== null
-      ? (locale === 'vi' ? `${Math.round(averageDailyCalories)} kcal/ngày` : `${Math.round(averageDailyCalories)} kcal/day`)
-      : (locale === 'vi' ? 'Đang ổn định' : 'Stable'),
+      ? tr('screen.tabs.coach.week.momentum.statusCalories', locale, { kcal: Math.round(averageDailyCalories) })
+      : tr('screen.tabs.coach.week.momentum.statusStable', locale),
     tone: 'good',
     days: [
       {
-        label: locale === 'vi' ? 'Ngày 1-2' : 'Day 1-2',
-        title: locale === 'vi' ? 'Giữ bữa neo' : 'Keep an anchor meal',
-        body: locale === 'vi' ? 'Chọn 1 bữa để lặp lại mỗi ngày: sáng hoặc trưa, để giảm quyết định.' : 'Choose one meal to repeat daily, breakfast or lunch, to reduce decision fatigue.',
+        label: tr('screen.tabs.coach.week.restart.d1.label', locale),
+        title: tr('screen.tabs.coach.week.momentum.d1.title', locale),
+        body: tr('screen.tabs.coach.week.momentum.d1.body', locale),
       },
       {
-        label: locale === 'vi' ? 'Ngày 3-4' : 'Day 3-4',
-        title: locale === 'vi' ? 'Chuẩn bị món fallback' : 'Prepare a fallback meal',
-        body: locale === 'vi' ? 'Có sẵn 1 món rẻ để cứu ngày: cơm gà nhỏ, bún/phở ít topping, salad thêm đạm.' : 'Keep one cheap fallback: small chicken rice, lighter noodle soup, or salad with extra protein.',
+        label: tr('screen.tabs.coach.week.restart.d2.label', locale),
+        title: tr('screen.tabs.coach.week.momentum.d2.title', locale),
+        body: tr('screen.tabs.coach.week.momentum.d2.body', locale),
       },
       {
-        label: locale === 'vi' ? 'Ngày 5-7' : 'Day 5-7',
-        title: locale === 'vi' ? 'Review và chỉnh nhẹ' : 'Review and adjust lightly',
-        body: locale === 'vi' ? 'Nếu 3 ngày liên tiếp vượt target, giảm đồ uống ngọt hoặc snack trước khi cắt bữa chính.' : 'If 3 days in a row exceed target, reduce sweet drinks or snacks before cutting main meals.',
+        label: tr('screen.tabs.coach.week.restart.d3.label', locale),
+        title: tr('screen.tabs.coach.week.momentum.d3.title', locale),
+        body: tr('screen.tabs.coach.week.momentum.d3.body', locale),
       },
     ],
   };
@@ -391,116 +330,21 @@ function dedupeInsights(items: CoachingInsight[]) {
   return [...byContent.values()];
 }
 
-const INSIGHT_TYPE_LABELS: Record<string, string> = {
-  pattern_alert: 'Mẫu hành vi',
-  recommendation: 'Gợi ý',
-  achievement: 'Tiến bộ',
-  warning: 'Cần chú ý',
-  prediction: 'Dự báo',
-};
-
-const INSIGHT_TEXT_TRANSLATIONS: Record<string, string> = {
-  '⏭️ Skipping Meals': '⏭️ Bỏ bữa nhiều lần',
-  'You skipped meals multiple times this week. This can lead to overeating later.': 'Tuần này bạn bỏ bữa vài lần. Điều này dễ làm bạn đói quá mức và ăn bù về sau.',
-  'Try eating something small every 4-5 hours to maintain stable energy levels.': 'Chuẩn bị một bữa nhỏ mỗi 4-5 giờ để giữ năng lượng ổn định.',
-  '🍽️ Binge Eating Pattern': '🍽️ Ngày ăn vượt nhiều',
-  'Your data shows several high-calorie days. These spikes make it hard to hit your goals.': 'Dữ liệu có vài ngày calo tăng vọt, khiến mục tiêu tuần khó ổn định.',
-  'Identify triggers (stress, time, emotions) and plan alternatives for next time.': 'Ghi lại bối cảnh như stress, thiếu ngủ hoặc tiệc để chuẩn bị phương án nhẹ hơn lần sau.',
-  '🌙 Late-Night Eating': '🌙 Ăn muộn buổi tối',
-  'Most of your calories come from late evening. This can disrupt sleep and metabolism.': 'Phần lớn calo đang rơi vào cuối ngày, có thể ảnh hưởng giấc ngủ và cảm giác đói hôm sau.',
-  'Try a 2-hour eating cutoff before bed. Have herbal tea instead if needed.': 'Thử chốt bữa trước giờ ngủ khoảng 2 tiếng; nếu đói hãy chọn đồ nhẹ giàu protein.',
-  '📅 Weekend Inconsistency': '📅 Cuối tuần lệch nhịp',
-  'Your weekend eating differs significantly from weekdays, making consistency hard.': 'Cách ăn cuối tuần khác khá nhiều so với ngày thường, làm tiến độ khó đều.',
-  'Plan weekend meals in advance to reduce variance and maintain progress.': 'Chọn trước 1-2 bữa chính cuối tuần để vẫn linh hoạt mà không lệch quá xa.',
-  '💭 Emotional Eating': '💭 Ăn theo cảm xúc',
-  'Your eating patterns suggest emotional triggers may be influencing your food choices.': 'Mẫu ăn uống cho thấy cảm xúc có thể đang ảnh hưởng đến lựa chọn món.',
-  'Track your mood when logging food. Look for patterns between emotions and eating.': 'Khi log bữa, thêm một ghi chú ngắn về tâm trạng để nhận ra trigger.',
-  '📝 Logging Gaps': '📝 Ghi chép chưa đều',
-  'You logged only a few days this week. Consistent logging = accurate tracking.': 'Tuần này bạn chỉ log vài ngày. Log đều giúp app tính mục tiêu và gợi ý chính xác hơn.',
-  'Set a daily reminder to log after each meal. Even rough estimates help!': 'Đặt nhắc nhở sau mỗi bữa. Ước lượng nhanh vẫn hữu ích hơn bỏ trống.',
-  '😰 Stress Eating': '😰 Ăn khi căng thẳng',
-  'On high-stress days, your calorie intake increases significantly.': 'Những ngày stress cao, lượng calo của bạn có xu hướng tăng rõ.',
-  'Practice stress management: exercise, meditation, or talking to someone before eating.': 'Trước khi ăn thêm, thử đi bộ 5-10 phút hoặc uống nước rồi quyết định lại.',
-  '⏰ Timing Preference': '⏰ Khung giờ ăn ổn định',
-  'You prefer eating at a specific time, which is actually helpful for consistency!': 'Bạn có xu hướng ăn vào khung giờ khá ổn định, đây là nền tốt để duy trì thói quen.',
-  'Keep this routine - consistency is a sign of good habits forming.': 'Giữ nhịp này và chuẩn bị sẵn bữa phù hợp trước khung giờ quen thuộc.',
-  '🎉 Amazing consistency! Keep up this excellent work.': '🎉 Tuần này rất đều. Giữ nhịp hiện tại là đủ tốt.',
-  '👍 Good progress! Try to log a bit more consistently.': '👍 Tiến độ ổn. Log đều hơn một chút sẽ giúp gợi ý chính xác hơn.',
-  '📈 You\'re on the right track. Consistent logging will help you see patterns.': '📈 Bạn đang đi đúng hướng. Hãy ưu tiên log đều trước khi tối ưu sâu.',
-};
-
-function getInsightTypeLabel(type: string) {
-  return INSIGHT_TYPE_LABELS[type] ?? 'Gợi ý';
-}
-
-function localizeInsightText(text?: string | null) {
-  if (!text) return '';
-  return INSIGHT_TEXT_TRANSLATIONS[text] ?? text;
-}
-
-const CANONICAL_INSIGHT_TEXT_VI: Record<string, string> = {
-  'Skipping meals': 'Bỏ bữa nhiều lần',
-  'You skipped meals several times this week. That can make you overly hungry and more likely to overeat later.': 'Tuần này bạn bỏ bữa vài lần. Điều này dễ làm bạn đói quá mức và ăn bù về sau.',
-  'Prepare a small meal or protein snack every 4-5 hours to keep energy steadier.': 'Chuẩn bị một bữa nhỏ hoặc snack giàu protein mỗi 4-5 giờ để giữ năng lượng ổn định.',
-  'High-calorie spikes': 'Ngày ăn vượt nhiều',
-  'Your data shows a few days with large calorie jumps, which can make weekly progress less stable.': 'Dữ liệu có vài ngày calo tăng vọt, khiến tiến độ tuần khó ổn định.',
-  'Note the context, such as stress, poor sleep, or social meals, and plan a lighter fallback for next time.': 'Ghi lại bối cảnh như stress, thiếu ngủ hoặc tiệc để chuẩn bị phương án nhẹ hơn lần sau.',
-  'Late-night eating': 'Ăn muộn buổi tối',
-  'A large share of calories is landing late in the day, which may affect sleep and next-day hunger.': 'Phần lớn calo đang rơi vào cuối ngày, có thể ảnh hưởng giấc ngủ và cảm giác đói hôm sau.',
-  'Try finishing your last main meal about 2 hours before bed; if hungry, choose a light protein option.': 'Thử chốt bữa chính trước giờ ngủ khoảng 2 tiếng; nếu đói hãy chọn đồ nhẹ giàu protein.',
-  'Weekend variance': 'Cuối tuần lệch nhịp',
-  'Weekend eating differs a lot from weekdays, making progress harder to keep consistent.': 'Cách ăn cuối tuần khác khá nhiều so với ngày thường, làm tiến độ khó đều.',
-  'Pre-plan 1-2 key weekend meals so you can stay flexible without drifting too far.': 'Chọn trước 1-2 bữa chính cuối tuần để vẫn linh hoạt mà không lệch quá xa.',
-  'Emotional eating cue': 'Ăn theo cảm xúc',
-  'Your eating pattern suggests mood may be influencing food choices.': 'Mẫu ăn uống cho thấy cảm xúc có thể đang ảnh hưởng đến lựa chọn món.',
-  'Add a short mood note when logging meals so recurring triggers become easier to spot.': 'Khi log bữa, thêm một ghi chú ngắn về tâm trạng để nhận ra trigger lặp lại.',
-  'Logging gaps': 'Ghi chép chưa đều',
-  'You logged only a few days this week. Consistent logging helps the app calculate targets and coaching more accurately.': 'Tuần này bạn chỉ log vài ngày. Log đều giúp app tính mục tiêu và gợi ý chính xác hơn.',
-  'Set a reminder after meals. A rough estimate is still more useful than a blank day.': 'Đặt nhắc nhở sau mỗi bữa. Ước lượng nhanh vẫn hữu ích hơn bỏ trống.',
-  'Stress eating': 'Ăn khi căng thẳng',
-  'On higher-stress days, your calorie intake appears to rise noticeably.': 'Những ngày stress cao, lượng calo của bạn có xu hướng tăng rõ.',
-  'Before eating more, try a 5-10 minute walk or a glass of water, then decide again.': 'Trước khi ăn thêm, thử đi bộ 5-10 phút hoặc uống nước rồi quyết định lại.',
-  'Stable meal timing': 'Khung giờ ăn ổn định',
-  'You tend to eat at a consistent time window, which is a useful base for habit building.': 'Bạn có xu hướng ăn vào khung giờ khá ổn định, đây là nền tốt để duy trì thói quen.',
-  'Keep this rhythm and prepare suitable meals before your usual eating window.': 'Giữ nhịp này và chuẩn bị sẵn bữa phù hợp trước khung giờ quen thuộc.',
-  'Great consistency this week. Keep the current rhythm.': 'Tuần này rất đều. Giữ nhịp hiện tại là đủ tốt.',
-  'Solid progress. Logging a bit more consistently will make recommendations more accurate.': 'Tiến độ ổn. Log đều hơn một chút sẽ giúp gợi ý chính xác hơn.',
-  'You are moving in the right direction. Prioritize consistent logging before optimizing details.': 'Bạn đang đi đúng hướng. Hãy ưu tiên log đều trước khi tối ưu sâu.',
-  'Start with one meal log today. Even a rough estimate gives Coach enough context to personalize the next step.': 'Bắt đầu bằng một bữa log hôm nay. Ước lượng nhanh cũng đủ để Coach cá nhân hóa bước tiếp theo.',
-  'Prioritize small, regular meals to avoid getting overly hungry late in the day.': 'Ưu tiên bữa nhỏ đều hơn để tránh đói quá mức vào cuối ngày.',
-  'Identify triggers and prepare an easier fallback meal before the next high-risk moment.': 'Nhận diện trigger và chuẩn bị trước bữa thay thế dễ kiểm soát hơn.',
-  'Try finishing your last main meal about 2 hours before bed to support better sleep.': 'Thử chốt bữa chính trước giờ ngủ khoảng 2 tiếng để ngủ tốt hơn.',
-  'Plan a few weekend choices in advance so you can enjoy flexibility without drifting too far.': 'Lên trước vài lựa chọn cuối tuần để vẫn vui mà không lệch quá xa.',
-  'Use one short stress-reduction action before deciding to eat more.': 'Dùng một hành động giảm stress ngắn trước khi quyết định ăn thêm.',
-  'Add mood notes when logging meals to spot recurring triggers.': 'Ghi chú cảm xúc khi log bữa để nhận ra trigger lặp lại.',
-  'Log right after meals, even roughly, so the data is not empty.': 'Log ngay sau bữa, kể cả ước lượng nhanh, để dữ liệu không bị rỗng.',
-  'Use your natural eating window to keep a stable routine.': 'Tận dụng khung giờ ăn tự nhiên để duy trì nhịp ổn định.',
+const INSIGHT_TYPE_LABEL_KEYS: Record<string, Parameters<typeof tr>[0]> = {
+  pattern_alert: 'screen.tabs.coach.insightType.pattern_alert',
+  recommendation: 'screen.tabs.coach.insightType.recommendation',
+  achievement: 'screen.tabs.coach.insightType.achievement',
+  warning: 'screen.tabs.coach.insightType.warning',
+  prediction: 'screen.tabs.coach.insightType.prediction',
 };
 
 function getLocalizedInsightTypeLabel(type: string, locale: Locale) {
-  if (locale === 'en') {
-    const labels: Record<string, string> = {
-      pattern_alert: 'Pattern',
-      recommendation: 'Recommendation',
-      achievement: 'Progress',
-      warning: 'Needs attention',
-      prediction: 'Forecast',
-    };
-    return labels[type] ?? 'Recommendation';
-  }
-
-  return INSIGHT_TYPE_LABELS[type] ?? 'Gợi ý';
+  return tr(INSIGHT_TYPE_LABEL_KEYS[type] ?? 'screen.tabs.coach.insightType.fallback', locale);
 }
 
 function localizeInsightTextForLocale(text: string | null | undefined, locale: Locale) {
-  if (!text) return '';
-  if (locale !== 'vi') return text;
-  return CANONICAL_INSIGHT_TEXT_VI[text] ?? INSIGHT_TEXT_TRANSLATIONS[text] ?? text;
+  return text ? translateText(text, locale) : '';
 }
-
-void getInsightTypeLabel;
-void localizeInsightText;
-
 function formatSummaryNumber(value: unknown, fallback = '--') {
   const numeric = toFiniteNumber(value);
   return numeric === null ? fallback : String(safeRound(numeric));
@@ -511,9 +355,7 @@ function formatSummaryPercent(value: unknown) {
 }
 
 function getCoachErrorMessage(error: unknown, locale: Locale): string {
-  const fallback = locale === 'vi'
-    ? 'Xin lỗi, tôi đang bị gián đoạn kết nối. Bạn thử lại sau ít phút nhé.'
-    : 'Sorry, I am having a connection issue. Please try again in a few minutes.';
+  const fallback = tr('screen.tabs.coach.error.connection', locale);
 
   const err: any = error;
   const rawMessage = String(err?.message ?? '').toLowerCase();
@@ -521,21 +363,15 @@ function getCoachErrorMessage(error: unknown, locale: Locale): string {
   const backendMessage = String(err?.response?.data?.message ?? '').trim();
 
   if (rawMessage.includes('only available on premium') || rawMessage.includes('premium or pro')) {
-    return locale === 'vi'
-      ? 'AI Coach hiện chỉ mở cho gói Premium/Pro. Bạn nâng cấp để tiếp tục dùng tính năng này nhé.'
-      : 'AI Coach is available on Premium/Pro. Upgrade to keep using this feature.';
+    return tr('screen.tabs.coach.error.premium', locale);
   }
 
   if (status === 401) {
-    return locale === 'vi'
-      ? 'Phiên đăng nhập đã hết hạn. Bạn vui lòng đăng nhập lại để tiếp tục chat với Coach.'
-      : 'Your session has expired. Please log in again to keep chatting with Coach.';
+    return tr('screen.tabs.coach.error.session', locale);
   }
 
   if (status >= 500 && backendMessage) {
-    return locale === 'vi'
-      ? `Coach tạm thời gặp lỗi hệ thống: ${backendMessage}`
-      : `Coach is temporarily unavailable: ${backendMessage}`;
+    return tr('screen.tabs.coach.error.backend', locale, { message: backendMessage });
   }
 
   if (backendMessage) {
@@ -543,9 +379,7 @@ function getCoachErrorMessage(error: unknown, locale: Locale): string {
   }
 
   if (rawMessage.includes('network')) {
-    return locale === 'vi'
-      ? 'Không thể kết nối backend. Bạn kiểm tra lại server và thử lại giúp mình nhé.'
-      : 'Cannot connect to the backend. Please check the server and try again.';
+    return tr('screen.tabs.coach.error.network', locale);
   }
 
   return fallback;
@@ -568,7 +402,7 @@ export default function CoachScreen() {
     {
       id: 'welcome',
       role: 'coach',
-      text: 'Xin chào. Tôi là AI Coach. Bạn có thể hỏi về bữa ăn, macro hoặc cách đặt mục tiêu calo hôm nay.',
+      text: tr('screen.tabs.coach.message.welcome'),
     },
   ]);
 
@@ -647,8 +481,7 @@ export default function CoachScreen() {
   }, [dailyLog]);
   const activePlan = useMemo(() => buildActivePlan(dailyLog, locale), [dailyLog, locale]);
   const weeklyPlan = useMemo(() => buildWeeklyPlan(summary, dailyLog, locale), [summary, dailyLog, locale]);
-  const summaryRecommendation = localizeInsightTextForLocale(summary?.recommended_action, locale) || t('screen.tabs.coach.summaryFallback')
-    || 'Coach cần thêm dữ liệu log trong tuần để đưa ra gợi ý chính xác hơn.';
+  const summaryRecommendation = localizeInsightTextForLocale(summary?.recommended_action, locale) || t('screen.tabs.coach.summaryFallback');
 
   const handleSend = async () => {
     const message = input.trim();
@@ -754,7 +587,7 @@ export default function CoachScreen() {
         >
           <View style={styles.activePlanHeader}>
             <View style={styles.activePlanCopy}>
-              <Text style={styles.activePlanEyebrow}>{locale === 'vi' ? 'KẾ HOẠCH HÔM NAY' : "TODAY'S PLAN"}</Text>
+              <Text style={styles.activePlanEyebrow}>{t('screen.tabs.coach.plan.todayEyebrow')}</Text>
               <Text style={styles.activePlanTitle}>{activePlan.title}</Text>
               <Text style={styles.activePlanBody}>{activePlan.body}</Text>
             </View>
@@ -787,7 +620,7 @@ export default function CoachScreen() {
               style={styles.planPrimaryAction}
             />
             <UiButton
-              label={locale === 'vi' ? 'Xem Today' : 'View Today'}
+              label="screen.tabs.coach.plan.viewToday"
               variant="secondary"
               onPress={() => router.push('/')}
               style={styles.planSecondaryAction}
@@ -812,7 +645,7 @@ export default function CoachScreen() {
         >
           <View style={styles.weeklyPlanHeader}>
             <View style={styles.weeklyPlanCopy}>
-              <Text style={styles.weeklyPlanEyebrow}>{locale === 'vi' ? 'KẾ HOẠCH 7 NGÀY' : '7-DAY PLAN'}</Text>
+              <Text style={styles.weeklyPlanEyebrow}>{t('screen.tabs.coach.plan.weekEyebrow')}</Text>
               <Text style={styles.weeklyPlanTitle}>{weeklyPlan.title}</Text>
               <Text style={styles.weeklyPlanBody}>{weeklyPlan.body}</Text>
             </View>
@@ -878,9 +711,6 @@ export default function CoachScreen() {
           <SurfaceCard style={styles.noInsightsCard}>
             <Text style={styles.noInsightsText}>
               {t('screen.tabs.coach.emptyInsights')}
-              {false ? <>
-              ✨ Bạn đang làm rất tốt! Không có cảnh báo nào ngay bây giờ.
-              </> : null}
             </Text>
           </SurfaceCard>
         )}
@@ -888,10 +718,10 @@ export default function CoachScreen() {
         {/* Context Card */}
         <SurfaceCard style={styles.contextCard}>
           <Text style={styles.contextTitle} i18nKey="screen.tabs.coach.text.006" />
-          <Text style={styles.contextLine}>{t('screen.tabs.coach.context.consumed')}: {context.today_calories} kcal</Text>
-          <Text style={styles.contextLine}>{t('screen.tabs.coach.context.target')}: {context.target_calories} kcal</Text>
+          <Text style={styles.contextLine}>{t('screen.tabs.coach.context.consumedLine', { kcal: context.today_calories })}</Text>
+          <Text style={styles.contextLine}>{t('screen.tabs.coach.context.targetLine', { kcal: context.target_calories })}</Text>
           <Text style={styles.contextLine}>
-            {t('screen.tabs.coach.context.remaining')}: {context.target_calories - context.today_calories} kcal
+            {t('screen.tabs.coach.context.remainingLine', { kcal: context.target_calories - context.today_calories })}
           </Text>
           <View style={styles.contextActions}>
             <UiButton
@@ -906,13 +736,6 @@ export default function CoachScreen() {
               style={styles.contextActionButton}
             />
           </View>
-          {false ? <>
-          <Text style={styles.contextLine}>Đã ăn: {context.today_calories} kcal</Text>
-          <Text style={styles.contextLine}>Mục tiêu: {context.target_calories} kcal</Text>
-          <Text style={styles.contextLine}>
-            Còn lại: {context.target_calories - context.today_calories} kcal
-          </Text>
-          </> : null}
         </SurfaceCard>
 
         {/* Chat Messages */}

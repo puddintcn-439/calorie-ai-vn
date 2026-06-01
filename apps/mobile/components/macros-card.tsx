@@ -6,6 +6,7 @@ import {
 import { SurfaceCard } from './ui-shell';
 import { useAppTheme } from './theme';
 import { Text } from './i18n-text';
+import { I18nKey } from './i18n';
 import { formatMacro, formatNumberVi, formatPercent, roundTo, safeNumber, safePositiveNumber, safeRound, toFiniteNumber } from '../services/number-format';
 
 type NutritionTargets = {
@@ -88,7 +89,7 @@ function computeNutritionTargets(daily: number): NutritionTargets {
     saturated_fat_g_max: safeRound((safeDaily * 0.1) / 9),
     free_sugar_pct_max: 10,
     saturated_fat_pct_max: 10,
-    basis: 'Mục tiêu tổng quát: fiber 14 g/1000 kcal, sodium <2300 mg/ngày, đường tự do/added sugar <10% kcal, saturated fat <10% kcal.',
+    basis: 'screen.components.macrosCard.basis',
   };
 }
 
@@ -159,15 +160,11 @@ export default function MacrosCard({ target, daily_calorie_target, weight_kg, go
           <Metric label="screen.components.macrosCard.label.003" value={`< ${formatMacro(nutrition.free_sugar_g_max)}`} tone="limit" />
           <Metric label="screen.components.macrosCard.label.004" value={`< ${formatMacro(nutrition.saturated_fat_g_max)}`} tone="limit" />
         </View>
-        <Text style={[styles.qualityNote, { color: colors.textMuted }]}>
-          Đường trên nhãn/barcode có thể là total sugar; app chưa luôn phân biệt được free sugar và added sugar.
-        </Text>
+        <Text style={[styles.qualityNote, { color: colors.textMuted }]} i18nKey="screen.components.macrosCard.qualityNote" />
       </View>
 
       {!!target?.medical_review_recommended && (
-        <Text style={[styles.warning, { color: colors.warning }]}>
-          Hồ sơ có yếu tố sức khỏe cần chuyên gia xem lại trước khi dùng mục tiêu này.
-        </Text>
+        <Text style={[styles.warning, { color: colors.warning }]} i18nKey="screen.components.macrosCard.medicalWarning" />
       )}
       {!!target?.macro_warnings?.length && (
         <Text style={[styles.warning, { color: colors.warning }]}>{target.macro_warnings[0]}</Text>
@@ -176,7 +173,7 @@ export default function MacrosCard({ target, daily_calorie_target, weight_kg, go
   );
 }
 
-function Metric({ label, value, tone }: { label: string; value: string; tone: 'good' | 'limit' }) {
+function Metric({ label, value, tone }: { label: I18nKey; value: string; tone: 'good' | 'limit' }) {
   const { colors } = useAppTheme();
   const toneStyle = tone === 'good'
     ? { backgroundColor: colors.surfaceSuccess, borderColor: colors.borderSuccess }
@@ -184,7 +181,7 @@ function Metric({ label, value, tone }: { label: string; value: string; tone: 'g
 
   return (
     <View style={[styles.metricPill, toneStyle]}>
-      <Text style={[styles.metricLabel, { color: colors.textMuted }]}>{label}</Text>
+      <Text style={[styles.metricLabel, { color: colors.textMuted }]} i18nKey={label} />
       <Text style={[styles.metricValue, { color: colors.text }]}>{value}</Text>
     </View>
   );

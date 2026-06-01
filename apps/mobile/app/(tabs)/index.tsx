@@ -24,25 +24,25 @@ import { AnimatedIonicon } from '../../components/animated-icon';
 import { RewardToast, RewardToastData } from '../../components/reward-toast';
 import { Text } from '../../components/i18n-text';
 import { Alert } from '../../components/i18n-alert';
-import { Locale, useI18n } from '../../components/i18n';
+import { Locale, tr, useI18n } from '../../components/i18n';
 
 const mealIllustration = require('../../assets/images/vietnamese-meal.jpg') as number;
 const todayHeroIllustration = require('../../assets/images/today-hero.jpg') as number;
 
 const MEAL_ORDER: MealType[] = ['breakfast', 'lunch', 'dinner', 'snack'];
 
-const MEAL_LABELS: Record<MealType, string> = {
-  breakfast: 'Sáng',
-  lunch: 'Trưa',
-  dinner: 'Tối',
-  snack: 'Vặt',
+const MEAL_LABEL_KEYS: Record<MealType, Parameters<typeof tr>[0]> = {
+  breakfast: 'screen.tabs.index.meal.breakfast',
+  lunch: 'screen.tabs.index.meal.lunch',
+  dinner: 'screen.tabs.index.meal.dinner',
+  snack: 'screen.tabs.index.meal.snack',
 };
 
-const MEAL_HINTS: Record<MealType, string> = {
-  breakfast: 'Bắt nhịp ngày mới',
-  lunch: 'Giữ năng lượng ổn',
-  dinner: 'Nhẹ nhưng đủ chất',
-  snack: 'Chống đói thông minh',
+const MEAL_HINT_KEYS: Record<MealType, Parameters<typeof tr>[0]> = {
+  breakfast: 'screen.tabs.index.mealHint.breakfast',
+  lunch: 'screen.tabs.index.mealHint.lunch',
+  dinner: 'screen.tabs.index.mealHint.dinner',
+  snack: 'screen.tabs.index.mealHint.snack',
 };
 
 type NudgeTone = 'good' | 'warn' | 'info';
@@ -149,15 +149,15 @@ function buildDailyFocusItems(args: {
       key: 'calories',
       label: 'Net kcal',
       value: remaining >= 0
-        ? (locale === 'vi' ? `còn ${formatNumber(remaining)}` : `${formatNumber(remaining)} left`)
-        : (locale === 'vi' ? `dư ${formatNumber(Math.abs(remaining))}` : `${formatNumber(Math.abs(remaining))} over`),
+        ? tr('screen.tabs.index.focus.calories.left', locale, { kcal: formatNumber(remaining) })
+        : tr('screen.tabs.index.focus.calories.over', locale, { kcal: formatNumber(Math.abs(remaining)) }),
       hint: consumedKcal <= 0
-        ? (locale === 'vi' ? 'Log bữa đầu để mục tiêu rõ hơn' : 'Log the first meal to clarify the goal')
+        ? tr('screen.tabs.index.focus.calories.empty', locale)
         : remaining >= 0
           ? calorieRatio >= 0.75
-            ? (locale === 'vi' ? 'Đang sát nhịp hôm nay' : 'On pace today')
-            : (locale === 'vi' ? 'Còn room cho bữa sau' : 'Room left for the next meal')
-          : (locale === 'vi' ? 'Bữa sau giảm dầu/ngọt' : 'Reduce oil/sugar in the next meal'),
+            ? tr('screen.tabs.index.focus.calories.onPace', locale)
+            : tr('screen.tabs.index.focus.calories.room', locale)
+          : tr('screen.tabs.index.focus.calories.reduce', locale),
       icon: remaining >= 0 ? 'pulse-outline' : 'alert-circle-outline',
       tone: remaining < 0 ? 'warn' : calorieRatio >= 0.75 ? 'good' : 'info',
       progress: clampProgress(calorieRatio),
@@ -167,8 +167,8 @@ function buildDailyFocusItems(args: {
       label: 'Protein',
       value: `${formatNumber(proteinG)}/${proteinTarget}g`,
       hint: proteinGap <= 0
-        ? (locale === 'vi' ? 'Đủ nền phục hồi' : 'Enough for recovery')
-        : (locale === 'vi' ? `Cần thêm khoảng ${Math.round(proteinGap)}g` : `Need about ${Math.round(proteinGap)}g more`),
+        ? tr('screen.tabs.index.focus.protein.good', locale)
+        : tr('screen.tabs.index.focus.protein.gap', locale, { grams: Math.round(proteinGap) }),
       icon: 'barbell-outline',
       tone: proteinGap <= 0 ? 'good' : 'info',
       progress: clampProgress(proteinG / Math.max(proteinTarget, 1)),
@@ -178,9 +178,9 @@ function buildDailyFocusItems(args: {
   if (activityMinutes < 25) {
     items.push({
       key: 'movement',
-      label: locale === 'vi' ? 'Vận động' : 'Movement',
-      value: `${formatNumber(activityMinutes)}/25${locale === 'vi' ? 'p' : 'm'}`,
-      hint: locale === 'vi' ? 'Đi bộ ngắn là đủ' : 'A short walk is enough',
+      label: tr('screen.tabs.index.focus.movement.label', locale),
+      value: tr('screen.tabs.index.focus.movement.value', locale, { minutes: formatNumber(activityMinutes) }),
+      hint: tr('screen.tabs.index.focus.movement.hint', locale),
       icon: 'walk-outline',
       tone: 'info',
       progress: clampProgress(activityMinutes / 25),
@@ -188,9 +188,9 @@ function buildDailyFocusItems(args: {
   } else if (qualityCoverageItems > 0 && sodiumMg > args.qualityTargets.sodium_mg_max) {
     items.push({
       key: 'sodium',
-      label: locale === 'vi' ? 'Muối' : 'Sodium',
+      label: tr('screen.tabs.index.focus.sodium.label', locale),
       value: `${formatNumber(sodiumMg)}mg`,
-      hint: locale === 'vi' ? 'Bữa sau giảm đồ mặn' : 'Reduce salty foods next meal',
+      hint: tr('screen.tabs.index.focus.sodium.hint', locale),
       icon: 'water-outline',
       tone: 'warn',
       progress: clampProgress(args.qualityTargets.sodium_mg_max / Math.max(sodiumMg, 1)),
@@ -198,9 +198,9 @@ function buildDailyFocusItems(args: {
   } else if (qualityCoverageItems > 0 && sugarG > args.qualityTargets.sugar_g_max) {
     items.push({
       key: 'sugar',
-      label: locale === 'vi' ? 'Đường' : 'Sugar',
+      label: tr('screen.tabs.index.focus.sugar.label', locale),
       value: `${formatNumber(sugarG)}g`,
-      hint: locale === 'vi' ? 'Ưu tiên nước lọc' : 'Choose water first',
+      hint: tr('screen.tabs.index.focus.sugar.hint', locale),
       icon: 'ice-cream-outline',
       tone: 'warn',
       progress: clampProgress(args.qualityTargets.sugar_g_max / Math.max(sugarG, 1)),
@@ -208,11 +208,11 @@ function buildDailyFocusItems(args: {
   } else if (qualityCoverageItems > 0) {
     items.push({
       key: 'fiber',
-      label: locale === 'vi' ? 'Chất xơ' : 'Fiber',
+      label: tr('screen.tabs.index.focus.fiber.label', locale),
       value: `${formatNumber(fiberG)}/${args.qualityTargets.fiber_g_min}g`,
       hint: fiberG >= args.qualityTargets.fiber_g_min
-        ? (locale === 'vi' ? 'Fiber ổn' : 'Fiber looks good')
-        : (locale === 'vi' ? 'Thêm rau/đậu/trái cây' : 'Add vegetables, beans, or fruit'),
+        ? tr('screen.tabs.index.focus.fiber.good', locale)
+        : tr('screen.tabs.index.focus.fiber.add', locale),
       icon: 'leaf-outline',
       tone: fiberG >= args.qualityTargets.fiber_g_min ? 'good' : 'info',
       progress: clampProgress(fiberG / Math.max(args.qualityTargets.fiber_g_min, 1)),
@@ -220,9 +220,9 @@ function buildDailyFocusItems(args: {
   } else {
     items.push({
       key: 'quality',
-      label: locale === 'vi' ? 'Chất lượng' : 'Quality',
-      value: locale === 'vi' ? 'thiếu dữ liệu' : 'no data',
-      hint: locale === 'vi' ? 'Scan/database để rõ sodium, fiber' : 'Use scan/database for sodium and fiber',
+      label: tr('screen.tabs.index.focus.quality.label', locale),
+      value: tr('screen.tabs.index.focus.quality.value', locale),
+      hint: tr('screen.tabs.index.focus.quality.hint', locale),
       icon: 'scan-outline',
       tone: 'muted',
       progress: 0,
@@ -262,15 +262,15 @@ function buildNutritionNudges(
 
   if (safeProtein >= 75) {
     items.push({
-      title: locale === 'vi' ? 'Ăn đủ protein' : 'Protein on track',
-      body: locale === 'vi' ? 'Bữa tới giữ rau và nước là ổn.' : 'Keep vegetables and water in the next meal.',
+      title: tr('screen.tabs.index.nudge.proteinGood.title', locale),
+      body: tr('screen.tabs.index.nudge.proteinGood.body', locale),
       tone: 'good',
       icon: 'checkmark-circle',
     });
   } else {
     items.push({
-      title: locale === 'vi' ? 'Thêm protein' : 'Add protein',
-      body: locale === 'vi' ? '+1 trứng, sữa chua hoặc đậu hũ.' : '+1 egg, yogurt, or tofu.',
+      title: tr('screen.tabs.index.nudge.addProtein.title', locale),
+      body: tr('screen.tabs.index.nudge.addProtein.body', locale),
       tone: 'info',
       icon: 'barbell',
     });
@@ -278,8 +278,8 @@ function buildNutritionNudges(
 
   if (!hasVeg(logs)) {
     items.push({
-      title: locale === 'vi' ? 'Thiếu rau' : 'Low vegetables',
-      body: locale === 'vi' ? 'Thêm canh hoặc rau luộc ở bữa kế.' : 'Add soup or cooked vegetables next meal.',
+      title: tr('screen.tabs.index.nudge.lowVeg.title', locale),
+      body: tr('screen.tabs.index.nudge.lowVeg.body', locale),
       tone: 'warn',
       icon: 'leaf',
     });
@@ -287,8 +287,8 @@ function buildNutritionNudges(
 
   if (safeCalories > 0 && fatCalories / Math.max(safeCalories, 1) > 0.38) {
     items.push({
-      title: locale === 'vi' ? 'Fat hơi lệch' : 'Fat is high',
-      body: locale === 'vi' ? 'Ưu tiên hấp, luộc hoặc nướng.' : 'Prefer steamed, boiled, or grilled foods.',
+      title: tr('screen.tabs.index.nudge.highFat.title', locale),
+      body: tr('screen.tabs.index.nudge.highFat.body', locale),
       tone: 'warn',
       icon: 'flame',
     });
@@ -296,8 +296,8 @@ function buildNutritionNudges(
 
   if (safeQuality.coverage_items > 0 && safeQuality.sodium_mg > quality.targets.sodium_mg_max) {
     items.push({
-      title: locale === 'vi' ? 'Sodium cao' : 'High sodium',
-      body: locale === 'vi' ? 'Bữa sau giảm đồ mặn/đồ đóng gói.' : 'Reduce salty or packaged food next meal.',
+      title: tr('screen.tabs.index.nudge.highSodium.title', locale),
+      body: tr('screen.tabs.index.nudge.highSodium.body', locale),
       tone: 'warn',
       icon: 'water',
     });
@@ -305,8 +305,8 @@ function buildNutritionNudges(
 
   if (safeQuality.coverage_items > 0 && safeQuality.sugar_g > quality.targets.sugar_g_max) {
     items.push({
-      title: locale === 'vi' ? 'Đường hơi cao' : 'Sugar is high',
-      body: locale === 'vi' ? 'Đổi sang nước lọc hoặc trái cây nguyên miếng.' : 'Switch to water or whole fruit.',
+      title: tr('screen.tabs.index.nudge.highSugar.title', locale),
+      body: tr('screen.tabs.index.nudge.highSugar.body', locale),
       tone: 'warn',
       icon: 'ice-cream',
     });
@@ -314,8 +314,8 @@ function buildNutritionNudges(
 
   if (safeQuality.coverage_items > 0 && safeCalories > safeTarget * 0.45 && safeQuality.fiber_g < quality.targets.fiber_g_min * 0.45) {
     items.push({
-      title: locale === 'vi' ? 'Fiber còn thấp' : 'Fiber is low',
-      body: locale === 'vi' ? 'Thêm rau, đậu hoặc trái cây ít ngọt.' : 'Add vegetables, beans, or lower-sugar fruit.',
+      title: tr('screen.tabs.index.nudge.lowFiber.title', locale),
+      body: tr('screen.tabs.index.nudge.lowFiber.body', locale),
       tone: 'info',
       icon: 'leaf',
     });
@@ -323,8 +323,8 @@ function buildNutritionNudges(
 
   if (safeTarget - safeCalories > 350) {
     items.push({
-      title: locale === 'vi' ? 'Còn dư calo đẹp' : 'Good calorie room left',
-      body: locale === 'vi' ? 'Chọn bữa sau đủ đạm, ít dầu.' : 'Choose a protein-rich, lower-oil next meal.',
+      title: tr('screen.tabs.index.nudge.calorieRoom.title', locale),
+      body: tr('screen.tabs.index.nudge.calorieRoom.body', locale),
       tone: 'good',
       icon: 'sparkles',
     });
@@ -334,6 +334,7 @@ function buildNutritionNudges(
 }
 
 function CaloriesRing({ consumed, burned, target, compact = false }: { consumed: number; burned: number; target: number; compact?: boolean }) {
+  const { t } = useI18n();
   const size = compact ? 154 : 214;
   const stroke = compact ? 12 : 14;
   const radius = (size - stroke) / 2;
@@ -366,7 +367,9 @@ function CaloriesRing({ consumed, burned, target, compact = false }: { consumed:
         <Text style={[styles.ringValue, compact && styles.ringValueCompact]}>{formatNumber(net)}</Text>
         <Text style={[styles.ringLabel, compact && styles.ringLabelCompact]} i18nKey="screen.tabs.index.text.001" />
         <Text style={[styles.ringRemain, compact && styles.ringRemainCompact, remaining < 0 && styles.ringRemainOver]}>
-          {remaining >= 0 ? `còn ${formatNumber(remaining)}` : `dư ${formatNumber(Math.abs(remaining))}`}
+          {remaining >= 0
+            ? t('screen.tabs.index.ring.remaining', { kcal: formatNumber(remaining) })
+            : t('screen.tabs.index.ring.over', { kcal: formatNumber(Math.abs(remaining)) })}
         </Text>
       </View>
     </View>
@@ -380,24 +383,21 @@ function computeDailyDelta(kgPerWeek: number) {
 
 type QuickGoalOption = {
   key: string;
-  label: string;
+  labelKey: Parameters<typeof tr>[0];
   type: 'loss' | 'maintain' | 'gain';
   kgPerWeek: number;
 };
 
 const QUICK_GOAL_OPTIONS: QuickGoalOption[] = [
-  { key: 'loss_0.25', label: 'Giảm 0.25 kg/tuần', type: 'loss', kgPerWeek: 0.25 },
-  { key: 'loss_0.5', label: 'Giảm 0.5 kg/tuần', type: 'loss', kgPerWeek: 0.5 },
-  { key: 'loss_1', label: 'Giảm 1.0 kg/tuần', type: 'loss', kgPerWeek: 1 },
-  { key: 'maintain', label: 'Giữ dáng', type: 'maintain', kgPerWeek: 0 },
-  { key: 'gain_0.25', label: 'Tăng 0.25 kg/tuần', type: 'gain', kgPerWeek: 0.25 },
+  { key: 'loss_0.25', labelKey: 'screen.tabs.index.quickGoal.loss025', type: 'loss', kgPerWeek: 0.25 },
+  { key: 'loss_0.5', labelKey: 'screen.tabs.index.quickGoal.loss05', type: 'loss', kgPerWeek: 0.5 },
+  { key: 'loss_1', labelKey: 'screen.tabs.index.quickGoal.loss1', type: 'loss', kgPerWeek: 1 },
+  { key: 'maintain', labelKey: 'screen.tabs.index.quickGoal.maintain', type: 'maintain', kgPerWeek: 0 },
+  { key: 'gain_0.25', labelKey: 'screen.tabs.index.quickGoal.gain025', type: 'gain', kgPerWeek: 0.25 },
 ];
 
 function formatQuickGoalLabel(option: QuickGoalOption, locale: Locale) {
-  if (locale === 'vi') return option.label;
-  if (option.type === 'maintain') return 'Maintain';
-  const verb = option.type === 'loss' ? 'Lose' : 'Gain';
-  return `${verb} ${option.kgPerWeek.toFixed(option.kgPerWeek % 1 === 0 ? 1 : 2)} kg/week`;
+  return tr(option.labelKey, locale);
 }
 
 type DashboardProfileMeta = Pick<User, 'age' | 'gender' | 'height_cm' | 'weight_kg' | 'health_flags' | 'activity_level' | 'goal_plan' | 'daily_calorie_target' | 'goal'>;
@@ -420,34 +420,35 @@ function buildQuickGoalPlan(option: QuickGoalOption): GoalPlan {
 
 function describeGoalPlan(plan: GoalPlan, locale: Locale) {
   if (plan.direction === 'maintain') {
-    return locale === 'vi' ? 'Duy trì cân nặng' : 'Maintain weight';
+    return tr('screen.tabs.index.goal.maintain', locale);
   }
 
   const verb = plan.direction === 'gain'
-    ? (locale === 'vi' ? 'Tăng' : 'Gain')
-    : (locale === 'vi' ? 'Giảm' : 'Lose');
+    ? tr('screen.tabs.index.goal.gain', locale)
+    : tr('screen.tabs.index.goal.lose', locale);
   const targetKg = safeNumber(plan.target_kg);
   const durationWeeks = safeNumber(plan.duration_weeks);
-  return `${verb} ${targetKg} kg${durationWeeks ? (locale === 'vi' ? ` trong ${durationWeeks} tuần` : ` in ${durationWeeks} weeks`) : ''}`;
+  const duration = durationWeeks ? tr('screen.tabs.index.goal.durationWeeks', locale, { weeks: durationWeeks }) : '';
+  return `${verb} ${targetKg} kg${duration}`;
 }
 
 function statusLabel(status: GoalPlan['safety_status'] | undefined, locale: Locale) {
-  if (status === 'adjusted') return locale === 'vi' ? 'Đã chỉnh' : 'Adjusted';
-  if (status === 'maintenance_only') return 'Maintenance';
-  if (status === 'incomplete') return locale === 'vi' ? 'Thiếu hồ sơ' : 'Incomplete';
-  return locale === 'vi' ? 'Đang dùng' : 'Active';
+  if (status === 'adjusted') return tr('screen.tabs.index.goal.status.adjusted', locale);
+  if (status === 'maintenance_only') return tr('screen.tabs.index.goal.status.maintenance', locale);
+  if (status === 'incomplete') return tr('screen.tabs.index.goal.status.incomplete', locale);
+  return tr('screen.tabs.index.goal.status.active', locale);
 }
 
 function getMissingProfileFields(profile: DashboardProfileMeta, locale: Locale): string[] {
   const missing: string[] = [];
-  if (!safePositiveNumber(profile.age, 0)) missing.push(locale === 'vi' ? 'tuổi' : 'age');
-  if (!profile.gender) missing.push(locale === 'vi' ? 'giới tính' : 'sex');
-  if (!safePositiveNumber(profile.height_cm, 0)) missing.push(locale === 'vi' ? 'chiều cao' : 'height');
-  if (!safePositiveNumber(profile.weight_kg, 0)) missing.push(locale === 'vi' ? 'cân nặng' : 'weight');
-  if (!profile.goal) missing.push(locale === 'vi' ? 'mục tiêu' : 'goal');
-  if (!profile.activity_level) missing.push(locale === 'vi' ? 'mức vận động' : 'activity level');
+  if (!safePositiveNumber(profile.age, 0)) missing.push(tr('screen.tabs.index.profileMissing.age', locale));
+  if (!profile.gender) missing.push(tr('screen.tabs.index.profileMissing.sex', locale));
+  if (!safePositiveNumber(profile.height_cm, 0)) missing.push(tr('screen.tabs.index.profileMissing.height', locale));
+  if (!safePositiveNumber(profile.weight_kg, 0)) missing.push(tr('screen.tabs.index.profileMissing.weight', locale));
+  if (!profile.goal) missing.push(tr('screen.tabs.index.profileMissing.goal', locale));
+  if (!profile.activity_level) missing.push(tr('screen.tabs.index.profileMissing.activity', locale));
   if (!safePositiveNumber(profile.daily_calorie_target, 0) && !safePositiveNumber(profile.goal_plan?.computed_daily_calorie_target, 0)) {
-    missing.push(locale === 'vi' ? 'mục tiêu kcal' : 'calorie target');
+    missing.push(tr('screen.tabs.index.profileMissing.calorieTarget', locale));
   }
   return missing;
 }
@@ -481,54 +482,44 @@ function buildTodayCoachBridge(args: {
 
   if (logsCount === 0 && streak === 0) {
     return {
-      title: locale === 'vi' ? 'Quay lại nhịp trong 1 phút' : 'Restart your rhythm in 1 minute',
-      body: locale === 'vi'
-        ? 'Coach đã có kế hoạch restart 7 ngày: log 1 bữa trước, rồi mới tối ưu calories.'
-        : 'Coach has a 7-day restart plan: log one meal first, then optimize calories.',
-      status: locale === 'vi' ? 'Restart nhẹ' : 'Gentle restart',
+      title: tr('screen.tabs.index.coach.restart.title', locale),
+      body: tr('screen.tabs.index.coach.restart.body', locale),
+      status: tr('screen.tabs.index.coach.restart.status', locale),
       tone: 'info',
     };
   }
 
   if (logsCount === 0) {
     return {
-      title: locale === 'vi' ? 'Đừng để trống ngày hôm nay' : 'Do not leave today empty',
-      body: locale === 'vi'
-        ? 'Mở Coach để chọn bước nhỏ nhất: log bữa gần nhất hoặc lập kế hoạch bữa tiếp theo.'
-        : 'Open Coach to choose the smallest next step: log your latest meal or plan the next one.',
-      status: locale === 'vi' ? `${formatNumber(streak)} ngày streak` : `${formatNumber(streak)} day streak`,
+      title: tr('screen.tabs.index.coach.empty.title', locale),
+      body: tr('screen.tabs.index.coach.empty.body', locale),
+      status: tr('screen.tabs.index.coach.empty.status', locale, { days: formatNumber(streak) }),
       tone: 'info',
     };
   }
 
   if (remaining < -150) {
     return {
-      title: locale === 'vi' ? 'Cần cứu ngày, không cần bỏ bữa' : 'Recover the day without skipping meals',
-      body: locale === 'vi'
-        ? 'Coach sẽ gợi ý bữa tiếp theo nhẹ hơn và cách bù lại bằng vận động vừa phải.'
-        : 'Coach will suggest a lighter next meal and a reasonable movement offset.',
-      status: locale === 'vi' ? `Dư ${formatNumber(Math.abs(remaining))} kcal` : `${formatNumber(Math.abs(remaining))} kcal over`,
+      title: tr('screen.tabs.index.coach.over.title', locale),
+      body: tr('screen.tabs.index.coach.over.body', locale),
+      status: tr('screen.tabs.index.coach.over.status', locale, { kcal: formatNumber(Math.abs(remaining)) }),
       tone: 'warn',
     };
   }
 
   if (protein < proteinTarget * 0.65) {
     return {
-      title: locale === 'vi' ? 'Thêm protein để đỡ thèm ăn vặt' : 'Add protein to reduce snacking',
-      body: locale === 'vi'
-        ? 'Coach có gợi ý món rẻ, dễ mua, giữ no lâu cho mục tiêu giảm cân.'
-        : 'Coach can suggest affordable, easy-to-buy foods that keep you full longer.',
+      title: tr('screen.tabs.index.coach.protein.title', locale),
+      body: tr('screen.tabs.index.coach.protein.body', locale),
       status: `${formatNumber(protein)}/${proteinTarget}g`,
       tone: 'info',
     };
   }
 
   return {
-    title: locale === 'vi' ? 'Hôm nay đang ổn, giữ đúng đà' : 'Today is on track',
-    body: locale === 'vi'
-      ? 'Coach đã chuẩn bị kế hoạch hôm nay và 7 ngày để bạn không phải tự nghĩ tiếp.'
-      : 'Coach prepared a today plan and a 7-day plan so you do not have to guess.',
-    status: locale === 'vi' ? `Còn ${formatNumber(Math.max(0, remaining))} kcal` : `${formatNumber(Math.max(0, remaining))} kcal left`,
+    title: tr('screen.tabs.index.coach.track.title', locale),
+    body: tr('screen.tabs.index.coach.track.body', locale),
+    status: tr('screen.tabs.index.coach.track.status', locale, { kcal: formatNumber(Math.max(0, remaining)) }),
     tone: 'good',
   };
 }
@@ -618,13 +609,11 @@ function buildMovementPlan(
 
   let activityType: ActivityType = 'walking';
   let durationMin = remainingToBase > 0 ? Math.max(15, Math.min(30, remainingToBase)) : 15;
-  let title = locale === 'vi' ? 'Đi bộ duy trì' : 'Maintenance walk';
-  let detail = locale === 'vi'
-    ? 'Giữ nhịp vận động vừa phải để hỗ trợ tim mạch và đủ vận động nền.'
-    : 'Keep a moderate movement pace to support cardio health and baseline activity.';
+  let title = tr('screen.tabs.index.movement.maintenanceWalk.title', locale);
+  let detail = tr('screen.tabs.index.movement.maintenanceWalk.detail', locale);
   let calorieStatus = gapToTarget >= 0
-    ? (locale === 'vi' ? `Net còn ${formatNumber(gapToTarget)} kcal trước mục tiêu.` : `${formatNumber(gapToTarget)} net kcal left before target.`)
-    : (locale === 'vi' ? `Net đang cao hơn mục tiêu ${formatNumber(overTarget)} kcal. Không cần bù toàn bộ bằng tập.` : `Net is ${formatNumber(overTarget)} kcal over target. You do not need to offset all of it with exercise.`);
+    ? tr('screen.tabs.index.movement.status.left', locale, { kcal: formatNumber(gapToTarget) })
+    : tr('screen.tabs.index.movement.status.over', locale, { kcal: formatNumber(overTarget) });
   let tone: MovementPlan['tone'] = 'normal';
 
   if (preferredActivity) {
@@ -637,19 +626,15 @@ function buildMovementPlan(
       : healthMinutes;
     title = preferredActivity.title;
     detail = overTarget > 75
-      ? (locale === 'vi' ? `Dựa trên lộ trình Profile; hôm nay chỉ cần nhắm khoảng ${formatNumber(surplusBurnTarget)} kcal vận động.` : `Based on your Profile routine; today aim for about ${formatNumber(surplusBurnTarget)} kcal of movement.`)
-      : (locale === 'vi' ? 'Bài này nằm trong lộ trình bạn đã chọn ở Profile.' : 'This exercise is part of the routine you chose in Profile.');
+      ? tr('screen.tabs.index.movement.profileOver.detail', locale, { kcal: formatNumber(surplusBurnTarget) })
+      : tr('screen.tabs.index.movement.profile.detail', locale);
   }
 
   if (caution) {
     durationMin = preferredActivity ? Math.min(preferredActivity.duration_min, 20) : 12;
-    title = preferredActivity?.title ?? (locale === 'vi' ? 'Vận động nhẹ an toàn' : 'Safe light movement');
-    detail = locale === 'vi'
-      ? 'Ưu tiên nhịp nhẹ; hỏi chuyên gia nếu đang có tình trạng sức khỏe đặc biệt.'
-      : 'Prioritize a light pace; ask a professional if you have a relevant health condition.';
-    calorieStatus = locale === 'vi'
-      ? `${calorieStatus} Ưu tiên an toàn, không dùng tập luyện để bù calo mạnh.`
-      : `${calorieStatus} Prioritize safety; do not use exercise for aggressive calorie compensation.`;
+    title = preferredActivity?.title ?? tr('screen.tabs.index.movement.safe.title', locale);
+    detail = tr('screen.tabs.index.movement.safe.detail', locale);
+    calorieStatus = `${calorieStatus} ${tr('screen.tabs.index.movement.safe.statusSuffix', locale)}`;
     tone = 'caution';
   } else if (overTarget > 75) {
     const targetBurn = surplusBurnTarget;
@@ -661,43 +646,41 @@ function buildMovementPlan(
           : 'walking';
       durationMin = estimateDurationForBurn(activityType, targetBurn, weightKg);
       title = activityType === 'running'
-        ? (locale === 'vi' ? 'Cardio vừa sức' : 'Moderate cardio')
-        : (locale === 'vi' ? 'Đi bộ nhanh' : 'Brisk walk');
+        ? tr('screen.tabs.index.movement.moderateCardio.title', locale)
+        : tr('screen.tabs.index.movement.briskWalk.title', locale);
     }
     detail = overTarget > targetBurn + 80
-      ? (locale === 'vi' ? `Mục tiêu là giảm khoảng ${formatNumber(targetBurn)} kcal; phần còn lại xử lý bằng bữa sau nhẹ hơn.` : `Aim to reduce about ${formatNumber(targetBurn)} kcal; handle the rest with a lighter next meal.`)
+      ? tr('screen.tabs.index.movement.over.detailLarge', locale, { kcal: formatNumber(targetBurn) })
       : preferredActivity
-        ? (locale === 'vi' ? 'Bài đã set trong Profile giúp đưa ngày hôm nay về gần mục tiêu.' : 'The Profile routine helps bring today closer to target.')
-        : (locale === 'vi' ? 'Bài này giúp đưa ngày hôm nay về gần mục tiêu.' : 'This activity helps bring today closer to target.');
+        ? tr('screen.tabs.index.movement.over.detailProfile', locale)
+        : tr('screen.tabs.index.movement.over.detailGeneric', locale);
     tone = 'surplus';
   } else if (effectiveGoal === 'gain_muscle' && !preferredActivity) {
     activityType = 'gym';
     durationMin = activityLevel === 'sedentary' ? 20 : 30;
-    title = locale === 'vi' ? 'Sức mạnh cho tăng cơ' : 'Strength for muscle gain';
+    title = tr('screen.tabs.index.movement.strength.title', locale);
     detail = gapToTarget > 250
-      ? (locale === 'vi' ? 'Tập strength ngắn, rồi ưu tiên ăn đủ protein và phần calo còn lại.' : 'Do a short strength session, then prioritize protein and the remaining calories.')
-      : (locale === 'vi' ? 'Tập strength để kích thích cơ; tránh cardio dài nếu đang cần surplus.' : 'Use strength work to stimulate muscle; avoid long cardio if you need a surplus.');
+      ? tr('screen.tabs.index.movement.strength.detailFuel', locale)
+      : tr('screen.tabs.index.movement.strength.detail', locale);
     tone = gapToTarget > 250 ? 'fuel' : 'normal';
   } else if (effectiveGoal === 'lose_weight' && !preferredActivity) {
     activityType = activityLevel === 'active' || activityLevel === 'very_active' ? 'running' : 'walking';
     durationMin = gapToTarget > 300 ? 20 : activityType === 'running' ? 25 : 30;
     title = gapToTarget > 300
-      ? (locale === 'vi' ? 'Giữ thâm hụt, vận động nhẹ' : 'Keep the deficit, move lightly')
+      ? tr('screen.tabs.index.movement.deficit.title', locale)
       : activityType === 'running'
         ? 'Cardio zone 2'
-        : (locale === 'vi' ? 'Đi bộ nhanh' : 'Brisk walk');
+        : tr('screen.tabs.index.movement.briskWalk.title', locale);
     detail = gapToTarget > 300
-      ? (locale === 'vi' ? 'Bạn đang dưới mục tiêu; chỉ cần vận động nền để giữ sức khỏe và phục hồi.' : 'You are under target; baseline movement is enough for health and recovery.')
-      : (locale === 'vi' ? 'Tạo thêm tiêu hao nhẹ, không cần ép cường độ cao.' : 'Add a small burn without forcing high intensity.');
+      ? tr('screen.tabs.index.movement.deficit.detail', locale)
+      : tr('screen.tabs.index.movement.lightBurn.detail', locale);
   } else if (activityLevel === 'sedentary' && !preferredActivity) {
     durationMin = 20;
-    title = locale === 'vi' ? 'Đi bộ phá ngồi lâu' : 'Break up sitting with a walk';
-    detail = locale === 'vi' ? 'Chia 2 chặng 10 phút cũng được tính.' : 'Two 10-minute walks still count.';
+    title = tr('screen.tabs.index.movement.sedentary.title', locale);
+    detail = tr('screen.tabs.index.movement.sedentary.detail', locale);
   } else if (gapToTarget > 300 && !preferredActivity) {
-    title = locale === 'vi' ? 'Vận động nền, không cần đốt thêm' : 'Baseline movement, no extra burn needed';
-    detail = locale === 'vi'
-      ? 'Bạn còn nhiều kcal trước mục tiêu; làm bài sức khỏe vừa đủ và ăn bữa sau cân bằng.'
-      : 'You still have plenty of kcal before target; do a health-focused session and keep the next meal balanced.';
+    title = tr('screen.tabs.index.movement.baseline.title', locale);
+    detail = tr('screen.tabs.index.movement.baseline.detail', locale);
     tone = 'fuel';
   }
 
@@ -860,11 +843,9 @@ export default function DashboardScreen() {
       return {
         tone: 'setup' as const,
         icon: 'shield-checkmark' as const,
-        title: locale === 'vi' ? 'Thiếu thông tin tính mục tiêu' : 'Missing target inputs',
-        body: locale === 'vi'
-          ? `Bổ sung ${missingFields.join(', ')} để app tính kcal và gợi ý vận động chính xác hơn.`
-          : `Add ${missingFields.join(', ')} so the app can calculate calories and movement guidance more accurately.`,
-        action: locale === 'vi' ? 'Cập nhật Profile' : 'Update Profile',
+        title: tr('screen.tabs.index.safety.missing.title', locale),
+        body: tr('screen.tabs.index.safety.missing.body', locale, { fields: missingFields.join(', ') }),
+        action: tr('screen.tabs.index.safety.missing.action', locale),
       };
     }
 
@@ -872,11 +853,9 @@ export default function DashboardScreen() {
       return {
         tone: 'setup' as const,
         icon: 'shield-checkmark' as const,
-        title: locale === 'vi' ? 'Xác nhận yếu tố sức khỏe' : 'Confirm health factors',
-        body: locale === 'vi'
-          ? 'Mở Profile và chọn các yếu tố sức khỏe nếu có, hoặc lưu hồ sơ để xác nhận không có yếu tố rủi ro.'
-          : 'Open Profile and choose any health factors, or save the profile to confirm there are no known risks.',
-        action: locale === 'vi' ? 'Xác nhận an toàn' : 'Confirm safety',
+        title: tr('screen.tabs.index.safety.confirm.title', locale),
+        body: tr('screen.tabs.index.safety.confirm.body', locale),
+        action: tr('screen.tabs.index.safety.confirm.action', locale),
       };
     }
 
@@ -884,11 +863,9 @@ export default function DashboardScreen() {
       return {
         tone: 'review' as const,
         icon: 'medical' as const,
-        title: locale === 'vi' ? 'Cần rà soát y tế' : 'Medical review needed',
-        body: locale === 'vi'
-          ? 'Mục tiêu đang ưu tiên an toàn. Hỏi bác sĩ/dietitian trước khi giảm hoặc tăng cân mạnh.'
-          : 'The target is prioritizing safety. Ask a clinician before aggressive weight change.',
-        action: locale === 'vi' ? 'Xem cảnh báo' : 'Review warning',
+        title: tr('screen.tabs.index.safety.review.title', locale),
+        body: tr('screen.tabs.index.safety.review.body', locale),
+        action: tr('screen.tabs.index.safety.review.action', locale),
       };
     }
 
@@ -966,20 +943,20 @@ export default function DashboardScreen() {
     ? clampProgress(activityMinutes / Math.max(safeNumber(movementPlan.daily_minutes_target), 1)) * 100
     : 0;
   const movementSourceLabel = movementPlan?.preference_id
-    ? (locale === 'vi' ? 'Từ Profile' : 'From Profile')
-    : (locale === 'vi' ? 'Gợi ý sức khỏe' : 'Health suggestion');
+    ? t('screen.tabs.index.movement.source.profile')
+    : t('screen.tabs.index.movement.source.suggestion');
   const movementButtonLabel = movementPlanCompleted
-    ? (locale === 'vi' ? 'Đã log' : 'Logged')
+    ? t('screen.tabs.index.movement.button.logged')
     : isLoggingMovement
-      ? (locale === 'vi' ? 'Đang log' : 'Logging')
-      : (locale === 'vi' ? 'Hoàn thành' : 'Complete');
+      ? t('screen.tabs.index.movement.button.logging')
+      : t('screen.tabs.index.movement.button.complete');
   const nextAction = useMemo(() => {
     if (safetyCard) {
       return {
         kind: 'profile' as const,
         tone: safetyCard.tone === 'review' ? 'warn' as const : 'info' as const,
         icon: safetyCard.icon,
-        label: locale === 'vi' ? 'Ưu tiên ngay' : 'Priority',
+        label: t('screen.tabs.index.next.priority'),
         title: safetyCard.title,
         body: safetyCard.body,
         primaryLabel: safetyCard.action,
@@ -991,12 +968,10 @@ export default function DashboardScreen() {
         kind: 'scan' as const,
         tone: 'info' as const,
         icon: 'camera' as const,
-        label: locale === 'vi' ? 'Bắt đầu ngày' : 'Start the day',
-        title: locale === 'vi' ? 'Log bữa đầu tiên' : 'Log your first meal',
-        body: locale === 'vi'
-          ? 'Scan ảnh hoặc nhập nhanh để app tính phần còn lại trong ngày chính xác hơn.'
-          : 'Scan a photo or type quickly so the app can calculate the rest of the day more accurately.',
-        primaryLabel: locale === 'vi' ? 'Scan bữa ăn' : 'Scan meal',
+        label: t('screen.tabs.index.next.startDay'),
+        title: t('screen.tabs.index.next.firstMeal.title'),
+        body: t('screen.tabs.index.next.firstMeal.body'),
+        primaryLabel: t('screen.tabs.index.next.firstMeal.primary'),
       };
     }
 
@@ -1005,11 +980,13 @@ export default function DashboardScreen() {
         kind: 'movement' as const,
         tone: movementPlan.tone === 'caution' || movementPlan.tone === 'surplus' ? 'warn' as const : 'good' as const,
         icon: 'walk-outline' as const,
-        label: locale === 'vi' ? 'Việc nên làm tiếp' : 'Next best action',
+        label: t('screen.tabs.index.next.action'),
         title: movementPlan.title,
-        body: locale === 'vi'
-          ? `${movementPlan.duration_min} phút · ~${formatNumber(movementPlan.estimated_kcal)} kcal. ${movementPlan.calorie_status}`
-          : `${movementPlan.duration_min} min · ~${formatNumber(movementPlan.estimated_kcal)} kcal. ${movementPlan.calorie_status}`,
+        body: t('screen.tabs.index.next.movementBody', {
+          minutes: movementPlan.duration_min,
+          kcal: formatNumber(movementPlan.estimated_kcal),
+          status: movementPlan.calorie_status,
+        }),
         primaryLabel: movementButtonLabel,
       };
     }
@@ -1020,10 +997,10 @@ export default function DashboardScreen() {
         kind: 'nudge' as const,
         tone: nudge.tone === 'warn' ? 'warn' as const : nudge.tone === 'good' ? 'good' as const : 'info' as const,
         icon: nudge.icon,
-        label: locale === 'vi' ? 'Bữa kế tiếp' : 'Next meal',
+        label: t('screen.tabs.index.next.meal'),
         title: nudge.title,
         body: nudge.body,
-        primaryLabel: locale === 'vi' ? 'Xem nhật ký' : 'View journal',
+        primaryLabel: t('screen.tabs.index.next.viewJournal'),
       };
     }
 
@@ -1031,14 +1008,12 @@ export default function DashboardScreen() {
       kind: 'log' as const,
       tone: 'good' as const,
       icon: 'checkmark-circle' as const,
-      label: locale === 'vi' ? 'Ổn định' : 'Steady',
-      title: locale === 'vi' ? 'Giữ nhịp hôm nay' : 'Keep today steady',
-      body: locale === 'vi'
-        ? 'Tiếp tục log bữa kế tiếp và duy trì vận động nền.'
-        : 'Keep logging the next meal and maintain baseline movement.',
-      primaryLabel: locale === 'vi' ? 'Mở nhật ký' : 'Open journal',
+      label: t('screen.tabs.index.next.steady'),
+      title: t('screen.tabs.index.next.steady.title'),
+      body: t('screen.tabs.index.next.steady.body'),
+      primaryLabel: t('screen.tabs.index.next.openJournal'),
     };
-  }, [locale, logs.length, movementButtonLabel, movementPlan, movementPlanCompleted, nudges, safetyCard]);
+  }, [locale, logs.length, movementButtonLabel, movementPlan, movementPlanCompleted, nudges, safetyCard, t]);
   const coachBridge = useMemo(() => buildTodayCoachBridge({
     logsCount: logs.length,
     consumed,
@@ -1070,20 +1045,18 @@ export default function DashboardScreen() {
     <ScreenShell contentStyle={[styles.screen, isCompact && styles.screenCompact]}>
       <View style={[styles.headerRow, isCompact && styles.headerRowCompact]}>
         <View style={styles.headerCopy}>
-          <Eyebrow>{locale === 'vi' ? 'Hôm nay' : 'Today'}</Eyebrow>
+          <Eyebrow>{t('screen.tabs.index.hero.eyebrow')}</Eyebrow>
           <Text style={[styles.dashboardTitle, isCompact && styles.dashboardTitleCompact]}>
-            {locale === 'vi' ? 'Tổng quan hôm nay' : "Today's overview"}
+            {t('screen.tabs.index.hero.title')}
           </Text>
           <BodyText style={[styles.heroBody, isCompact && styles.heroBodyCompact]}>
-            {locale === 'vi'
-              ? 'Nhìn nhanh calo, bữa ăn và việc cần chỉnh ở bữa kế tiếp.'
-              : 'See calories, meals, and the next adjustment at a glance.'}
+            {t('screen.tabs.index.hero.body')}
           </BodyText>
         </View>
         <TouchableOpacity style={[styles.streakPill, isCompact && styles.streakPillCompact]} onPress={() => router.push('/achievements' as never)}>
           <AnimatedIonicon name="flame" size={16} color={theme.colors.accentAmber} motion="pulse" />
           <Text style={styles.streakText}>
-            {locale === 'vi' ? `${formatNumber(displayStreak)} ngày` : `${formatNumber(displayStreak)} days`}
+            {t('screen.tabs.index.streak.days', { days: formatNumber(displayStreak) })}
           </Text>
         </TouchableOpacity>
       </View>
@@ -1122,7 +1095,7 @@ export default function DashboardScreen() {
       ]}>
         <View style={styles.coachBridgeCopy}>
           <View style={styles.coachBridgeHeader}>
-            <Text style={styles.coachBridgeEyebrow}>{locale === 'vi' ? 'TRỢ LÝ GIẢM CÂN' : 'WEIGHT LOSS ASSISTANT'}</Text>
+            <Text style={styles.coachBridgeEyebrow}>{t('screen.tabs.index.coach.eyebrow')}</Text>
             <Text style={[
               styles.coachBridgeStatus,
               coachBridge.tone === 'warn' && styles.coachBridgeStatusWarn,
@@ -1134,7 +1107,7 @@ export default function DashboardScreen() {
           <Text style={styles.coachBridgeBody}>{coachBridge.body}</Text>
         </View>
         <TouchableOpacity style={styles.coachBridgeButton} onPress={() => router.push('/coach' as never)}>
-          <Text style={styles.coachBridgeButtonText}>{locale === 'vi' ? 'Mở Coach' : 'Open Coach'}</Text>
+          <Text style={styles.coachBridgeButtonText}>{t('screen.tabs.index.coach.open')}</Text>
         </TouchableOpacity>
       </SurfaceCard>
 
@@ -1196,7 +1169,7 @@ export default function DashboardScreen() {
           <View style={styles.goalPlanHeaderCopy}>
             <Text style={styles.goalPlanEyebrow} i18nKey="screen.tabs.index.text.008" />
             <Text style={styles.goalPlanTitle}>
-              {locale === 'vi' ? `Mục tiêu hôm nay ${formatNumber(target)} kcal` : `Today's target ${formatNumber(target)} kcal`}
+              {t('screen.tabs.index.goal.todayTarget', { kcal: formatNumber(target) })}
             </Text>
           </View>
           {activeGoalPlan?.safety_status && (
@@ -1220,10 +1193,8 @@ export default function DashboardScreen() {
               <View style={styles.activeGoalPlanBox}>
                 <Text style={styles.activeGoalPlanTitle}>{describeGoalPlan(activeGoalPlan, locale)}</Text>
                 <Text style={styles.activeGoalPlanMeta}>
-                  {locale === 'vi'
-                    ? `Đang dùng ${formatNumber(activeGoalPlan.computed_daily_calorie_target)} kcal/ngày`
-                    : `Using ${formatNumber(activeGoalPlan.computed_daily_calorie_target)} kcal/day`}
-                  {activeGoalPlan.weekly_rate_kg ? (locale === 'vi' ? ` · ${activeGoalPlan.weekly_rate_kg} kg/tuần` : ` · ${activeGoalPlan.weekly_rate_kg} kg/week`) : ''}
+                  {t('screen.tabs.index.goal.usingTarget', { kcal: formatNumber(activeGoalPlan.computed_daily_calorie_target) })}
+                  {activeGoalPlan.weekly_rate_kg ? t('screen.tabs.index.goal.weeklyRate', { rate: activeGoalPlan.weekly_rate_kg }) : ''}
                 </Text>
                 {!!activeGoalPlan.warnings?.length && (
                   <Text style={styles.activeGoalPlanWarning}>{activeGoalPlan.warnings[0]}</Text>
@@ -1252,14 +1223,15 @@ export default function DashboardScreen() {
             <View style={styles.goalPlanPreview}>
               <View style={styles.goalPlanPreviewCopy}>
                 <Text style={styles.goalPlanPreviewTitle}>
-                  {locale === 'vi' ? `Chuẩn bị lưu: ${describeGoalPlan(selectedGoalPlan, locale)}` : `Ready to save: ${describeGoalPlan(selectedGoalPlan, locale)}`}
+                  {t('screen.tabs.index.goal.readyToSave', { plan: describeGoalPlan(selectedGoalPlan, locale) })}
                 </Text>
                 <Text style={styles.goalPlanPreviewText}>
                   {selectedGoalOption.type === 'maintain'
-                    ? (locale === 'vi' ? 'Backend sẽ tính mục tiêu duy trì từ hồ sơ hiện tại.' : 'The backend will calculate a maintenance target from the current profile.')
-                    : (locale === 'vi'
-                      ? `Delta tham khảo ${selectedGoalOption.type === 'loss' ? '-' : '+'}${formatNumber(selectedDailyDelta)} kcal/ngày trước khi clamp.`
-                      : `Reference delta ${selectedGoalOption.type === 'loss' ? '-' : '+'}${formatNumber(selectedDailyDelta)} kcal/day before clamping.`)}
+                    ? t('screen.tabs.index.goal.maintainPreview')
+                    : t('screen.tabs.index.goal.deltaPreview', {
+                      sign: selectedGoalOption.type === 'loss' ? '-' : '+',
+                      kcal: formatNumber(selectedDailyDelta),
+                    })}
                 </Text>
               </View>
               <TouchableOpacity style={[styles.applyButton, isApplyingTarget && styles.disabledButton]} onPress={applySelectedTarget} disabled={isApplyingTarget}>
@@ -1305,7 +1277,7 @@ export default function DashboardScreen() {
               <View style={styles.movementMetaRow}>
                 <View style={styles.movementMetaPill}>
                   <Ionicons name="time-outline" size={13} color={theme.colors.accentMint} />
-                  <Text style={styles.movementMetaText}>{movementPlan.duration_min} {locale === 'vi' ? 'phút' : 'min'}</Text>
+                  <Text style={styles.movementMetaText}>{movementPlan.duration_min} {t('screen.tabs.index.unit.minutes')}</Text>
                 </View>
                 <View style={styles.movementMetaPill}>
                   <Ionicons name="flame-outline" size={13} color={theme.colors.accentAmber} />
@@ -1320,7 +1292,7 @@ export default function DashboardScreen() {
             <View style={styles.movementProgressHeader}>
               <Text style={styles.movementProgressLabel} i18nKey="screen.tabs.index.text.015" />
               <Text style={styles.movementMetric}>
-                {formatNumber(activityMinutes)}/{formatNumber(movementPlan.daily_minutes_target)} {locale === 'vi' ? 'phút' : 'min'}
+                {formatNumber(activityMinutes)}/{formatNumber(movementPlan.daily_minutes_target)} {t('screen.tabs.index.unit.minutes')}
               </Text>
             </View>
             <View style={styles.movementProgressBar}>
@@ -1406,8 +1378,8 @@ export default function DashboardScreen() {
                 <View style={styles.mealContent}>
                   <View style={styles.mealTopRow}>
                     <View>
-                      <Text style={styles.mealName}>{MEAL_LABELS[meal]}</Text>
-                      <Text style={styles.mealHint}>{MEAL_HINTS[meal]}</Text>
+                      <Text style={styles.mealName}>{t(MEAL_LABEL_KEYS[meal])}</Text>
+                      <Text style={styles.mealHint}>{t(MEAL_HINT_KEYS[meal])}</Text>
                     </View>
                     <Text style={styles.mealCalories}>{formatNumber(mealCalories)} kcal</Text>
                   </View>
