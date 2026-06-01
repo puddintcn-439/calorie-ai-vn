@@ -54,129 +54,182 @@ type WeeklyPlan = {
 };
 
 const MEAL_ORDER = ['breakfast', 'lunch', 'dinner', 'snack'] as const;
-const MEAL_LABELS: Record<(typeof MEAL_ORDER)[number], string> = {
-  breakfast: 'sang',
-  lunch: 'trua',
-  dinner: 'toi',
-  snack: 'vat',
+const MEAL_LABELS: Record<Locale, Record<(typeof MEAL_ORDER)[number], string>> = {
+  vi: {
+    breakfast: 'sáng',
+    lunch: 'trưa',
+    dinner: 'tối',
+    snack: 'vặt',
+  },
+  en: {
+    breakfast: 'breakfast',
+    lunch: 'lunch',
+    dinner: 'dinner',
+    snack: 'snack',
+  },
 };
 
-function getNextMealLabel(logs: Array<{ meal_type?: string }> = []) {
+function getNextMealLabel(logs: Array<{ meal_type?: string }> = [], locale: Locale) {
   const loggedMeals = new Set(logs.map((log) => log.meal_type).filter(Boolean));
   const nextMeal = MEAL_ORDER.find((meal) => !loggedMeals.has(meal)) ?? 'snack';
-  return MEAL_LABELS[nextMeal];
+  return MEAL_LABELS[locale][nextMeal];
 }
 
-function buildActivePlan(dailyLog: DailyLog | null): ActivePlan {
+function buildActivePlan(dailyLog: DailyLog | null, locale: Locale): ActivePlan {
   const logs = dailyLog?.logs ?? [];
   const consumed = toFiniteNumber(dailyLog?.total_calories) ?? 0;
   const target = toFiniteNumber(dailyLog?.target_calories) ?? 1800;
   const protein = toFiniteNumber(dailyLog?.total_protein_g) ?? 0;
   const remaining = target - consumed;
   const mealCount = logs.length;
-  const nextMeal = getNextMealLabel(logs);
+  const nextMeal = getNextMealLabel(logs, locale);
   const proteinTarget = Math.max(70, Math.round(target * 0.075 / 4));
 
   if (mealCount === 0) {
     return {
-      title: 'Bat dau bang 1 bua de app co du lieu',
-      body: 'Dung can nhap hoan hao. Uoc luong nhanh van tot hon de trong ngay.',
-      status: 'Chua log bua nao',
+      title: locale === 'vi' ? 'Bắt đầu bằng một bữa để app có dữ liệu' : 'Start with one meal so the app has context',
+      body: locale === 'vi'
+        ? 'Không cần nhập hoàn hảo. Ước lượng nhanh vẫn tốt hơn để trống cả ngày.'
+        : 'It does not need to be perfect. A quick estimate is still better than leaving the day blank.',
+      status: locale === 'vi' ? 'Chưa log bữa nào' : 'No meals logged',
       tone: 'info',
-      steps: [
-        'Log bua gan nhat bang anh hoac mo ta ngan.',
-        `Giu bua tiep theo quanh ${Math.round(target * 0.3)}-${Math.round(target * 0.4)} kcal.`,
-        'Them protein de tranh doi lai sau vai gio.',
+      steps: locale === 'vi' ? [
+        'Log bữa gần nhất bằng ảnh hoặc mô tả ngắn.',
+        `Giữ bữa tiếp theo quanh ${Math.round(target * 0.3)}-${Math.round(target * 0.4)} kcal.`,
+        'Thêm protein để tránh đói lại sau vài giờ.',
+      ] : [
+        'Log your latest meal with a photo or a short description.',
+        `Keep the next meal around ${Math.round(target * 0.3)}-${Math.round(target * 0.4)} kcal.`,
+        'Add protein so you are less hungry again in a few hours.',
       ],
-      prompts: [
-        'Toi moi bat dau hom nay, nen an bua tiep theo the nao?',
-        `Lap ke hoach don gian cho muc tieu ${target} kcal hom nay.`,
+      prompts: locale === 'vi' ? [
+        'Tôi mới bắt đầu hôm nay, nên ăn bữa tiếp theo thế nào?',
+        `Lập kế hoạch đơn giản cho mục tiêu ${target} kcal hôm nay.`,
+      ] : [
+        'I am just starting today. What should my next meal look like?',
+        `Make a simple plan for my ${target} kcal target today.`,
       ],
       primaryRoute: '/scan',
-      primaryLabel: 'Log bua dau tien',
+      primaryLabel: locale === 'vi' ? 'Log bữa đầu tiên' : 'Log first meal',
     };
   }
 
   if (remaining < -150) {
     return {
-      title: 'Hom nay da vuot muc tieu, tap trung cuu ngay',
-      body: 'Khong can bo bua. Giam do ngot/dau va them van dong nhe de ngay mai khong bi vo nhip.',
-      status: `Du ${Math.abs(Math.round(remaining))} kcal`,
+      title: locale === 'vi' ? 'Hôm nay đã vượt mục tiêu, tập trung cứu ngày' : 'You are over target today, focus on damage control',
+      body: locale === 'vi'
+        ? 'Không cần bỏ bữa. Giảm đồ ngọt/dầu và thêm vận động nhẹ để ngày mai không bị vỡ nhịp.'
+        : 'Do not skip meals. Reduce sweets/oil and add light movement so tomorrow stays on track.',
+      status: locale === 'vi' ? `Dư ${Math.abs(Math.round(remaining))} kcal` : `${Math.abs(Math.round(remaining))} kcal over`,
       tone: 'warn',
-      steps: [
-        'Bua sau chon mon nhieu rau, dam nac, it sot.',
-        'Di bo 15-25 phut neu suc khoe cho phep.',
-        'Dung an bu qua manh vao ngay mai.',
+      steps: locale === 'vi' ? [
+        'Bữa sau chọn món nhiều rau, đạm nạc, ít sốt.',
+        'Đi bộ 15-25 phút nếu sức khỏe cho phép.',
+        'Đừng ăn bù quá mạnh vào ngày mai.',
+      ] : [
+        'For the next meal, choose vegetables, lean protein, and less sauce.',
+        'Walk 15-25 minutes if your health allows.',
+        'Avoid over-restricting tomorrow.',
       ],
-      prompts: [
-        'Hom nay toi vuot kcal, toi nen an gi cho bua tiep theo?',
-        'Goi y mot bua toi nhe nhung khong bi doi.',
+      prompts: locale === 'vi' ? [
+        'Hôm nay tôi vượt kcal, tôi nên ăn gì cho bữa tiếp theo?',
+        'Gợi ý một bữa tối nhẹ nhưng không bị đói.',
+      ] : [
+        'I am over calories today. What should I eat next?',
+        'Suggest a light dinner that will still keep me full.',
       ],
       primaryRoute: '/log',
-      primaryLabel: 'Xem lai bua da log',
+      primaryLabel: locale === 'vi' ? 'Xem lại bữa đã log' : 'Review logged meals',
     };
   }
 
   if (remaining > 450) {
     return {
-      title: `Con room tot cho bua ${nextMeal}`,
-      body: 'Dung cat calo qua sau. Mot bua du dam se giup giam an vat ve toi.',
-      status: `Con ${Math.round(remaining)} kcal`,
+      title: locale === 'vi' ? `Còn room tốt cho bữa ${nextMeal}` : `Good room left for ${nextMeal}`,
+      body: locale === 'vi'
+        ? 'Đừng cắt calo quá sâu. Một bữa đủ đạm sẽ giúp giảm ăn vặt về tối.'
+        : 'Do not cut too aggressively. A protein-rich meal helps reduce snacking later.',
+      status: locale === 'vi' ? `Còn ${Math.round(remaining)} kcal` : `${Math.round(remaining)} kcal left`,
       tone: 'good',
-      steps: [
-        `Chon bua ${nextMeal} co dam nac va rau.`,
-        `Neu doi, dung khoang ${Math.min(450, Math.max(250, Math.round(remaining * 0.55)))} kcal truoc.`,
-        'Neu sap ngu, uu tien sua chua/trai cay it ngot/protein nhe.',
+      steps: locale === 'vi' ? [
+        `Chọn bữa ${nextMeal} có đạm nạc và rau.`,
+        `Nếu đói, dùng khoảng ${Math.min(450, Math.max(250, Math.round(remaining * 0.55)))} kcal trước.`,
+        'Nếu sắp ngủ, ưu tiên sữa chua, trái cây ít ngọt hoặc protein nhẹ.',
+      ] : [
+        `Choose a ${nextMeal} with lean protein and vegetables.`,
+        `If hungry, use about ${Math.min(450, Math.max(250, Math.round(remaining * 0.55)))} kcal first.`,
+        'If it is close to bedtime, choose yogurt, low-sugar fruit, or a light protein option.',
       ],
-      prompts: [
-        `Toi con ${Math.round(remaining)} kcal, goi y bua ${nextMeal} de giam can.`,
-        'Goi y 3 mon Viet Nam de an no ma khong vuot kcal.',
+      prompts: locale === 'vi' ? [
+        `Tôi còn ${Math.round(remaining)} kcal, gợi ý bữa ${nextMeal} để giảm cân.`,
+        'Gợi ý 3 món Việt Nam ăn no mà không vượt kcal.',
+      ] : [
+        `I have ${Math.round(remaining)} kcal left. Suggest a ${nextMeal} for weight loss.`,
+        'Suggest 3 filling meals that do not exceed my calories.',
       ],
       primaryRoute: '/scan',
-      primaryLabel: `Log bua ${nextMeal}`,
+      primaryLabel: locale === 'vi' ? `Log bữa ${nextMeal}` : `Log ${nextMeal}`,
     };
   }
 
   if (protein < proteinTarget * 0.65) {
     return {
-      title: 'Can tang protein de do doi hon',
-      body: 'Calo dang on, nhung protein thap se lam de them an vat.',
+      title: locale === 'vi' ? 'Cần tăng protein để đỡ đói hơn' : 'Add protein to stay full longer',
+      body: locale === 'vi'
+        ? 'Calo đang ổn, nhưng protein thấp sẽ làm dễ thèm ăn vặt.'
+        : 'Calories look fine, but low protein can make snacking more tempting.',
       status: `${Math.round(protein)}/${proteinTarget}g protein`,
       tone: 'info',
-      steps: [
-        'Them trung, sua chua, dau hu, ga, ca hoac thit nac.',
-        'Giu tinh bot vua phai trong bua tiep theo.',
-        'Neu an vat, chon protein thay vi tra sua/banh ngot.',
+      steps: locale === 'vi' ? [
+        'Thêm trứng, sữa chua, đậu hũ, gà, cá hoặc thịt nạc.',
+        'Giữ tinh bột vừa phải trong bữa tiếp theo.',
+        'Nếu ăn vặt, chọn protein thay vì trà sữa/bánh ngọt.',
+      ] : [
+        'Add eggs, yogurt, tofu, chicken, fish, or lean meat.',
+        'Keep carbs moderate in the next meal.',
+        'If snacking, choose protein instead of sweet drinks or cakes.',
       ],
-      prompts: [
-        `Toi moi co ${Math.round(protein)}g protein, bua tiep theo nen an gi?`,
-        'Goi y snack giau protein, re va de mua.',
+      prompts: locale === 'vi' ? [
+        `Tôi mới có ${Math.round(protein)}g protein, bữa tiếp theo nên ăn gì?`,
+        'Gợi ý snack giàu protein, rẻ và dễ mua.',
+      ] : [
+        `I only have ${Math.round(protein)}g protein. What should I eat next?`,
+        'Suggest high-protein snacks that are cheap and easy to buy.',
       ],
       primaryRoute: '/scan',
-      primaryLabel: 'Log mon protein',
+      primaryLabel: locale === 'vi' ? 'Log món protein' : 'Log protein food',
     };
   }
 
   return {
-    title: 'Hom nay dang di dung huong',
-    body: 'Giu nhip nay. Viec quan trong nhat la log tiep bua sau va khong toi uu qua muc.',
-    status: `Con ${Math.max(0, Math.round(remaining))} kcal`,
+    title: locale === 'vi' ? 'Hôm nay đang đi đúng hướng' : 'Today is on track',
+    body: locale === 'vi'
+      ? 'Giữ nhịp này. Việc quan trọng nhất là log tiếp bữa sau và không tối ưu quá mức.'
+      : 'Keep this rhythm. The main job is to log the next meal and avoid over-optimizing.',
+    status: locale === 'vi' ? `Còn ${Math.max(0, Math.round(remaining))} kcal` : `${Math.max(0, Math.round(remaining))} kcal left`,
     tone: 'good',
-    steps: [
-      `Log bua ${nextMeal} ngay sau khi an.`,
-      'Giu do uong khong calo neu dang them ngot.',
-      'Cuoi ngay xem Progress de biet co can chinh ngay mai khong.',
+    steps: locale === 'vi' ? [
+      `Log bữa ${nextMeal} ngay sau khi ăn.`,
+      'Giữ đồ uống không calo nếu đang thèm ngọt.',
+      'Cuối ngày xem Progress để biết có cần chỉnh ngày mai không.',
+    ] : [
+      `Log ${nextMeal} right after eating.`,
+      'Stick with zero-calorie drinks if you crave something sweet.',
+      'Check Progress tonight to see whether tomorrow needs adjustment.',
     ],
-    prompts: [
-      'Danh gia nhanh ngay hom nay cua toi va noi buoc tiep theo.',
-      'Toi nen an gi de ket thuc ngay ma van giam can?',
+    prompts: locale === 'vi' ? [
+      'Đánh giá nhanh ngày hôm nay của tôi và nói bước tiếp theo.',
+      'Tôi nên ăn gì để kết thúc ngày mà vẫn giảm cân?',
+    ] : [
+      'Quickly review my day and tell me the next step.',
+      'What should I eat to finish the day while still losing weight?',
     ],
     primaryRoute: '/scan',
-    primaryLabel: `Log bua ${nextMeal}`,
+    primaryLabel: locale === 'vi' ? `Log bữa ${nextMeal}` : `Log ${nextMeal}`,
   };
 }
 
-function buildWeeklyPlan(summary: CoachingSummary | null, dailyLog: DailyLog | null): WeeklyPlan {
+function buildWeeklyPlan(summary: CoachingSummary | null, dailyLog: DailyLog | null, locale: Locale): WeeklyPlan {
   const logsCount = toFiniteNumber(summary?.logs_count) ?? 0;
   const adherence = toFiniteNumber(summary?.adherence_percentage);
   const averageDailyCalories = toFiniteNumber(summary?.average_daily_calories);
@@ -186,25 +239,31 @@ function buildWeeklyPlan(summary: CoachingSummary | null, dailyLog: DailyLog | n
   if (!summary || logsCount < 7) {
     const missingLogs = Math.max(0, 7 - logsCount);
     return {
-      title: 'Ke hoach quay lai nhip',
-      body: 'Muc tieu tuan nay la tao lai thoi quen, khong phai an hoan hao. Log thieu van co the cuu duoc.',
-      status: logsCount > 0 ? `Thieu ${missingLogs} bua log` : 'Can restart nhe',
+      title: locale === 'vi' ? 'Kế hoạch quay lại nhịp' : 'Plan to rebuild momentum',
+      body: locale === 'vi'
+        ? 'Mục tiêu tuần này là tạo lại thói quen, không phải ăn hoàn hảo. Log thiếu vẫn có thể cứu được.'
+        : 'This week is about rebuilding the habit, not eating perfectly. Missing logs can still be recovered.',
+      status: logsCount > 0
+        ? (locale === 'vi' ? `Thiếu ${missingLogs} bữa log` : `${missingLogs} meal logs missing`)
+        : (locale === 'vi' ? 'Cần restart nhẹ' : 'Needs a light restart'),
       tone: 'info',
       days: [
         {
-          label: 'Ngay 1-2',
-          title: 'Log 1 bua de mo lai da',
-          body: todayLogs > 0 ? 'Hom nay da co du lieu. Giu tiep 1 bua nua sau khi an.' : 'Dung camera/text de log bua gan nhat, uoc luong cung duoc.',
+          label: locale === 'vi' ? 'Ngày 1-2' : 'Day 1-2',
+          title: locale === 'vi' ? 'Log 1 bữa để mở lại đà' : 'Log one meal to restart',
+          body: todayLogs > 0
+            ? (locale === 'vi' ? 'Hôm nay đã có dữ liệu. Giữ tiếp 1 bữa nữa sau khi ăn.' : 'You already have data today. Log one more meal after eating.')
+            : (locale === 'vi' ? 'Dùng camera/text để log bữa gần nhất, ước lượng cũng được.' : 'Use camera or text to log the latest meal; an estimate is fine.'),
         },
         {
-          label: 'Ngay 3-4',
-          title: 'Lap lai bua de thanh nhanh hon',
-          body: 'Dung saved meal hoac mon da log gan day. Muc tieu la giam thao tac.',
+          label: locale === 'vi' ? 'Ngày 3-4' : 'Day 3-4',
+          title: locale === 'vi' ? 'Lặp lại bữa để nhanh hơn' : 'Repeat meals to move faster',
+          body: locale === 'vi' ? 'Dùng saved meal hoặc món đã log gần đây. Mục tiêu là giảm thao tác.' : 'Use saved meals or recently logged foods. The goal is fewer steps.',
         },
         {
-          label: 'Ngay 5-7',
-          title: 'Them 1 viec nho moi ngay',
-          body: 'Di bo 15 phut hoac them protein re: trung, dau hu, sua chua, ga/ca.',
+          label: locale === 'vi' ? 'Ngày 5-7' : 'Day 5-7',
+          title: locale === 'vi' ? 'Thêm 1 việc nhỏ mỗi ngày' : 'Add one small action per day',
+          body: locale === 'vi' ? 'Đi bộ 15 phút hoặc thêm protein rẻ: trứng, đậu hũ, sữa chua, gà/cá.' : 'Walk 15 minutes or add affordable protein: eggs, tofu, yogurt, chicken, or fish.',
         },
       ],
     };
@@ -212,25 +271,29 @@ function buildWeeklyPlan(summary: CoachingSummary | null, dailyLog: DailyLog | n
 
   if (adherence !== null && adherence > 115) {
     return {
-      title: 'Ke hoach 7 ngay de ha kcal mem',
-      body: 'Tuan truoc dang cao hon muc tieu. Dieu chinh nho se ben hon cat manh.',
-      status: `${Math.round(adherence)}% adherence`,
+      title: locale === 'vi' ? 'Kế hoạch 7 ngày để hạ kcal mềm' : '7-day plan to reduce calories gently',
+      body: locale === 'vi'
+        ? 'Tuần trước đang cao hơn mục tiêu. Điều chỉnh nhỏ sẽ bền hơn cắt mạnh.'
+        : 'Last week was above target. Small adjustments are more sustainable than hard restriction.',
+      status: locale === 'vi' ? `${Math.round(adherence)}% tuân thủ` : `${Math.round(adherence)}% adherence`,
       tone: 'warn',
       days: [
         {
-          label: 'Ngay 1-2',
-          title: 'Cat calories long',
-          body: 'Doi tra sua/nuoc ngot sang size nho, it duong hoac nuoc khong calo.',
+          label: locale === 'vi' ? 'Ngày 1-2' : 'Day 1-2',
+          title: locale === 'vi' ? 'Cắt calories lỏng' : 'Cut liquid calories',
+          body: locale === 'vi' ? 'Đổi trà sữa/nước ngọt sang size nhỏ, ít đường hoặc nước không calo.' : 'Switch sweet drinks to a smaller size, less sugar, or zero-calorie drinks.',
         },
         {
-          label: 'Ngay 3-4',
-          title: 'Giu bua toi gon hon',
-          body: `Dat bua toi quanh ${Math.round(target * 0.28)}-${Math.round(target * 0.34)} kcal, uu tien rau va dam nac.`,
+          label: locale === 'vi' ? 'Ngày 3-4' : 'Day 3-4',
+          title: locale === 'vi' ? 'Giữ bữa tối gọn hơn' : 'Keep dinner lighter',
+          body: locale === 'vi'
+            ? `Đặt bữa tối quanh ${Math.round(target * 0.28)}-${Math.round(target * 0.34)} kcal, ưu tiên rau và đạm nạc.`
+            : `Keep dinner around ${Math.round(target * 0.28)}-${Math.round(target * 0.34)} kcal with vegetables and lean protein.`,
         },
         {
-          label: 'Ngay 5-7',
-          title: 'Di bo sau bua cao kcal',
-          body: 'Neu bua nao vuot ke hoach, them 15-25 phut di bo thay vi bo bua sau.',
+          label: locale === 'vi' ? 'Ngày 5-7' : 'Day 5-7',
+          title: locale === 'vi' ? 'Đi bộ sau bữa cao kcal' : 'Walk after high-calorie meals',
+          body: locale === 'vi' ? 'Nếu bữa nào vượt kế hoạch, thêm 15-25 phút đi bộ thay vì bỏ bữa sau.' : 'If a meal goes over plan, add a 15-25 minute walk instead of skipping the next meal.',
         },
       ],
     };
@@ -238,50 +301,58 @@ function buildWeeklyPlan(summary: CoachingSummary | null, dailyLog: DailyLog | n
 
   if (adherence !== null && adherence < 80) {
     return {
-      title: 'Ke hoach 7 ngay de an du hon',
-      body: 'Tuan truoc co the qua thap hoac log chua du. Giam can ben can du nang luong nen.',
-      status: `${Math.round(adherence)}% adherence`,
+      title: locale === 'vi' ? 'Kế hoạch 7 ngày để ăn đủ hơn' : '7-day plan to eat enough',
+      body: locale === 'vi'
+        ? 'Tuần trước có thể quá thấp hoặc log chưa đủ. Giảm cân bền cần đủ năng lượng nền.'
+        : 'Last week may have been too low or under-logged. Sustainable weight loss still needs enough baseline energy.',
+      status: locale === 'vi' ? `${Math.round(adherence)}% tuân thủ` : `${Math.round(adherence)}% adherence`,
       tone: 'info',
       days: [
         {
-          label: 'Ngay 1-2',
-          title: 'Dung bo bua sang/trua',
-          body: 'Neu ban khong doi, van log nhanh mot bua nho de app khong hieu sai.',
+          label: locale === 'vi' ? 'Ngày 1-2' : 'Day 1-2',
+          title: locale === 'vi' ? 'Đừng bỏ bữa sáng/trưa' : 'Do not skip breakfast or lunch',
+          body: locale === 'vi' ? 'Nếu bạn không đói, vẫn log nhanh một bữa nhỏ để app không hiểu sai.' : 'If you are not hungry, still log a small meal so the app does not misread the day.',
         },
         {
-          label: 'Ngay 3-4',
-          title: 'Them protein gia re',
-          body: 'Trung, dau hu, sua chua, uc ga hoac ca hop giup no lau hon.',
+          label: locale === 'vi' ? 'Ngày 3-4' : 'Day 3-4',
+          title: locale === 'vi' ? 'Thêm protein giá rẻ' : 'Add affordable protein',
+          body: locale === 'vi' ? 'Trứng, đậu hũ, sữa chua, ức gà hoặc cá hộp giúp no lâu hơn.' : 'Eggs, tofu, yogurt, chicken breast, or canned fish help you stay full longer.',
         },
         {
-          label: 'Ngay 5-7',
-          title: 'Giu deficit vua phai',
-          body: `An gan ${Math.round(target * 0.85)}-${Math.round(target)} kcal thay vi cat qua sau.`,
+          label: locale === 'vi' ? 'Ngày 5-7' : 'Day 5-7',
+          title: locale === 'vi' ? 'Giữ deficit vừa phải' : 'Keep a moderate deficit',
+          body: locale === 'vi'
+            ? `Ăn gần ${Math.round(target * 0.85)}-${Math.round(target)} kcal thay vì cắt quá sâu.`
+            : `Aim for about ${Math.round(target * 0.85)}-${Math.round(target)} kcal instead of cutting too deeply.`,
         },
       ],
     };
   }
 
   return {
-    title: 'Ke hoach 7 ngay giu da giam can',
-    body: 'Tuan nay uu tien lap lai nhung viec dang hieu qua thay vi doi qua nhieu.',
-    status: averageDailyCalories !== null ? `${Math.round(averageDailyCalories)} kcal/ngay` : 'Dang on dinh',
+    title: locale === 'vi' ? 'Kế hoạch 7 ngày giữ đà giảm cân' : '7-day plan to keep weight-loss momentum',
+    body: locale === 'vi'
+      ? 'Tuần này ưu tiên lặp lại những việc đang hiệu quả thay vì đổi quá nhiều.'
+      : 'This week, repeat what is already working instead of changing too much.',
+    status: averageDailyCalories !== null
+      ? (locale === 'vi' ? `${Math.round(averageDailyCalories)} kcal/ngày` : `${Math.round(averageDailyCalories)} kcal/day`)
+      : (locale === 'vi' ? 'Đang ổn định' : 'Stable'),
     tone: 'good',
     days: [
       {
-        label: 'Ngay 1-2',
-        title: 'Giu bua neo',
-        body: 'Chon 1 bua de lap lai moi ngay: sang hoac trua, de giam quyet dinh.',
+        label: locale === 'vi' ? 'Ngày 1-2' : 'Day 1-2',
+        title: locale === 'vi' ? 'Giữ bữa neo' : 'Keep an anchor meal',
+        body: locale === 'vi' ? 'Chọn 1 bữa để lặp lại mỗi ngày: sáng hoặc trưa, để giảm quyết định.' : 'Choose one meal to repeat daily, breakfast or lunch, to reduce decision fatigue.',
       },
       {
-        label: 'Ngay 3-4',
-        title: 'Chuan bi mon fallback',
-        body: 'Co san 1 mon re de cuu ngay: com ga nho, bun/pho it topping, salad them dam.',
+        label: locale === 'vi' ? 'Ngày 3-4' : 'Day 3-4',
+        title: locale === 'vi' ? 'Chuẩn bị món fallback' : 'Prepare a fallback meal',
+        body: locale === 'vi' ? 'Có sẵn 1 món rẻ để cứu ngày: cơm gà nhỏ, bún/phở ít topping, salad thêm đạm.' : 'Keep one cheap fallback: small chicken rice, lighter noodle soup, or salad with extra protein.',
       },
       {
-        label: 'Ngay 5-7',
-        title: 'Review va chinh nhe',
-        body: 'Neu 3 ngay lien tiep vuot target, giam do uong ngot hoac snack truoc khi cat bua chinh.',
+        label: locale === 'vi' ? 'Ngày 5-7' : 'Day 5-7',
+        title: locale === 'vi' ? 'Review và chỉnh nhẹ' : 'Review and adjust lightly',
+        body: locale === 'vi' ? 'Nếu 3 ngày liên tiếp vượt target, giảm đồ uống ngọt hoặc snack trước khi cắt bữa chính.' : 'If 3 days in a row exceed target, reduce sweet drinks or snacks before cutting main meals.',
       },
     ],
   };
@@ -439,8 +510,10 @@ function formatSummaryPercent(value: unknown) {
   return formatPercent(value);
 }
 
-function getCoachErrorMessage(error: unknown): string {
-  const fallback = 'Xin lỗi, tôi đang bị gián đoạn kết nối. Bạn thử lại sau ít phút nhé.';
+function getCoachErrorMessage(error: unknown, locale: Locale): string {
+  const fallback = locale === 'vi'
+    ? 'Xin lỗi, tôi đang bị gián đoạn kết nối. Bạn thử lại sau ít phút nhé.'
+    : 'Sorry, I am having a connection issue. Please try again in a few minutes.';
 
   const err: any = error;
   const rawMessage = String(err?.message ?? '').toLowerCase();
@@ -448,15 +521,21 @@ function getCoachErrorMessage(error: unknown): string {
   const backendMessage = String(err?.response?.data?.message ?? '').trim();
 
   if (rawMessage.includes('only available on premium') || rawMessage.includes('premium or pro')) {
-    return 'AI Coach hiện chỉ mở cho gói Premium/Pro. Bạn nâng cấp để tiếp tục dùng tính năng này nhé.';
+    return locale === 'vi'
+      ? 'AI Coach hiện chỉ mở cho gói Premium/Pro. Bạn nâng cấp để tiếp tục dùng tính năng này nhé.'
+      : 'AI Coach is available on Premium/Pro. Upgrade to keep using this feature.';
   }
 
   if (status === 401) {
-    return 'Phiên đăng nhập đã hết hạn. Bạn vui lòng đăng nhập lại để tiếp tục chat với Coach.';
+    return locale === 'vi'
+      ? 'Phiên đăng nhập đã hết hạn. Bạn vui lòng đăng nhập lại để tiếp tục chat với Coach.'
+      : 'Your session has expired. Please log in again to keep chatting with Coach.';
   }
 
   if (status >= 500 && backendMessage) {
-    return `Coach tạm thời gặp lỗi hệ thống: ${backendMessage}`;
+    return locale === 'vi'
+      ? `Coach tạm thời gặp lỗi hệ thống: ${backendMessage}`
+      : `Coach is temporarily unavailable: ${backendMessage}`;
   }
 
   if (backendMessage) {
@@ -464,7 +543,9 @@ function getCoachErrorMessage(error: unknown): string {
   }
 
   if (rawMessage.includes('network')) {
-    return 'Không thể kết nối backend. Bạn kiểm tra lại server và thử lại giúp mình nhé.';
+    return locale === 'vi'
+      ? 'Không thể kết nối backend. Bạn kiểm tra lại server và thử lại giúp mình nhé.'
+      : 'Cannot connect to the backend. Please check the server and try again.';
   }
 
   return fallback;
@@ -512,7 +593,7 @@ export default function CoachScreen() {
         setInsights(dedupeInsights(insightsResult.value.data || []));
       } else {
         setInsights([]);
-        setInsightsError(getCoachErrorMessage(insightsResult.reason));
+        setInsightsError(getCoachErrorMessage(insightsResult.reason, locale));
       }
 
       if (summaryResult.status === 'fulfilled') {
@@ -520,13 +601,13 @@ export default function CoachScreen() {
       } else {
         setSummary(null);
         if (insightsResult.status === 'fulfilled') {
-          setInsightsError(getCoachErrorMessage(summaryResult.reason));
+          setInsightsError(getCoachErrorMessage(summaryResult.reason, locale));
         }
       }
     } catch (error) {
       setInsights([]);
       setSummary(null);
-      setInsightsError(getCoachErrorMessage(error));
+      setInsightsError(getCoachErrorMessage(error, locale));
     } finally {
       setLoadingInsights(false);
     }
@@ -564,8 +645,8 @@ export default function CoachScreen() {
       target_calories: target,
     };
   }, [dailyLog]);
-  const activePlan = useMemo(() => buildActivePlan(dailyLog), [dailyLog]);
-  const weeklyPlan = useMemo(() => buildWeeklyPlan(summary, dailyLog), [summary, dailyLog]);
+  const activePlan = useMemo(() => buildActivePlan(dailyLog, locale), [dailyLog, locale]);
+  const weeklyPlan = useMemo(() => buildWeeklyPlan(summary, dailyLog, locale), [summary, dailyLog, locale]);
   const summaryRecommendation = localizeInsightTextForLocale(summary?.recommended_action, locale) || t('screen.tabs.coach.summaryFallback')
     || 'Coach cần thêm dữ liệu log trong tuần để đưa ra gợi ý chính xác hơn.';
 
@@ -595,7 +676,7 @@ export default function CoachScreen() {
       const fallback: ChatMessage = {
         id: `c-${Date.now()}`,
         role: 'coach',
-        text: getCoachErrorMessage(error),
+        text: getCoachErrorMessage(error, locale),
       };
       setMessages((prev) => [...prev, fallback]);
     } finally {
@@ -624,7 +705,7 @@ export default function CoachScreen() {
     setTimeout(() => {
       coachScrollRef.current?.scrollToEnd({ animated: true });
     }, Platform.OS === 'ios' ? 280 : 180);
-  }, []);
+  }, [locale]);
 
   const renderInsightCard = (insight: CoachingInsight) => (
     <View key={insight.id} style={styles.insightCard}>
@@ -673,7 +754,7 @@ export default function CoachScreen() {
         >
           <View style={styles.activePlanHeader}>
             <View style={styles.activePlanCopy}>
-              <Text style={styles.activePlanEyebrow}>KE HOACH HOM NAY</Text>
+              <Text style={styles.activePlanEyebrow}>{locale === 'vi' ? 'KẾ HOẠCH HÔM NAY' : "TODAY'S PLAN"}</Text>
               <Text style={styles.activePlanTitle}>{activePlan.title}</Text>
               <Text style={styles.activePlanBody}>{activePlan.body}</Text>
             </View>
@@ -706,7 +787,7 @@ export default function CoachScreen() {
               style={styles.planPrimaryAction}
             />
             <UiButton
-              label="Xem Today"
+              label={locale === 'vi' ? 'Xem Today' : 'View Today'}
               variant="secondary"
               onPress={() => router.push('/')}
               style={styles.planSecondaryAction}
@@ -731,7 +812,7 @@ export default function CoachScreen() {
         >
           <View style={styles.weeklyPlanHeader}>
             <View style={styles.weeklyPlanCopy}>
-              <Text style={styles.weeklyPlanEyebrow}>KE HOACH 7 NGAY</Text>
+              <Text style={styles.weeklyPlanEyebrow}>{locale === 'vi' ? 'KẾ HOẠCH 7 NGÀY' : '7-DAY PLAN'}</Text>
               <Text style={styles.weeklyPlanTitle}>{weeklyPlan.title}</Text>
               <Text style={styles.weeklyPlanBody}>{weeklyPlan.body}</Text>
             </View>
@@ -786,7 +867,7 @@ export default function CoachScreen() {
         ) : insightsError ? (
           <SurfaceCard style={styles.noInsightsCard}>
             <Text style={styles.noInsightsText}>{insightsError}</Text>
-            <UiButton label="Thử lại" onPress={() => loadInsights().catch(() => {})} />
+            <UiButton label="common.tryAgain" onPress={() => loadInsights().catch(() => {})} />
           </SurfaceCard>
         ) : insights.length > 0 ? (
           <View style={styles.insightsContainer}>

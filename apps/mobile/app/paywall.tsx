@@ -17,11 +17,23 @@ import { Alert } from '../components/i18n-alert';
 import { useI18n } from '../components/i18n';
 import { toFiniteNumber } from '../services/number-format';
 
-function formatPrice(value: unknown): string {
+function formatPrice(value: unknown, freeLabel: string): string {
   const price = toFiniteNumber(value);
-  if (price === null || price <= 0) return 'Miễn phí';
+  if (price === null || price <= 0) return freeLabel;
   return `$${price.toFixed(2)}`;
 }
+
+const FEATURE_KEYS = [
+  'manual_food_search',
+  'barcode_scanning',
+  'daily_insights',
+  'meal_reminders',
+  'ai_coach',
+  'weekly_reports',
+  'correction_tracking',
+  'healthkit_sync',
+  'priority_support',
+] as const;
 
 export default function PaywallScreen() {
   useAppTheme();
@@ -74,7 +86,7 @@ export default function PaywallScreen() {
           onPress={() => setBillingCycle('monthly')}
         >
           <Text style={[styles.billingText, billingCycle === 'monthly' && styles.activeText]}>
-            Hàng tháng
+            {t('screen.paywall.billing.monthly')}
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -82,7 +94,7 @@ export default function PaywallScreen() {
           onPress={() => setBillingCycle('yearly')}
         >
           <Text style={[styles.billingText, billingCycle === 'yearly' && styles.activeText]}>
-            Hàng năm
+            {t('screen.paywall.billing.yearly')}
           </Text>
           <Text style={styles.savingsBadge} i18nKey="screen.paywall.text.003" />
         </TouchableOpacity>
@@ -125,28 +137,18 @@ export default function PaywallScreen() {
 
               <View style={styles.priceContainer}>
                 <Text style={styles.price}>
-                  {formatPrice(price)}
+                  {formatPrice(price, t('screen.paywall.price.free'))}
                 </Text>
                 {price > 0 && (
                   <Text style={styles.billingPeriod}>
-                    /{billingCycle === 'monthly' ? 'tháng' : 'năm'}
+                    {billingCycle === 'monthly' ? t('screen.paywall.billing.period.month') : t('screen.paywall.billing.period.year')}
                   </Text>
                 )}
               </View>
 
               {/* Features List */}
               <View style={styles.featuresList}>
-                {[
-                  { key: 'manual_food_search', label: 'Tìm kiếm thủ công' },
-                  { key: 'barcode_scanning', label: 'Quét mã vạch' },
-                  { key: 'daily_insights', label: 'Thông tin chi tiết hàng ngày' },
-                  { key: 'meal_reminders', label: 'Nhắc nhở ăn uống' },
-                  { key: 'ai_coach', label: 'AI Coach' },
-                  { key: 'weekly_reports', label: 'Báo cáo hàng tuần' },
-                  { key: 'correction_tracking', label: 'Theo dõi sửa đổi' },
-                  { key: 'healthkit_sync', label: 'HealthKit Sync' },
-                  { key: 'priority_support', label: 'Hỗ trợ ưu tiên' },
-                ].map(({ key, label }) => {
+                {FEATURE_KEYS.map((key) => {
                   const hasFeature = tierInfo.features[key as keyof typeof tierInfo.features];
                   return (
                     <View key={key} style={styles.featureRow}>
@@ -156,7 +158,7 @@ export default function PaywallScreen() {
                         color={hasFeature ? theme.colors.accentMint : theme.colors.textMuted}
                       />
                       <Text style={[styles.featureText, !hasFeature && styles.featureDisabled]}>
-                        {label}
+                        {t(`screen.paywall.feature.${key}` as any)}
                       </Text>
                     </View>
                   );
@@ -178,7 +180,11 @@ export default function PaywallScreen() {
                     isCurrentTier && styles.currentButtonText,
                   ]}
                 >
-                  {isCurrentTier ? '✓ Hiện tại' : tier === 'free' ? 'Chuyển về Free' : 'Áp dụng gói này'}
+                  {isCurrentTier
+                    ? t('screen.paywall.action.current')
+                    : tier === 'free'
+                      ? t('screen.paywall.action.free')
+                      : t('screen.paywall.action.apply')}
                 </Text>
               </TouchableOpacity>
             </View>

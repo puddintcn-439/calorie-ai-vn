@@ -9,9 +9,11 @@ import { BodyText, Eyebrow, HeroTitle, ScreenShell, SurfaceCard } from '../compo
 import { useGamificationStore } from '../store/gamification.store';
 import { createThemedStyles, theme, useAppTheme } from '../components/theme';
 import { Text } from '../components/i18n-text';
+import { useI18n } from '../components/i18n';
 
 export default function AchievementsScreen() {
   useAppTheme();
+  const { t } = useI18n();
   const { summary, isLoading, fetchSummary } = useGamificationStore();
 
   useEffect(() => {
@@ -20,11 +22,9 @@ export default function AchievementsScreen() {
 
   return (
     <ScreenShell>
-      <Eyebrow>Gamification</Eyebrow>
-      <HeroTitle>Streak và thành tích của bạn</HeroTitle>
-      <BodyText style={styles.heroBody}>
-        Theo dõi chuỗi ngày liên tiếp, số ngày active và toàn bộ badges bạn đã mở khóa.
-      </BodyText>
+      <Eyebrow>screen.achievements.eyebrow</Eyebrow>
+      <HeroTitle>screen.achievements.title</HeroTitle>
+      <BodyText style={styles.heroBody}>screen.achievements.body</BodyText>
 
       <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
         <Text style={styles.backButtonText} i18nKey="screen.achievements.text.001" />
@@ -38,8 +38,8 @@ export default function AchievementsScreen() {
                 <Text style={styles.overviewTitle} i18nKey="screen.achievements.text.002" />
                 <Text style={styles.overviewSubtitle}>
                   {summary.current_streak > 0
-                    ? `Bạn đang giữ ${summary.current_streak} ngày liên tiếp.`
-                    : 'Chưa có streak active, hôm nay là thời điểm tốt để bắt đầu.'}
+                    ? t('screen.achievements.streakActive', { days: summary.current_streak })
+                    : t('screen.achievements.streakEmpty')}
                 </Text>
               </View>
               <Text style={styles.streakValue}>🔥 {summary.current_streak}</Text>
@@ -53,7 +53,10 @@ export default function AchievementsScreen() {
 
             {summary.next_streak_milestone && (
               <Text style={styles.milestoneText}>
-                Còn {Math.max(0, summary.next_streak_milestone - summary.current_streak)} ngày để đạt mốc {summary.next_streak_milestone}.
+                {t('screen.achievements.milestone', {
+                  days: Math.max(0, summary.next_streak_milestone - summary.current_streak),
+                  milestone: summary.next_streak_milestone,
+                })}
               </Text>
             )}
           </SurfaceCard>
@@ -65,7 +68,7 @@ export default function AchievementsScreen() {
                 <View style={styles.badgeTopRow}>
                   <Text style={styles.badgeIcon}>{badge.icon}</Text>
                   <Text style={[styles.badgeState, badge.unlocked ? styles.badgeStateUnlocked : styles.badgeStateLocked]}>
-                    {badge.unlocked ? 'Unlocked' : 'Locked'}
+                    {badge.unlocked ? t('screen.achievements.badgeUnlocked') : t('screen.achievements.badgeLocked')}
                   </Text>
                 </View>
                 <Text style={styles.badgeTitle}>{badge.label}</Text>

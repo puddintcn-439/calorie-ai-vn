@@ -14,6 +14,7 @@ import { loadPresets, savePreset as savePresetService, removePreset as removePre
 import { formatNumberVi } from '../../services/number-format';
 import { Text } from '../../components/i18n-text';
 import { Alert } from '../../components/i18n-alert';
+import { useI18n } from '../../components/i18n';
 
 type LocalSet = { reps: number; weight_kg: number };
 type LocalExercise = {
@@ -38,6 +39,7 @@ const defaultExercise = (name = ''): LocalExercise => ({
 
 export default function StrengthLogScreen() {
   useAppTheme();
+  const { t } = useI18n();
   const { addActivity } = useLogStore();
   const [exercises, setExercises] = useState<LocalExercise[]>([defaultExercise('Squat')]);
   const [sessionNotes, setSessionNotes] = useState('');
@@ -158,9 +160,9 @@ export default function StrengthLogScreen() {
 
   return (
     <ScreenShell contentStyle={styles.container}>
-      <Eyebrow>Tập luyện</Eyebrow>
-      <HeroTitle>Ghi buổi tập tạ</HeroTitle>
-      <BodyText style={styles.heroBody}>Lưu set, reps và mức tạ để nhìn rõ sức mạnh qua từng buổi.</BodyText>
+      <Eyebrow>screen.tabs.strength.eyebrow</Eyebrow>
+      <HeroTitle>screen.tabs.strength.title</HeroTitle>
+      <BodyText style={styles.heroBody}>screen.tabs.strength.body</BodyText>
 
       <View style={styles.statsGrid}>
         <View style={styles.statTile}>
@@ -181,7 +183,7 @@ export default function StrengthLogScreen() {
         <View style={styles.sectionHeader}>
           <View>
             <Text style={styles.sectionTitle} i18nKey="screen.tabs.strength.text.004" />
-            <Text style={styles.sectionMeta}>Ước tính {stats.duration} phút</Text>
+            <Text style={styles.sectionMeta}>{t('screen.tabs.strength.meta.estimated', { minutes: stats.duration })}</Text>
           </View>
           <View style={styles.headerIcon}>
             <Ionicons name="barbell" size={18} color={theme.colors.accentMint} />
@@ -203,7 +205,7 @@ export default function StrengthLogScreen() {
               <Pressable onPress={() => addExercise(preset)} style={styles.presetName}>
                 <Text style={styles.presetText}>{preset}</Text>
               </Pressable>
-              <Pressable accessibilityLabel={`Xóa mẫu ${preset}`} onPress={() => handleRemovePreset(preset)} style={styles.presetRemove}>
+              <Pressable accessibilityLabel={t('screen.tabs.strength.accessibility.removePreset', { name: preset })} onPress={() => handleRemovePreset(preset)} style={styles.presetRemove}>
                 <Ionicons name="close" size={14} color={theme.colors.textMuted} />
               </Pressable>
             </View>
@@ -215,10 +217,10 @@ export default function StrengthLogScreen() {
         <SurfaceCard key={exercise.id} style={styles.exerciseCard}>
           <View style={styles.exerciseHeader}>
             <View style={styles.exerciseTitleBlock}>
-              <Text style={styles.exerciseKicker}>Bài #{idx + 1}</Text>
-              <Text style={styles.exerciseTitle}>{exercise.name.trim() || 'Chưa đặt tên'}</Text>
+              <Text style={styles.exerciseKicker}>{t('screen.tabs.strength.exercise.kicker', { index: idx + 1 })}</Text>
+              <Text style={styles.exerciseTitle}>{exercise.name.trim() || t('screen.tabs.strength.exercise.unnamed')}</Text>
             </View>
-            <Pressable accessibilityLabel={`Xóa bài tập ${idx + 1}`} onPress={() => removeExercise(exercise.id)} style={styles.iconDangerButton}>
+            <Pressable accessibilityLabel={t('screen.tabs.strength.accessibility.removeExercise', { index: idx + 1 })} onPress={() => removeExercise(exercise.id)} style={styles.iconDangerButton}>
               <Ionicons name="trash-outline" size={18} color={theme.colors.danger} />
             </Pressable>
           </View>
@@ -226,7 +228,7 @@ export default function StrengthLogScreen() {
           <UiInput
             value={exercise.name}
             onChangeText={(value) => updateExerciseName(exercise.id, value)}
-            placeholder={`Bài tập #${idx + 1}`}
+            placeholder={t('screen.tabs.strength.exercise.placeholder', { index: idx + 1 })}
             containerStyle={styles.nameInput}
           />
 
@@ -259,7 +261,7 @@ export default function StrengthLogScreen() {
                 </View>
                 <Text style={styles.setValue}>{set.reps} reps</Text>
                 <Text style={styles.setValue}>{set.weight_kg} kg</Text>
-                <Pressable accessibilityLabel={`Xóa set ${setIdx + 1}`} onPress={() => removeSetFromExercise(exercise.id, setIdx)} style={styles.removeSetButton}>
+                <Pressable accessibilityLabel={t('screen.tabs.strength.accessibility.removeSet', { index: setIdx + 1 })} onPress={() => removeSetFromExercise(exercise.id, setIdx)} style={styles.removeSetButton}>
                   <Ionicons name="remove" size={16} color={theme.colors.accentCyan} />
                 </Pressable>
               </View>

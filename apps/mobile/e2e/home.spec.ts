@@ -10,9 +10,26 @@ test.describe('Mobile web smoke', () => {
     });
     await gotoApp(page, '/');
     await expect(page.getByText('Tổng quan hôm nay')).toBeVisible({ timeout: 15000 });
-    await expect(page.getByText('Scan').last()).toBeVisible();
-    await expect(page.getByText('Log').last()).toBeVisible();
+    await expect(page.getByText('Quét').last()).toBeVisible();
+    await expect(page.getByText('Nhật ký').last()).toBeVisible();
     await expect(page.getByText('Coach').last()).toBeVisible();
     await expect(page.getByText('Hồ sơ').last()).toBeVisible();
+  });
+
+  test('uses stored English locale for primary dashboard copy', async ({ page }) => {
+    await setAuthToken(page);
+    await page.addInitScript(() => window.localStorage.setItem('app_locale', 'en'));
+    await page.route('**/user/profile', async (route) => {
+      await route.fulfill(jsonResponse({ full_name: 'Test', weight_kg: 65, height_cm: 170, age: 30, gender: 'male' }));
+    });
+
+    await gotoApp(page, '/');
+
+    await expect(page.getByText("Today's overview")).toBeVisible({ timeout: 15000 });
+    await expect(page.getByText('Missing target inputs')).toBeVisible();
+    await expect(page.getByText('Scan meal').last()).toBeVisible();
+    await expect(page.getByText('Profile').last()).toBeVisible();
+    await expect(page.locator('body')).not.toContainText('Tổng quan hôm nay');
+    await expect(page.locator('body')).not.toContainText('phút');
   });
 });

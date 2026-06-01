@@ -61,7 +61,7 @@ test.describe('Scan degraded AI states', () => {
     await gotoApp(page, '/scan');
     await page.getByTestId('scan-mode-text').click();
     await page.locator('textarea, input, [contenteditable="true"]').first().fill('tra sua matcha latte 500ml');
-    await page.getByText('Phan tich').click();
+    await page.getByTestId('scan-analyze-text-button').click();
 
     await expect(page.getByText(/quota\/rate limit/i)).toBeVisible({ timeout: 15000 });
     await expect(page.getByText(/Th|th.*l.i/i).first()).toBeVisible();
@@ -158,7 +158,7 @@ test.describe('Scan degraded AI states', () => {
     await gotoApp(page, '/scan');
     await page.getByTestId('scan-mode-text').click();
     await page.locator('textarea, input, [contenteditable="true"]').first().fill('tra sua matcha latte 500ml');
-    await page.getByText('Phan tich').click();
+    await page.getByTestId('scan-analyze-text-button').click();
 
     await expect(page.getByTestId('scan-notice-body')).toBeVisible({ timeout: 15000 });
     await expect(page.getByTestId('scan-retry-button')).toBeVisible();

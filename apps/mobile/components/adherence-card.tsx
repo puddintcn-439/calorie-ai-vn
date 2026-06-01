@@ -11,6 +11,7 @@ import { useAppTheme } from './theme';
 import { apiClient } from '../services/api';
 import { formatNumberVi, formatPercent, safeNumber } from '../services/number-format';
 import { Text } from './i18n-text';
+import { useI18n } from './i18n';
 
 type WeeklySummary = {
   adherence_percentage: number;
@@ -26,6 +27,7 @@ export default function AdherenceCard() {
   const [loading, setLoading] = useState(true);
   const [summary, setSummary] = useState<WeeklySummary | null>(null);
   const { colors } = useAppTheme();
+  const { locale } = useI18n();
 
   useEffect(() => {
     let mounted = true;
@@ -58,7 +60,9 @@ export default function AdherenceCard() {
       <SurfaceCard style={[styles.card, { borderColor: colors.borderInfo }]}>
         <Text style={[styles.title, { color: colors.text }]} i18nKey="screen.components.adherenceCard.text.001" />
         <Text style={[styles.empty, { color: colors.textMuted }]}>
-          Chưa có dữ liệu tuần này. Ghi nhật ký ăn uống để nhận phân tích.
+          {locale === 'vi'
+            ? 'Chưa có dữ liệu tuần này. Ghi nhật ký ăn uống để nhận phân tích.'
+            : 'No weekly data yet. Log meals to unlock analysis.'}
         </Text>
       </SurfaceCard>
     );
@@ -79,9 +83,9 @@ export default function AdherenceCard() {
       </View>
 
       <View style={styles.rowSmall}>
-        <Text style={[styles.small, { color: colors.textSoft }]}>Trên mục tiêu: {summary.days_above_target}</Text>
-        <Text style={[styles.small, { color: colors.textSoft }]}>Đúng đích: {summary.days_on_target}</Text>
-        <Text style={[styles.small, { color: colors.textSoft }]}>Dưới mục tiêu: {summary.days_below_target}</Text>
+        <Text style={[styles.small, { color: colors.textSoft }]}>{locale === 'vi' ? 'Trên mục tiêu' : 'Above target'}: {summary.days_above_target}</Text>
+        <Text style={[styles.small, { color: colors.textSoft }]}>{locale === 'vi' ? 'Đúng đích' : 'On target'}: {summary.days_on_target}</Text>
+        <Text style={[styles.small, { color: colors.textSoft }]}>{locale === 'vi' ? 'Dưới mục tiêu' : 'Below target'}: {summary.days_below_target}</Text>
       </View>
 
       {summary.recommended_action ? (

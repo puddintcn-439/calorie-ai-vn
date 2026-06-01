@@ -17,11 +17,13 @@ import { createThemedStyles, theme, useAppTheme } from '../../components/theme';
 import { Text } from '../../components/i18n-text';
 import { Alert } from '../../components/i18n-alert';
 import { formatKcal, formatMacro, formatNumberVi, formatPercent, safeNumber } from '../../services/number-format';
+import { useI18n } from '../../components/i18n';
 
 const screenWidth = Dimensions.get('window').width;
 
 export default function InsightsScreen() {
   useAppTheme();
+  const { t } = useI18n();
   const bottomContentPadding = useBottomNavContentPadding();
   const { weeklyInsights, isLoading, fetchWeeklyInsights } = useInsightsStore();
   const {
@@ -79,8 +81,8 @@ export default function InsightsScreen() {
   return (
     <ScreenShell scroll={false} reserveBottomNav={false}>
       <ScrollView contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomContentPadding }]}>
-        <Eyebrow>Thống kê tuần</Eyebrow>
-        <HeroTitle>Bạn đã tiến bộ bao nhiêu tuần này?</HeroTitle>
+        <Eyebrow>screen.tabs.insights.eyebrow</Eyebrow>
+        <HeroTitle>screen.tabs.insights.title</HeroTitle>
         <BodyText style={styles.periodText}>{data.period}</BodyText>
 
         {/* ─── Weekly Summary Cards ─── */}
@@ -115,7 +117,7 @@ export default function InsightsScreen() {
               {safeNumber(data.trend_vs_last_week) > 0 ? '+' : ''}{formatPercent(data.trend_vs_last_week)}
             </Text>
             <Text style={styles.summaryUnit}>
-              {safeNumber(data.trend_vs_last_week) <= 0 ? '📉 Tốt' : '📈 Tăng'}
+              {safeNumber(data.trend_vs_last_week) <= 0 ? t('screen.tabs.insights.trend.good') : t('screen.tabs.insights.trend.up')}
             </Text>
           </SurfaceCard>
         </View>
@@ -255,7 +257,7 @@ export default function InsightsScreen() {
           </View>
           <View style={styles.highlightRow}>
             <Text style={styles.highlightLabel} i18nKey="screen.tabs.insights.text.024" />
-            <Text style={styles.highlightValue}>{formatNumberVi(data.total_meals_logged)} bữa</Text>
+            <Text style={styles.highlightValue}>{t('screen.tabs.insights.unit.meals', { count: formatNumberVi(data.total_meals_logged) })}</Text>
           </View>
         </SurfaceCard>
 
@@ -272,7 +274,10 @@ export default function InsightsScreen() {
           {recommendations ? (
             <>
               <Text style={styles.planMeta}>
-                Remaining hôm nay: {formatKcal(recommendations.remaining_calories)} · Adherence TB: {formatPercent(recommendations.weekly_insights?.average_adherence)}
+                {t('screen.tabs.insights.planMeta', {
+                  remaining: formatKcal(recommendations.remaining_calories),
+                  adherence: formatPercent(recommendations.weekly_insights?.average_adherence),
+                })}
               </Text>
 
               {(Array.isArray(recommendations.meals) ? recommendations.meals : []).map((meal) => (
@@ -280,12 +285,12 @@ export default function InsightsScreen() {
                   <View style={styles.planMealLeft}>
                     <Text style={styles.planMealLabel}>
                       {meal.meal_type === 'breakfast'
-                        ? '🌅 Sáng'
+                        ? t('screen.tabs.insights.label.001')
                         : meal.meal_type === 'lunch'
-                          ? '🌤️ Trưa'
+                          ? t('screen.tabs.insights.label.002')
                           : meal.meal_type === 'dinner'
-                            ? '🌙 Tối'
-                            : '🍿 Vặt'}
+                            ? t('screen.tabs.insights.label.003')
+                            : t('screen.tabs.insights.label.004')}
                     </Text>
                     <Text style={styles.planMealTip}>{meal.tips}</Text>
                   </View>
@@ -295,7 +300,7 @@ export default function InsightsScreen() {
 
               <View style={styles.planSuggestionBox}>
                 <Text style={styles.planSuggestionTitle} i18nKey="screen.tabs.insights.text.027" />
-                <Text style={styles.planSuggestionText}>{recommendations.weekly_insights?.suggestion ?? 'Chưa đủ dữ liệu để gợi ý tuần này.'}</Text>
+                <Text style={styles.planSuggestionText}>{recommendations.weekly_insights?.suggestion ?? t('screen.tabs.insights.recommendationFallback')}</Text>
               </View>
             </>
           ) : (
@@ -322,11 +327,12 @@ function MealBreakdownRow({
   const safeCalories = safeNumber(calories);
   const safeTotal = safeNumber(total);
   const percentage = safeTotal > 0 ? (safeCalories / safeTotal) * 100 : 0;
+  const { t } = useI18n();
   return (
     <View style={styles.breakdownRow}>
       <View style={styles.breakdownLeft}>
         <Text style={styles.breakdownLabel}>{label}</Text>
-        <Text style={styles.breakdownMeta}>{formatNumberVi(count)} bữa</Text>
+        <Text style={styles.breakdownMeta}>{t('screen.tabs.insights.unit.meals', { count: formatNumberVi(count) })}</Text>
       </View>
       <View style={styles.breakdownBar}>
         <View style={[styles.breakdownFill, { width: `${Math.max(5, Math.min(100, percentage))}%` }]} />

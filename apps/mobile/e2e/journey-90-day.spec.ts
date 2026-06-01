@@ -9,10 +9,10 @@ import {
 } from './helpers';
 
 const JOURNEY_ROUTES = [
-  { name: 'Today', path: '/', expected: [/TRO LY GIAM CAN/i, /90\s*ng|90\s*day/i, /1[.,]?[78]\d{2}/] },
+  { name: 'Today', path: '/', expected: [/TRỢ LÝ GIẢM CÂN|WEIGHT LOSS ASSISTANT/i, /90\s*ng|90\s*day/i, /1[.,]?[78]\d{2}/] },
   { name: 'Log', path: '/log', expected: [/High protein lunch/i, /730/] },
   { name: 'Progress', path: '/progress', expected: [/90/, /84%|84\s*%/] },
-  { name: 'Coach', path: '/coach', expected: [/KE HOACH HOM NAY/i, /KE HOACH 7 NGAY/i, /97%|97\s*%/, /21/] },
+  { name: 'Coach', path: '/coach', expected: [/KẾ HOẠCH HÔM NAY|TODAY'S PLAN/i, /KẾ HOẠCH 7 NGÀY|7-DAY PLAN/i, /97%|97\s*%/, /21/] },
   { name: 'Insights', path: '/insights', expected: [/97%|97\s*%/, /21/] },
 ];
 

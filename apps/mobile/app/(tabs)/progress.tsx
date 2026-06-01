@@ -21,6 +21,7 @@ import { formatNumberVi, formatPercent, safeNumber, toFiniteNumber } from '../..
 import { Text } from '../../components/i18n-text';
 import { TextInput } from '../../components/i18n-text-input';
 import { Alert } from '../../components/i18n-alert';
+import { useI18n } from '../../components/i18n';
 
 function formatDecimal(value: unknown, fallback = '--') {
   const numeric = toFiniteNumber(value);
@@ -32,7 +33,14 @@ function parseOptionalInput(value: string): number | undefined {
   return numeric === null ? undefined : numeric;
 }
 
-const ENERGY_LABELS = ['', '😴 Rất mệt', '😐 Mệt', '😊 Bình thường', '😄 Tốt', '🔥 Xuất sắc'];
+const ENERGY_LABEL_KEYS = [
+  '',
+  'screen.tabs.progress.energy.1',
+  'screen.tabs.progress.energy.2',
+  'screen.tabs.progress.energy.3',
+  'screen.tabs.progress.energy.4',
+  'screen.tabs.progress.energy.5',
+] as const;
 
 function DeltaBadge({ value, unit, lowerIsBetter = false }: { value: number | null; unit: string; lowerIsBetter?: boolean }) {
   const numeric = toFiniteNumber(value);
@@ -49,13 +57,13 @@ function DeltaBadge({ value, unit, lowerIsBetter = false }: { value: number | nu
   );
 }
 
-function progressStatusText(summary?: BodyProgressSummary) {
-  if (!summary) return 'Chua tai duoc du lieu tien trinh.';
-  if (summary.data_status === 'no_logs') return 'Chua co log an uong trong 90 ngay gan day nen chua tinh tuan thu.';
-  if (summary.data_status === 'no_weight') return 'Thieu it nhat 2 moc can nang de tinh da thay doi.';
-  if (summary.data_status === 'missing_goal') return 'Thieu muc tieu can nang cu the nen chua tinh phan tram hoan thanh.';
-  if (summary.data_status === 'insufficient_data') return 'Du lieu dang co nhung chua du day de ket luan dai han.';
-  return 'Du lieu 90 ngay da du de theo doi xu huong.';
+function progressStatusKey(summary?: BodyProgressSummary) {
+  if (!summary) return 'screen.tabs.progress.status.noSummary';
+  if (summary.data_status === 'no_logs') return 'screen.tabs.progress.status.noLogs';
+  if (summary.data_status === 'no_weight') return 'screen.tabs.progress.status.noWeight';
+  if (summary.data_status === 'missing_goal') return 'screen.tabs.progress.status.missingGoal';
+  if (summary.data_status === 'insufficient_data') return 'screen.tabs.progress.status.insufficientData';
+  return 'screen.tabs.progress.status.ready';
 }
 
 function ProgressMetric({ label, value, hint }: { label: string; value: string; hint?: string }) {
@@ -69,38 +77,42 @@ function ProgressMetric({ label, value, hint }: { label: string; value: string; 
 }
 
 function ProgressSummaryCard({ summary }: { summary?: BodyProgressSummary }) {
+  const { t } = useI18n();
   return (
     <SurfaceCard style={styles.progressSummaryCard}>
-      <Text style={styles.trendTitle}>Tuan thu & muc tieu 90 ngay</Text>
+      <Text style={styles.trendTitle} i18nKey="screen.tabs.progress.summary.title" />
       <View style={styles.progressSummaryGrid}>
         <ProgressMetric
-          label="Tuan thu TB tuan"
+          label={t('screen.tabs.progress.summary.adherence')}
           value={summary?.average_weekly_adherence_pct == null ? '--' : formatPercent(summary.average_weekly_adherence_pct)}
-          hint={summary?.average_weekly_adherence_pct == null ? 'Chua co log de tinh' : `${safeNumber(summary?.weeks_with_logs)} tuan co du lieu`}
+          hint={summary?.average_weekly_adherence_pct == null
+            ? t('screen.tabs.progress.summary.adherenceEmpty')
+            : t('screen.tabs.progress.summary.weeksWithData', { weeks: safeNumber(summary?.weeks_with_logs) })}
         />
         <ProgressMetric
-          label="Ngay da log"
+          label={t('screen.tabs.progress.summary.loggedDays')}
           value={summary ? formatNumberVi(summary.logged_days, '0') : '--'}
-          hint={`Trong ${summary?.period_days ?? 90} ngay`}
+          hint={t('screen.tabs.progress.summary.periodDays', { days: summary?.period_days ?? 90 })}
         />
         <ProgressMetric
-          label="Doi can"
+          label={t('screen.tabs.progress.summary.weightDelta')}
           value={summary?.weight_delta_kg == null ? '--' : `${formatDecimal(summary.weight_delta_kg)} kg`}
-          hint={summary?.weight_delta_kg == null ? 'Can it nhat 2 lan can' : 'So voi moc dau'}
+          hint={summary?.weight_delta_kg == null ? t('screen.tabs.progress.summary.weightDeltaEmpty') : t('screen.tabs.progress.summary.weightDeltaHint')}
         />
         <ProgressMetric
-          label="Tien do muc tieu"
+          label={t('screen.tabs.progress.summary.goalProgress')}
           value={summary?.weight_goal_progress_pct == null ? '--' : formatPercent(summary.weight_goal_progress_pct)}
-          hint={summary?.weight_goal_kg ? `Muc tieu ${formatDecimal(summary.weight_goal_kg)} kg` : 'Chua co muc tieu kg'}
+          hint={summary?.weight_goal_kg ? t('screen.tabs.progress.summary.goalKg', { kg: formatDecimal(summary.weight_goal_kg) }) : t('screen.tabs.progress.summary.goalMissing')}
         />
       </View>
-      <Text style={styles.progressStatus}>{progressStatusText(summary)}</Text>
+      <Text style={styles.progressStatus}>{t(progressStatusKey(summary) as any)}</Text>
     </SurfaceCard>
   );
 }
 
 export default function BodyProgressScreen() {
   useAppTheme();
+  const { t } = useI18n();
   const bottomContentPadding = useBottomNavContentPadding();
   const [trend, setTrend] = useState<BodyProgressTrend | null>(null);
   const [loading, setLoading] = useState(true);
@@ -286,11 +298,9 @@ export default function BodyProgressScreen() {
         contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomContentPadding }]}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
-        <Eyebrow>Theo dõi cơ thể</Eyebrow>
-        <HeroTitle>Tiến trình của bạn qua từng ngày</HeroTitle>
-        <BodyText style={styles.heroBody}>
-          Ghi lại cân nặng và số đo để thấy sự thay đổi thực sự theo thời gian.
-        </BodyText>
+        <Eyebrow>screen.tabs.progress.hero.eyebrow</Eyebrow>
+        <HeroTitle>screen.tabs.progress.hero.title</HeroTitle>
+        <BodyText style={styles.heroBody}>screen.tabs.progress.hero.body</BodyText>
 
         {/* ── Trend Summary ── */}
         {trend && trend.days_tracked > 0 && (
@@ -318,7 +328,7 @@ export default function BodyProgressScreen() {
             </View>
             {trend.weight_change_kg !== null && (
               <Text style={styles.totalChange}>
-                Tổng thay đổi cân nặng:{' '}
+                {t('screen.tabs.progress.totalChange')}{' '}
                 <Text style={{ color: safeNumber(trend.weight_change_kg) < 0 ? theme.colors.accentMint : theme.colors.danger }}>
                   {safeNumber(trend.weight_change_kg) > 0 ? '+' : ''}{formatDecimal(trend.weight_change_kg)} kg
                 </Text>
@@ -332,16 +342,16 @@ export default function BodyProgressScreen() {
         {/* ── Why This Target (Preview) ── */}
         <SurfaceCard style={styles.previewCard}>
           <Text style={styles.trendTitle} i18nKey="screen.tabs.progress.text.005" />
-          <BodyText style={{ marginTop: 6 }}>Tính toán điều chỉnh dựa trên nhật ký ăn uống và cân nặng. Xem trước điều chỉnh tuần này và lý do (ActualTDEE, clamp).</BodyText>
+          <BodyText style={{ marginTop: 6 }}>screen.tabs.progress.preview.body</BodyText>
           <View style={{ marginTop: 10 }}>
-            <UiButton label={preview ? 'Làm mới' : 'Xem lý do'} onPress={fetchPreview} loading={previewLoading} />
+            <UiButton label={preview ? 'screen.tabs.progress.preview.refresh' : 'screen.tabs.progress.preview.reason'} onPress={fetchPreview} loading={previewLoading} />
             {preview && (
               <View style={{ marginTop: 10 }}>
-                <Text style={styles.previewRow}>Phiên bản: {preview.algorithm_version}</Text>
+                <Text style={styles.previewRow}>{t('screen.tabs.progress.preview.version', { version: preview.algorithm_version })}</Text>
                 <Text style={styles.previewRow}>Actual TDEE: {preview.actual_tdee ?? '—'} kcal</Text>
                 <Text style={styles.previewRow}>Clamp: {preview.clamp_reason ?? '—'}</Text>
-                <Text style={styles.previewRow}>Mục tiêu hiện tại: {preview.original_daily_target} kcal</Text>
-                <Text style={styles.previewRow}>Mục tiêu đề xuất: {preview.adjusted_daily_target} kcal ({preview.adjustment_percentage}%)</Text>
+                <Text style={styles.previewRow}>{t('screen.tabs.progress.preview.currentTarget', { target: preview.original_daily_target })}</Text>
+                <Text style={styles.previewRow}>{t('screen.tabs.progress.preview.suggestedTarget', { target: preview.adjusted_daily_target, percent: preview.adjustment_percentage })}</Text>
                 <Text style={[styles.previewRow, { marginTop: 6 }]}>{preview.recommendation}</Text>
                 <UiButton label="screen.tabs.progress.label.001" onPress={handleApplyAdjustment} loading={saving} style={{ marginTop: 8 }} />
               </View>
@@ -355,7 +365,7 @@ export default function BodyProgressScreen() {
 
         {/* ── Log Today Button ── */}
         <UiButton
-          label={showForm ? 'Ẩn form' : '📝 Ghi số liệu hôm nay'}
+          label={showForm ? 'screen.tabs.progress.form.toggleHide' : 'screen.tabs.progress.form.toggleShow'}
           onPress={() => setShowForm(!showForm)}
           style={styles.logButton}
         />
@@ -363,7 +373,7 @@ export default function BodyProgressScreen() {
         {/* ── Input Form ── */}
         {showForm && (
           <SurfaceCard style={styles.formCard}>
-            <Text style={styles.formTitle}>📅 Hôm nay, {new Date().toLocaleDateString('vi-VN')}</Text>
+            <Text style={styles.formTitle}>{t('screen.tabs.progress.form.title', { date: new Date().toLocaleDateString('vi-VN') })}</Text>
 
             <View style={styles.formRow}>
               <View style={styles.formField}>
@@ -423,7 +433,7 @@ export default function BodyProgressScreen() {
                   style={[styles.energyChip, energyLevel === level && styles.energyChipActive]}
                   onPress={() => setEnergyLevel(level)}
                 >
-                  <Text style={styles.energyLabel}>{ENERGY_LABELS[level]}</Text>
+                  <Text style={styles.energyLabel}>{t(ENERGY_LABEL_KEYS[level] as any)}</Text>
                 </TouchableOpacity>
               ))}
             </View>
@@ -450,7 +460,7 @@ export default function BodyProgressScreen() {
         {/* ── History List ── */}
         {trend && trend.entries.length > 0 && (
           <>
-            <Text style={styles.historyTitle}>Lịch sử ({trend.entries.length} mục)</Text>
+            <Text style={styles.historyTitle}>{t('screen.tabs.progress.history.title', { count: trend.entries.length })}</Text>
             {trend.entries.slice(0, 30).map((entry) => (
               <SurfaceCard key={entry.id} style={styles.historyCard}>
                 <View style={styles.historyHeader}>
@@ -458,7 +468,7 @@ export default function BodyProgressScreen() {
                   <View style={styles.historyRight}>
                     {entry.energy_level && (
                       <Text style={styles.energyEmoji}>
-                        {ENERGY_LABELS[entry.energy_level].split(' ')[0]}
+                        {t(ENERGY_LABEL_KEYS[entry.energy_level] as any).split(' ')[0]}
                       </Text>
                     )}
                     <TouchableOpacity
@@ -488,9 +498,7 @@ export default function BodyProgressScreen() {
 
         {trend?.days_tracked === 0 && !showForm && (
           <SurfaceCard style={styles.emptyCard}>
-            <Text style={styles.emptyText}>
-              Chưa có dữ liệu. Bắt đầu ghi lại số liệu hôm nay để theo dõi tiến trình!
-            </Text>
+            <Text style={styles.emptyText} i18nKey="screen.tabs.progress.empty" />
           </SurfaceCard>
         )}
       </ScrollView>

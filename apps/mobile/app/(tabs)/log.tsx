@@ -5,8 +5,7 @@ import {
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
-  Modal,
-  TextInput
+  Modal
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
@@ -21,10 +20,12 @@ import { VisualHeroCard } from '../../components/visual-hero-card';
 import { AnimatedIonicon } from '../../components/animated-icon';
 import { RewardToast, RewardToastData } from '../../components/reward-toast';
 import { useI18n } from '../../components/i18n';
+import type { I18nKey } from '../../components/i18n';
+import { TextInput } from '../../components/i18n-text-input';
 
 const logHeroIllustration = require('../../assets/images/log-hero.jpg') as number;
 
-const MEAL_LABELS: Record<MealType, string> = {
+const MEAL_LABELS: Record<MealType, I18nKey> = {
   breakfast: 'screen.tabs.log.meal.breakfast',
   lunch: 'screen.tabs.log.meal.lunch',
   dinner: 'screen.tabs.log.meal.dinner',
@@ -90,7 +91,7 @@ type ExerciseRoadmapItem = {
 function parseRoadmapNote(notes?: string): { taskId: string; taskTitle: string } | null {
   if (!notes || !notes.startsWith('ROADMAP_TASK:')) return null;
   const payload = notes.replace('ROADMAP_TASK:', '');
-  const [taskId, taskTitle = 'Bai tap lo trinh'] = payload.split('|');
+  const [taskId, taskTitle = 'screen.tabs.log.roadmap.defaultTask'] = payload.split('|');
   if (!taskId) return null;
   return { taskId, taskTitle };
 }
@@ -286,13 +287,13 @@ export default function LogScreen() {
       t('screen.tabs.log.alert.quickLogTitle', { name: meal.name }),
       t('screen.tabs.log.alert.quickLogMealPrompt', { calories: formatSavedMealNumber(totals.calories) }),
       (['breakfast', 'lunch', 'dinner', 'snack'] as MealType[]).map((m) => ({
-        text: tx(MEAL_LABELS[m]),
+        text: t(MEAL_LABELS[m]),
         onPress: async () => {
           try {
             await logSavedMeal(meal.id, m);
             setReward({
               title: 'screen.tabs.log.alert.006',
-              body: t('screen.tabs.log.reward.quickMealBody', { name: meal.name, meal: tx(MEAL_LABELS[m]) }),
+              body: t('screen.tabs.log.reward.quickMealBody', { name: meal.name, meal: t(MEAL_LABELS[m]) }),
               icon: 'checkmark-circle',
             });
           } catch {
@@ -319,7 +320,7 @@ export default function LogScreen() {
     if (!editingSavedMeal) return;
     const name = editSavedMealName.trim();
     if (!name) {
-      Alert.alert('Invalid saved meal', 'Name is required.');
+      Alert.alert('screen.tabs.log.alert.invalidSavedMealTitle', 'screen.tabs.log.alert.nameRequired');
       return;
     }
 
@@ -327,12 +328,12 @@ export default function LogScreen() {
       await updateSavedMeal(editingSavedMeal.id, { name });
       setEditingSavedMeal(null);
       setReward({
-        title: 'Saved meal updated',
+        title: t('screen.tabs.log.reward.savedMealUpdated'),
         body: name,
         icon: 'bookmark',
       });
     } catch {
-      Alert.alert('Could not update saved meal', 'Try again in a moment.');
+      Alert.alert('screen.tabs.log.alert.updateSavedMealFailed', 'common.tryAgain');
     }
   };
 
@@ -372,7 +373,7 @@ export default function LogScreen() {
     const fat = Number(editFat);
 
     if (![grams, calories, protein, carbs, fat].every((value) => Number.isFinite(value) && value >= 0)) {
-      Alert.alert('Invalid log', 'Check portion and macro values.');
+      Alert.alert('screen.tabs.log.alert.invalidLogTitle', 'screen.tabs.log.alert.invalidLogBody');
       return;
     }
 
@@ -390,12 +391,12 @@ export default function LogScreen() {
       });
       setEditingLog(null);
       setReward({
-        title: 'Log updated',
+        title: t('screen.tabs.log.reward.logUpdated'),
         body: `${editName || editingLog.name} · ${formatKcal(calories)}`,
         icon: 'create',
       });
     } catch {
-      Alert.alert('Could not update log', 'Try again in a moment.');
+      Alert.alert('screen.tabs.log.alert.updateLogFailed', 'common.tryAgain');
     }
   };
 
@@ -403,27 +404,27 @@ export default function LogScreen() {
     try {
       const deleted = await removeLog(log.id);
       setReward({
-        title: 'Log deleted',
+        title: t('screen.tabs.log.reward.logDeleted'),
         body: `${log.name_vi ?? log.name} · ${formatKcal(log.calories)}`,
         icon: 'trash',
       });
       if (deleted) {
-        Alert.alert('Log deleted', 'Undo this delete?', [
-          { text: 'Keep deleted', style: 'cancel' },
+        Alert.alert('screen.tabs.log.alert.logDeleted', 'screen.tabs.log.alert.undoDelete', [
+          { text: t('screen.tabs.log.alert.keepDeleted'), style: 'cancel' },
           {
-            text: 'Undo',
+            text: t('screen.tabs.log.alert.undo'),
             onPress: async () => {
               try {
                 await restoreLog(log.id);
               } catch {
-                Alert.alert('Could not undo', 'Try again in a moment.');
+                Alert.alert('screen.tabs.log.alert.undoFailed', 'common.tryAgain');
               }
             },
           },
         ]);
       }
     } catch {
-      Alert.alert('Could not delete log', 'Try again in a moment.');
+      Alert.alert('screen.tabs.log.alert.deleteLogFailed', 'common.tryAgain');
     }
   };
 
@@ -439,7 +440,7 @@ export default function LogScreen() {
       await addActivity({ activity_type: activityType, duration_min: minutes });
       setReward({
         title: 'screen.tabs.log.reward.activityTitle',
-        body: t('screen.tabs.log.reward.activityBody', { activity: ACTIVITY_LABELS[activityType], minutes }),
+        body: t('screen.tabs.log.reward.activityBody', { activity: tx(ACTIVITY_LABELS[activityType]), minutes }),
         icon: 'checkmark-circle',
       });
     } catch {
@@ -455,7 +456,7 @@ export default function LogScreen() {
 
     Alert.alert('screen.tabs.log.alert.020', 'screen.tabs.log.alert.021', [
       ...unfinishedRoadmap.slice(0, 3).map((task) => ({
-        text: `${task.title} (${task.duration_min}p · ${task.estimated_kcal} kcal)`,
+        text: `${tx(task.title)} (${task.duration_min}p · ${task.estimated_kcal} kcal)`,
         onPress: () => void handleToggleRoadmapTask(task),
       })),
       { text: 'screen.tabs.log.alert.022', style: 'cancel' },
@@ -499,8 +500,8 @@ export default function LogScreen() {
       if (existing) {
         await deleteActivity(existing.id);
         setReward({
-          title: 'Đã bỏ hoàn thành',
-          body: `${task.title} · -${task.estimated_kcal} kcal khỏi nhật ký`,
+          title: t('screen.tabs.log.reward.roadmapIncomplete'),
+          body: t('screen.tabs.log.reward.roadmapIncompleteBody', { title: tx(task.title), kcal: task.estimated_kcal }),
           icon: 'remove-circle',
         });
       } else {
@@ -511,8 +512,8 @@ export default function LogScreen() {
           notes: `ROADMAP_TASK:${task.id}|${task.title}`,
         });
         setReward({
-          title: 'Đã cập nhật calo đốt',
-          body: `${task.title} · +${task.estimated_kcal} kcal`,
+          title: t('screen.tabs.log.reward.roadmapUpdated'),
+          body: t('screen.tabs.log.reward.roadmapUpdatedBody', { title: tx(task.title), kcal: task.estimated_kcal }),
           icon: 'flame',
         });
       }
@@ -546,9 +547,7 @@ export default function LogScreen() {
 
             {catalogSelectedType === null ? (
               <ScrollView showsVerticalScrollIndicator={false}>
-                <Text style={styles.catalogHint}>
-                  Chọn loại hoạt động đã hoàn thành. Muốn sửa lộ trình thì vào Profile.
-                </Text>
+                <Text style={styles.catalogHint} i18nKey="screen.tabs.log.catalog.hint" />
                 {catalogTypes.map((type) => {
                   const kcal30 = estimateExerciseCalories(type, 30, userWeight);
                   return (
@@ -558,8 +557,8 @@ export default function LogScreen() {
                       onPress={() => setCatalogSelectedType(type)}
                     >
                       <View style={{ flex: 1 }}>
-                        <Text style={styles.catalogItemName}>{ACTIVITY_LABELS[type]}</Text>
-                        <Text style={styles.catalogItemKcal}>~{kcal30} kcal / 30 phút</Text>
+                        <Text style={styles.catalogItemName}>{tx(ACTIVITY_LABELS[type])}</Text>
+                        <Text style={styles.catalogItemKcal}>{t('screen.tabs.log.catalog.kcalPerMinutes', { kcal: kcal30, minutes: 30 })}</Text>
                       </View>
                       <Ionicons name="chevron-forward" size={16} color={theme.colors.textMuted} />
                     </TouchableOpacity>
@@ -572,7 +571,7 @@ export default function LogScreen() {
                   <Ionicons name="arrow-back" size={16} color={theme.colors.accentMint} />
                   <Text style={styles.catalogBackText} i18nKey="screen.tabs.log.text.002" />
                 </TouchableOpacity>
-                <Text style={styles.catalogSelectedLabel}>{ACTIVITY_LABELS[catalogSelectedType]}</Text>
+                <Text style={styles.catalogSelectedLabel}>{tx(ACTIVITY_LABELS[catalogSelectedType])}</Text>
                 <Text style={styles.catalogHint} i18nKey="screen.tabs.log.text.003" />
                 <View style={styles.durationRow}>
                   {([15, 30, 45, 60] as const).map((d) => {
@@ -583,7 +582,7 @@ export default function LogScreen() {
                         style={[styles.durationBtn, catalogDuration === d && styles.durationBtnActive]}
                         onPress={() => setCatalogDuration(d)}
                       >
-                        <Text style={[styles.durationBtnMin, catalogDuration === d && styles.durationBtnTextActive]}>{d} phút</Text>
+                        <Text style={[styles.durationBtnMin, catalogDuration === d && styles.durationBtnTextActive]}>{t('screen.tabs.log.catalog.duration', { minutes: d })}</Text>
                         <Text style={[styles.durationBtnKcal, catalogDuration === d && styles.durationBtnTextActive]}>~{kcal} kcal</Text>
                       </TouchableOpacity>
                     );
@@ -591,7 +590,11 @@ export default function LogScreen() {
                 </View>
                 <TouchableOpacity style={styles.catalogConfirmBtn} onPress={() => void handleCatalogConfirm()}>
                   <Text style={styles.catalogConfirmText}>
-                    Thêm {ACTIVITY_LABELS[catalogSelectedType]} · {catalogDuration} phút · ~{estimateExerciseCalories(catalogSelectedType, catalogDuration, userWeight)} kcal
+                    {t('screen.tabs.log.catalog.add', {
+                      activity: tx(ACTIVITY_LABELS[catalogSelectedType]),
+                      minutes: catalogDuration,
+                      kcal: estimateExerciseCalories(catalogSelectedType, catalogDuration, userWeight),
+                    })}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -609,7 +612,7 @@ export default function LogScreen() {
         <View style={styles.catalogOverlay}>
           <View style={styles.catalogSheet}>
             <View style={styles.catalogHeader}>
-              <Text style={styles.catalogTitle}>Edit log</Text>
+              <Text style={styles.catalogTitle} i18nKey="screen.tabs.log.edit.title" />
               <TouchableOpacity onPress={() => setEditingLog(null)}>
                 <Ionicons name="close" size={22} color={theme.colors.textMuted} />
               </TouchableOpacity>
@@ -618,7 +621,7 @@ export default function LogScreen() {
             <TextInput
               value={editName}
               onChangeText={setEditName}
-              placeholder="Food name"
+              placeholder="screen.tabs.log.edit.foodName"
               placeholderTextColor={theme.colors.textDisabled}
               style={styles.editInput}
             />
@@ -631,7 +634,7 @@ export default function LogScreen() {
                   onPress={() => setEditMealType(meal)}
                 >
                   <Text style={[styles.editMealBtnText, editMealType === meal && styles.editMealBtnTextActive]}>
-                    {tx(MEAL_LABELS[meal])}
+                    {t(MEAL_LABELS[meal])}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -639,23 +642,23 @@ export default function LogScreen() {
 
             <View style={styles.editGrid}>
               <View style={styles.editField}>
-                <Text style={styles.editLabel}>Grams</Text>
+                <Text style={styles.editLabel} i18nKey="screen.tabs.log.edit.grams" />
                 <TextInput value={editGrams} onChangeText={updateEditGrams} keyboardType="numeric" style={styles.editInput} />
               </View>
               <View style={styles.editField}>
-                <Text style={styles.editLabel}>Kcal</Text>
+                <Text style={styles.editLabel} i18nKey="screen.tabs.log.edit.kcal" />
                 <TextInput value={editCalories} onChangeText={setEditCalories} keyboardType="numeric" style={styles.editInput} />
               </View>
               <View style={styles.editField}>
-                <Text style={styles.editLabel}>Protein</Text>
+                <Text style={styles.editLabel} i18nKey="screen.tabs.log.edit.protein" />
                 <TextInput value={editProtein} onChangeText={setEditProtein} keyboardType="numeric" style={styles.editInput} />
               </View>
               <View style={styles.editField}>
-                <Text style={styles.editLabel}>Carbs</Text>
+                <Text style={styles.editLabel} i18nKey="screen.tabs.log.edit.carbs" />
                 <TextInput value={editCarbs} onChangeText={setEditCarbs} keyboardType="numeric" style={styles.editInput} />
               </View>
               <View style={styles.editField}>
-                <Text style={styles.editLabel}>Fat</Text>
+                <Text style={styles.editLabel} i18nKey="screen.tabs.log.edit.fat" />
                 <TextInput value={editFat} onChangeText={setEditFat} keyboardType="numeric" style={styles.editInput} />
               </View>
             </View>
@@ -663,14 +666,14 @@ export default function LogScreen() {
             <TextInput
               value={editNotes}
               onChangeText={setEditNotes}
-              placeholder="Notes"
+              placeholder="screen.tabs.log.edit.notes"
               placeholderTextColor={theme.colors.textDisabled}
               style={[styles.editInput, styles.editNotes]}
               multiline
             />
 
             <TouchableOpacity style={styles.catalogConfirmBtn} onPress={() => void handleSaveEditedLog()}>
-              <Text style={styles.catalogConfirmText}>Save changes</Text>
+              <Text style={styles.catalogConfirmText} i18nKey="screen.tabs.log.edit.save" />
             </TouchableOpacity>
           </View>
         </View>
@@ -685,7 +688,7 @@ export default function LogScreen() {
         <View style={styles.catalogOverlay}>
           <View style={styles.catalogSheet}>
             <View style={styles.catalogHeader}>
-              <Text style={styles.catalogTitle}>Edit saved meal</Text>
+              <Text style={styles.catalogTitle} i18nKey="screen.tabs.log.edit.savedMealTitle" />
               <TouchableOpacity onPress={() => setEditingSavedMeal(null)}>
                 <Ionicons name="close" size={22} color={theme.colors.textMuted} />
               </TouchableOpacity>
@@ -693,12 +696,12 @@ export default function LogScreen() {
             <TextInput
               value={editSavedMealName}
               onChangeText={setEditSavedMealName}
-              placeholder="Saved meal name"
+              placeholder="screen.tabs.log.edit.savedMealName"
               placeholderTextColor={theme.colors.textDisabled}
               style={[styles.editInput, { marginBottom: 14 }]}
             />
             <TouchableOpacity style={styles.catalogConfirmBtn} onPress={() => void handleSaveSavedMeal()}>
-              <Text style={styles.catalogConfirmText}>Save saved meal</Text>
+              <Text style={styles.catalogConfirmText} i18nKey="screen.tabs.log.edit.saveSavedMeal" />
             </TouchableOpacity>
           </View>
         </View>
@@ -768,7 +771,7 @@ export default function LogScreen() {
           return (
             <SurfaceCard key={meal} style={styles.mealSection}>
               <View style={styles.mealHeader}>
-                <Text style={styles.mealLabel}>{MEAL_LABELS[meal]}</Text>
+                <Text style={styles.mealLabel}>{t(MEAL_LABELS[meal])}</Text>
                 <View style={styles.mealHeaderRight}>
                   {total > 0 && <Text style={styles.mealTotal}>{formatKcal(total)}</Text>}
                   <Text style={styles.mealTarget}>/{formatKcal(mealTarget).replace(' kcal', '')}</Text>
@@ -837,8 +840,8 @@ export default function LogScreen() {
             activityLogs.map((act) => (
               <View key={act.id} style={styles.activityRow}>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.activityName}>{ACTIVITY_LABELS[act.activity_type] ?? act.activity_type}</Text>
-                  <Text style={styles.activityDetail}>{act.duration_min} phút · -{act.calories_burned} kcal</Text>
+                  <Text style={styles.activityName}>{tx(ACTIVITY_LABELS[act.activity_type] ?? act.activity_type)}</Text>
+                  <Text style={styles.activityDetail}>{t('screen.tabs.log.activity.duration', { minutes: act.duration_min, kcal: safeRound(act.calories_burned) })}</Text>
                   {parseRoadmapNote(act.notes) ? (
                     <Text style={styles.activityRoadmapBadge} i18nKey="screen.tabs.log.text.010" />
                   ) : null}
@@ -851,7 +854,7 @@ export default function LogScreen() {
           )}
           {activityLogs.length > 0 && (
             <Text style={styles.activityBurned}>
-              Đã đốt: {formatKcal(activityLogs.reduce((s, a) => s + safeNumber(a.calories_burned), 0))}
+              {t('screen.tabs.log.activity.burned', { kcal: formatKcal(activityLogs.reduce((s, a) => s + safeNumber(a.calories_burned), 0)) })}
             </Text>
           )}
         </SurfaceCard>

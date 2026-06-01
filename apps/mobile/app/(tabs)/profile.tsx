@@ -589,7 +589,7 @@ export default function ProfileScreen() {
   const { requestedMode } = useAppTheme();
   const { setThemeMode } = useThemeStore();
   const { logout } = useAuthStore();
-  const { locale, setLocale, t } = useI18n();
+  const { locale, setLocale, t, tx } = useI18n();
   const {
     preferences: reminderPrefs,
     previewNudge,
@@ -692,42 +692,47 @@ export default function ProfileScreen() {
   const setupSteps = useMemo(() => [
     {
       key: 'basic',
-      label: 'Thể trạng',
+      label: t('profile.setup.basic'),
       detail: profile.weight_kg && profile.height_cm && profile.age && profile.gender
-        ? `${profile.weight_kg} kg · ${profile.height_cm} cm · ${profile.age} tuổi · ${profile.gender === 'male' ? 'Nam' : 'Nữ'}`
-        : 'Thiếu số đo hoặc giới tính',
+        ? t('profile.setup.basicDetail', {
+            weight: profile.weight_kg,
+            height: profile.height_cm,
+            age: profile.age,
+            gender: profile.gender === 'male' ? t('profile.gender.male').replace('👨 ', '') : t('profile.gender.female').replace('👩 ', ''),
+          })
+        : t('profile.setup.basicMissing'),
       done: Boolean(profile.weight_kg && profile.height_cm && profile.age && profile.gender),
       icon: 'monitor-weight',
     },
     {
       key: 'safety',
-      label: 'An toàn',
+      label: t('profile.setup.safety'),
       detail: Array.isArray(profile.health_flags)
-        ? (selectedHealthFlags.length > 0 ? `${selectedHealthFlags.length} yếu tố cần lưu ý` : 'Đã xác nhận không có yếu tố rủi ro')
-        : 'Chưa xác nhận yếu tố sức khỏe',
+        ? (selectedHealthFlags.length > 0 ? t('profile.setup.safetyFlags', { count: selectedHealthFlags.length }) : t('profile.setup.safetyClear'))
+        : t('profile.setup.safetyMissing'),
       done: Array.isArray(profile.health_flags),
       icon: 'health-and-safety',
     },
     {
       key: 'goal',
-      label: 'Mục tiêu',
+      label: t('profile.setup.goal'),
       detail: activeGoalPlan?.computed_daily_calorie_target
-        ? `${activeGoalPlan.computed_daily_calorie_target} kcal/ngày`
-        : profile.goal ? GOAL_LABELS[profile.goal] : 'Chưa chọn mục tiêu',
+        ? t('profile.goalPlan.statusTitle', { target: activeGoalPlan.computed_daily_calorie_target })
+        : profile.goal ? tx(GOAL_LABELS[profile.goal]) : t('profile.setup.goalMissing'),
       done: Boolean(profile.goal && profile.daily_calorie_target),
       icon: 'track-changes',
     },
     {
       key: 'roadmap',
-      label: 'Vận động',
-      detail: roadmap.length > 0 ? `${roadmap.length} bài ưu tiên` : 'Chưa có lộ trình',
+      label: t('profile.setup.movement'),
+      detail: roadmap.length > 0 ? t('profile.setup.movementDetail', { count: roadmap.length }) : t('profile.setup.movementMissing'),
       done: roadmap.length > 0,
       icon: 'directions-run',
     },
     {
       key: 'notifications',
-      label: 'Nhắc nhở',
-      detail: (reminders.allow_push_notifications ?? true) ? 'Đang bật' : 'Đang tắt',
+      label: t('profile.setup.reminders'),
+      detail: (reminders.allow_push_notifications ?? true) ? t('profile.setup.on') : t('profile.setup.off'),
       done: reminders.allow_push_notifications ?? true,
       icon: 'notifications-active',
     },
@@ -743,6 +748,8 @@ export default function ProfileScreen() {
     reminders.allow_push_notifications,
     roadmap.length,
     selectedHealthFlags.length,
+    t,
+    tx,
   ]);
   const completedSetupCount = setupSteps.filter((step) => step.done).length;
   const setupProgressPct = Math.round((completedSetupCount / setupSteps.length) * 100);
@@ -1011,7 +1018,7 @@ export default function ProfileScreen() {
   const handleRoadmapCatalogConfirm = async () => {
     if (!roadmapCatalogType) return;
 
-    const activityLabel = EXERCISE_ACTIVITY_LABELS[roadmapCatalogType] ?? roadmapCatalogType;
+    const activityLabel = tx(EXERCISE_ACTIVITY_LABELS[roadmapCatalogType] ?? roadmapCatalogType);
     const durationMin = roadmapCatalogDuration;
     const duplicate = roadmap.find((item) => (
       item.activity_type === roadmapCatalogType
@@ -1033,13 +1040,13 @@ export default function ProfileScreen() {
 
       if (editingRoadmapTask?.persisted_item_id) {
         await updateActivityPreference(editingRoadmapTask.persisted_item_id, {
-          title: `${activityLabel} tự chọn`,
+          title: t('profile.roadmap.customTitle', { activity: activityLabel }),
           activity_type: roadmapCatalogType,
           duration_min: durationMin,
         });
       } else {
         await addActivityPreference({
-          title: `${activityLabel} tự chọn`,
+          title: t('profile.roadmap.customTitle', { activity: activityLabel }),
           activity_type: roadmapCatalogType,
           duration_min: durationMin,
           sort_order: activityPreferences.length,
@@ -1055,7 +1062,7 @@ export default function ProfileScreen() {
       setRoadmapCatalogDuration(30);
       setReward({
         title: editingRoadmapTask ? 'profile.roadmap.editSaved' : 'profile.roadmap.exerciseAdded',
-        body: `${activityLabel} · ${durationMin} phút`,
+        body: t('profile.roadmap.rewardBody', { activity: activityLabel, minutes: durationMin }),
         icon: 'walk',
       });
     } catch (error: any) {
@@ -1155,7 +1162,7 @@ export default function ProfileScreen() {
         <View style={styles.catalogOverlay}>
           <View style={styles.catalogSheet}>
             <View style={styles.catalogHeader}>
-              <Text style={styles.catalogTitle}>{editingRoadmapTask ? 'Sửa bài trong lộ trình' : 'Thêm bài vào lộ trình'}</Text>
+              <Text style={styles.catalogTitle}>{editingRoadmapTask ? t('profile.roadmap.catalogTitleEdit') : t('profile.roadmap.catalogTitleAdd')}</Text>
               <TouchableOpacity onPress={() => setRoadmapCatalogVisible(false)}>
                 <MaterialIcons name="close" size={22} color={theme.colors.textMuted} />
               </TouchableOpacity>
@@ -1163,7 +1170,7 @@ export default function ProfileScreen() {
 
             {roadmapCatalogType === null ? (
               <ScrollView showsVerticalScrollIndicator={false}>
-                <Text style={styles.catalogHint}>Chọn môn/bài người dùng muốn tập hoặc có thể chơi hôm nay ({userWeight} kg).</Text>
+                <Text style={styles.catalogHint}>{t('profile.roadmap.catalogHint', { weight: userWeight })}</Text>
                 {catalogTypes.map((type) => {
                   const kcal30 = estimateExerciseCalories(type, 30, userWeight);
                   const alreadyAdded = existingRoadmapActivityTypes.has(type) && type !== editingRoadmapTask?.activity_type;
@@ -1176,10 +1183,10 @@ export default function ProfileScreen() {
                     >
                       <View style={{ flex: 1 }}>
                         <Text style={[styles.catalogItemName, alreadyAdded && styles.catalogItemNameDisabled]}>
-                          {EXERCISE_ACTIVITY_LABELS[type]}
+                          {tx(EXERCISE_ACTIVITY_LABELS[type])}
                         </Text>
                         <Text style={[styles.catalogItemKcal, alreadyAdded && styles.catalogItemKcalDisabled]}>
-                          {alreadyAdded ? 'Đã có, dùng Sửa để đổi thời gian' : `~${kcal30} kcal / 30 phút`}
+                          {alreadyAdded ? t('profile.roadmap.catalogAlreadyAdded') : t('profile.roadmap.catalogKcal', { kcal: kcal30, minutes: 30 })}
                         </Text>
                       </View>
                       <MaterialIcons name={alreadyAdded ? 'check-circle' : 'chevron-right'} size={18} color={alreadyAdded ? theme.colors.accentMint : theme.colors.textMuted} />
@@ -1193,7 +1200,7 @@ export default function ProfileScreen() {
                   <MaterialIcons name="arrow-back" size={16} color={theme.colors.accentMint} />
                   <Text style={styles.catalogBackText} i18nKey="screen.tabs.profile.text.001" />
                 </TouchableOpacity>
-                <Text style={styles.catalogSelectedLabel}>{EXERCISE_ACTIVITY_LABELS[roadmapCatalogType]}</Text>
+                <Text style={styles.catalogSelectedLabel}>{tx(EXERCISE_ACTIVITY_LABELS[roadmapCatalogType])}</Text>
                 <Text style={styles.catalogHint} i18nKey="screen.tabs.profile.text.002" />
                 <View style={styles.durationRow}>
                   {([15, 30, 45, 60] as const).map((duration) => {
@@ -1204,7 +1211,7 @@ export default function ProfileScreen() {
                         style={[styles.durationBtn, roadmapCatalogDuration === duration && styles.durationBtnActive]}
                         onPress={() => setRoadmapCatalogDuration(duration)}
                       >
-                        <Text style={[styles.durationBtnMin, roadmapCatalogDuration === duration && styles.durationBtnTextActive]}>{duration} phút</Text>
+                        <Text style={[styles.durationBtnMin, roadmapCatalogDuration === duration && styles.durationBtnTextActive]}>{t('profile.roadmap.catalogDuration', { minutes: duration })}</Text>
                         <Text style={[styles.durationBtnKcal, roadmapCatalogDuration === duration && styles.durationBtnTextActive]}>~{kcal} kcal</Text>
                       </TouchableOpacity>
                     );
@@ -1212,7 +1219,11 @@ export default function ProfileScreen() {
                 </View>
                 <TouchableOpacity style={styles.catalogConfirmBtn} onPress={() => void handleRoadmapCatalogConfirm()}>
                   <Text style={styles.catalogConfirmText}>
-                    {editingRoadmapTask ? 'Lưu thay đổi' : 'Thêm vào lộ trình'} · {roadmapCatalogDuration} phút · ~{estimateExerciseCalories(roadmapCatalogType, roadmapCatalogDuration, userWeight)} kcal
+                    {t('profile.roadmap.catalogConfirm', {
+                      action: editingRoadmapTask ? t('profile.roadmap.catalogConfirmSave') : t('profile.roadmap.catalogConfirmAdd'),
+                      minutes: roadmapCatalogDuration,
+                      kcal: estimateExerciseCalories(roadmapCatalogType, roadmapCatalogDuration, userWeight),
+                    })}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -1307,7 +1318,9 @@ export default function ProfileScreen() {
               <Text style={styles.sectionTitle} i18nKey="screen.tabs.profile.text.003" />
               {basicCollapsed && (
                 <Text style={styles.sectionSubtitle}>
-                  {profile.weight_kg ? `${profile.weight_kg} kg · ${profile.height_cm ?? '--'} cm · ${profile.age ?? '--'} tuổi` : 'Chưa thiết lập'}
+                  {profile.weight_kg
+                    ? t('profile.basic.collapsed', { weight: profile.weight_kg, height: profile.height_cm ?? '--', age: profile.age ?? '--' })
+                    : t('profile.basic.unset')}
                 </Text>
               )}
             </View>
@@ -1326,19 +1339,17 @@ export default function ProfileScreen() {
               <Text style={styles.label} i18nKey="screen.tabs.profile.text.004" />
               <View style={styles.chipRow}>
                 {(['male', 'female'] as const).map((g) => (
-                  <UiChip key={g} label={g === 'male' ? '👨 Nam' : '👩 Nữ'} selected={profile.gender === g} onPress={() => setProfile((p) => ({ ...p, gender: g }))} />
+                  <UiChip key={g} label={g === 'male' ? t('profile.gender.male') : t('profile.gender.female')} selected={profile.gender === g} onPress={() => setProfile((p) => ({ ...p, gender: g }))} />
                 ))}
               </View>
 
               <Text style={styles.label} i18nKey="screen.tabs.profile.text.005" />
-              <Text style={styles.helperText}>
-                Chọn nếu có. App sẽ hạ rủi ro bằng cảnh báo và không tự đưa mục tiêu weight-loss/gain cho các trường hợp nhạy cảm.
-              </Text>
+              <Text style={styles.helperText} i18nKey="profile.health.helper" />
               <View style={styles.chipRow}>
                 {HEALTH_FLAGS.map((flag) => (
                   <UiChip
                     key={flag}
-                    label={HEALTH_FLAG_LABELS[flag]}
+                    label={tx(HEALTH_FLAG_LABELS[flag])}
                     selected={selectedHealthFlags.includes(flag)}
                     onPress={() => toggleHealthFlag(flag)}
                     style={styles.healthChip}
@@ -1358,8 +1369,8 @@ export default function ProfileScreen() {
               {assessmentCollapsed && (
                 <Text style={styles.sectionSubtitle}>
                   {instantAssessment.assessment
-                    ? `BMI ${instantAssessment.assessment.bmi} · ${BODY_STATUS_LABELS[instantAssessment.assessment.body_status]}`
-                    : 'Nhập chiều cao và cân nặng để xem đánh giá'}
+                    ? `BMI ${instantAssessment.assessment.bmi} · ${tx(BODY_STATUS_LABELS[instantAssessment.assessment.body_status])}`
+                    : t('profile.assessment.collapsedMissing')}
                 </Text>
               )}
             </View>
@@ -1368,9 +1379,7 @@ export default function ProfileScreen() {
 
           {!assessmentCollapsed && (
             <>
-              <Text style={styles.helperText}>
-                Tính tức thì theo số bạn vừa nhập, không cần bấm lưu database.
-              </Text>
+              <Text style={styles.helperText} i18nKey="profile.assessment.helper" />
 
               {!!instantAssessment.assessment && (
                 <View
@@ -1387,7 +1396,7 @@ export default function ProfileScreen() {
                     <View style={styles.assessmentMeta}>
                       <Text style={styles.assessmentMetaLabel} i18nKey="screen.tabs.profile.text.008" />
                       <Text style={[styles.assessmentMetaValue, { color: assessmentTone?.accent }]}> 
-                        {BODY_STATUS_LABELS[instantAssessment.assessment.body_status]}
+                        {tx(BODY_STATUS_LABELS[instantAssessment.assessment.body_status])}
                       </Text>
                     </View>
                   </View>
@@ -1395,17 +1404,17 @@ export default function ProfileScreen() {
                   <View style={styles.assessmentGuidesRow}>
                     <View style={[styles.assessmentBadge, { backgroundColor: assessmentTone?.badgeBg, borderColor: assessmentTone?.border }]}>
                       <Text style={[styles.assessmentBadgeText, { color: assessmentTone?.text }]}> 
-                        {WEIGHT_RECOMMENDATION_LABELS[instantAssessment.assessment.weight_recommendation]}
+                        {tx(WEIGHT_RECOMMENDATION_LABELS[instantAssessment.assessment.weight_recommendation])}
                       </Text>
                     </View>
                     <View style={[styles.assessmentBadge, { backgroundColor: assessmentTone?.badgeBg, borderColor: assessmentTone?.border }]}>
                       <Text style={[styles.assessmentBadgeText, { color: assessmentTone?.text }]}> 
-                        Mục tiêu phù hợp: {GOAL_LABELS[instantAssessment.assessment.recommended_goal]}
+                        {t('profile.assessment.recommendedGoal', { goal: tx(GOAL_LABELS[instantAssessment.assessment.recommended_goal]) })}
                       </Text>
                     </View>
                     <View style={[styles.assessmentBadge, { backgroundColor: assessmentTone?.badgeBg, borderColor: assessmentTone?.border }]}>
                       <Text style={[styles.assessmentBadgeText, { color: assessmentTone?.text }]}> 
-                        Vận động gợi ý: {ACTIVITY_RECOMMENDATION_LABELS[instantAssessment.assessment.recommended_activity_level]}
+                        {t('profile.assessment.recommendedActivity', { activity: tx(ACTIVITY_RECOMMENDATION_LABELS[instantAssessment.assessment.recommended_activity_level]) })}
                       </Text>
                     </View>
                   </View>
@@ -1417,7 +1426,7 @@ export default function ProfileScreen() {
                   <View style={styles.safetyNotice}>
                     {instantAssessment.assessment.medical_review_recommended && (
                       <Text style={styles.safetyNoticeText}>
-                        Nên có chuyên gia y tế/dinh dưỡng xem lại mục tiêu trước khi dùng lâu dài.
+                        {t('profile.assessment.medicalReview')}
                       </Text>
                     )}
                     {instantAssessment.assessment.safety_warnings.map((warning, index) => (
@@ -1429,8 +1438,14 @@ export default function ProfileScreen() {
 
                   <Text style={[styles.assessmentWeightPlan, { color: assessmentTone?.text }]}> 
                     {instantAssessment.assessment.weight_recommendation === 'maintain'
-                      ? `Bạn đang gần mức cân nặng mục tiêu khỏe mạnh (${instantAssessment.assessment.target_weight_kg} kg).`
-                      : `Ước tính cần ${instantAssessment.assessment.weight_recommendation === 'increase' ? 'tăng' : 'giảm'} khoảng ${instantAssessment.assessment.weight_delta_kg} kg để về vùng khỏe mạnh (mục tiêu ~${instantAssessment.assessment.target_weight_kg} kg).`}
+                      ? t('profile.assessment.weightPlanMaintain', { target: instantAssessment.assessment.target_weight_kg })
+                      : t('profile.assessment.weightPlanChange', {
+                          direction: instantAssessment.assessment.weight_recommendation === 'increase'
+                            ? t('profile.assessment.direction.increase')
+                            : t('profile.assessment.direction.decrease'),
+                          delta: instantAssessment.assessment.weight_delta_kg,
+                          target: instantAssessment.assessment.target_weight_kg,
+                        })}
                   </Text>
 
                   <Text style={[styles.assessmentActivityNote, { color: assessmentTone?.text }]}> 
@@ -1464,11 +1479,11 @@ export default function ProfileScreen() {
             <Text style={styles.summaryLabel} i18nKey="screen.tabs.profile.text.010" />
           </SurfaceCard>
           <SurfaceCard style={styles.summaryCard}>
-            <Text style={styles.summaryValue}>{profile.goal ? GOAL_LABELS[profile.goal] : '--'}</Text>
+            <Text style={styles.summaryValue}>{profile.goal ? tx(GOAL_LABELS[profile.goal]) : '--'}</Text>
             <Text style={styles.summaryLabel} i18nKey="screen.tabs.profile.text.011" />
           </SurfaceCard>
           <SurfaceCard style={styles.summaryCard}>
-            <Text style={styles.summaryValue}>{profile.activity_level ? ACTIVITY_LABELS[profile.activity_level] : '--'}</Text>
+            <Text style={styles.summaryValue}>{profile.activity_level ? tx(ACTIVITY_LABELS[profile.activity_level]) : '--'}</Text>
             <Text style={styles.summaryLabel} i18nKey="screen.tabs.profile.text.012" />
           </SurfaceCard>
         </View>
@@ -1479,7 +1494,7 @@ export default function ProfileScreen() {
           <View>
             <Text style={styles.sectionTitle} i18nKey="screen.tabs.profile.text.013" />
             {goalCollapsed && (
-              <Text style={styles.sectionSubtitle}>{profile.goal ? GOAL_LABELS[profile.goal] : 'Chưa chọn'} · {profile.activity_level ? ACTIVITY_LABELS[profile.activity_level] : '...'}</Text>
+              <Text style={styles.sectionSubtitle}>{profile.goal ? tx(GOAL_LABELS[profile.goal]) : t('profile.setup.goalMissing')} · {profile.activity_level ? tx(ACTIVITY_LABELS[profile.activity_level]) : '...'}</Text>
             )}
           </View>
           <MaterialIcons name={goalCollapsed ? 'expand-more' : 'expand-less'} size={26} color={theme.colors.textMuted} />
@@ -1492,14 +1507,14 @@ export default function ProfileScreen() {
             <Text style={styles.label} i18nKey="screen.tabs.profile.text.015" />
             <View style={styles.chipRow}>
               {(Object.keys(GOAL_LABELS) as UserGoal[]).map((g) => (
-                <UiChip key={g} label={GOAL_LABELS[g]} selected={profile.goal === g} onPress={() => setProfile((p) => ({ ...p, goal: g }))} />
+                <UiChip key={g} label={tx(GOAL_LABELS[g])} selected={profile.goal === g} onPress={() => setProfile((p) => ({ ...p, goal: g }))} />
               ))}
             </View>
 
             <Text style={styles.label} i18nKey="screen.tabs.profile.text.016" />
             <View style={styles.chipRow}>
               {(Object.keys(ACTIVITY_LABELS) as ActivityLevel[]).map((a) => (
-                <UiChip key={a} label={ACTIVITY_LABELS[a]} selected={profile.activity_level === a} onPress={() => setProfile((p) => ({ ...p, activity_level: a }))} style={styles.activityChip} />
+                <UiChip key={a} label={tx(ACTIVITY_LABELS[a])} selected={profile.activity_level === a} onPress={() => setProfile((p) => ({ ...p, activity_level: a }))} style={styles.activityChip} />
               ))}
             </View>
 
@@ -1519,10 +1534,10 @@ export default function ProfileScreen() {
                 {activeGoalPlan?.computed_daily_calorie_target && (
                   <View style={styles.goalPlanStatusBox}>
                     <Text style={styles.goalPlanStatusTitle}>
-                      Mục tiêu từ kế hoạch: {activeGoalPlan.computed_daily_calorie_target} kcal/ngày
+                      {t('profile.goalPlan.statusTitle', { target: activeGoalPlan.computed_daily_calorie_target })}
                     </Text>
                     <Text style={styles.goalPlanStatusText}>
-                      Tốc độ: {activeGoalPlan.weekly_rate_kg ?? 0} kg/tuần · Trạng thái: {activeGoalPlan.safety_status ?? 'ok'}
+                      {t('profile.goalPlan.statusText', { rate: activeGoalPlan.weekly_rate_kg ?? 0, status: activeGoalPlan.safety_status ?? 'ok' })}
                     </Text>
                     {activeGoalPlan.warnings?.map((warning, index) => (
                       <Text key={`goal-plan-warning-${index}`} style={styles.goalPlanWarningText}>{warning}</Text>
@@ -1545,8 +1560,8 @@ export default function ProfileScreen() {
                   </View>
                   <Text style={styles.roadmapSummary}>
                     {roadmap.length > 0
-                      ? `${completedRoadmapCount}/${roadmap.length} bài · ${completedRoadmapKcal} kcal đã log`
-                      : 'Chưa có bài tập ưu tiên.'}
+                      ? t('profile.roadmap.summary', { done: completedRoadmapCount, total: roadmap.length, kcal: completedRoadmapKcal })
+                      : t('profile.roadmap.emptySummary')}
                   </Text>
                 </View>
                 <Text style={styles.helperText} i18nKey="screen.tabs.profile.text.021" />
@@ -1569,12 +1584,16 @@ export default function ProfileScreen() {
                               {completed && <Text style={styles.checkboxTick}>✓</Text>}
                             </View>
                             <View style={styles.roadmapItemBody}>
-                              <Text style={styles.roadmapItemTitle}>{item.title}</Text>
-                              <Text style={styles.roadmapItemDetail}>{item.detail}</Text>
+                              <Text style={styles.roadmapItemTitle}>{tx(item.title)}</Text>
+                              <Text style={styles.roadmapItemDetail}>{tx(item.detail)}</Text>
                               <Text style={styles.roadmapItemMeta}>
-                                {item.duration_min} phút · ~{item.estimated_kcal} kcal · {EXERCISE_ACTIVITY_LABELS[item.activity_type] ?? item.activity_type}
+                                {t('profile.roadmap.meta', {
+                                  minutes: item.duration_min,
+                                  kcal: item.estimated_kcal,
+                                  activity: tx(EXERCISE_ACTIVITY_LABELS[item.activity_type] ?? item.activity_type),
+                                })}
                               </Text>
-                              <Text style={styles.roadmapCta}>{completed ? 'Đã log hôm nay' : 'Today và Log sẽ dùng bài này để gợi ý/log nhanh'}</Text>
+                              <Text style={styles.roadmapCta}>{completed ? t('profile.roadmap.loggedToday') : t('profile.roadmap.cta')}</Text>
                               <View style={styles.roadmapActionsRow}>
                                 <TouchableOpacity
                                   style={styles.roadmapActionBtn}
@@ -1610,7 +1629,7 @@ export default function ProfileScreen() {
           <View>
             <Text style={styles.sectionTitle} i18nKey="screen.tabs.profile.text.025" />
             {calorieCollapsed && (
-              <Text style={styles.sectionSubtitle}>{profile.daily_calorie_target ? `${profile.daily_calorie_target} kcal/ngày` : 'Chưa đặt'}</Text>
+              <Text style={styles.sectionSubtitle}>{profile.daily_calorie_target ? t('profile.calorie.collapsed', { target: profile.daily_calorie_target }) : t('profile.basic.unset')}</Text>
             )}
           </View>
           <MaterialIcons name={calorieCollapsed ? 'expand-more' : 'expand-less'} size={26} color={theme.colors.textMuted} />
@@ -1638,7 +1657,7 @@ export default function ProfileScreen() {
             <View>
               <Text style={styles.sectionTitle} i18nKey="screen.tabs.profile.text.027" />
               {notificationsCollapsed && (
-                <Text style={styles.sectionSubtitle}>{(reminders.allow_push_notifications ?? true) ? 'Bật' : 'Tắt'}</Text>
+              <Text style={styles.sectionSubtitle}>{(reminders.allow_push_notifications ?? true) ? t('profile.notification.on') : t('profile.notification.off')}</Text>
               )}
             </View>
           </TouchableOpacity>
@@ -1674,7 +1693,11 @@ export default function ProfileScreen() {
               {(['encouraging', 'neutral', 'warning'] as const).map((style) => (
                 <UiChip
                   key={style}
-                  label={style === 'encouraging' ? '💪 Khuyến khích' : style === 'neutral' ? '📝 Trung lập' : '⚠️ Cảnh báo'}
+                  label={style === 'encouraging'
+                    ? t('profile.reminderStyle.encouraging')
+                    : style === 'neutral'
+                      ? t('profile.reminderStyle.neutral')
+                      : t('profile.reminderStyle.warning')}
                   selected={reminders.nudge_motivation_style === style}
                   onPress={() => setReminders((r) => ({ ...r, nudge_motivation_style: style }))}
                 />
@@ -1683,7 +1706,7 @@ export default function ProfileScreen() {
 
             <ReminderTimePickerRow
               meal="breakfast"
-              mealLabel="🌅 Sáng"
+              mealLabel={t('screen.tabs.profile.label.012')}
               enabled={reminders.breakfast_reminder_enabled ?? true}
               time={reminders.breakfast_reminder_time ?? '07:00'}
               onEnabledChange={(v) => setReminders((r) => ({ ...r, breakfast_reminder_enabled: v }))}
@@ -1692,7 +1715,7 @@ export default function ProfileScreen() {
 
             <ReminderTimePickerRow
               meal="lunch"
-              mealLabel="🌤️ Trưa"
+              mealLabel={t('screen.tabs.profile.label.013')}
               enabled={reminders.lunch_reminder_enabled ?? true}
               time={reminders.lunch_reminder_time ?? '12:00'}
               onEnabledChange={(v) => setReminders((r) => ({ ...r, lunch_reminder_enabled: v }))}
@@ -1701,7 +1724,7 @@ export default function ProfileScreen() {
 
             <ReminderTimePickerRow
               meal="dinner"
-              mealLabel="🌙 Tối"
+              mealLabel={t('screen.tabs.profile.label.014')}
               enabled={reminders.dinner_reminder_enabled ?? true}
               time={reminders.dinner_reminder_time ?? '19:00'}
               onEnabledChange={(v) => setReminders((r) => ({ ...r, dinner_reminder_enabled: v }))}
@@ -1710,7 +1733,7 @@ export default function ProfileScreen() {
 
             <ReminderTimePickerRow
               meal="snack"
-              mealLabel="🍿 Vặt"
+              mealLabel={t('screen.tabs.profile.label.015')}
               enabled={reminders.snack_reminder_enabled ?? false}
               time={reminders.snack_reminder_time ?? '15:00'}
               onEnabledChange={(v) => setReminders((r) => ({ ...r, snack_reminder_enabled: v }))}
@@ -1721,10 +1744,10 @@ export default function ProfileScreen() {
               <Text style={styles.label} i18nKey="screen.tabs.profile.text.031" />
               <View style={styles.chipRow}>
                 {([
-                  ['breakfast', '🌅 Sáng'],
-                  ['lunch', '🌤️ Trưa'],
-                  ['dinner', '🌙 Tối'],
-                  ['snack', '🍿 Vặt'],
+                  ['breakfast', t('screen.tabs.profile.label.012')],
+                  ['lunch', t('screen.tabs.profile.label.013')],
+                  ['dinner', t('screen.tabs.profile.label.014')],
+                  ['snack', t('screen.tabs.profile.label.015')],
                 ] as const).map(([mealType, label]) => (
                   <UiChip
                     key={mealType}
@@ -1746,7 +1769,10 @@ export default function ProfileScreen() {
                     <Text style={styles.previewBody}>{previewNudge.body}</Text>
                     {!!previewNudge.streakContext && (
                       <Text style={styles.previewMeta}>
-                        Streak hiện tại {previewNudge.streakContext.currentStreak} ngày · Best {previewNudge.streakContext.longestStreak} ngày
+                        {t('profile.preview.streakMeta', {
+                          current: previewNudge.streakContext.currentStreak,
+                          best: previewNudge.streakContext.longestStreak,
+                        })}
                       </Text>
                     )}
                   </>
@@ -1763,9 +1789,9 @@ export default function ProfileScreen() {
         <View style={styles.subscriptionCard}>
           <View style={styles.subscriptionHeader}>
             <View>
-              <Text style={styles.subscriptionTier}>{subscription?.tier === 'premium' ? 'Premium' : subscription?.tier === 'pro' ? 'Pro' : 'Miễn phí'}</Text>
+              <Text style={styles.subscriptionTier}>{subscription?.tier === 'premium' ? 'Premium' : subscription?.tier === 'pro' ? 'Pro' : t('profile.subscription.free')}</Text>
               <Text style={styles.subscriptionStatus}>
-                {subscription?.is_active ? 'Đang hoạt động' : 'Hết hạn'}
+                {subscription?.is_active ? t('profile.subscription.active') : t('profile.subscription.expired')}
               </Text>
             </View>
             <MaterialIcons
@@ -1775,9 +1801,7 @@ export default function ProfileScreen() {
             />
           </View>
 
-          <Text style={styles.subscriptionHelper}>
-            Chọn gói để áp quyền tính năng tương ứng cho user hiện tại.
-          </Text>
+          <Text style={styles.subscriptionHelper} i18nKey="profile.subscription.helper" />
 
           <View style={[styles.planSelectorRow, isDesktop && styles.planSelectorRowDesktop]}>
             {(Object.keys(SUBSCRIPTION_TIERS) as SubscriptionTier[]).map((tier) => {
@@ -1802,10 +1826,10 @@ export default function ProfileScreen() {
                   </View>
                   <Text style={styles.planOptionDescription}>{tierInfo.description}</Text>
                   <Text style={styles.planOptionPrice}>
-                    {tier === 'free' ? 'Miễn phí' : `$${tierInfo.price_usd_monthly}/tháng`}
+                    {tier === 'free' ? t('profile.subscription.free') : t('profile.subscription.priceMonthly', { price: tierInfo.price_usd_monthly })}
                   </Text>
                   <Text style={[styles.planOptionAction, isCurrentTier && { color: accent }]}>
-                    {isCurrentTier ? 'Đang áp dụng' : 'Chuyển sang gói này'}
+                    {isCurrentTier ? t('profile.subscription.current') : t('profile.subscription.switch')}
                   </Text>
                 </TouchableOpacity>
               );
@@ -1818,8 +1842,8 @@ export default function ProfileScreen() {
               <View style={styles.featureGrid}>
                 {[
                   { name: 'ai_coach', label: 'AI Coach' },
-                  { name: 'meal_reminders', label: 'Nhắc nhở' },
-                  { name: 'weekly_reports', label: 'Báo cáo' },
+                  { name: 'meal_reminders', label: t('profile.feature.reminders') },
+                  { name: 'weekly_reports', label: t('profile.feature.reports') },
                   { name: 'healthkit_sync', label: 'HealthKit' },
                 ].map(({ name, label }) => (
                   <View key={name} style={styles.featureCheckItem}>

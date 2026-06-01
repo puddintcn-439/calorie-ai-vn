@@ -35,6 +35,8 @@ import { RewardToast, RewardToastData } from '../../components/reward-toast';
 import { Text } from '../../components/i18n-text';
 import { TextInput } from '../../components/i18n-text-input';
 import { Alert } from '../../components/i18n-alert';
+import { useI18n } from '../../components/i18n';
+import type { I18nKey } from '../../components/i18n';
 
 const scanHeroIllustration = require('../../assets/images/scan-hero.jpg') as number;
 type CameraModule = typeof import('expo-camera');
@@ -59,14 +61,14 @@ const MODE_ICONS: Record<InputMode, IoniconName> = {
   search: 'search-outline',
 };
 
-const MODE_LABELS: Record<InputMode, string> = {
-  camera: 'Camera',
-  gallery: 'Ảnh',
-  text: 'Nhập',
-  voice: 'Giọng nói',
-  receipt: 'Hóa đơn',
-  barcode: 'Mã vạch',
-  search: 'Tìm món',
+const MODE_LABEL_KEYS: Record<InputMode, I18nKey> = {
+  camera: 'screen.tabs.scan.mode.camera',
+  gallery: 'screen.tabs.scan.mode.gallery',
+  text: 'screen.tabs.scan.mode.text',
+  voice: 'screen.tabs.scan.mode.voice',
+  receipt: 'screen.tabs.scan.mode.receipt',
+  barcode: 'screen.tabs.scan.mode.barcode',
+  search: 'screen.tabs.scan.mode.search',
 };
 
 const PRIMARY_INPUT_MODES: InputMode[] = ['camera', 'text', 'search'];
@@ -88,24 +90,25 @@ function getAiFallbackReason(result: AIScanResponse): string | null {
   return typeof reason === 'string' ? reason : 'unavailable';
 }
 
-function getAiFallbackNotice(reason: string, parseMode?: string): string {
+function getAiFallbackNoticeKey(reason: string, parseMode?: string): I18nKey {
   if (reason === 'timeout' && parseMode !== 'image' && parseMode !== 'receipt') {
-    return 'AI dang xu ly hoi lau. Vui long thu lai, hoac nhap mo ta ngan gon hon de co ket qua som hon.';
+    return 'screen.tabs.scan.notice.timeoutText';
   }
 
   if (reason === 'timeout') {
-    return 'AI xử lý ảnh hơi lâu, thường gặp với ảnh nhiều món hoặc ảnh quá lớn. Vui lòng thử lại hoặc chụp gần món chính hơn.';
+    return 'screen.tabs.scan.notice.timeoutImage';
   }
 
   if (reason === 'quota_or_rate_limited' || reason === 'quota_or_rate_limit') {
-    return 'AI đang bận do quota/rate limit. Vui lòng thử lại sau vài phút.';
+    return 'screen.tabs.scan.notice.quota';
   }
 
-  return 'Tạm thời chưa có kết quả AI. Vui lòng thử lại sau ít phút.';
+  return 'screen.tabs.scan.notice.unavailable';
 }
 
 export default function ScanScreen() {
   useAppTheme();
+  const { t } = useI18n();
   // Determine default meal based on current time
   const getDefaultMeal = (): MealType => {
     const hour = new Date().getHours();
@@ -183,9 +186,9 @@ export default function ScanScreen() {
   }, [isAiScanning]);
 
   const getScanningHelpText = () => {
-    if (scanElapsedSeconds < 6) return 'Dang toi uu anh va gui AI phan tich.';
-    if (scanElapsedSeconds < 14) return 'Anh nhieu mon co the lau hon mot chut. Ban co the chup can mon chinh neu can.';
-    return 'AI van dang xu ly. Neu mang cham hoac anh qua phuc tap, hay nhap mo ta nhanh de co ket qua som hon.';
+    if (scanElapsedSeconds < 6) return t('screen.tabs.scan.scanning.initial');
+    if (scanElapsedSeconds < 14) return t('screen.tabs.scan.scanning.slow');
+    return t('screen.tabs.scan.scanning.long');
   };
 
   const applyScanResult = (result: AIScanResponse) => {
@@ -196,7 +199,7 @@ export default function ScanScreen() {
         : undefined;
       setScanResult(null);
       setEditableItems([]);
-      setScanNotice(getAiFallbackNotice(fallbackReason, parseMode));
+      setScanNotice(t(getAiFallbackNoticeKey(fallbackReason, parseMode)));
       Alert.alert(
         'screen.tabs.scan.alert.001',
         'screen.tabs.scan.alert.002',
@@ -297,25 +300,25 @@ export default function ScanScreen() {
   };
 
   const promptAfterLog = (logs: FoodLog[], summary: string) => {
-    Alert.alert('Logged', summary, [
-      { text: 'Keep scanning', style: 'cancel' },
+    Alert.alert(t('screen.tabs.scan.prompt.logged'), summary, [
+      { text: t('screen.tabs.scan.prompt.keepScanning'), style: 'cancel' },
       {
-        text: 'Undo',
+        text: t('screen.tabs.scan.prompt.undo'),
         style: 'destructive',
         onPress: async () => {
           try {
             await Promise.all(logs.map((log) => removeLog(log.id)));
             setReward({
-              title: 'Log undone',
-              body: `${logs.length} item${logs.length > 1 ? 's' : ''} removed`,
+              title: t('screen.tabs.scan.reward.logUndone'),
+              body: t('screen.tabs.scan.reward.itemsRemoved', { count: logs.length }),
               icon: 'arrow-undo',
             });
           } catch {
-            Alert.alert('Could not undo', 'Open Log to delete the item manually.');
+            Alert.alert('screen.tabs.scan.alert.couldNotUndoTitle', 'screen.tabs.scan.alert.couldNotUndoBody');
           }
         },
       },
-      { text: 'View Today', onPress: () => router.replace('/') },
+      { text: t('screen.tabs.scan.prompt.viewToday'), onPress: () => router.replace('/') },
     ]);
   };
 
@@ -338,7 +341,7 @@ export default function ScanScreen() {
   const startVoiceRecording = async () => {
     try {
       if (!NativeAudio) {
-        setVoiceRecordingNote('Bản web chưa hỗ trợ ghi âm trực tiếp. Hãy nhập hoặc dán nội dung bữa ăn để Coach phân tích.');
+        setVoiceRecordingNote(t('screen.tabs.scan.voice.webNote'));
         return;
       }
 
@@ -394,7 +397,7 @@ export default function ScanScreen() {
       setIsRecording(false);
 
       if (uri) {
-        setVoiceRecordingNote(`Đã ghi âm ${recordingDuration}s. Bản hiện tại chưa tự chuyển giọng nói thành chữ, hãy nhập hoặc dán nội dung bữa ăn bên dưới để phân tích.`);
+        setVoiceRecordingNote(t('screen.tabs.scan.voice.recordedNote', { seconds: recordingDuration }));
         Alert.alert(
           'screen.tabs.scan.alert.007',
           'screen.tabs.scan.alert.008',
@@ -436,7 +439,7 @@ export default function ScanScreen() {
     }
     catch (err) {
       void telemetryService.emitLogFailed('image', 'scan_api_error', Date.now() - startedAt);
-      setScanNotice('Không thể phân tích ảnh lúc này. Vui lòng thử lại sau ít phút.');
+      setScanNotice(t('screen.tabs.scan.notice.imageError'));
       setLastFailedScan({ mode: mode === 'gallery' ? 'gallery' : 'camera', payload: uri });
       console.error('runImageScan error', err);
       Alert.alert('screen.tabs.scan.alert.012', 'screen.tabs.scan.alert.013');
@@ -462,7 +465,7 @@ export default function ScanScreen() {
     }
     catch (err) {
       void telemetryService.emitLogFailed('text', 'scan_api_error', Date.now() - startedAt);
-      setScanNotice('Không thể phân tích mô tả lúc này. Vui lòng thử lại sau ít phút.');
+      setScanNotice(t('screen.tabs.scan.notice.textError'));
       setLastFailedScan({ mode: 'text', payload: textInput.trim() });
       console.error('handleTextScan error', err);
       Alert.alert('screen.tabs.scan.alert.014', 'screen.tabs.scan.alert.015');
@@ -495,7 +498,7 @@ export default function ScanScreen() {
     }
     catch (err) {
       void telemetryService.emitLogFailed('voice', 'scan_api_error', Date.now() - startedAt);
-      setScanNotice('Không thể phân tích giọng nói lúc này. Vui lòng thử lại sau ít phút.');
+      setScanNotice(t('screen.tabs.scan.notice.voiceError'));
       setLastFailedScan({ mode: 'voice', payload: transcript });
       console.error('handleVoiceScan error', err);
       Alert.alert('screen.tabs.scan.alert.016', 'screen.tabs.scan.alert.017');
@@ -525,7 +528,7 @@ export default function ScanScreen() {
     }
     catch (err) {
       void telemetryService.emitLogFailed('receipt', 'scan_api_error', Date.now() - startedAt);
-      setScanNotice('Không thể phân tích hóa đơn lúc này. Vui lòng thử lại sau ít phút.');
+      setScanNotice(t('screen.tabs.scan.notice.receiptError'));
       setLastFailedScan({ mode: 'receipt', payload: uri });
       console.error('runReceiptScan error', err);
       Alert.alert('screen.tabs.scan.alert.018', 'screen.tabs.scan.alert.019');
@@ -580,18 +583,18 @@ export default function ScanScreen() {
         createdLogs.push(created);
       }
       setReward({
-        title: 'Đã log bữa ăn',
-        body: `${currentItems.length} món · ${formatKcal(totalCalories)}`,
+        title: t('screen.tabs.scan.reward.mealLogged'),
+        body: t('screen.tabs.scan.reward.mealLoggedBody', { count: currentItems.length, calories: formatKcal(totalCalories) }),
         icon: 'checkmark-circle',
       });
-      promptAfterLog(createdLogs, `${currentItems.length} items · ${formatKcal(totalCalories)}`);
+      promptAfterLog(createdLogs, `${currentItems.length} · ${formatKcal(totalCalories)}`);
     } catch { Alert.alert('screen.tabs.scan.alert.025', 'screen.tabs.scan.alert.026'); }
     finally { setIsLogging(false); }
   };
 
   const handleSaveAsMeal = async () => {
     if (!currentItems.length) return;
-    Alert.prompt('💾 Lưu bộ sưu tập', 'Đặt tên cho bữa ăn:', async (name) => {
+    Alert.prompt(t('screen.tabs.scan.alert.saveCollectionTitle'), t('screen.tabs.scan.alert.saveCollectionMessage'), async (name) => {
       if (!name?.trim()) return;
       setIsSavingMeal(true);
       try {
@@ -609,8 +612,8 @@ export default function ScanScreen() {
           estimated_grams: i.estimated_grams,
         })));
         setReward({
-          title: 'Đã lưu bộ sưu tập',
-          body: `"${name}" đã sẵn sàng để log nhanh.`,
+          title: t('screen.tabs.scan.reward.collectionSaved'),
+          body: t('screen.tabs.scan.reward.collectionReady', { name }),
           icon: 'bookmark',
         });
       } catch { Alert.alert('screen.tabs.scan.alert.027', 'screen.tabs.scan.alert.028'); }
@@ -668,7 +671,7 @@ export default function ScanScreen() {
       }
     } catch (err) {
       console.error('handleRetryLast error', err);
-      setScanNotice('Thử lại không thành công. Vui lòng thử lại sau ít phút.');
+      setScanNotice(t('screen.tabs.scan.notice.retryFailed'));
     } finally {
       setIsRetrying(false);
       setLastFailedScan(null);
@@ -679,7 +682,7 @@ export default function ScanScreen() {
     if (!barcodeResult || isLogging) return;
     const grams = Number(barcodeGrams);
     if (!Number.isFinite(grams) || grams <= 0) {
-      Alert.alert('Invalid portion', 'Enter grams greater than 0.');
+      Alert.alert('screen.tabs.scan.alert.invalidPortionTitle', 'screen.tabs.scan.alert.invalidPortionBody');
       return;
     }
     const ratio = grams / 100;
@@ -699,7 +702,7 @@ export default function ScanScreen() {
         estimated_grams: grams,
       });
       setReward({
-        title: 'Đã log sản phẩm',
+        title: t('screen.tabs.scan.reward.productLogged'),
         body: `${barcodeResult.name_vi ?? barcodeResult.name} · ${formatKcal(safeNumber(barcodeResult.calories_per_100g) * ratio)}`,
         icon: 'checkmark-circle',
       });
@@ -728,7 +731,7 @@ export default function ScanScreen() {
     if (isLogging) return;
     const grams = Number(searchGramsById[food.id] ?? food.serving_size_g ?? 100);
     if (!Number.isFinite(grams) || grams <= 0) {
-      Alert.alert('Invalid portion', 'Enter grams greater than 0.');
+      Alert.alert('screen.tabs.scan.alert.invalidPortionTitle', 'screen.tabs.scan.alert.invalidPortionBody');
       return;
     }
     const ratio = grams / 100;
@@ -748,7 +751,7 @@ export default function ScanScreen() {
         estimated_grams: grams,
       });
       setReward({
-        title: 'Đã log món ăn',
+        title: t('screen.tabs.scan.reward.foodLogged'),
         body: `${food.name_vi ?? food.name} · ${formatKcal(safeNumber(food.calories_per_100g) * ratio)}`,
         icon: 'checkmark-circle',
       });
@@ -782,7 +785,7 @@ export default function ScanScreen() {
                 motion="float"
                 active={mode === m}
               />
-              <Text style={[styles.modeTabText, mode === m && styles.modeTabTextActive]}>{MODE_LABELS[m]}</Text>
+              <Text style={[styles.modeTabText, mode === m && styles.modeTabTextActive]}>{t(MODE_LABEL_KEYS[m])}</Text>
             </TouchableOpacity>
           ))}
           <TouchableOpacity
@@ -811,7 +814,7 @@ export default function ScanScreen() {
                   motion="float"
                   active={mode === m}
                 />
-                <Text style={[styles.modeTabText, mode === m && styles.modeTabTextActive]}>{MODE_LABELS[m]}</Text>
+                <Text style={[styles.modeTabText, mode === m && styles.modeTabTextActive]}>{t(MODE_LABEL_KEYS[m])}</Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -827,10 +830,10 @@ export default function ScanScreen() {
             {lastFailedScan ? (
               <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
                 <TouchableOpacity testID="scan-retry-button" style={[styles.retryButton, isRetrying && styles.buttonDisabled]} onPress={handleRetryLast} disabled={isRetrying}>
-                  <Text style={styles.retryButtonText}>{isRetrying ? 'Đang thử lại...' : 'Thử lại'}</Text>
+                  <Text style={styles.retryButtonText}>{isRetrying ? t('screen.tabs.scan.button.retrying') : t('screen.tabs.scan.button.retry')}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity testID="scan-cancel-notice-button" style={[styles.cancelButton, isRetrying && styles.buttonDisabled]} onPress={() => { setLastFailedScan(null); setScanNotice(null); }}>
-                  <Text style={styles.cancelButtonText}>Huỷ</Text>
+                  <Text style={styles.cancelButtonText} i18nKey="screen.tabs.scan.button.cancel" />
                 </TouchableOpacity>
               </View>
             ) : null}
@@ -871,9 +874,9 @@ export default function ScanScreen() {
                   <Text style={styles.resultName}>{food.name_vi ?? food.name}</Text>
                   <Text style={styles.resultCalorie}>{formatKcal(kcal)}</Text>
                 </View>
-                <Text style={styles.resultDetail}>Khẩu phần mặc định: {formatMacro(food.serving_size_g ?? 100)}</Text>
+                <Text style={styles.resultDetail}>{t('screen.tabs.scan.label.defaultServing', { grams: formatMacro(food.serving_size_g ?? 100) })}</Text>
                 <View style={styles.portionRow}>
-                  <Text style={styles.portionLabel}>Grams</Text>
+                  <Text style={styles.portionLabel} i18nKey="screen.tabs.scan.label.grams" />
                   <TextInput
                     style={styles.portionInput}
                     value={searchGramsById[food.id] ?? String(safeRound(food.serving_size_g ?? 100))}
@@ -887,7 +890,7 @@ export default function ScanScreen() {
                   P: {formatMacro(roundTo(safeNumber(food.protein_g) * ratio, 1))}  C: {formatMacro(roundTo(safeNumber(food.carbs_g) * ratio, 1))}  F: {formatMacro(roundTo(safeNumber(food.fat_g) * ratio, 1))}
                 </Text>
                 <TouchableOpacity style={[styles.saveButton, isLogging && styles.buttonDisabled]} onPress={() => handleLogSearchedFood(food)} disabled={isLogging}>
-                  <Text style={styles.saveButtonText}>{isLogging ? 'Logging...' : 'Log food'}</Text>
+                  <Text style={styles.saveButtonText}>{isLogging ? t('screen.tabs.scan.button.logging') : t('screen.tabs.scan.button.logFood')}</Text>
                 </TouchableOpacity>
               </SurfaceCard>
               );
@@ -951,7 +954,7 @@ export default function ScanScreen() {
           <View>
             {barcodeResult.image_url && <Image source={{ uri: barcodeResult.image_url }} style={styles.barcodeImage} resizeMode="contain" />}
             <Text style={styles.barcodeProductName}>{barcodeResult.name_vi ?? barcodeResult.name}</Text>
-            <Text style={styles.barcodeServing}>{barcodeResult.serving_description ?? `${barcodeResult.serving_size_g ?? 100}g`} / khẩu phần</Text>
+            <Text style={styles.barcodeServing}>{t('screen.tabs.scan.label.serving', { serving: barcodeResult.serving_description ?? `${barcodeResult.serving_size_g ?? 100}g` })}</Text>
             <SurfaceCard style={styles.totalCard}>
               {(() => {
                 const grams = Number(barcodeGrams);
@@ -968,7 +971,7 @@ export default function ScanScreen() {
               })()}
             </SurfaceCard>
             <View style={styles.portionRow}>
-              <Text style={styles.portionLabel}>Grams</Text>
+              <Text style={styles.portionLabel} i18nKey="screen.tabs.scan.label.grams" />
               <TextInput
                 style={styles.portionInput}
                 value={barcodeGrams}
@@ -980,7 +983,7 @@ export default function ScanScreen() {
             </View>
             <MealPicker selected={selectedMeal} onSelect={setSelectedMeal} />
             <TouchableOpacity style={[styles.saveButton, isLogging && styles.buttonDisabled]} onPress={handleLogBarcode} disabled={isLogging}>
-              <Text style={styles.saveButtonText}>{isLogging ? 'Logging...' : 'Log food'}</Text>
+              <Text style={styles.saveButtonText}>{isLogging ? t('screen.tabs.scan.button.logging') : t('screen.tabs.scan.button.logFood')}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.secondaryButton} onPress={() => { setBarcodeScanned(false); setBarcodeResult(null); setBarcodeGrams('100'); }}>
               <Text style={styles.secondaryButtonText} i18nKey="screen.tabs.scan.text.014" />
@@ -994,11 +997,11 @@ export default function ScanScreen() {
             <View style={styles.selectedImageBar}>
               <View style={styles.selectedImageLabel}>
                 <Ionicons name="image-outline" size={18} color={theme.colors.success} />
-                <Text style={styles.selectedImageText}>Ảnh đã chọn</Text>
+                <Text style={styles.selectedImageText} i18nKey="screen.tabs.scan.image.selected" />
               </View>
               <TouchableOpacity style={styles.selectedImageAction} onPress={handleCameraCapture}>
                 <Ionicons name="camera-outline" size={16} color={theme.colors.text} />
-                <Text style={styles.selectedImageActionText}>Chụp lại</Text>
+                <Text style={styles.selectedImageActionText} i18nKey="screen.tabs.scan.image.retake" />
               </TouchableOpacity>
             </View>
           ) : (
@@ -1013,11 +1016,11 @@ export default function ScanScreen() {
             <View style={styles.selectedImageBar}>
               <View style={styles.selectedImageLabel}>
                 <Ionicons name="image-outline" size={18} color={theme.colors.success} />
-                <Text style={styles.selectedImageText}>Ảnh đã chọn</Text>
+                <Text style={styles.selectedImageText} i18nKey="screen.tabs.scan.image.selected" />
               </View>
               <TouchableOpacity style={styles.selectedImageAction} onPress={handleGalleryPick}>
                 <Ionicons name="images-outline" size={16} color={theme.colors.text} />
-                <Text style={styles.selectedImageActionText}>Đổi ảnh</Text>
+                <Text style={styles.selectedImageActionText} i18nKey="screen.tabs.scan.image.change" />
               </TouchableOpacity>
             </View>
           ) : (
@@ -1036,11 +1039,12 @@ export default function ScanScreen() {
               placeholderTextColor={theme.colors.textDisabled} multiline />
             <TouchableOpacity
               style={[styles.analyzeButton, (!textInput.trim() || isScanning) && styles.buttonDisabled]}
+              testID="scan-analyze-text-button"
               onPress={handleTextScan}
               disabled={!textInput.trim() || isScanning}
             >
               <Text style={styles.analyzeButtonText}>
-                {isScanning ? 'Dang phan tich...' : 'Phan tich'}
+                {isScanning ? t('screen.tabs.scan.action.analyzing') : t('screen.tabs.scan.action.analyze')}
               </Text>
             </TouchableOpacity>
           </View>
@@ -1056,7 +1060,7 @@ export default function ScanScreen() {
               >
                 <AnimatedIonicon name="mic" size={40} color={voiceRecordingNote ? theme.colors.info : theme.colors.success} motion="pulse" />
                 <Text style={[styles.captureText, voiceRecordingNote && { color: theme.colors.info }]}>
-                  {voiceRecordingNote ? '🎙️ Ghi âm lại' : '🎙️ Ghi âm nháp'}
+                  {voiceRecordingNote ? t('screen.tabs.scan.voice.recordAgain') : t('screen.tabs.scan.voice.recordDraft')}
                 </Text>
               </TouchableOpacity>
             ) : (
@@ -1097,7 +1101,7 @@ export default function ScanScreen() {
                   style={styles.textInput}
                   value={voiceTranscript}
                   onChangeText={setVoiceTranscript}
-                  placeholder='VD: sáng nay mình ăn 1 tô bún bò và uống 1 ly sữa đậu nành'
+                  placeholder="screen.tabs.scan.placeholder.voiceDescription"
                   placeholderTextColor={theme.colors.textDisabled}
                   multiline
                   editable={!isScanning}
@@ -1112,7 +1116,7 @@ export default function ScanScreen() {
               disabled={!voiceTranscript || isScanning}
             >
               <Text style={styles.analyzeButtonText}>
-                {isScanning ? 'Đang phân tích...' : 'Phân tích mô tả'}
+                {isScanning ? t('screen.tabs.scan.action.analyzing') : t('screen.tabs.scan.action.analyzeDescription')}
               </Text>
             </TouchableOpacity>
           </View>
@@ -1146,7 +1150,7 @@ export default function ScanScreen() {
         {isAiScanning && mode !== 'barcode' && (
           <View style={styles.scanningContainer}>
             <ActivityIndicator size="large" color={theme.colors.success} />
-            <Text style={styles.scanningText}>{mode === 'receipt' ? 'AI đang đọc hóa đơn...' : 'AI đang phân tích...'}</Text>
+            <Text style={styles.scanningText}>{mode === 'receipt' ? t('screen.tabs.scan.loading.receipt') : t('screen.tabs.scan.loading.scan')}</Text>
             <Text style={styles.scanningHelpText}>{getScanningHelpText()}</Text>
           </View>
         )}
@@ -1158,12 +1162,12 @@ export default function ScanScreen() {
               <SurfaceCard style={styles.lowConfidenceBanner}>
                 <Text style={styles.lowConfidenceTitle} i18nKey="screen.tabs.scan.text.024" />
                 <Text style={styles.lowConfidenceBody}>
-                  Độ tin cậy tổng thể {formatPercent(safeNumber(scanResult.ai_confidence) * 100)}. Kiểm tra kỹ từng món và điều chỉnh nếu cần trước khi lưu.
+                  {t('screen.tabs.scan.lowConfidenceBody', { confidence: formatPercent(safeNumber(scanResult.ai_confidence) * 100) })}
                 </Text>
               </SurfaceCard>
             )}
             <Text style={styles.sectionTitle}>
-              Kết quả ({formatPercent(safeNumber(scanResult.ai_confidence) * 100)} độ tin cậy)
+              {t('screen.tabs.scan.label.resultTitle', { confidence: formatPercent(safeNumber(scanResult.ai_confidence) * 100) })}
             </Text>
             <MealPicker selected={selectedMeal} onSelect={setSelectedMeal} />
             {currentItems.map((item, i) => (
@@ -1187,11 +1191,11 @@ export default function ScanScreen() {
             <SurfaceCard style={styles.totalCard}>
               <Text style={styles.totalLabel} i18nKey="screen.tabs.scan.text.026" />
               <Text style={styles.totalCalorie}>{formatKcal(totalCalories)}</Text>
-              <Text style={styles.totalRange}>Khoảng: {formatCalorieRange(totalCaloriesMin, totalCaloriesMax)}</Text>
+              <Text style={styles.totalRange}>{t('screen.tabs.scan.label.range', { range: formatCalorieRange(totalCaloriesMin, totalCaloriesMax) })}</Text>
               <Text style={styles.totalMacros}>P: {formatMacro(totalProtein)}  C: {formatMacro(totalCarbs)}  F: {formatMacro(totalFat)}</Text>
             </SurfaceCard>
             <TouchableOpacity style={[styles.saveButton, isLogging && styles.buttonDisabled]} onPress={handleSaveLog} disabled={isLogging}>
-              <Text style={styles.saveButtonText}>{isLogging ? 'Logging...' : 'Log meal'}</Text>
+              <Text style={styles.saveButtonText}>{isLogging ? t('screen.tabs.scan.button.logging') : t('screen.tabs.scan.button.logMeal')}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[styles.secondaryButton, isSavingMeal && styles.buttonDisabled]} onPress={handleSaveAsMeal} disabled={isSavingMeal}>
               <Text style={styles.secondaryButtonText} i18nKey="screen.tabs.scan.text.027" />
@@ -1201,7 +1205,7 @@ export default function ScanScreen() {
               <Text style={styles.refineTitle} i18nKey="screen.tabs.scan.text.028" />
               <Text style={styles.refineHint} i18nKey="screen.tabs.scan.text.029" />
               <TextInput style={styles.refineInput} value={refineContext} onChangeText={setRefineContext}
-                placeholder='VD: "Thực ra là 2 phần", "Thêm 1 quả trứng"' placeholderTextColor={theme.colors.textDisabled} multiline />
+                placeholder="screen.tabs.scan.placeholder.refine" placeholderTextColor={theme.colors.textDisabled} multiline />
               <TouchableOpacity style={[styles.refineButton, (!refineContext.trim() || isRefining) && styles.buttonDisabled]}
                 onPress={handleRefineScan} disabled={!refineContext.trim() || isRefining}>
                 {isRefining ? <ActivityIndicator size="small" color={theme.colors.text} /> : <Text style={styles.refineButtonText} i18nKey="screen.tabs.scan.text.030" />}
@@ -1224,12 +1228,18 @@ export default function ScanScreen() {
 }
 
 function MealPicker({ selected, onSelect }: { selected: MealType; onSelect: (m: MealType) => void }) {
-  const labels: Record<MealType, string> = { breakfast: 'Sáng', lunch: 'Trưa', dinner: 'Tối', snack: 'Vặt' };
+  const { t } = useI18n();
+  const labels: Record<MealType, I18nKey> = {
+    breakfast: 'screen.tabs.scan.meal.breakfast',
+    lunch: 'screen.tabs.scan.meal.lunch',
+    dinner: 'screen.tabs.scan.meal.dinner',
+    snack: 'screen.tabs.scan.meal.snack',
+  };
   return (
     <View style={styles.mealPicker}>
       {(Object.keys(labels) as MealType[]).map((m) => (
         <TouchableOpacity key={m} style={[styles.mealChip, selected === m && styles.mealChipActive]} onPress={() => onSelect(m)}>
-          <Text style={[styles.mealChipText, selected === m && styles.mealChipTextActive]}>{labels[m]}</Text>
+          <Text style={[styles.mealChipText, selected === m && styles.mealChipTextActive]}>{t(labels[m])}</Text>
         </TouchableOpacity>
       ))}
     </View>
@@ -1237,6 +1247,7 @@ function MealPicker({ selected, onSelect }: { selected: MealType; onSelect: (m: 
 }
 
 function ContextPicker({ activeContexts, onToggle }: { activeContexts: ContextMode[]; onToggle: (mode: ContextMode) => void }) {
+  const { t } = useI18n();
   const contextIcons: Record<ContextMode, string> = {
     [ContextMode.STRESS]: '😰',
     [ContextMode.PERIOD]: '🩸',
@@ -1248,15 +1259,15 @@ function ContextPicker({ activeContexts, onToggle }: { activeContexts: ContextMo
     [ContextMode.NORMAL]: '✨',
   };
 
-  const contextLabels: Record<ContextMode, string> = {
-    [ContextMode.STRESS]: 'Áp lực',
-    [ContextMode.PERIOD]: 'Kỳ kinh',
-    [ContextMode.BUSY_WORK]: 'Bận',
-    [ContextMode.TRAVEL]: 'Du lịch',
-    [ContextMode.POOR_SLEEP]: 'Ngủ kém',
-    [ContextMode.EVENT]: 'Tiệc',
-    [ContextMode.RECOVERY]: 'Phục hồi',
-    [ContextMode.NORMAL]: 'Bình thường',
+  const contextLabels: Record<ContextMode, I18nKey> = {
+    [ContextMode.STRESS]: 'screen.tabs.scan.context.stress',
+    [ContextMode.PERIOD]: 'screen.tabs.scan.context.period',
+    [ContextMode.BUSY_WORK]: 'screen.tabs.scan.context.busyWork',
+    [ContextMode.TRAVEL]: 'screen.tabs.scan.context.travel',
+    [ContextMode.POOR_SLEEP]: 'screen.tabs.scan.context.poorSleep',
+    [ContextMode.EVENT]: 'screen.tabs.scan.context.event',
+    [ContextMode.RECOVERY]: 'screen.tabs.scan.context.recovery',
+    [ContextMode.NORMAL]: 'screen.tabs.scan.context.normal',
   };
 
   const displayContexts = [
@@ -1280,7 +1291,7 @@ function ContextPicker({ activeContexts, onToggle }: { activeContexts: ContextMo
           >
             <Text style={styles.contextChipIcon}>{contextIcons[mode]}</Text>
             <Text style={[styles.contextChipText, activeContexts.includes(mode) && styles.contextChipTextActive]}>
-              {contextLabels[mode]}
+              {t(contextLabels[mode])}
             </Text>
           </TouchableOpacity>
         ))}
@@ -1302,6 +1313,7 @@ function ScanResultItem({
   onNameChange: (name: string) => void;
   onRemove: () => void;
 }) {
+  const { t } = useI18n();
   const [editingName, setEditingName] = useState(false);
   const [nameInput, setNameInput] = useState(item.name_vi ?? item.name);
 
@@ -1309,7 +1321,11 @@ function ScanResultItem({
   const confidenceColor =
     confidence >= 0.8 ? theme.colors.success : confidence >= 0.6 ? theme.colors.warning : theme.colors.danger;
   const confidenceLabel =
-    confidence >= 0.8 ? 'Cao' : confidence >= 0.6 ? 'Trung bình' : 'Thấp';
+    confidence >= 0.8
+      ? t('screen.tabs.scan.confidence.high')
+      : confidence >= 0.6
+        ? t('screen.tabs.scan.confidence.medium')
+        : t('screen.tabs.scan.confidence.low');
 
   return (
     <SurfaceCard style={[

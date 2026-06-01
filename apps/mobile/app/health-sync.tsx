@@ -29,7 +29,7 @@ function getTodayDateString() {
 
 export default function HealthSyncScreen() {
   useAppTheme();
-  const { t } = useI18n();
+  const { t, tx } = useI18n();
   const { syncActivity } = useLogStore();
   const [isLoadingInfo, setIsLoadingInfo] = useState(true);
   const [isLoadingDiagnostics, setIsLoadingDiagnostics] = useState(true);
@@ -92,25 +92,23 @@ export default function HealthSyncScreen() {
 
   return (
     <ScreenShell>
-      <Eyebrow>Health Sync</Eyebrow>
-      <HeroTitle>Kiểm tra Activity Sync trên phone.</HeroTitle>
+      <Eyebrow>screen.healthSync.hero.eyebrow</Eyebrow>
+      <HeroTitle>screen.healthSync.hero.title</HeroTitle>
       <BodyText style={styles.heroBody}>
-        Deep link cố định để mở trang này trên bản native là {HEALTH_SYNC_SCREEN_LINK}.
+        {t('screen.healthSync.hero.body', { link: HEALTH_SYNC_SCREEN_LINK })}
       </BodyText>
 
       <SurfaceCard style={styles.linkCard}>
         <Text style={styles.sectionLabel} i18nKey="screen.healthSync.text.001" />
         <Text style={styles.linkValue}>{HEALTH_SYNC_SCREEN_LINK}</Text>
-        <Text style={styles.helperText}>
-          Dùng link này sau khi cài dev build hoặc internal build. Route này không phụ thuộc tab, nên test nhanh hơn.
-        </Text>
+        <Text style={styles.helperText} i18nKey="screen.healthSync.link.help" />
       </SurfaceCard>
 
       <SurfaceCard style={styles.statusCard}>
         <View style={styles.statusHeader}>
           <View style={{ flex: 1 }}>
             <Text style={styles.statusTitle} i18nKey="screen.healthSync.text.002" />
-            <Text style={styles.statusSubtitle}>Nền tảng hiện tại: {Platform.OS}</Text>
+            <Text style={styles.statusSubtitle}>{t('screen.healthSync.status.platform', { platform: Platform.OS })}</Text>
           </View>
           <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
             <Text style={styles.backButtonText} i18nKey="screen.healthSync.text.003" />
@@ -123,15 +121,15 @@ export default function HealthSyncScreen() {
           <>
             <View style={styles.pillRow}>
               <Text style={styles.providerPill}>{phoneCheckInfo.providerName}</Text>
-              <Text style={styles.statusPill}>{phoneCheckInfo.statusLabel}</Text>
+              <Text style={styles.statusPill}>{tx(phoneCheckInfo.statusLabel)}</Text>
             </View>
-            <Text style={styles.statusDetail}>{phoneCheckInfo.detail}</Text>
+            <Text style={styles.statusDetail}>{tx(phoneCheckInfo.detail)}</Text>
             <View style={styles.actionRow}>
               <TouchableOpacity style={styles.primaryButton} onPress={handleOpenProvider}>
-                <Text style={styles.primaryButtonText}>{phoneCheckInfo.actionLabel}</Text>
+                <Text style={styles.primaryButtonText}>{tx(phoneCheckInfo.actionLabel)}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.secondaryButton} onPress={handleOpenSupport}>
-                <Text style={styles.secondaryButtonText}>{phoneCheckInfo.installLabel}</Text>
+                <Text style={styles.secondaryButtonText}>{tx(phoneCheckInfo.installLabel)}</Text>
               </TouchableOpacity>
             </View>
           </>
@@ -143,7 +141,7 @@ export default function HealthSyncScreen() {
       <SurfaceCard style={styles.stepsCard}>
         <Text style={styles.sectionTitle} i18nKey="screen.healthSync.text.005" />
         <Text style={styles.checkItem} i18nKey="screen.healthSync.text.006" />
-        <Text style={styles.checkItem}>2. Mở link {HEALTH_SYNC_SCREEN_LINK} trên phone.</Text>
+        <Text style={styles.checkItem}>{t('screen.healthSync.check.002', { link: HEALTH_SYNC_SCREEN_LINK })}</Text>
         <Text style={styles.checkItem} i18nKey="screen.healthSync.text.007" />
         <Text style={styles.checkItem} i18nKey="screen.healthSync.text.008" />
         <Text style={styles.checkItem} i18nKey="screen.healthSync.text.009" />
@@ -156,7 +154,7 @@ export default function HealthSyncScreen() {
             <Text style={styles.statusSubtitle} i18nKey="screen.healthSync.text.011" />
           </View>
           <TouchableOpacity style={styles.backButton} onPress={handleRefreshDiagnostics}>
-            <Text style={styles.backButtonText}>{isLoadingDiagnostics ? 'Đang tải...' : 'Tải lại'}</Text>
+            <Text style={styles.backButtonText}>{isLoadingDiagnostics ? t('screen.healthSync.action.loading') : t('screen.healthSync.action.reload')}</Text>
           </TouchableOpacity>
         </View>
 
@@ -174,12 +172,20 @@ export default function HealthSyncScreen() {
         ) : diagnostics ? (
           <>
             <Text style={styles.diagLine}>Availability: {diagnostics.availability}</Text>
-            <Text style={styles.diagLine}>Granted: {diagnostics.grantedPermissions.length ? diagnostics.grantedPermissions.join(', ') : 'Chưa có'}</Text>
-            <Text style={styles.diagLine}>Missing: {diagnostics.missingPermissions.length ? diagnostics.missingPermissions.join(', ') : 'Không thiếu'}</Text>
+            <Text style={styles.diagLine}>
+              {t('screen.healthSync.diag.granted', {
+                value: diagnostics.grantedPermissions.length ? diagnostics.grantedPermissions.join(', ') : t('screen.healthSync.value.none'),
+              })}
+            </Text>
+            <Text style={styles.diagLine}>
+              {t('screen.healthSync.diag.missing', {
+                value: diagnostics.missingPermissions.length ? diagnostics.missingPermissions.join(', ') : t('screen.healthSync.value.noneMissing'),
+              })}
+            </Text>
 
             {diagnostics.today ? (
               <View style={styles.resultBox}>
-                <Text style={styles.resultTitle}>Snapshot hôm nay ({diagnostics.today.date})</Text>
+                <Text style={styles.resultTitle}>{t('screen.healthSync.diag.snapshot', { date: diagnostics.today.date })}</Text>
                 <Text style={styles.resultLine}>Steps: {diagnostics.today.steps}</Text>
                 <Text style={styles.resultLine}>Distance: {diagnostics.today.distanceKm} km</Text>
                 <Text style={styles.resultLine}>Calories burned: {diagnostics.today.caloriesBurned}</Text>
@@ -189,7 +195,7 @@ export default function HealthSyncScreen() {
             <View style={styles.notesBox}>
               <Text style={styles.resultTitle} i18nKey="screen.healthSync.text.012" />
               {diagnostics.notes.map((note) => (
-                <Text key={note} style={styles.noteLine}>{note}</Text>
+                <Text key={note} style={styles.noteLine}>{tx(note)}</Text>
               ))}
             </View>
           </>
@@ -221,7 +227,7 @@ export default function HealthSyncScreen() {
           }}
           disabled={isSyncing}
         >
-          <Text style={styles.primaryButtonText}>{isSyncing ? 'Đang đồng bộ...' : 'Đồng bộ activity ngay bây giờ'}</Text>
+          <Text style={styles.primaryButtonText}>{isSyncing ? t('screen.healthSync.sync.loading') : t('screen.healthSync.sync.cta')}</Text>
         </TouchableOpacity>
 
         {lastSyncResult && (
