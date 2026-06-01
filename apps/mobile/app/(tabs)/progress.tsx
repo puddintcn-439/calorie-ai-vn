@@ -194,7 +194,7 @@ export default function BodyProgressScreen() {
     if (!preview) return Alert.alert('screen.tabs.progress.alert.003', 'screen.tabs.progress.alert.004');
     Alert.alert(
       'screen.tabs.progress.alert.005',
-      `Áp dụng mục tiêu mới ${preview.adjusted_daily_target} kcal/ngày?`,
+      t('screen.tabs.progress.adjustment.applyMessage', { target: preview.adjusted_daily_target }),
       [
         { text: 'screen.tabs.progress.alert.006', style: 'cancel' },
         {
@@ -259,7 +259,7 @@ export default function BodyProgressScreen() {
   const handleDeleteEntry = (entry: BodyProgressEntry) => {
     Alert.alert(
       'screen.tabs.progress.alert.018',
-      `Xoá số liệu ngày ${entry.recorded_at}?`,
+      t('screen.tabs.progress.delete.message', { date: entry.recorded_at }),
       [
         { text: 'screen.tabs.progress.alert.019', style: 'cancel' },
         {

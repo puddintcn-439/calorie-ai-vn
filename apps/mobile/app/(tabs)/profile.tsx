@@ -648,6 +648,15 @@ export default function ProfileScreen() {
   const assessmentTone = instantAssessment.assessment
     ? getBodyStatusTone(instantAssessment.assessment.body_status)
     : null;
+  const assessmentHintText = useMemo(() => {
+    if (!instantAssessment.assessment) return tx(instantAssessment.hint);
+    const heightM = profile.height_cm ? profile.height_cm / 100 : 0;
+    if (!heightM) return tx(instantAssessment.hint);
+    return t('profile.assessment.healthyRangeHint', {
+      min: round1(18.5 * heightM * heightM),
+      max: round1(24.9 * heightM * heightM),
+    });
+  }, [instantAssessment.assessment, instantAssessment.hint, profile.height_cm, t, tx]);
   const roadmap = useMemo<ExerciseRoadmapItem[]>(() => {
     return activityPreferences.map((item) => ({
       id: item.id,
@@ -1420,7 +1429,7 @@ export default function ProfileScreen() {
                   </View>
 
                   <Text style={[styles.assessmentNote, { color: assessmentTone?.text }]}> 
-                    {instantAssessment.assessment.recommendation_note}
+                    {tx(instantAssessment.assessment.recommendation_note)}
                   </Text>
 
                   <View style={styles.safetyNotice}>
@@ -1431,7 +1440,7 @@ export default function ProfileScreen() {
                     )}
                     {instantAssessment.assessment.safety_warnings.map((warning, index) => (
                       <Text key={`safety-${index}`} style={styles.safetyNoticeText}>
-                        {warning}
+                        {tx(warning)}
                       </Text>
                     ))}
                   </View>
@@ -1449,24 +1458,24 @@ export default function ProfileScreen() {
                   </Text>
 
                   <Text style={[styles.assessmentActivityNote, { color: assessmentTone?.text }]}> 
-                    {instantAssessment.assessment.activity_note}
+                    {tx(instantAssessment.assessment.activity_note)}
                   </Text>
 
                   <View style={styles.exerciseListWrap}>
                     <Text style={[styles.exerciseListTitle, { color: assessmentTone?.accent }]} i18nKey="screen.tabs.profile.text.009" />
                     {instantAssessment.assessment.exercise_plan.map((item, index) => (
                       <Text key={`exercise-${index}`} style={[styles.exerciseListItem, { color: assessmentTone?.text }]}> 
-                        {index + 1}. {item}
+                        {index + 1}. {tx(item)}
                       </Text>
                     ))}
                   </View>
 
-                  <Text style={styles.assessmentHint}>{instantAssessment.hint}</Text>
+                  <Text style={styles.assessmentHint}>{assessmentHintText}</Text>
                 </View>
               )}
 
               {!instantAssessment.assessment && !!instantAssessment.hint && (
-                <Text style={styles.assessmentHint}>{instantAssessment.hint}</Text>
+                <Text style={styles.assessmentHint}>{assessmentHintText}</Text>
               )}
             </>
           )}

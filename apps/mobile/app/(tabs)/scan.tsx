@@ -333,7 +333,7 @@ export default function ScanScreen() {
       setVoicePermissionGranted(permission.granted);
       return permission.granted;
     } catch (error) {
-      console.error('Lỗi yêu cầu quyền microphone:', error);
+      console.error('Failed to request microphone permission:', error);
       return false;
     }
   };
@@ -376,7 +376,7 @@ export default function ScanScreen() {
       // Store interval ID in ref for cleanup
       (window as any).__voiceRecordingInterval = durationInterval;
     } catch (error) {
-      console.error('Lỗi bắt đầu ghi âm:', error);
+      console.error('Failed to start recording:', error);
       Alert.alert('screen.tabs.scan.alert.005', 'screen.tabs.scan.alert.006');
     }
   };
@@ -404,7 +404,7 @@ export default function ScanScreen() {
         );
       }
     } catch (error) {
-      console.error('Lỗi dừng ghi âm:', error);
+      console.error('Failed to stop recording:', error);
       Alert.alert('screen.tabs.scan.alert.009', 'screen.tabs.scan.alert.010');
       setIsRecording(false);
     }

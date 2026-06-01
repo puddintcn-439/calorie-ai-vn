@@ -243,13 +243,16 @@ export default function LogScreen() {
     () => activityPreferences.map((item) => ({
       id: item.id,
       title: item.title,
-      detail: `${item.duration_min} phút · ~${estimateExerciseCalories(item.activity_type as ActivityType, item.duration_min, profileMeta.weight_kg ?? 65)} kcal`,
+      detail: t('screen.tabs.log.roadmap.detail', {
+        minutes: item.duration_min,
+        kcal: estimateExerciseCalories(item.activity_type as ActivityType, item.duration_min, profileMeta.weight_kg ?? 65),
+      }),
       activity_type: item.activity_type as ActivityType,
       duration_min: item.duration_min,
       estimated_kcal: estimateExerciseCalories(item.activity_type as ActivityType, item.duration_min, profileMeta.weight_kg ?? 65),
       is_custom: true,
     })),
-    [activityPreferences, profileMeta.weight_kg],
+    [activityPreferences, profileMeta.weight_kg, t],
   );
 
   const roadmapActivityByTaskId = useMemo(() => {
