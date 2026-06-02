@@ -135,7 +135,7 @@ describe('CalorieTargetController (e2e)', () => {
     expect(res.body.daily_calorie_target).toBe(2200);
   });
 
-  it('GET /calorie-target/me returns 400 when profile is incomplete', async () => {
+  it('GET /calorie-target/me returns no-data contract when profile is incomplete', async () => {
     userService.getProfile.mockResolvedValue({
       id: 'user-1',
       email: 'user@example.com',
@@ -143,9 +143,16 @@ describe('CalorieTargetController (e2e)', () => {
       // missing required fields
     });
 
-    await request(app.getHttpServer())
+    const res = await request(app.getHttpServer())
       .get('/calorie-target/me')
-      .expect(400);
+      .expect(200);
+
+    expect(res.body).toEqual({
+      status: 'incomplete_profile',
+      target: null,
+      missing_fields: ['height_cm', 'age', 'gender', 'activity_level', 'goal'],
+      message: 'Complete profile fields before calorie target calculation.',
+    });
   });
 
   it('GET /calorie-target/:userId returns target for requested user', async () => {

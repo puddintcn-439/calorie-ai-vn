@@ -37,6 +37,7 @@ import { TextInput } from '../../components/i18n-text-input';
 import { Alert } from '../../components/i18n-alert';
 import { useI18n } from '../../components/i18n';
 import type { I18nKey } from '../../components/i18n';
+import { appLogger } from '../../services/logger.service';
 
 const scanHeroIllustration = require('../../assets/images/scan-hero.jpg') as number;
 type CameraModule = typeof import('expo-camera');
@@ -333,7 +334,7 @@ export default function ScanScreen() {
       setVoicePermissionGranted(permission.granted);
       return permission.granted;
     } catch (error) {
-      console.error('Failed to request microphone permission:', error);
+      appLogger.warn('Scan', 'Failed to request microphone permission', error);
       return false;
     }
   };
@@ -376,7 +377,7 @@ export default function ScanScreen() {
       // Store interval ID in ref for cleanup
       (window as any).__voiceRecordingInterval = durationInterval;
     } catch (error) {
-      console.error('Failed to start recording:', error);
+      appLogger.warn('Scan', 'Failed to start recording', error);
       Alert.alert('screen.tabs.scan.alert.005', 'screen.tabs.scan.alert.006');
     }
   };
@@ -404,7 +405,7 @@ export default function ScanScreen() {
         );
       }
     } catch (error) {
-      console.error('Failed to stop recording:', error);
+      appLogger.warn('Scan', 'Failed to stop recording', error);
       Alert.alert('screen.tabs.scan.alert.009', 'screen.tabs.scan.alert.010');
       setIsRecording(false);
     }
@@ -441,7 +442,7 @@ export default function ScanScreen() {
       void telemetryService.emitLogFailed('image', 'scan_api_error', Date.now() - startedAt);
       setScanNotice(t('screen.tabs.scan.notice.imageError'));
       setLastFailedScan({ mode: mode === 'gallery' ? 'gallery' : 'camera', payload: uri });
-      console.error('runImageScan error', err);
+      appLogger.warn('Scan', 'runImageScan error', err);
       Alert.alert('screen.tabs.scan.alert.012', 'screen.tabs.scan.alert.013');
     }
     finally { setIsScanning(false); }
@@ -467,7 +468,7 @@ export default function ScanScreen() {
       void telemetryService.emitLogFailed('text', 'scan_api_error', Date.now() - startedAt);
       setScanNotice(t('screen.tabs.scan.notice.textError'));
       setLastFailedScan({ mode: 'text', payload: textInput.trim() });
-      console.error('handleTextScan error', err);
+      appLogger.warn('Scan', 'handleTextScan error', err);
       Alert.alert('screen.tabs.scan.alert.014', 'screen.tabs.scan.alert.015');
     }
     finally { setIsScanning(false); }
@@ -500,7 +501,7 @@ export default function ScanScreen() {
       void telemetryService.emitLogFailed('voice', 'scan_api_error', Date.now() - startedAt);
       setScanNotice(t('screen.tabs.scan.notice.voiceError'));
       setLastFailedScan({ mode: 'voice', payload: transcript });
-      console.error('handleVoiceScan error', err);
+      appLogger.warn('Scan', 'handleVoiceScan error', err);
       Alert.alert('screen.tabs.scan.alert.016', 'screen.tabs.scan.alert.017');
     }
     finally { setIsScanning(false); }
@@ -530,7 +531,7 @@ export default function ScanScreen() {
       void telemetryService.emitLogFailed('receipt', 'scan_api_error', Date.now() - startedAt);
       setScanNotice(t('screen.tabs.scan.notice.receiptError'));
       setLastFailedScan({ mode: 'receipt', payload: uri });
-      console.error('runReceiptScan error', err);
+      appLogger.warn('Scan', 'runReceiptScan error', err);
       Alert.alert('screen.tabs.scan.alert.018', 'screen.tabs.scan.alert.019');
     }
     finally { setIsReceiptScanning(false); }
@@ -594,7 +595,7 @@ export default function ScanScreen() {
 
   const handleSaveAsMeal = async () => {
     if (!currentItems.length) return;
-    Alert.prompt(t('screen.tabs.scan.alert.saveCollectionTitle'), t('screen.tabs.scan.alert.saveCollectionMessage'), async (name) => {
+    Alert.prompt(t('screen.tabs.scan.alert.saveCollectionTitle'), t('screen.tabs.scan.alert.saveCollectionMessage'), async (name: string | null) => {
       if (!name?.trim()) return;
       setIsSavingMeal(true);
       try {
@@ -630,7 +631,7 @@ export default function ScanScreen() {
       setBarcodeGrams(String(safeRound(result.serving_size_g ?? 100)));
     }
     catch (err) { 
-      console.error('handleBarcodeScan error', err);
+      appLogger.warn('Scan', 'handleBarcodeScan error', err);
       Alert.alert('screen.tabs.scan.alert.029', 'screen.tabs.scan.alert.030');
       setLastFailedScan({ mode: 'barcode', payload: barcode });
       setBarcodeScanned(false);
@@ -670,7 +671,7 @@ export default function ScanScreen() {
             break;
       }
     } catch (err) {
-      console.error('handleRetryLast error', err);
+      appLogger.warn('Scan', 'handleRetryLast error', err);
       setScanNotice(t('screen.tabs.scan.notice.retryFailed'));
     } finally {
       setIsRetrying(false);

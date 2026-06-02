@@ -1,4 +1,5 @@
 import { authStorage } from './auth-storage';
+import { appLogger } from './logger.service';
 
 const PRESETS_KEY = 'strength_presets_v1';
 
@@ -12,7 +13,7 @@ export async function loadPresets(): Promise<string[]> {
     if (Array.isArray(parsed)) return parsed;
     return DEFAULT_PRESETS;
   } catch (err) {
-    console.warn('loadPresets failed', err);
+    appLogger.warn('Presets', 'loadPresets failed', err);
     return DEFAULT_PRESETS;
   }
 }
@@ -24,7 +25,7 @@ export async function savePreset(name: string): Promise<void> {
     const updated = [name, ...presets.filter((p) => p !== name)].slice(0, 50);
     await authStorage.setItemAsync(PRESETS_KEY, JSON.stringify(updated));
   } catch (err) {
-    console.warn('savePreset failed', err);
+    appLogger.warn('Presets', 'savePreset failed', err);
   }
 }
 
@@ -34,7 +35,7 @@ export async function removePreset(name: string): Promise<void> {
     const updated = presets.filter((p) => p !== name);
     await authStorage.setItemAsync(PRESETS_KEY, JSON.stringify(updated));
   } catch (err) {
-    console.warn('removePreset failed', err);
+    appLogger.warn('Presets', 'removePreset failed', err);
   }
 }
 
@@ -42,7 +43,7 @@ export async function setAllPresets(list: string[]): Promise<void> {
   try {
     await authStorage.setItemAsync(PRESETS_KEY, JSON.stringify(list.slice(0, 50)));
   } catch (err) {
-    console.warn('setAllPresets failed', err);
+    appLogger.warn('Presets', 'setAllPresets failed', err);
   }
 }
 

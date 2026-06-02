@@ -136,12 +136,17 @@ describe('CalorieTargetController', () => {
       ).rejects.toThrow(BadRequestException);
     });
 
-    it('throws when profile is incomplete', async () => {
+    it('returns no-data contract when profile is incomplete', async () => {
       userService.getProfile.mockResolvedValue(makeProfile({ height_cm: undefined }) as any);
 
       await expect(
         controller.getMyTarget({ user: { id: 'user-1', email: 'user@example.com' } }),
-      ).rejects.toThrow('Incomplete user profile for calorie calculation');
+      ).resolves.toEqual({
+        status: 'incomplete_profile',
+        target: null,
+        missing_fields: ['height_cm'],
+        message: 'Complete profile fields before calorie target calculation.',
+      });
     });
   });
 

@@ -15,13 +15,20 @@ import MacrosCard from '../../components/macros-card';
 import AdherenceCard from '../../components/adherence-card';
 import { createThemedStyles, theme, useAppTheme } from '../../components/theme';
 import { apiClient } from '../../services/api';
-import { calorieTargetService, WeeklyAdaptiveResult } from '../../services/calorie-target.service';
+import {
+  calorieTargetService,
+  isCalorieTargetReady,
+  CalorieTargetRequiredField,
+  CalorieTargetResponse,
+  WeeklyAdaptiveResult,
+} from '../../services/calorie-target.service';
 import { getLocalDateYmd } from '../../services/date';
 import { formatNumberVi, formatPercent, safeNumber, toFiniteNumber } from '../../services/number-format';
 import { Text } from '../../components/i18n-text';
 import { TextInput } from '../../components/i18n-text-input';
 import { Alert } from '../../components/i18n-alert';
 import { useI18n } from '../../components/i18n';
+import { appLogger } from '../../services/logger.service';
 
 function formatDecimal(value: unknown, fallback = '--') {
   const numeric = toFiniteNumber(value);
@@ -41,6 +48,15 @@ const ENERGY_LABEL_KEYS = [
   'screen.tabs.progress.energy.4',
   'screen.tabs.progress.energy.5',
 ] as const;
+
+const TARGET_FIELD_LABEL_KEYS: Record<CalorieTargetRequiredField, any> = {
+  weight_kg: 'screen.tabs.progress.target.field.weight',
+  height_cm: 'screen.tabs.progress.target.field.height',
+  age: 'screen.tabs.progress.target.field.age',
+  gender: 'screen.tabs.progress.target.field.gender',
+  activity_level: 'screen.tabs.progress.target.field.activity',
+  goal: 'screen.tabs.progress.target.field.goal',
+};
 
 function DeltaBadge({ value, unit, lowerIsBetter = false }: { value: number | null; unit: string; lowerIsBetter?: boolean }) {
   const numeric = toFiniteNumber(value);
@@ -146,7 +162,7 @@ export default function BodyProgressScreen() {
         setNote(todayEntry.note ?? '');
       }
     } catch (error) {
-      console.error('Failed to load body progress:', error);
+      appLogger.warn('Progress', 'Failed to load body progress', error);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -163,7 +179,8 @@ export default function BodyProgressScreen() {
 
   const [preview, setPreview] = useState<WeeklyAdaptiveResult | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
-  const [myTarget, setMyTarget] = useState<import('../../services/calorie-target.service').CalorieTargetResponse | null>(null);
+  const [myTarget, setMyTarget] = useState<CalorieTargetResponse | null>(null);
+  const [targetMissingFields, setTargetMissingFields] = useState<CalorieTargetRequiredField[]>([]);
   const [targetLoading, setTargetLoading] = useState(false);
 
   const fetchPreview = async () => {
@@ -182,9 +199,15 @@ export default function BodyProgressScreen() {
     setTargetLoading(true);
     try {
       const res = await calorieTargetService.getMyTarget();
-      setMyTarget(res);
+      if (isCalorieTargetReady(res)) {
+        setMyTarget(res);
+        setTargetMissingFields([]);
+      } else {
+        setMyTarget(null);
+        setTargetMissingFields(res.missing_fields);
+      }
     } catch (err) {
-      // ignore
+      setTargetMissingFields([]);
     } finally {
       setTargetLoading(false);
     }
@@ -357,6 +380,16 @@ export default function BodyProgressScreen() {
               </View>
             )}
             {myTarget && <MacrosCard target={myTarget} />}
+            {!targetLoading && targetMissingFields.length > 0 && (
+              <View style={styles.targetNotice}>
+                <Text style={styles.targetNoticeTitle} i18nKey="screen.tabs.progress.target.incompleteTitle" />
+                <Text style={styles.targetNoticeBody}>
+                  {t('screen.tabs.progress.target.incompleteBody' as any, {
+                    fields: targetMissingFields.map((field) => t(TARGET_FIELD_LABEL_KEYS[field])).join(', '),
+                  })}
+                </Text>
+              </View>
+            )}
           </View>
         </SurfaceCard>
 
@@ -512,6 +545,16 @@ const styles = createThemedStyles((colors, radii) => ({
   heroBody: { marginBottom: 16, maxWidth: 720 },
   trendCard: { marginBottom: 14, borderColor: colors.border, backgroundColor: colors.surfaceAlt },
   trendTitle: { color: colors.text, fontSize: 15, fontWeight: '800', marginBottom: 12 },
+  targetNotice: {
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: colors.warning,
+    backgroundColor: colors.surfaceAlt,
+    borderRadius: radii.lg,
+    padding: 12,
+  },
+  targetNoticeTitle: { color: colors.warning, fontSize: 13, fontWeight: '800', marginBottom: 4 },
+  targetNoticeBody: { color: colors.textSoft, fontSize: 12, lineHeight: 17 },
   trendGrid: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
   trendItem: { alignItems: 'center', flex: 1 },
   trendLabel: { color: colors.textSoft, fontSize: 12, marginBottom: 4 },

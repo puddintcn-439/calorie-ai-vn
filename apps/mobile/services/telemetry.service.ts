@@ -1,12 +1,13 @@
 import { apiClient } from './api';
 import { CorrectionEventDto, LoggingEventDto, LoggingInputMode, ContextMode } from '@calorie-ai/types';
+import { appLogger } from './logger.service';
 
 class TelemetryService {
   async emitLoggingEvent(event: LoggingEventDto): Promise<void> {
     try {
       await apiClient.post('/telemetry/logging-events', event);
     } catch (error) {
-      console.warn('[Telemetry] Failed to emit logging event:', error);
+      appLogger.warn('Telemetry', 'Failed to emit logging event', error);
     }
   }
 
@@ -54,8 +55,7 @@ class TelemetryService {
     try {
       await apiClient.post('/telemetry/corrections', event);
     } catch (error) {
-      // Log but don't throw - telemetry failures should not break user experience
-      console.warn('[Telemetry] Failed to emit correction event:', error);
+      appLogger.warn('Telemetry', 'Failed to emit correction event', error);
     }
   }
 
@@ -124,7 +124,7 @@ class TelemetryService {
         timestamp: new Date().toISOString(),
       });
     } catch (error) {
-      console.warn('[Telemetry] Failed to emit context event:', error);
+      appLogger.warn('Telemetry', 'Failed to emit context event', error);
     }
   }
 }

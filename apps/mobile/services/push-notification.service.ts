@@ -3,6 +3,7 @@ import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { apiClient } from './api';
 import { authStorage } from './auth-storage';
+import { appLogger } from './logger.service';
 
 type NotificationsModule = typeof ExpoNotifications;
 
@@ -100,13 +101,13 @@ class PushNotificationService {
           });
 
       if (!finalPermissions.granted) {
-        console.warn('[Push] User declined notification permissions');
+        appLogger.info('Push', 'User declined notification permissions');
         return null;
       }
 
       const projectId = this.getExpoProjectId();
       if (!projectId) {
-        console.log('[Push] Skipping Expo push token registration because no Expo projectId is configured');
+        appLogger.info('Push', 'Skipping Expo push token registration because no Expo projectId is configured');
         return null;
       }
 
@@ -124,14 +125,14 @@ class PushNotificationService {
           await this.unregisterPushToken(cachedToken, false);
         }
         await authStorage.setItemAsync('push_token', token);
-        console.log('[Push] Token registered with backend');
+        appLogger.info('Push', 'Token registered with backend');
       } catch (err) {
-        console.warn('[Push] Failed to register token with backend:', err);
+        appLogger.warn('Push', 'Failed to register token with backend', err);
       }
 
       return token;
     } catch (error) {
-      console.warn('[Push] Failed to initialize notifications:', error);
+      appLogger.warn('Push', 'Failed to initialize notifications', error);
       return null;
     }
   }
@@ -143,7 +144,7 @@ class PushNotificationService {
     try {
       await apiClient.delete('/reminders/push-token', { data: { token: resolvedToken } });
     } catch (error) {
-      console.warn('[Push] Failed to unregister token with backend:', error);
+      appLogger.warn('Push', 'Failed to unregister token with backend', error);
     } finally {
       if (clearLocalToken) {
         await authStorage.deleteItemAsync('push_token');
@@ -176,7 +177,7 @@ class PushNotificationService {
         trigger: null, // Send immediately
       });
     } catch (error) {
-      console.error('[Push] Failed to send notification:', error);
+      appLogger.warn('Push', 'Failed to send notification', error);
     }
   }
 
@@ -220,9 +221,9 @@ class PushNotificationService {
         },
       });
 
-      console.log(`[Push] Scheduled notification for ${options.time}`);
+      appLogger.info('Push', 'Scheduled notification', { time: options.time });
     } catch (error) {
-      console.error('[Push] Failed to schedule notification:', error);
+      appLogger.warn('Push', 'Failed to schedule notification', error);
     }
   }
 
@@ -260,9 +261,9 @@ class PushNotificationService {
         },
       });
 
-      console.log(`[Push] Scheduled recurring notification daily at ${options.time}`);
+      appLogger.info('Push', 'Scheduled recurring notification', { time: options.time });
     } catch (error) {
-      console.error('[Push] Failed to schedule recurring notification:', error);
+      appLogger.warn('Push', 'Failed to schedule recurring notification', error);
     }
   }
 
@@ -277,9 +278,9 @@ class PushNotificationService {
       }
 
       await Notifications.cancelAllScheduledNotificationsAsync();
-      console.log('[Push] Cancelled all notifications');
+      appLogger.info('Push', 'Cancelled all notifications');
     } catch (error) {
-      console.error('[Push] Failed to cancel notifications:', error);
+      appLogger.warn('Push', 'Failed to cancel notifications', error);
     }
   }
 

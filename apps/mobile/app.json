@@ -49,10 +49,11 @@
       "expo-secure-store",
       "expo-health-connect",
       [
-        "react-native-health",
+        "@kingstinct/react-native-healthkit",
         {
-          "healthSharePermission": "Cho phép đọc dữ liệu bước đi và calories từ Health để đồng bộ vận động",
-          "healthUpdatePermission": "Cho phép ghi dữ liệu vận động từ ứng dụng vào Health"
+          "NSHealthShareUsageDescription": "Cho phep doc du lieu buoc di, quang duong va calories tu Apple Health de dong bo van dong.",
+          "NSHealthUpdateUsageDescription": "Ung dung hien khong ghi du lieu vao Apple Health.",
+          "background": false
         }
       ],
       [

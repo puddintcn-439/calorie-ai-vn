@@ -7,15 +7,49 @@ test.describe('Profile flows', () => {
 
     let patchCalled = false;
 
-    await page.route('**/user/profile', async (route) => {
+    await page.route('**/*', async (route) => {
+      const url = new URL(route.request().url());
+      if (url.port !== '3000') {
+        await route.continue();
+        return;
+      }
+
       const method = route.request().method();
-      if (method === 'GET') {
+      const path = url.pathname;
+
+      if (path === '/user/profile' && method === 'GET') {
         await route.fulfill(jsonResponse({ full_name: '', weight_kg: 65, height_cm: 170, age: 25, gender: 'male' }));
-      } else if (method === 'PATCH') {
+      } else if (path === '/user/profile' && method === 'PATCH') {
         patchCalled = true;
         await route.fulfill(jsonResponse({ full_name: 'Test User', weight_kg: 70, height_cm: 175, age: 30, gender: 'male' }));
+      } else if (path === '/reminders/preferences') {
+        await route.fulfill(jsonResponse({
+          allow_push_notifications: false,
+          breakfast_reminder_enabled: false,
+          lunch_reminder_enabled: false,
+          dinner_reminder_enabled: false,
+          snack_reminder_enabled: false,
+          nudge_motivation_style: 'neutral',
+        }));
+      } else if (path === '/reminders/nudge-test') {
+        await route.fulfill(jsonResponse({ title: 'Lunch reminder', body: 'Keep it simple.' }));
+      } else if (path === '/subscriptions/current') {
+        await route.fulfill(jsonResponse({ tier: 'free', is_active: true }));
+      } else if (path === '/subscriptions/features') {
+        await route.fulfill(jsonResponse({
+          ai_scans_per_month: 5,
+          ai_coach_messages_per_day: 5,
+          meal_reminders: false,
+          weekly_reports: false,
+        }));
+      } else if (path === '/log/activity' || path === '/activity-preferences') {
+        await route.fulfill(jsonResponse([]));
+      } else if (path === '/log/daily') {
+        await route.fulfill(jsonResponse({ logs: [], total_calories: 0 }));
+      } else if (path.startsWith('/calorie-target') || path.startsWith('/insights')) {
+        await route.fulfill(jsonResponse({}));
       } else {
-        await route.continue();
+        await route.fulfill(jsonResponse({}));
       }
     });
 

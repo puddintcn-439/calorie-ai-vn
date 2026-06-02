@@ -158,11 +158,12 @@ async function withRetry<T>(fn: () => Promise<T>, attempts = 3, baseDelay = 600)
   for (let attempt = 1; attempt <= attempts; attempt++) {
     try {
       return await fn();
-    } catch (err) {
+    } catch (err: unknown) {
       lastError = err;
       // Determine if error is retryable
-      const status = err?.response?.status;
-      const code = err?.code;
+      const candidate = err as { response?: { status?: unknown }; code?: unknown };
+      const status = candidate.response?.status;
+      const code = candidate.code;
       const isServerError = typeof status === 'number' && (status >= 500 || status === 429 || status === 503);
       const isNetwork = code === 'ECONNABORTED' || code === 'ENOTFOUND' || code === 'ECONNREFUSED' || code === 'ETIMEDOUT' || code === 'ERR_NETWORK';
       const shouldRetry = isServerError || isNetwork;

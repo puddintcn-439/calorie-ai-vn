@@ -83,6 +83,27 @@ export interface CalorieTargetResponse {
   nutrition_targets?: NutritionTargets;
 }
 
+export type CalorieTargetRequiredField =
+  | 'weight_kg'
+  | 'height_cm'
+  | 'age'
+  | 'gender'
+  | 'activity_level'
+  | 'goal';
+
+export interface CalorieTargetUnavailableResponse {
+  status: 'incomplete_profile';
+  target: null;
+  missing_fields: CalorieTargetRequiredField[];
+  message: string;
+}
+
+export type MyCalorieTargetResponse = CalorieTargetResponse | CalorieTargetUnavailableResponse;
+
+export function isCalorieTargetReady(response: MyCalorieTargetResponse): response is CalorieTargetResponse {
+  return 'daily_calorie_target' in response && typeof response.daily_calorie_target === 'number';
+}
+
 class CalorieTargetService {
   async getMyRecommendations(): Promise<WeeklyRecommendations> {
     const res = await apiClient.get<WeeklyRecommendations>('/calorie-target/recommendations/me');
@@ -99,8 +120,8 @@ class CalorieTargetService {
     return res.data;
   }
 
-  async getMyTarget(): Promise<CalorieTargetResponse> {
-    const res = await apiClient.get<CalorieTargetResponse>('/calorie-target/me');
+  async getMyTarget(): Promise<MyCalorieTargetResponse> {
+    const res = await apiClient.get<MyCalorieTargetResponse>('/calorie-target/me');
     return res.data;
   }
 }

@@ -587,6 +587,7 @@ function buildMovementPlan(
   targetKcal: number,
   locale: Locale,
 ): MovementPlan | null {
+  if (!profile) return null;
   const weightKg = toFiniteNumber(profile?.weight_kg);
   if (weightKg === null || weightKg <= 0) return null;
 

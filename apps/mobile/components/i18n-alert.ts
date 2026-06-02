@@ -1,10 +1,11 @@
 import { Alert as NativeAlert } from 'react-native';
+import type { AlertButton, AlertOptions } from 'react-native';
 import { translateAlertButtons, translateText } from './i18n';
 import { useLocaleStore } from '../store/locale.store';
 
 export const Alert: any = {
   ...NativeAlert,
-  alert: (title, message, buttons, options) => {
+  alert: (title: string, message?: string, buttons?: AlertButton[], options?: AlertOptions) => {
     const locale = useLocaleStore.getState().locale;
     return NativeAlert.alert(
       title ? translateText(title, locale) : title,

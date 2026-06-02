@@ -320,11 +320,12 @@ function MealBreakdownRow({
   total,
 }: {
   label: string;
-  calories: number;
-  count: number;
-  total: number;
+  calories: number | undefined;
+  count: number | undefined;
+  total: number | undefined;
 }) {
   const safeCalories = safeNumber(calories);
+  const safeCount = safeNumber(count);
   const safeTotal = safeNumber(total);
   const percentage = safeTotal > 0 ? (safeCalories / safeTotal) * 100 : 0;
   const { t } = useI18n();
@@ -332,7 +333,7 @@ function MealBreakdownRow({
     <View style={styles.breakdownRow}>
       <View style={styles.breakdownLeft}>
         <Text style={styles.breakdownLabel}>{label}</Text>
-        <Text style={styles.breakdownMeta}>{t('screen.tabs.insights.unit.meals', { count: formatNumberVi(count) })}</Text>
+        <Text style={styles.breakdownMeta}>{t('screen.tabs.insights.unit.meals', { count: formatNumberVi(safeCount) })}</Text>
       </View>
       <View style={styles.breakdownBar}>
         <View style={[styles.breakdownFill, { width: `${Math.max(5, Math.min(100, percentage))}%` }]} />

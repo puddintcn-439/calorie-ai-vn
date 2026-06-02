@@ -21,6 +21,7 @@ import { createThemedStyles, theme, useAppTheme } from '../../components/theme';
 import { Text } from '../../components/i18n-text';
 import { Locale, tr, translateText, useI18n } from '../../components/i18n';
 import { formatPercent, safeRound, toFiniteNumber } from '../../services/number-format';
+import { appLogger } from '../../services/logger.service';
 
 const coachHeroIllustration = require('../../assets/images/coach-hero.jpg') as number;
 
@@ -526,7 +527,7 @@ export default function CoachScreen() {
         insight.id !== insightId && (!acknowledgedKey || getInsightContentKey(insight) !== acknowledgedKey)
       )));
     } catch (error) {
-      console.error('Failed to acknowledge insight:', error);
+      appLogger.warn('Coach', 'Failed to acknowledge insight', error);
     }
   };
 

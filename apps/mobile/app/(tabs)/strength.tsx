@@ -15,6 +15,7 @@ import { formatNumberVi } from '../../services/number-format';
 import { Text } from '../../components/i18n-text';
 import { Alert } from '../../components/i18n-alert';
 import { useI18n } from '../../components/i18n';
+import { appLogger } from '../../services/logger.service';
 
 type LocalSet = { reps: number; weight_kg: number };
 type LocalExercise = {
@@ -125,7 +126,7 @@ export default function StrengthLogScreen() {
       const presets = await loadPresets();
       setPresetsState(presets);
     } catch (err) {
-      console.warn('remove preset failed', err);
+      appLogger.warn('Strength', 'remove preset failed', err);
     }
   };
 

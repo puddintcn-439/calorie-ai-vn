@@ -1,6 +1,7 @@
 import type { ComponentProps } from 'react';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import type { ColorValue } from 'react-native';
 import { Platform, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppTheme } from '../../components/theme';
@@ -18,13 +19,14 @@ function TabIcon({
   desktop,
 }: {
   name: TabIconName;
-  color: string;
+  color: ColorValue;
   size: number;
   focused: boolean;
   compact: boolean;
   desktop: boolean;
 }) {
   const { colors } = useAppTheme();
+  const iconColor = typeof color === 'string' ? color : colors.textMuted;
   return (
     <View style={[
       styles.tabIconWrap,
@@ -35,7 +37,7 @@ function TabIcon({
       <AnimatedIonicon
         name={name}
         size={Math.max(18, size - 2)}
-        color={focused ? colors.textOnAccent : color}
+        color={focused ? colors.textOnAccent : iconColor}
         motion="float"
         active={focused}
       />

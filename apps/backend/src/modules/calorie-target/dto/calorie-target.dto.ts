@@ -79,3 +79,20 @@ export interface CalorieTargetResponse {
   medical_review_recommended?: boolean;
   nutrition_targets?: NutritionTargets;
 }
+
+export type CalorieTargetRequiredField =
+  | 'weight_kg'
+  | 'height_cm'
+  | 'age'
+  | 'gender'
+  | 'activity_level'
+  | 'goal';
+
+export interface CalorieTargetUnavailableResponse {
+  status: 'incomplete_profile';
+  target: null;
+  missing_fields: CalorieTargetRequiredField[];
+  message: string;
+}
+
+export type MyCalorieTargetResponse = CalorieTargetResponse | CalorieTargetUnavailableResponse;

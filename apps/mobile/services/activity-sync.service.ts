@@ -42,19 +42,13 @@ export const HEALTH_SYNC_SCREEN_LINK = 'calorieai://health-sync';
 const HEALTH_CONNECT_STORE_URL = 'https://play.google.com/store/apps/details?id=com.google.android.apps.healthdata';
 const APPLE_HEALTH_SUPPORT_URL = 'https://support.apple.com/108779';
 const HEALTH_SYNC_PERMISSION_KEYS = ['Steps', 'Distance', 'ActiveCaloriesBurned', 'TotalCaloriesBurned'] as const;
+const APPLE_HEALTH_READ_TYPES = [
+  'HKQuantityTypeIdentifierStepCount',
+  'HKQuantityTypeIdentifierDistanceWalkingRunning',
+  'HKQuantityTypeIdentifierActiveEnergyBurned',
+] as const;
 
-function getIosHealthPermissions(AppleHealthKit: any) {
-  return {
-    permissions: {
-      read: [
-        AppleHealthKit.Constants.Permissions.Steps,
-        AppleHealthKit.Constants.Permissions.ActiveEnergyBurned,
-        AppleHealthKit.Constants.Permissions.DistanceWalkingRunning,
-      ],
-      write: [],
-    },
-  };
-}
+type AppleHealthKitModule = typeof import('@kingstinct/react-native-healthkit');
 
 function toDayRange(date: string) {
   const start = new Date(`${date}T00:00:00.000Z`);
@@ -113,6 +107,80 @@ function toKm(length: { value: number; unit: string } | undefined): number {
     default:
       return 0;
   }
+}
+
+function readHealthKitQuantity(statistics: { sumQuantity?: { quantity?: number } } | null | undefined): number {
+  const value = Number(statistics?.sumQuantity?.quantity ?? 0);
+  return Number.isFinite(value) ? value : 0;
+}
+
+async function getAppleHealthKitModule(): Promise<AppleHealthKitModule> {
+  return import('@kingstinct/react-native-healthkit');
+}
+
+async function requestAppleHealthAuthorization(healthkit: AppleHealthKitModule): Promise<boolean> {
+  return healthkit.requestAuthorization({
+    toRead: APPLE_HEALTH_READ_TYPES,
+  });
+}
+
+async function readAppleHealthDailySnapshot(date: string) {
+  const healthkit = await getAppleHealthKitModule();
+  const available = await healthkit.isHealthDataAvailableAsync();
+  if (!available) {
+    return {
+      available: false,
+      authorized: false,
+      steps: 0,
+      distanceKm: 0,
+      caloriesBurned: 0,
+    };
+  }
+
+  const authorized = await requestAppleHealthAuthorization(healthkit);
+  if (!authorized) {
+    return {
+      available: true,
+      authorized: false,
+      steps: 0,
+      distanceKm: 0,
+      caloriesBurned: 0,
+    };
+  }
+
+  const { startIso, endIso } = toDayRange(date);
+  const filter = {
+    date: {
+      startDate: new Date(startIso),
+      endDate: new Date(endIso),
+    },
+  };
+
+  const [stepsStats, distanceStats, activeEnergyStats] = await Promise.all([
+    healthkit.queryStatisticsForQuantity(
+      'HKQuantityTypeIdentifierStepCount',
+      ['cumulativeSum'],
+      { filter, unit: 'count' },
+    ),
+    healthkit.queryStatisticsForQuantity(
+      'HKQuantityTypeIdentifierDistanceWalkingRunning',
+      ['cumulativeSum'],
+      { filter, unit: 'm' },
+    ),
+    healthkit.queryStatisticsForQuantity(
+      'HKQuantityTypeIdentifierActiveEnergyBurned',
+      ['cumulativeSum'],
+      { filter, unit: 'kcal' },
+    ),
+  ]);
+
+  return {
+    available: true,
+    authorized: true,
+    steps: readHealthKitQuantity(stepsStats),
+    distanceKm: readHealthKitQuantity(distanceStats) / 1000,
+    caloriesBurned: readHealthKitQuantity(activeEnergyStats),
+  };
 }
 
 function buildSyncedEntry(params: {
@@ -230,57 +298,23 @@ async function buildAndroidHealthConnectBatch(date: string): Promise<ActivitySyn
   });
 }
 
-function withCallback<T>(
-  invoke: (cb: (error: string | null, result: T) => void) => void,
-): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    invoke((error, result) => {
-      if (error) {
-        reject(new Error(error));
-        return;
-      }
-      resolve(result);
-    });
-  });
-}
-
 async function buildIosHealthKitBatch(date: string): Promise<ActivitySyncBatchDto> {
-  const healthkitModule = await import('react-native-health');
-  const AppleHealthKit = healthkitModule.default;
-  const { startIso, endIso } = toDayRange(date);
-
-  await withCallback<any>((cb) => AppleHealthKit.isAvailable((error, available) => {
-    cb(error as any, available as any);
-  }));
-
-  const permissions = getIosHealthPermissions(AppleHealthKit);
-
-  await withCallback<any>((cb) => AppleHealthKit.initHealthKit(permissions as any, (error, result) => {
-    cb(error as any, result as any);
-  }));
-
-  const [stepCount, distance, activeEnergySamples] = await Promise.all([
-    withCallback<any>((cb) => AppleHealthKit.getStepCount({ date }, (error, result) => cb(error as any, result as any))),
-    withCallback<any>((cb) => AppleHealthKit.getDistanceWalkingRunning({ startDate: startIso, endDate: endIso }, (error, result) => cb(error as any, result as any))),
-    withCallback<any[]>((cb) => AppleHealthKit.getActiveEnergyBurned({ startDate: startIso, endDate: endIso }, (error, result) => cb(error as any, result as any))),
-  ]);
-
-  const steps = Number(stepCount?.value ?? 0);
-  const distanceKm = Number(distance?.value ?? 0) / 1000;
-  const caloriesBurned = activeEnergySamples.reduce((sum, sample: any) => {
-    const val = Number(sample?.value ?? 0);
-    return sum + (Number.isFinite(val) ? val : 0);
-  }, 0);
-  const durationMin = safeMinutes(steps / 105);
+  const snapshot = await readAppleHealthDailySnapshot(date);
+  if (!snapshot.available) {
+    throw new Error('Apple Health khong kha dung tren thiet bi hien tai.');
+  }
+  if (!snapshot.authorized) {
+    throw new Error('Can cap quyen Apple Health truoc khi dong bo.');
+  }
 
   return buildSyncedEntry({
     source: 'apple_health',
     date,
     syncedAt: new Date().toISOString(),
-    steps,
-    distanceKm,
-    caloriesBurned,
-    durationMin,
+    steps: snapshot.steps,
+    distanceKm: snapshot.distanceKm,
+    caloriesBurned: snapshot.caloriesBurned,
+    durationMin: safeMinutes(snapshot.steps / 105),
   });
 }
 
@@ -378,76 +412,44 @@ class ActivitySyncService {
     }
 
     if (Platform.OS === 'ios') {
-      const healthkitModule = await import('react-native-health');
-      const AppleHealthKit = healthkitModule.default;
-      const permissions = getIosHealthPermissions(AppleHealthKit);
-      const { startIso, endIso } = toDayRange(targetDate);
-
-      const available = await withCallback<boolean>((cb) => AppleHealthKit.isAvailable((error, result) => {
-        cb(error as any, result as any);
-      }));
-
-      if (!available) {
+      const snapshot = await readAppleHealthDailySnapshot(targetDate);
+      if (!snapshot.available) {
         return {
           platform: 'ios',
           providerName: 'Apple Health',
           availability: 'Health unavailable',
           grantedPermissions: [],
-          missingPermissions: ['Steps', 'ActiveEnergyBurned', 'DistanceWalkingRunning'],
+          missingPermissions: [...APPLE_HEALTH_READ_TYPES],
           today: null,
           notes: ['Apple Health khong kha dung tren thiet bi hien tai.'],
         };
       }
 
-      await withCallback<any>((cb) => AppleHealthKit.initHealthKit(permissions as any, (error, result) => {
-        cb(error as any, result as any);
-      }));
-
-      const authStatus = await withCallback<any>((cb) => AppleHealthKit.getAuthStatus(permissions as any, (error, result) => {
-        cb(error as any, result as any);
-      }));
-
-      const permissionNames = ['Steps', 'ActiveEnergyBurned', 'DistanceWalkingRunning'];
-      const grantedPermissions = permissionNames.filter((_, index) => authStatus?.permissions?.read?.[index] === 2);
-      const missingPermissions = permissionNames.filter((_, index) => authStatus?.permissions?.read?.[index] !== 2);
-
-      if (missingPermissions.length > 0) {
+      if (!snapshot.authorized) {
         return {
           platform: 'ios',
           providerName: 'Apple Health',
           availability: 'Health available',
-          grantedPermissions,
-          missingPermissions,
+          grantedPermissions: [],
+          missingPermissions: [...APPLE_HEALTH_READ_TYPES],
           today: null,
-          notes: ['Neu da tung tu choi quyen, hay mo Apple Health hoac Settings de cap lai.'],
+          notes: ['Can cap quyen Apple Health truoc khi doc du lieu van dong hom nay.'],
         };
       }
 
-      const [stepCount, distance, activeEnergySamples] = await Promise.all([
-        withCallback<any>((cb) => AppleHealthKit.getStepCount({ date: targetDate }, (error, result) => cb(error as any, result as any))),
-        withCallback<any>((cb) => AppleHealthKit.getDistanceWalkingRunning({ startDate: startIso, endDate: endIso }, (error, result) => cb(error as any, result as any))),
-        withCallback<any[]>((cb) => AppleHealthKit.getActiveEnergyBurned({ startDate: startIso, endDate: endIso }, (error, result) => cb(error as any, result as any))),
-      ]);
-
-      const caloriesBurned = activeEnergySamples.reduce((sum, sample: any) => {
-        const value = Number(sample?.value ?? 0);
-        return sum + (Number.isFinite(value) ? value : 0);
-      }, 0);
-
-      const steps = Math.round(Number(stepCount?.value ?? 0));
+      const steps = Math.round(snapshot.steps);
       const estimatedStepsKcal = Math.max(0, Math.round(steps * 0.04));
-
       return {
         platform: 'ios',
         providerName: 'Apple Health',
         availability: 'Health available',
-        grantedPermissions,
+        grantedPermissions: [...APPLE_HEALTH_READ_TYPES],
         missingPermissions: [],
         today: {
           date: targetDate,
           steps,
-          distanceKm: Number((Number(distance?.value ?? 0) / 1000).toFixed(2)),
-          caloriesBurned: Math.round(caloriesBurned),
+          distanceKm: Number(snapshot.distanceKm.toFixed(2)),
+          caloriesBurned: Math.round(snapshot.caloriesBurned),
           steps_estimated_kcal: estimatedStepsKcal,
         },
         notes: ['Snapshot doc truc tiep tu Apple Health tren thiet bi hien tai.'],

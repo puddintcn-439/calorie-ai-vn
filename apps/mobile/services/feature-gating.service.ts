@@ -1,5 +1,6 @@
 import { SubscriptionFeatures } from '@calorie-ai/types';
 import { apiClient } from './api';
+import { appLogger } from './logger.service';
 
 class FeatureGatingService {
   private featureCache: SubscriptionFeatures | null = null;
@@ -23,7 +24,7 @@ class FeatureGatingService {
       this.cacheExpiry = now + this.CACHE_DURATION;
       return res.data;
     } catch (error) {
-      console.error('[FeatureGating] Failed to fetch features:', error);
+      appLogger.warn('FeatureGating', 'Failed to fetch features', error);
       // Return default free tier features on error
       return {
         daily_insights: false,
@@ -80,7 +81,7 @@ class FeatureGatingService {
         features,
       };
     } catch (error) {
-      console.error('[FeatureGating] Failed to get subscription status:', error);
+      appLogger.warn('FeatureGating', 'Failed to get subscription status', error);
       return {
         tier: 'free',
         isActive: true,

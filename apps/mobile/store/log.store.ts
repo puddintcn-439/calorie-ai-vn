@@ -17,6 +17,7 @@ import {
 import { apiClient } from '../services/api';
 import { activitySyncService } from '../services/activity-sync.service';
 import { getLocalDateYmd, getLocalTimezoneOffsetMinutes } from '../services/date';
+import { appLogger } from '../services/logger.service';
 
 const create = require('zustand').create as typeof import('zustand').create;
 
@@ -90,7 +91,7 @@ export const useLogStore = create<LogState>((set, get) => ({
       const res = await apiClient.get(`/roadmap/${d}`);
       set({ dailyRoadmap: res.data });
     } catch (error) {
-      console.warn('Failed to fetch daily roadmap:', error);
+      appLogger.warn('LogStore', 'Failed to fetch daily roadmap', error);
       set({ dailyRoadmap: [] });
     }
   },
@@ -185,7 +186,7 @@ export const useLogStore = create<LogState>((set, get) => ({
       const res = await apiClient.get('/activity-preferences');
       set({ activityPreferences: res.data });
     } catch (error) {
-      console.warn('Failed to fetch activity preferences:', error);
+      appLogger.warn('LogStore', 'Failed to fetch activity preferences', error);
       set({ activityPreferences: [] });
     }
   },

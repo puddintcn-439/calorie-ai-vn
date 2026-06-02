@@ -15,7 +15,7 @@ export function estimateExerciseCalories(activityType: ActivityType, durationMin
  */
 export function stepsToKcal(steps: number, weightKg?: number): number {
   if (!Number.isFinite(steps) || steps <= 0) return 0;
-  const w = Number.isFinite(weightKg) && weightKg > 0 ? weightKg : 65;
+  const w = typeof weightKg === 'number' && Number.isFinite(weightKg) && weightKg > 0 ? weightKg : 65;
   const baseFactor = 0.04; // kcal per step at 65kg
   return Math.max(0, Math.round(steps * baseFactor * (w / 65)));
 }
