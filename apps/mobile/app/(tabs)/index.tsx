@@ -1476,7 +1476,7 @@ function QuickLink({ icon, label, onPress }: { icon: keyof typeof Ionicons.glyph
 
 const styles = createThemedStyles((colors, radii) => ({
   screen: {
-    paddingBottom: 24,
+    paddingBottom: 28,
   },
   screenCompact: {
     paddingBottom: 8,
@@ -1485,26 +1485,26 @@ const styles = createThemedStyles((colors, radii) => ({
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
-    gap: 12,
-    marginBottom: 14,
+    gap: 14,
+    marginBottom: 18,
   },
   headerRowCompact: {
     gap: 8,
-    marginBottom: 10,
+    marginBottom: 12,
   },
   headerCopy: {
     flex: 1,
   },
   dashboardTitle: {
     color: colors.text,
-    fontSize: 30,
-    lineHeight: 36,
+    fontSize: 34,
+    lineHeight: 39,
     fontWeight: '900',
-    marginBottom: 8,
+    marginBottom: 10,
   },
   dashboardTitleCompact: {
-    fontSize: 25,
-    lineHeight: 31,
+    fontSize: 28,
+    lineHeight: 33,
     marginBottom: 6,
   },
   heroBody: {
@@ -1515,12 +1515,12 @@ const styles = createThemedStyles((colors, radii) => ({
     lineHeight: 19,
   },
   streakPill: {
-    minHeight: 38,
+    minHeight: 40,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     borderRadius: radii.lg,
-    paddingHorizontal: 12,
+    paddingHorizontal: 13,
     backgroundColor: colors.surfaceWarning,
     borderWidth: 1,
     borderColor: colors.borderWarning,
@@ -1532,16 +1532,16 @@ const styles = createThemedStyles((colors, radii) => ({
   streakText: {
     color: colors.text,
     fontSize: 13,
-    fontWeight: '800',
+    fontWeight: '900',
   },
   nextActionCard: {
-    marginBottom: 12,
+    marginBottom: 16,
     borderColor: colors.borderInfo,
     backgroundColor: colors.surfaceInfo,
     flexDirection: 'row',
     alignItems: 'center',
     flexWrap: 'wrap',
-    gap: 12,
+    gap: 15,
   },
   nextActionCardCompact: {
     padding: 12,
@@ -1556,14 +1556,14 @@ const styles = createThemedStyles((colors, radii) => ({
     backgroundColor: colors.surfaceWarning,
   },
   nextActionIconWrap: {
-    width: 42,
-    height: 42,
+    width: 44,
+    height: 44,
     borderRadius: 999,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.borderSubtle,
   },
   nextActionIconWrapCompact: {
     width: 36,
@@ -1581,12 +1581,13 @@ const styles = createThemedStyles((colors, radii) => ({
     color: colors.textMuted,
     fontSize: 10,
     fontWeight: '900',
-    textTransform: 'uppercase',
-    marginBottom: 2,
+    letterSpacing: 0.5,
+    marginBottom: 3,
   },
   nextActionTitle: {
     color: colors.text,
-    fontSize: 17,
+    fontSize: 18,
+    lineHeight: 23,
     fontWeight: '900',
   },
   nextActionTitleCompact: {
@@ -1596,18 +1597,18 @@ const styles = createThemedStyles((colors, radii) => ({
   nextActionBody: {
     color: colors.textSoft,
     fontSize: 12,
-    lineHeight: 17,
-    marginTop: 3,
+    lineHeight: 18,
+    marginTop: 4,
   },
   nextActionBodyCompact: {
     lineHeight: 16,
   },
   nextActionButton: {
-    minHeight: 38,
-    minWidth: 112,
+    minHeight: 44,
+    minWidth: 122,
     borderRadius: radii.lg,
     backgroundColor: colors.accentMint,
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1618,16 +1619,17 @@ const styles = createThemedStyles((colors, radii) => ({
   },
   nextActionButtonText: {
     color: colors.textOnAccent,
-    fontSize: 12,
+    fontSize: 13,
+    lineHeight: 17,
     fontWeight: '900',
   },
   coachBridgeCard: {
-    marginBottom: 12,
+    marginBottom: 16,
     borderColor: colors.borderInfo,
     backgroundColor: colors.surfaceInfo,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 14,
   },
   coachBridgeGood: {
     borderColor: colors.borderSuccess,
@@ -1671,12 +1673,12 @@ const styles = createThemedStyles((colors, radii) => ({
   coachBridgeBody: {
     color: colors.textSoft,
     fontSize: 12,
-    lineHeight: 18,
-    marginTop: 3,
+    lineHeight: 19,
+    marginTop: 4,
   },
   coachBridgeButton: {
-    minHeight: 38,
-    minWidth: 92,
+    minHeight: 42,
+    minWidth: 96,
     borderRadius: radii.lg,
     backgroundColor: colors.accentMint,
     paddingHorizontal: 11,
@@ -1689,10 +1691,10 @@ const styles = createThemedStyles((colors, radii) => ({
     fontWeight: '900',
   },
   cockpitCard: {
-    marginBottom: 16,
+    marginBottom: 20,
     backgroundColor: colors.surface,
-    borderColor: colors.borderStrong,
-    padding: 18,
+    borderColor: colors.borderSubtle,
+    padding: 22,
   },
   cockpitCardCompact: {
     marginBottom: 12,
@@ -1701,7 +1703,7 @@ const styles = createThemedStyles((colors, radii) => ({
   cockpitMain: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
+    gap: 16,
   },
   cockpitMainCompact: {
     gap: 8,
@@ -1757,11 +1759,11 @@ const styles = createThemedStyles((colors, radii) => ({
   },
   targetRow: {
     borderRadius: radii.lg,
-    backgroundColor: colors.surfaceAlt,
+    backgroundColor: colors.surfaceMuted,
     borderWidth: 1,
-    borderColor: colors.border,
-    paddingHorizontal: 13,
-    paddingVertical: 11,
+    borderColor: colors.borderSubtle,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
   },
   targetRowCompact: {
     paddingHorizontal: 10,
@@ -1789,8 +1791,8 @@ const styles = createThemedStyles((colors, radii) => ({
   },
   macroRow: {
     flexDirection: 'row',
-    gap: 8,
-    marginTop: 16,
+    gap: 10,
+    marginTop: 20,
   },
   macroRowCompact: {
     gap: 6,
@@ -1798,12 +1800,12 @@ const styles = createThemedStyles((colors, radii) => ({
   },
   macroPill: {
     flex: 1,
-    minHeight: 58,
+    minHeight: 64,
     borderRadius: radii.lg,
-    backgroundColor: colors.surface,
+    backgroundColor: colors.surfaceMuted,
     borderWidth: 1,
-    borderColor: colors.border,
-    padding: 10,
+    borderColor: colors.borderSubtle,
+    padding: 12,
   },
   macroDot: {
     width: 8,
@@ -1813,7 +1815,7 @@ const styles = createThemedStyles((colors, radii) => ({
   },
   macroValue: {
     color: colors.text,
-    fontSize: 17,
+    fontSize: 18,
     fontWeight: '900',
   },
   macroLabel: {
@@ -1824,15 +1826,15 @@ const styles = createThemedStyles((colors, radii) => ({
   focusStrip: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-    marginTop: 14,
+    gap: 11,
+    marginTop: 18,
   },
   focusPill: {
     flex: 1,
-    minWidth: 104,
+    minWidth: 112,
     borderRadius: radii.lg,
     borderWidth: 1,
-    padding: 10,
+    padding: 12,
   },
   focusPillGood: {
     backgroundColor: colors.surfaceSuccess,
@@ -1848,7 +1850,7 @@ const styles = createThemedStyles((colors, radii) => ({
   },
   focusPillMuted: {
     backgroundColor: colors.surfaceMuted,
-    borderColor: colors.border,
+    borderColor: colors.borderSubtle,
   },
   focusHeader: {
     flexDirection: 'row',
@@ -1860,7 +1862,7 @@ const styles = createThemedStyles((colors, radii) => ({
     color: colors.textMuted,
     fontSize: 10,
     fontWeight: '900',
-    textTransform: 'uppercase',
+    letterSpacing: 0.45,
   },
   focusValue: {
     color: colors.text,
@@ -1870,9 +1872,9 @@ const styles = createThemedStyles((colors, radii) => ({
   focusHint: {
     color: colors.textSoft,
     fontSize: 11,
-    lineHeight: 15,
-    minHeight: 30,
-    marginTop: 2,
+    lineHeight: 16,
+    minHeight: 32,
+    marginTop: 3,
   },
   focusProgressTrack: {
     height: 5,
@@ -1888,21 +1890,21 @@ const styles = createThemedStyles((colors, radii) => ({
   qualityRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
-    marginTop: 10,
+    gap: 11,
+    marginTop: 14,
   },
   qualityPill: {
     minWidth: '47%',
     flex: 1,
     borderRadius: radii.lg,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.borderSubtle,
     backgroundColor: colors.surfaceMuted,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
   qualityPillMuted: {
-    borderColor: colors.border,
+    borderColor: colors.borderSubtle,
     backgroundColor: colors.surfaceMuted,
   },
   qualityPillOver: {
@@ -1928,18 +1930,18 @@ const styles = createThemedStyles((colors, radii) => ({
   },
   actionGrid: {
     flexDirection: 'row',
-    gap: 10,
-    marginBottom: 12,
+    gap: 11,
+    marginBottom: 16,
   },
   actionGridCompact: {
     gap: 8,
     marginBottom: 10,
   },
   movementCard: {
-    marginBottom: 12,
+    marginBottom: 16,
     backgroundColor: colors.surfaceSuccess,
     borderColor: colors.borderSuccess,
-    gap: 10,
+    gap: 12,
   },
   movementCardCaution: {
     backgroundColor: colors.surfaceWarning,
@@ -1958,7 +1960,7 @@ const styles = createThemedStyles((colors, radii) => ({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 10,
-    marginBottom: 10,
+    marginBottom: 12,
   },
   movementTitleWrap: {
     flexDirection: 'row',
@@ -1967,7 +1969,8 @@ const styles = createThemedStyles((colors, radii) => ({
   },
   movementTitle: {
     color: colors.text,
-    fontSize: 15,
+    fontSize: 16,
+    lineHeight: 21,
     fontWeight: '900',
   },
   movementMetric: {
@@ -1993,14 +1996,14 @@ const styles = createThemedStyles((colors, radii) => ({
     borderWidth: 1,
     borderColor: colors.borderSuccess,
     backgroundColor: colors.surfaceSuccess,
-    padding: 12,
-    gap: 8,
+    padding: 13,
+    gap: 9,
   },
   movementActionLabel: {
     color: colors.textMuted,
     fontSize: 11,
     fontWeight: '900',
-    textTransform: 'uppercase',
+    letterSpacing: 0.45,
   },
   movementMetaRow: {
     flexDirection: 'row',
@@ -2039,7 +2042,7 @@ const styles = createThemedStyles((colors, radii) => ({
     height: 7,
     borderRadius: 999,
     overflow: 'hidden',
-    backgroundColor: colors.border,
+    backgroundColor: colors.progressBg,
   },
   movementProgressFill: {
     height: '100%',
@@ -2059,18 +2062,19 @@ const styles = createThemedStyles((colors, radii) => ({
   movementPlanTitle: {
     color: colors.text,
     fontSize: 18,
+    lineHeight: 23,
     fontWeight: '900',
   },
   movementCalorieStatus: {
     color: colors.accentCyan,
     fontSize: 12,
-    lineHeight: 17,
+    lineHeight: 18,
     fontWeight: '800',
   },
   movementPlanDetail: {
     color: colors.textSoft,
     fontSize: 12,
-    lineHeight: 18,
+    lineHeight: 19,
   },
   movementPlanMeta: {
     color: colors.textMuted,
@@ -2079,10 +2083,10 @@ const styles = createThemedStyles((colors, radii) => ({
     marginTop: 5,
   },
   movementLogButton: {
-    minHeight: 38,
+    minHeight: 42,
     borderRadius: radii.lg,
     backgroundColor: colors.accentMint,
-    paddingHorizontal: 11,
+    paddingHorizontal: 13,
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
@@ -2095,12 +2099,12 @@ const styles = createThemedStyles((colors, radii) => ({
     marginTop: 2,
   },
   movementSecondaryButton: {
-    minHeight: 38,
+    minHeight: 42,
     borderRadius: radii.lg,
     borderWidth: 1,
     borderColor: colors.borderSuccess,
     backgroundColor: colors.surfaceSuccess,
-    paddingHorizontal: 10,
+    paddingHorizontal: 12,
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
@@ -2117,8 +2121,8 @@ const styles = createThemedStyles((colors, radii) => ({
     fontWeight: '900',
   },
   safetySetupCard: {
-    gap: 9,
-    marginBottom: 12,
+    gap: 10,
+    marginBottom: 14,
     backgroundColor: colors.surfaceSuccess,
     borderColor: colors.borderSuccess,
   },
@@ -2139,11 +2143,11 @@ const styles = createThemedStyles((colors, radii) => ({
   safetySetupBody: {
     color: colors.textMuted,
     fontSize: 12,
-    lineHeight: 18,
+    lineHeight: 19,
   },
   safetySetupButton: {
     alignSelf: 'flex-start',
-    minHeight: 34,
+    minHeight: 38,
     borderRadius: radii.lg,
     backgroundColor: colors.accentMint,
     paddingHorizontal: 11,
@@ -2158,7 +2162,7 @@ const styles = createThemedStyles((colors, radii) => ({
   },
   primaryAction: {
     flex: 1.25,
-    minHeight: 56,
+    minHeight: 58,
     borderRadius: radii.lg,
     backgroundColor: colors.accentMint,
     borderWidth: 1,
@@ -2179,7 +2183,7 @@ const styles = createThemedStyles((colors, radii) => ({
   },
   secondaryAction: {
     flex: 1,
-    minHeight: 56,
+    minHeight: 58,
     borderRadius: radii.lg,
     backgroundColor: colors.surfaceAlt,
     borderWidth: 1,
@@ -2199,15 +2203,15 @@ const styles = createThemedStyles((colors, radii) => ({
     fontWeight: '800',
   },
   nudgeRow: {
-    gap: 8,
-    marginBottom: 16,
+    gap: 10,
+    marginBottom: 18,
   },
   nudgeChip: {
-    minHeight: 58,
+    minHeight: 62,
     borderRadius: radii.lg,
     borderWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingHorizontal: 13,
+    paddingVertical: 11,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
@@ -2236,13 +2240,13 @@ const styles = createThemedStyles((colors, radii) => ({
     color: colors.textSoft,
     fontSize: 12,
     marginTop: 2,
-    lineHeight: 17,
+    lineHeight: 18,
   },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 10,
+    marginBottom: 12,
   },
   sectionTitle: {
     color: colors.text,
@@ -2255,16 +2259,16 @@ const styles = createThemedStyles((colors, radii) => ({
     fontWeight: '800',
   },
   mealList: {
-    gap: 10,
+    gap: 12,
   },
   mealCard: {
     flexDirection: 'row',
-    gap: 12,
-    padding: 12,
+    gap: 13,
+    padding: 13,
   },
   mealImage: {
-    width: 78,
-    height: 78,
+    width: 82,
+    height: 82,
     borderRadius: radii.lg,
     backgroundColor: colors.surfaceAlt,
   },
@@ -2281,6 +2285,7 @@ const styles = createThemedStyles((colors, radii) => ({
   mealName: {
     color: colors.text,
     fontSize: 15,
+    lineHeight: 20,
     fontWeight: '900',
   },
   mealHint: {
@@ -2296,7 +2301,7 @@ const styles = createThemedStyles((colors, radii) => ({
   mealItems: {
     color: colors.textSoft,
     fontSize: 13,
-    lineHeight: 18,
+    lineHeight: 19,
     marginTop: 8,
   },
   mealItemsMuted: {
@@ -2306,12 +2311,12 @@ const styles = createThemedStyles((colors, radii) => ({
   },
   quickLinks: {
     flexDirection: 'row',
-    gap: 8,
-    marginTop: 14,
+    gap: 10,
+    marginTop: 16,
   },
   quickLink: {
     flex: 1,
-    minHeight: 48,
+    minHeight: 50,
     borderRadius: radii.lg,
     borderWidth: 1,
     borderColor: colors.border,

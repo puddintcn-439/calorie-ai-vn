@@ -26,7 +26,7 @@ import { formatKcal, formatMacro, formatPercent, roundTo, safeNumber, safePositi
 const IMAGE_MEDIA_TYPES = ['images'] as any;
 import { telemetryService } from '../../services/telemetry.service';
 import { router } from 'expo-router';
-import { ScreenShell, SurfaceCard } from '../../components/ui-shell';
+import { ScreenShell, SkeletonBlock, SurfaceCard } from '../../components/ui-shell';
 import { EmptyState } from '../../components/empty-state';
 import { createThemedStyles, theme, useAppTheme } from '../../components/theme';
 import { AnimatedIonicon } from '../../components/animated-icon';
@@ -859,10 +859,7 @@ export default function ScanScreen() {
             <MealPicker selected={selectedMeal} onSelect={setSelectedMeal} />
 
             {isSearching ? (
-              <View style={styles.scanningContainer}>
-                <ActivityIndicator size="large" color={theme.colors.success} />
-                <Text style={styles.scanningText} i18nKey="screen.tabs.scan.text.004" />
-              </View>
+              <ScanLoadingState title={t('screen.tabs.scan.text.004')} />
             ) : null}
 
             {searchResults.map((food) => {
@@ -1149,11 +1146,10 @@ export default function ScanScreen() {
 
         {/* Loading spinner for AI scan */}
         {isAiScanning && mode !== 'barcode' && (
-          <View style={styles.scanningContainer}>
-            <ActivityIndicator size="large" color={theme.colors.success} />
-            <Text style={styles.scanningText}>{mode === 'receipt' ? t('screen.tabs.scan.loading.receipt') : t('screen.tabs.scan.loading.scan')}</Text>
-            <Text style={styles.scanningHelpText}>{getScanningHelpText()}</Text>
-          </View>
+          <ScanLoadingState
+            title={mode === 'receipt' ? t('screen.tabs.scan.loading.receipt') : t('screen.tabs.scan.loading.scan')}
+            help={getScanningHelpText()}
+          />
         )}
 
         {/* ── AI Scan Results ── */}
@@ -1225,6 +1221,26 @@ export default function ScanScreen() {
         )}
         <RewardToast reward={reward} onHide={() => setReward(null)} />
     </ScreenShell>
+  );
+}
+
+function ScanLoadingState({ title, help }: { title: string; help?: string }) {
+  return (
+    <SurfaceCard style={styles.scanLoadingCard}>
+      <View style={styles.scanLoadingHeader}>
+        <SkeletonBlock width={44} height={44} radius={22} />
+        <View style={styles.scanLoadingCopy}>
+          <Text style={styles.scanningText}>{title}</Text>
+          {help ? <Text style={styles.scanningHelpText}>{help}</Text> : null}
+        </View>
+      </View>
+      <View style={styles.scanSkeletonList}>
+        <SkeletonBlock height={18} width="74%" />
+        <SkeletonBlock height={56} />
+        <SkeletonBlock height={56} />
+        <SkeletonBlock height={42} width="58%" />
+      </View>
+    </SurfaceCard>
   );
 }
 
@@ -1414,16 +1430,16 @@ const styles = createThemedStyles((colors, radii) => ({
     padding: 14,
   },
   heroBody: { maxWidth: 700 },
-  modeTabs: { flexDirection: 'row', gap: 8, marginBottom: 8, flexWrap: 'wrap' },
+  modeTabs: { flexDirection: 'row', gap: 9, marginBottom: 10, flexWrap: 'wrap' },
   modeTab: {
-    minHeight: 40,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
+    minHeight: 44,
+    paddingVertical: 11,
+    paddingHorizontal: 13,
     borderRadius: 8,
-    backgroundColor: colors.surfaceLifted,
+    backgroundColor: colors.surfaceMuted,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.borderSubtle,
     flexDirection: 'row',
     gap: 6,
   },
@@ -1434,11 +1450,11 @@ const styles = createThemedStyles((colors, radii) => ({
     flexDirection: 'row',
     gap: 8,
     flexWrap: 'wrap',
-    marginBottom: 18,
-    padding: 8,
+    marginBottom: 20,
+    padding: 10,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.borderSubtle,
     backgroundColor: colors.surfaceAlt,
   },
   modeSecondaryTab: {
@@ -1447,18 +1463,18 @@ const styles = createThemedStyles((colors, radii) => ({
   modeTabActive: { backgroundColor: colors.accentMint, borderColor: colors.accentMint },
   modeTabText: { color: colors.textSoft, fontWeight: '800', fontSize: 13, textTransform: 'capitalize' },
   modeTabTextActive: { color: colors.textOnAccent },
-  searchContainer: { marginBottom: 16 },
-  searchItemCard: { marginBottom: 10 },
-  captureButton: { backgroundColor: colors.surfaceLifted, borderRadius: 8, padding: 30, alignItems: 'center', gap: 12, marginBottom: 14, borderWidth: 1, borderColor: colors.borderStrong },
-  captureText: { color: colors.textSoft, fontSize: 15, fontWeight: '700' },
+  searchContainer: { marginBottom: 18 },
+  searchItemCard: { marginBottom: 12, gap: 8 },
+  captureButton: { backgroundColor: colors.surfaceLifted, borderRadius: 8, padding: 32, alignItems: 'center', gap: 14, marginBottom: 16, borderWidth: 1, borderColor: colors.borderStrong },
+  captureText: { color: colors.textSoft, fontSize: 15, lineHeight: 21, fontWeight: '800', textAlign: 'center' },
   selectedImageBar: {
     minHeight: 44,
-    marginBottom: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    marginBottom: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.borderSubtle,
     backgroundColor: colors.surfaceAlt,
     flexDirection: 'row',
     alignItems: 'center',
@@ -1473,40 +1489,44 @@ const styles = createThemedStyles((colors, radii) => ({
     borderRadius: 8,
     backgroundColor: colors.surfaceLifted,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.borderSubtle,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
   },
   selectedImageActionText: { color: colors.text, fontSize: 12, fontWeight: '800' },
-  textInputContainer: { gap: 10, marginBottom: 16 },
-  textInput: { backgroundColor: colors.surfaceLifted, borderRadius: 8, padding: 14, color: colors.text, minHeight: 80, borderWidth: 1, borderColor: colors.border },
-  analyzeButton: { backgroundColor: colors.accentCyan, borderRadius: 8, padding: 14, alignItems: 'center' },
-  analyzeButtonText: { color: colors.textOnAccent, fontWeight: '800', fontSize: 16 },
-  retryButton: { backgroundColor: colors.accentMint, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
-  retryButtonText: { color: colors.textOnAccent, fontWeight: '700', fontSize: 14 },
-  cancelButton: { borderRadius: 8, paddingHorizontal: 14, paddingVertical: 10, alignItems: 'center', borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
-  cancelButtonText: { color: colors.text, fontWeight: '700', fontSize: 14 },
-  previewImage: { width: '100%', height: 220, borderRadius: 8, marginBottom: 16 },
+  textInputContainer: { gap: 12, marginBottom: 18 },
+  textInput: { backgroundColor: colors.surfaceLifted, borderRadius: 8, padding: 15, color: colors.text, minHeight: 88, borderWidth: 1, borderColor: colors.borderSubtle, fontSize: 15, lineHeight: 22 },
+  analyzeButton: { backgroundColor: colors.accentMint, borderRadius: 8, padding: 15, alignItems: 'center', minHeight: 50, justifyContent: 'center' },
+  analyzeButtonText: { color: colors.textOnAccent, fontWeight: '900', fontSize: 16 },
+  retryButton: { backgroundColor: colors.accentMint, paddingHorizontal: 17, paddingVertical: 11, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  retryButtonText: { color: colors.textOnAccent, fontWeight: '800', fontSize: 14 },
+  cancelButton: { borderRadius: 8, paddingHorizontal: 15, paddingVertical: 11, alignItems: 'center', borderWidth: 1, borderColor: colors.borderSubtle, backgroundColor: colors.surface },
+  cancelButtonText: { color: colors.text, fontWeight: '800', fontSize: 14 },
+  previewImage: { width: '100%', height: 230, borderRadius: 8, marginBottom: 18 },
   scanningContainer: { alignItems: 'center', padding: 30, gap: 12 },
-  scanningText: { color: colors.textMuted, fontSize: 15, marginTop: 8 },
-  scanningHelpText: { color: colors.textSoft, fontSize: 13, lineHeight: 19, textAlign: 'center', maxWidth: 420 },
-  sectionTitle: { fontSize: 18, fontWeight: '700', color: colors.text, marginBottom: 12 },
-  mealPicker: { flexDirection: 'row', gap: 8, marginBottom: 12 },
-  mealChip: { flex: 1, padding: 10, borderRadius: 8, backgroundColor: colors.surfaceAlt, alignItems: 'center', borderWidth: 1, borderColor: colors.border },
-  mealChipActive: { backgroundColor: colors.surfaceSuccess, borderWidth: 1, borderColor: colors.accentMint },
+  scanLoadingCard: { marginBottom: 16, gap: 14 },
+  scanLoadingHeader: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  scanLoadingCopy: { flex: 1, minWidth: 0 },
+  scanSkeletonList: { gap: 10 },
+  scanningText: { color: colors.text, fontSize: 15, lineHeight: 21, fontWeight: '800' },
+  scanningHelpText: { color: colors.textSoft, fontSize: 13, lineHeight: 19, maxWidth: 520 },
+  sectionTitle: { fontSize: 19, lineHeight: 24, fontWeight: '900', color: colors.text, marginBottom: 14 },
+  mealPicker: { flexDirection: 'row', gap: 8, marginBottom: 14 },
+  mealChip: { flex: 1, paddingVertical: 11, paddingHorizontal: 8, borderRadius: 8, backgroundColor: colors.surfaceMuted, alignItems: 'center', borderWidth: 1, borderColor: colors.borderSubtle },
+  mealChipActive: { backgroundColor: colors.accentMint, borderWidth: 1, borderColor: colors.accentMint },
   mealChipText: { color: colors.textSoft, fontSize: 13, fontWeight: '600' },
-  mealChipTextActive: { color: colors.accentMint, fontWeight: '800' },
+  mealChipTextActive: { color: colors.textOnAccent, fontWeight: '900' },
   // Context picker
-  contextPickerContainer: { marginBottom: 16 },
-  contextPickerLabel: { color: colors.textMuted, fontSize: 12, fontWeight: '600', marginBottom: 8 },
-  contextPicker: { flexDirection: 'row', gap: 6, flexWrap: 'wrap' },
-  contextChip: { paddingVertical: 8, paddingHorizontal: 10, borderRadius: 8, backgroundColor: colors.surfaceAlt, borderWidth: 1, borderColor: colors.border, alignItems: 'center', flexDirection: 'row', gap: 4 },
-  contextChipActive: { backgroundColor: colors.surfaceSuccess, borderColor: colors.accentMint },
+  contextPickerContainer: { marginBottom: 18 },
+  contextPickerLabel: { color: colors.textMuted, fontSize: 12, fontWeight: '700', marginBottom: 8, letterSpacing: 0.2 },
+  contextPicker: { flexDirection: 'row', gap: 7, flexWrap: 'wrap' },
+  contextChip: { paddingVertical: 9, paddingHorizontal: 11, borderRadius: 8, backgroundColor: colors.surfaceMuted, borderWidth: 1, borderColor: colors.borderSubtle, alignItems: 'center', flexDirection: 'row', gap: 5 },
+  contextChipActive: { backgroundColor: colors.surfaceSuccess, borderColor: colors.borderSuccess },
   contextChipIcon: { fontSize: 16 },
   contextChipText: { color: colors.textSoft, fontSize: 12, fontWeight: '600' },
   contextChipTextActive: { color: colors.accentMint, fontWeight: '800' },
-  resultItem: { marginBottom: 10 },
+  resultItem: { marginBottom: 12 },
   resultItemLowConf: { borderColor: colors.borderDanger, borderWidth: 1 },
   confidenceRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
   confidenceBadge: { fontSize: 12, fontWeight: '700' },
@@ -1517,8 +1537,8 @@ const styles = createThemedStyles((colors, radii) => ({
   calorieColumn: { alignItems: 'flex-end' },
   editHint: { fontSize: 12, opacity: 0.5 },
   resultHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
-  resultName: { color: colors.text, fontWeight: '700', flex: 1 },
-  resultCalorie: { color: colors.accentMint, fontWeight: '800' },
+  resultName: { color: colors.text, fontWeight: '800', flex: 1, fontSize: 15, lineHeight: 20 },
+  resultCalorie: { color: colors.accentMint, fontWeight: '900', fontSize: 15 },
   resultRange: { color: colors.textMuted, fontSize: 12, marginTop: 2 },
   resultDetail: { color: colors.textMuted, fontSize: 13, marginBottom: 2 },
   resultMacros: { color: colors.textMuted, fontSize: 12 },
@@ -1527,7 +1547,7 @@ const styles = createThemedStyles((colors, radii) => ({
   portionInput: {
     minWidth: 90,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.borderSubtle,
     borderRadius: 8,
     backgroundColor: colors.surfaceAlt,
     color: colors.text,
@@ -1536,7 +1556,7 @@ const styles = createThemedStyles((colors, radii) => ({
     fontSize: 14,
   },
   adjustRow: { flexDirection: 'row', gap: 10, marginTop: 10 },
-  adjustBtn: { backgroundColor: colors.surfaceInfo, borderWidth: 1, borderColor: colors.borderInfo, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8 },
+  adjustBtn: { backgroundColor: colors.surfaceInfo, borderWidth: 1, borderColor: colors.borderInfo, borderRadius: 8, paddingHorizontal: 13, paddingVertical: 9 },
   adjustBtnText: { color: colors.textSoft, fontSize: 12, fontWeight: '700' },
   lowConfidenceBanner: { backgroundColor: colors.surfaceDanger, borderColor: colors.borderDanger, borderWidth: 1, marginBottom: 12 },
   lowConfidenceTitle: { color: colors.danger, fontSize: 15, fontWeight: '800', marginBottom: 6 },
@@ -1544,30 +1564,30 @@ const styles = createThemedStyles((colors, radii) => ({
   scanNoticeCard: { backgroundColor: colors.surfaceDanger, borderColor: colors.borderDanger, borderWidth: 1, marginBottom: 12 },
   scanNoticeTitle: { color: colors.danger, fontSize: 15, fontWeight: '800', marginBottom: 6 },
   scanNoticeBody: { color: colors.danger, fontSize: 13, lineHeight: 19 },
-  totalCard: { marginVertical: 12, alignItems: 'center' },
+  totalCard: { marginVertical: 14, alignItems: 'center' },
   totalLabel: { color: colors.textMuted, fontSize: 13, marginBottom: 4 },
-  totalCalorie: { color: colors.accentMint, fontSize: 30, fontWeight: '800' },
+  totalCalorie: { color: colors.accentMint, fontSize: 32, lineHeight: 38, fontWeight: '900' },
   totalRange: { color: colors.textMuted, fontSize: 13, marginTop: 4 },
   totalMacros: { color: colors.textMuted, fontSize: 13, marginTop: 4 },
-  saveButton: { backgroundColor: colors.accentMint, borderRadius: 8, padding: 16, alignItems: 'center', marginBottom: 10 },
-  saveButtonText: { color: colors.textOnAccent, fontWeight: '800', fontSize: 16 },
-  secondaryButton: { borderRadius: 8, padding: 14, alignItems: 'center', marginBottom: 10, borderWidth: 1, borderColor: colors.accentCyan, backgroundColor: colors.surfaceInfo },
-  secondaryButtonText: { color: colors.accentCyan, fontWeight: '800', fontSize: 15 },
+  saveButton: { backgroundColor: colors.accentMint, borderRadius: 8, padding: 16, alignItems: 'center', marginBottom: 11, minHeight: 52, justifyContent: 'center' },
+  saveButtonText: { color: colors.textOnAccent, fontWeight: '900', fontSize: 16 },
+  secondaryButton: { borderRadius: 8, padding: 15, alignItems: 'center', marginBottom: 11, borderWidth: 1, borderColor: colors.borderInfo, backgroundColor: colors.surfaceInfo, minHeight: 50, justifyContent: 'center' },
+  secondaryButtonText: { color: colors.info, fontWeight: '900', fontSize: 15 },
   buttonDisabled: { opacity: 0.4 },
   refineContainer: { marginBottom: 20 },
   refineTitle: { color: colors.text, fontWeight: '700', fontSize: 16, marginBottom: 4 },
   refineHint: { color: colors.textMuted, fontSize: 13, marginBottom: 10 },
-  refineInput: { backgroundColor: colors.surfacePressed, borderRadius: 8, padding: 12, color: colors.text, minHeight: 60, marginBottom: 10, borderWidth: 1, borderColor: colors.border },
-  refineButton: { backgroundColor: colors.accentPlum, borderRadius: 8, padding: 12, alignItems: 'center' },
-  refineButtonText: { color: colors.text, fontWeight: '600', fontSize: 14 },
+  refineInput: { backgroundColor: colors.surfaceMuted, borderRadius: 8, padding: 13, color: colors.text, minHeight: 68, marginBottom: 12, borderWidth: 1, borderColor: colors.borderSubtle },
+  refineButton: { backgroundColor: colors.surfaceInfo, borderRadius: 8, padding: 13, alignItems: 'center', borderWidth: 1, borderColor: colors.borderInfo },
+  refineButtonText: { color: colors.info, fontWeight: '800', fontSize: 14 },
   // Barcode
   barcodeContainer: { marginBottom: 16 },
   manualBarcodeCard: { marginBottom: 12 },
   manualBarcodeTitle: { color: colors.text, fontSize: 16, fontWeight: '900', marginBottom: 6 },
   manualBarcodeHint: { color: colors.textMuted, fontSize: 12, lineHeight: 18, marginBottom: 12 },
-  manualBarcodeRow: { flexDirection: 'row', gap: 8, alignItems: 'center' },
-  manualBarcodeInput: { flex: 1, backgroundColor: colors.surfaceAlt, borderRadius: 8, borderWidth: 1, borderColor: colors.border, color: colors.text, paddingHorizontal: 12, paddingVertical: 11, fontSize: 14 },
-  manualBarcodeButton: { minHeight: 44, borderRadius: 8, backgroundColor: colors.accentMint, paddingHorizontal: 14, alignItems: 'center', justifyContent: 'center' },
+  manualBarcodeRow: { flexDirection: 'row', gap: 9, alignItems: 'center' },
+  manualBarcodeInput: { flex: 1, backgroundColor: colors.surfaceMuted, borderRadius: 8, borderWidth: 1, borderColor: colors.borderSubtle, color: colors.text, paddingHorizontal: 13, paddingVertical: 12, fontSize: 14 },
+  manualBarcodeButton: { minHeight: 46, borderRadius: 8, backgroundColor: colors.accentMint, paddingHorizontal: 15, alignItems: 'center', justifyContent: 'center' },
   manualBarcodeButtonText: { color: colors.textOnAccent, fontSize: 13, fontWeight: '900' },
   barcodeCamera: { width: '100%', height: 280, borderRadius: 8, overflow: 'hidden' },
   barcodeScanningOverlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.overlay },

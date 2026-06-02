@@ -46,7 +46,7 @@ export function UiInput({ label, containerStyle, error, style, ...rest }: UiInpu
 
   const borderColor = borderAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [colors.border, colors.accentMint],
+    outputRange: [colors.borderSubtle, colors.accentMint],
   });
 
   return (
@@ -57,7 +57,7 @@ export function UiInput({ label, containerStyle, error, style, ...rest }: UiInpu
           styles.inputWrap,
           {
             borderRadius: radii.lg,
-            backgroundColor: colors.surfaceAlt,
+            backgroundColor: focused ? colors.surfaceLifted : colors.surfaceMuted,
             borderColor,
           },
           error && { borderColor: colors.danger },
@@ -79,25 +79,31 @@ export function UiInput({ label, containerStyle, error, style, ...rest }: UiInpu
 
 const styles = StyleSheet.create({
   wrapper: {
-    marginBottom: 12,
+    marginBottom: 16,
   },
   label: {
     fontSize: 12,
-    fontWeight: '600',
-    marginBottom: 6,
-    letterSpacing: 0.4,
+    lineHeight: 16,
+    fontWeight: '700',
+    marginBottom: 7,
+    letterSpacing: 0.2,
   },
   inputWrap: {
     borderWidth: 1,
     overflow: 'hidden',
+    minHeight: 52,
+    justifyContent: 'center',
   },
   input: {
     fontSize: 15,
+    lineHeight: 20,
     paddingVertical: 14,
     paddingHorizontal: 15,
+    textAlignVertical: 'center',
   },
   error: {
     fontSize: 12,
-    marginTop: 4,
+    lineHeight: 16,
+    marginTop: 6,
   },
 });

@@ -54,6 +54,7 @@ export function ScreenShell({
   const { colors } = useAppTheme();
   const bottomNavPadding = useBottomNavContentPadding();
   const bottomNavStyle = reserveBottomNav ? { paddingBottom: bottomNavPadding } : null;
+  const screenPaddingStyle = width < 480 ? styles.scrollContentCompact : null;
 
   useEffect(() => {
     Animated.parallel([
@@ -98,6 +99,7 @@ export function ScreenShell({
               keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
               contentContainerStyle={[
                 styles.scrollContent,
+                screenPaddingStyle,
                 isDesktop && styles.scrollContentDesktop,
                 bottomNavStyle,
                 scrollContentStyle,
@@ -106,7 +108,7 @@ export function ScreenShell({
               {content}
             </ScrollView>
           ) : (
-            <View style={[styles.noScrollContent, isDesktop && styles.noScrollContentDesktop, bottomNavStyle]}>{content}</View>
+            <View style={[styles.noScrollContent, width < 480 && styles.noScrollContentCompact, isDesktop && styles.noScrollContentDesktop, bottomNavStyle]}>{content}</View>
           )}
         </KeyboardAvoidingView>
       </SafeAreaView>
@@ -144,19 +146,19 @@ export function SurfaceCard({ children, style }: { children: ReactNode; style?: 
       style={[
         {
           backgroundColor: colors.surface,
-          borderRadius: isCompact ? radii.lg : radii.xl,
+          borderRadius: radii.xl,
           borderWidth: 1,
-          borderColor: colors.border,
-          padding: isCompact ? 14 : 16,
+          borderColor: colors.borderSubtle,
+          padding: isCompact ? 16 : 20,
           ...(Platform.OS === 'web'
-            ? { boxShadow: `0px 14px 30px ${colors.shadow}24` }
+            ? { boxShadow: `0px 16px 34px ${colors.shadow}18` }
             : {
                 shadowColor: colors.shadow,
-                shadowOpacity: 0.16,
+                shadowOpacity: 0.1,
                 shadowRadius: isCompact ? 12 : 18,
                 shadowOffset: { width: 0, height: 10 },
               }),
-          elevation: isCompact ? 3 : 5,
+          elevation: isCompact ? 2 : 3,
         },
         style,
         { opacity: fade, transform: [{ scale }] },
@@ -183,41 +185,94 @@ export function BodyText({ children, style }: { children: ReactNode; style?: Sty
   return <Text style={[styles.bodyText, { color: colors.textSoft }, style]}>{children}</Text>;
 }
 
+export function SkeletonBlock({
+  width = '100%',
+  height = 16,
+  radius,
+  style,
+}: {
+  width?: ViewStyle['width'];
+  height?: number;
+  radius?: number;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const shimmer = useRef(new Animated.Value(0.46)).current;
+  const useNativeDriver = Platform.OS !== 'web';
+  const { colors, radii } = useAppTheme();
+
+  useEffect(() => {
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(shimmer, {
+          toValue: 1,
+          duration: 760,
+          easing: Easing.inOut(Easing.quad),
+          useNativeDriver,
+        }),
+        Animated.timing(shimmer, {
+          toValue: 0.46,
+          duration: 760,
+          easing: Easing.inOut(Easing.quad),
+          useNativeDriver,
+        }),
+      ]),
+    );
+    animation.start();
+    return () => animation.stop();
+  }, [shimmer, useNativeDriver]);
+
+  return (
+    <Animated.View
+      style={[
+        {
+          width,
+          height,
+          borderRadius: radius ?? radii.lg,
+          backgroundColor: colors.surfacePressed,
+          opacity: shimmer,
+        },
+        style,
+      ]}
+    />
+  );
+}
+
 const styles = StyleSheet.create({
   gradient: { flex: 1 },
   safeArea: { flex: 1 },
   keyboardAvoider: { flex: 1 },
-  scrollContent: { padding: 14 },
-  scrollContentDesktop: { padding: 16 },
-  noScrollContent: { flex: 1, paddingHorizontal: 18 },
+  scrollContent: { padding: 20, rowGap: 16 },
+  scrollContentCompact: { paddingHorizontal: 16, paddingTop: 16 },
+  scrollContentDesktop: { paddingHorizontal: 28, paddingTop: 24 },
+  noScrollContent: { flex: 1, paddingHorizontal: 20, paddingTop: 16 },
+  noScrollContentCompact: { paddingHorizontal: 16 },
   noScrollContentDesktop: {},
   inner: {
     width: '100%',
-    maxWidth: 1080,
+    maxWidth: 1120,
     alignSelf: 'center',
   },
   innerDesktop: {
-    paddingHorizontal: 12,
+    paddingHorizontal: 8,
   },
   eyebrow: {
     fontSize: 12,
-    textTransform: 'uppercase',
-    letterSpacing: 0,
+    letterSpacing: 0.7,
     fontWeight: '700',
-    marginBottom: 10,
+    marginBottom: 9,
   },
   heroTitle: {
-    fontSize: 28,
-    lineHeight: 34,
-    fontWeight: '800',
-    marginBottom: 8,
+    fontSize: 33,
+    lineHeight: 38,
+    fontWeight: '900',
+    marginBottom: 12,
   },
   heroTitleMobile: {
-    fontSize: 23,
-    lineHeight: 29,
+    fontSize: 27,
+    lineHeight: 32,
   },
   bodyText: {
-    fontSize: 14,
-    lineHeight: 21,
+    fontSize: 15,
+    lineHeight: 23,
   },
 });

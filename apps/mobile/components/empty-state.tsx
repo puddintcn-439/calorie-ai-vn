@@ -60,7 +60,7 @@ export function EmptyState({
   }, [imageSource, pulse, useNativeDriver]);
 
   return (
-    <SurfaceCard style={[styles.card, { backgroundColor: colors.surfaceLifted }, isCompact && styles.compactCard, style]}>
+    <SurfaceCard style={[styles.card, { backgroundColor: colors.surfaceMuted, borderColor: colors.borderSubtle }, isCompact && styles.compactCard, style]}>
       {imageSource ? (
         <Image
           source={imageSource}
@@ -69,7 +69,7 @@ export function EmptyState({
         />
       ) : (
         <Animated.View style={[styles.iconWrap, isCompact && styles.compactIconWrap, {
-          backgroundColor: colors.surfaceAlt,
+          backgroundColor: colors.surface,
           borderColor: colors.borderStrong,
           transform: [{
             scale: pulse.interpolate({
@@ -92,13 +92,13 @@ export function EmptyState({
 const styles = StyleSheet.create({
   card: {
     alignItems: 'center',
-    paddingVertical: 20,
+    paddingVertical: 22,
   },
   compactCard: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 12,
-    gap: 12,
+    gap: 14,
   },
   image: {
     width: '100%',
@@ -143,7 +143,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 16,
     fontWeight: '900',
-    marginBottom: 6,
+    marginBottom: 7,
   },
   compactTitle: {
     fontSize: 14,
@@ -151,7 +151,7 @@ const styles = StyleSheet.create({
   },
   description: {
     fontSize: 13,
-    lineHeight: 19,
+    lineHeight: 20,
     textAlign: 'center',
     maxWidth: 280,
   },

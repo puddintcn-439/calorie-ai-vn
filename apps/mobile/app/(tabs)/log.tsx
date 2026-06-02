@@ -4,14 +4,13 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  ActivityIndicator,
   Modal
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import { useLogStore } from '../../store/log.store';
 import { FoodLog, MealType, SavedMeal, ActivityLog, ActivityType, ACTIVITY_LABELS, User, ActivityLevel, UserGoal, HealthFlag } from '@calorie-ai/types';
-import { ScreenShell, SurfaceCard } from '../../components/ui-shell';
+import { ScreenShell, SkeletonBlock, SurfaceCard } from '../../components/ui-shell';
 import { EmptyState } from '../../components/empty-state';
 import { createThemedStyles, theme, useAppTheme } from '../../components/theme';
 import { apiClient } from '../../services/api';
@@ -717,7 +716,7 @@ export default function LogScreen() {
         body="screen.tabs.log.body.001"
       />
 
-      {isLoading && <ActivityIndicator color={theme.colors.success} style={{ marginTop: 40 }} />}
+      {isLoading && <LogLoadingState />}
 
       <SurfaceCard style={styles.logSummaryCard}>
         <View style={styles.logSummaryItem}>
@@ -866,24 +865,41 @@ export default function LogScreen() {
   );
 }
 
+function LogLoadingState() {
+  return (
+    <SurfaceCard style={styles.logLoadingCard}>
+      <View style={styles.loadingSummaryRow}>
+        <SkeletonBlock height={54} width="31%" />
+        <SkeletonBlock height={54} width="31%" />
+        <SkeletonBlock height={54} width="31%" />
+      </View>
+      <View style={styles.loadingMealList}>
+        <SkeletonBlock height={18} width="42%" />
+        <SkeletonBlock height={48} />
+        <SkeletonBlock height={48} />
+      </View>
+    </SurfaceCard>
+  );
+}
+
 const styles = createThemedStyles((colors, radii) => ({
   heroBody: { marginBottom: 18, maxWidth: 700 },
-  savedSection: { marginBottom: 16 },
-  savedTitle: { color: colors.text, fontWeight: '800', fontSize: 15, marginBottom: 10 },
-  savedList: { gap: 10, paddingRight: 16 },
-  savedCard: { backgroundColor: colors.surfaceLifted, borderRadius: 8, padding: 14, width: 160, position: 'relative', borderWidth: 1, borderColor: colors.border },
-  savedName: { color: colors.text, fontWeight: '700', fontSize: 13, marginBottom: 6, paddingRight: 16 },
-  savedCalorie: { color: colors.accentMint, fontWeight: '800', fontSize: 18, marginBottom: 4 },
-  savedMacro: { color: colors.textMuted, fontSize: 11 },
-  savedEdit: { position: 'absolute', top: 8, right: 28 },
-  savedDelete: { position: 'absolute', top: 8, right: 8 },
+  savedSection: { marginBottom: 18 },
+  savedTitle: { color: colors.text, fontWeight: '900', fontSize: 16, lineHeight: 21, marginBottom: 11 },
+  savedList: { gap: 12, paddingRight: 18 },
+  savedCard: { backgroundColor: colors.surfaceLifted, borderRadius: 8, padding: 15, width: 170, minHeight: 112, position: 'relative', borderWidth: 1, borderColor: colors.borderSubtle },
+  savedName: { color: colors.text, fontWeight: '800', fontSize: 13, lineHeight: 18, marginBottom: 7, paddingRight: 20 },
+  savedCalorie: { color: colors.accentMint, fontWeight: '900', fontSize: 20, lineHeight: 25, marginBottom: 4 },
+  savedMacro: { color: colors.textMuted, fontSize: 11, lineHeight: 16 },
+  savedEdit: { position: 'absolute', top: 9, right: 30 },
+  savedDelete: { position: 'absolute', top: 9, right: 9 },
   logSummaryCard: {
     flexDirection: 'row',
     alignItems: 'stretch',
     justifyContent: 'space-between',
-    gap: 10,
-    marginTop: 14,
-    marginBottom: 16,
+    gap: 12,
+    marginTop: 16,
+    marginBottom: 18,
     backgroundColor: colors.surfaceLifted,
   },
   logSummaryItem: {
@@ -897,12 +913,14 @@ const styles = createThemedStyles((colors, radii) => ({
   logSummaryLabel: {
     color: colors.textMuted,
     fontSize: 11,
-    fontWeight: '800',
-    marginBottom: 4,
+    fontWeight: '700',
+    marginBottom: 5,
+    letterSpacing: 0.2,
   },
   logSummaryValue: {
     color: colors.text,
-    fontSize: 20,
+    fontSize: 22,
+    lineHeight: 27,
     fontWeight: '900',
   },
   logSummaryValueWarn: {
@@ -910,7 +928,8 @@ const styles = createThemedStyles((colors, radii) => ({
   },
   logSummaryValueBurned: {
     color: colors.accentMint,
-    fontSize: 20,
+    fontSize: 22,
+    lineHeight: 27,
     fontWeight: '900',
   },
   logSummaryUnit: {
@@ -918,29 +937,32 @@ const styles = createThemedStyles((colors, radii) => ({
     fontSize: 11,
     marginTop: 1,
   },
-  mealSection: { marginBottom: 12 },
-  mealHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8, alignItems: 'center' },
+  logLoadingCard: { marginTop: 14, marginBottom: 18, gap: 16 },
+  loadingSummaryRow: { flexDirection: 'row', gap: 10 },
+  loadingMealList: { gap: 10 },
+  mealSection: { marginBottom: 14 },
+  mealHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10, alignItems: 'center' },
   mealHeaderRight: { flexDirection: 'row', alignItems: 'baseline', gap: 2 },
-  mealLabel: { color: colors.text, fontWeight: '700', fontSize: 15 },
-  mealTotal: { color: colors.accentMint, fontWeight: '800' },
+  mealLabel: { color: colors.text, fontWeight: '900', fontSize: 16, lineHeight: 21 },
+  mealTotal: { color: colors.accentMint, fontWeight: '900' },
   mealTarget: { color: colors.textMuted, fontSize: 12 },
-  mealProgressBar: { height: 6, backgroundColor: colors.border, borderRadius: 999, marginBottom: 10, overflow: 'hidden' },
+  mealProgressBar: { height: 7, backgroundColor: colors.progressBg, borderRadius: 999, marginBottom: 12, overflow: 'hidden' },
   mealProgressFill: { height: '100%', borderRadius: 2 },
-  logRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10, borderTopWidth: 1, borderTopColor: colors.border },
+  logRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, borderTopWidth: 1, borderTopColor: colors.borderSubtle, gap: 12 },
   logInfo: { flex: 1 },
-  logName: { color: colors.text, fontSize: 14, fontWeight: '600' },
-  logDetail: { color: colors.textMuted, fontSize: 12, marginTop: 2 },
+  logName: { color: colors.text, fontSize: 14, lineHeight: 19, fontWeight: '800' },
+  logDetail: { color: colors.textMuted, fontSize: 12, lineHeight: 17, marginTop: 3 },
   logRight: { alignItems: 'flex-end', gap: 4 },
   logActions: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  logCalorie: { color: colors.accentMint, fontWeight: '700' },
+  logCalorie: { color: colors.accentMint, fontWeight: '900' },
   emptyStateCard: { marginTop: 8 },
-  activitySection: { marginBottom: 20, marginTop: 4 },
-  activityHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
-  activityTitle: { color: colors.text, fontWeight: '700', fontSize: 15 },
-  addActivityBtn: { backgroundColor: colors.accentMint, borderRadius: 16, width: 30, height: 30, justifyContent: 'center', alignItems: 'center' },
-  activityRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, borderTopWidth: 1, borderTopColor: colors.border },
-  activityName: { color: colors.text, fontWeight: '600', fontSize: 14 },
-  activityDetail: { color: colors.textMuted, fontSize: 12, marginTop: 2 },
+  activitySection: { marginBottom: 22, marginTop: 4 },
+  activityHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  activityTitle: { color: colors.text, fontWeight: '900', fontSize: 16, lineHeight: 21 },
+  addActivityBtn: { backgroundColor: colors.accentMint, borderRadius: 8, width: 34, height: 34, justifyContent: 'center', alignItems: 'center' },
+  activityRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 12, borderTopWidth: 1, borderTopColor: colors.borderSubtle, gap: 12 },
+  activityName: { color: colors.text, fontWeight: '800', fontSize: 14, lineHeight: 19 },
+  activityDetail: { color: colors.textMuted, fontSize: 12, lineHeight: 17, marginTop: 3 },
   activityRoadmapBadge: {
     marginTop: 5,
     alignSelf: 'flex-start',
@@ -952,42 +974,42 @@ const styles = createThemedStyles((colors, radii) => ({
     fontSize: 11,
     fontWeight: '700',
   },
-  activityBurned: { color: colors.warning, fontWeight: '700', fontSize: 13, marginTop: 8, textAlign: 'right' },
+  activityBurned: { color: colors.warning, fontWeight: '800', fontSize: 13, marginTop: 10, textAlign: 'right' },
   // Exercise catalog modal
   catalogOverlay: { flex: 1, backgroundColor: colors.overlay, justifyContent: 'flex-end' },
-  catalogSheet: { backgroundColor: colors.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, maxHeight: '85%' },
-  catalogHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  catalogTitle: { color: colors.text, fontWeight: '800', fontSize: 18 },
-  catalogHint: { color: colors.textMuted, fontSize: 12, marginBottom: 12 },
-  catalogItem: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surfaceAlt, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, marginBottom: 8, borderWidth: 1, borderColor: colors.border },
-  catalogItemName: { color: colors.text, fontWeight: '700', fontSize: 14, marginBottom: 2 },
+  catalogSheet: { backgroundColor: colors.surface, borderTopLeftRadius: 18, borderTopRightRadius: 18, padding: 22, maxHeight: '85%', borderWidth: 1, borderColor: colors.borderSubtle },
+  catalogHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
+  catalogTitle: { color: colors.text, fontWeight: '900', fontSize: 19, lineHeight: 24 },
+  catalogHint: { color: colors.textMuted, fontSize: 13, lineHeight: 19, marginBottom: 14 },
+  catalogItem: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surfaceMuted, borderRadius: 8, paddingHorizontal: 15, paddingVertical: 13, marginBottom: 9, borderWidth: 1, borderColor: colors.borderSubtle },
+  catalogItemName: { color: colors.text, fontWeight: '800', fontSize: 14, marginBottom: 3 },
   catalogItemKcal: { color: colors.accentMint, fontSize: 12, fontWeight: '700' },
   catalogBack: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 14 },
   catalogBackText: { color: colors.accentMint, fontSize: 13, fontWeight: '700' },
   catalogSelectedLabel: { color: colors.text, fontSize: 20, fontWeight: '800', marginBottom: 6 },
   durationRow: { flexDirection: 'row', gap: 10, marginBottom: 20, flexWrap: 'wrap' },
-  durationBtn: { flex: 1, minWidth: 70, backgroundColor: colors.surfaceAlt, borderWidth: 1.5, borderColor: colors.border, borderRadius: 12, paddingVertical: 12, alignItems: 'center' },
+  durationBtn: { flex: 1, minWidth: 70, backgroundColor: colors.surfaceMuted, borderWidth: 1, borderColor: colors.borderSubtle, borderRadius: 8, paddingVertical: 13, alignItems: 'center' },
   durationBtnActive: { borderColor: colors.accentMint, backgroundColor: colors.surfaceSuccess },
   durationBtnMin: { color: colors.text, fontWeight: '700', fontSize: 14 },
   durationBtnKcal: { color: colors.textMuted, fontSize: 11, marginTop: 2 },
   durationBtnTextActive: { color: colors.accentMint },
-  catalogConfirmBtn: { backgroundColor: colors.accentMint, borderRadius: 16, paddingVertical: 14, alignItems: 'center' },
-  catalogConfirmText: { color: colors.textOnAccent, fontWeight: '800', fontSize: 14 },
+  catalogConfirmBtn: { backgroundColor: colors.accentMint, borderRadius: 8, paddingVertical: 15, alignItems: 'center' },
+  catalogConfirmText: { color: colors.textOnAccent, fontWeight: '900', fontSize: 14 },
   editInput: {
-    backgroundColor: colors.surfaceAlt,
+    backgroundColor: colors.surfaceMuted,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.borderSubtle,
     borderRadius: 8,
     color: colors.text,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 14,
+    paddingHorizontal: 13,
+    paddingVertical: 12,
+    fontSize: 15,
   },
-  editMealRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginVertical: 12 },
-  editMealBtn: { paddingHorizontal: 10, paddingVertical: 8, borderRadius: 8, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surfaceAlt },
-  editMealBtnActive: { backgroundColor: colors.surfaceSuccess, borderColor: colors.accentMint },
-  editMealBtnText: { color: colors.textMuted, fontWeight: '700', fontSize: 12 },
-  editMealBtnTextActive: { color: colors.accentMint },
+  editMealRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginVertical: 14 },
+  editMealBtn: { paddingHorizontal: 11, paddingVertical: 9, borderRadius: 8, borderWidth: 1, borderColor: colors.borderSubtle, backgroundColor: colors.surfaceMuted },
+  editMealBtnActive: { backgroundColor: colors.accentMint, borderColor: colors.accentMint },
+  editMealBtnText: { color: colors.textMuted, fontWeight: '800', fontSize: 12 },
+  editMealBtnTextActive: { color: colors.textOnAccent },
   editGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 12 },
   editField: { flexBasis: '30%', flexGrow: 1, minWidth: 92 },
   editLabel: { color: colors.textMuted, fontSize: 11, fontWeight: '800', marginBottom: 5 },

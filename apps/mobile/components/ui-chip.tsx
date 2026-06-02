@@ -47,15 +47,15 @@ export function UiChip({ label, selected, onPress, style }: UiChipProps) {
           styles.chip,
           {
             borderRadius: radii.lg,
-            backgroundColor: selected ? colors.surfaceSuccess : colors.surfaceAlt,
-            borderColor: selected ? colors.accentMint : colors.border,
+            backgroundColor: selected ? colors.accentMint : colors.surfaceMuted,
+            borderColor: selected ? colors.accentMint : colors.borderSubtle,
           },
         ]}
         onPress={onPress}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
       >
-        <Text style={[styles.label, { color: selected ? colors.accentMint : colors.textSoft }]}>{label}</Text>
+        <Text style={[styles.label, { color: selected ? colors.textOnAccent : colors.textSoft }]}>{label}</Text>
       </Pressable>
     </Animated.View>
   );
@@ -63,12 +63,12 @@ export function UiChip({ label, selected, onPress, style }: UiChipProps) {
 
 const styles = StyleSheet.create({
   chip: {
-    paddingHorizontal: 14,
-    paddingVertical: 9,
+    paddingHorizontal: 15,
+    paddingVertical: 10,
     borderWidth: 1,
   },
   label: {
     fontSize: 13,
-    fontWeight: '600',
+    fontWeight: '800',
   },
 });

@@ -1,10 +1,10 @@
 import React, { useRef } from 'react';
 import {
   Animated,
-  ActivityIndicator,
   Platform,
   Pressable,
   StyleSheet,
+  View,
   ViewStyle,
   StyleProp,
 } from 'react-native';
@@ -58,12 +58,12 @@ export function UiButton({
     primary: {
       backgroundColor: colors.accentMint,
       borderWidth: 1,
-      borderColor: colors.borderSuccess,
+      borderColor: colors.accentMint,
     },
     secondary: {
-      backgroundColor: colors.surface,
+      backgroundColor: colors.surfaceLifted,
       borderWidth: 1,
-      borderColor: colors.accentMint,
+      borderColor: colors.borderStrong,
     },
     danger: {
       backgroundColor: colors.surfaceDanger,
@@ -72,12 +72,14 @@ export function UiButton({
     },
     ghost: {
       backgroundColor: 'transparent',
+      borderWidth: 1,
+      borderColor: 'transparent',
     },
   } satisfies Record<Variant, ViewStyle>;
 
   const variantTextStyle = {
     primary: { color: colors.textOnAccent },
-    secondary: { color: colors.accentMint },
+    secondary: { color: colors.text },
     danger: { color: colors.danger },
     ghost: { color: colors.accentCyan, fontWeight: '600' as const, fontSize: 14 },
   } satisfies Record<Variant, object>;
@@ -93,7 +95,13 @@ export function UiButton({
   const textStyle = [styles.baseText, variantTextStyle[variant]];
 
   return (
-    <Animated.View style={{ transform: [{ scale }] }}>
+    <Animated.View
+      style={[
+        styles.shadowWrap,
+        variant === 'primary' && Platform.OS === 'web' ? { boxShadow: `0px 10px 18px ${colors.accentMint}24` } : null,
+        { transform: [{ scale }] },
+      ]}
+    >
       <Pressable
         style={containerStyle}
         onPress={onPress}
@@ -102,7 +110,11 @@ export function UiButton({
         disabled={disabled || loading}
       >
         {loading ? (
-          <ActivityIndicator color={variant === 'primary' ? colors.textOnAccent : colors.accentMint} />
+          <View style={styles.loadingRow}>
+            <View style={[styles.loadingDot, { backgroundColor: variant === 'primary' ? colors.textOnAccent : colors.accentMint }]} />
+            <View style={[styles.loadingDot, { backgroundColor: variant === 'primary' ? colors.textOnAccent : colors.accentMint, opacity: 0.72 }]} />
+            <View style={[styles.loadingDot, { backgroundColor: variant === 'primary' ? colors.textOnAccent : colors.accentMint, opacity: 0.48 }]} />
+          </View>
         ) : (
           <Text style={textStyle}>{tx(label)}</Text>
         )}
@@ -113,16 +125,35 @@ export function UiButton({
 
 const styles = StyleSheet.create({
   base: {
+    minHeight: 50,
     paddingVertical: 14,
-    paddingHorizontal: 20,
+    paddingHorizontal: 22,
     alignItems: 'center',
     justifyContent: 'center',
+    flexDirection: 'row',
   },
   disabled: {
     opacity: 0.5,
   },
   baseText: {
     fontSize: 15,
-    fontWeight: '800',
+    lineHeight: 20,
+    fontWeight: '900',
+    textAlign: 'center',
+  },
+  shadowWrap: {
+    borderRadius: 8,
+  },
+  loadingRow: {
+    flexDirection: 'row',
+    gap: 5,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 20,
+  },
+  loadingDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
   },
 });
