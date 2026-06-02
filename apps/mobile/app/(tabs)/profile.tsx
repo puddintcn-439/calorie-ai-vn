@@ -32,30 +32,31 @@ import { AnimatedMaterialIcon } from '../../components/animated-icon';
 import { RewardToast, RewardToastData } from '../../components/reward-toast';
 import { createThemedStyles, theme, useAppTheme } from '../../components/theme';
 import { useI18n } from '../../components/i18n';
+import type { I18nKey } from '../../components/i18n';
 
 const profileHeroIllustration = require('../../assets/images/profile-hero.jpg') as number;
 
-const ACTIVITY_LABELS: Record<ActivityLevel, string> = {
-  sedentary: '🪑 Ít vận động',
-  light: '🚶 Nhẹ (1-3 ngày/tuần)',
-  moderate: '🏃 Vừa (3-5 ngày/tuần)',
-  active: '💪 Nhiều (6-7 ngày/tuần)',
-  very_active: '🔥 Rất nhiều',
+const ACTIVITY_LABELS: Record<ActivityLevel, I18nKey> = {
+  sedentary: 'profile.activityLabel.sedentary',
+  light: 'profile.activityLabel.light',
+  moderate: 'profile.activityLabel.moderate',
+  active: 'profile.activityLabel.active',
+  very_active: 'profile.activityLabel.veryActive',
 };
 
-const GOAL_LABELS: Record<UserGoal, string> = {
-  lose_weight: '📉 Giảm cân',
-  maintain: '⚖️ Duy trì',
-  gain_muscle: '💪 Tăng cơ',
+const GOAL_LABELS: Record<UserGoal, I18nKey> = {
+  lose_weight: 'profile.goalLabel.loseWeight',
+  maintain: 'profile.goalLabel.maintain',
+  gain_muscle: 'profile.goalLabel.gainMuscle',
 };
 
-const HEALTH_FLAG_LABELS: Record<HealthFlag, string> = {
-  pregnant: 'Thai kỳ',
-  breastfeeding: 'Cho con bú',
-  kidney_disease: 'Bệnh thận',
-  diabetes: 'Tiểu đường',
-  eating_disorder_history: 'Rối loạn ăn uống',
-  weight_affecting_medication: 'Thuốc ảnh hưởng cân nặng',
+const HEALTH_FLAG_LABELS: Record<HealthFlag, I18nKey> = {
+  pregnant: 'profile.healthFlag.pregnant',
+  breastfeeding: 'profile.healthFlag.breastfeeding',
+  kidney_disease: 'profile.healthFlag.kidneyDisease',
+  diabetes: 'profile.healthFlag.diabetes',
+  eating_disorder_history: 'profile.healthFlag.eatingDisorder',
+  weight_affecting_medication: 'profile.healthFlag.weightMedication',
 };
 
 const HEALTH_FLAGS: HealthFlag[] = [
@@ -111,25 +112,25 @@ type ExerciseRoadmapItem = {
   persisted_item_id?: string;
 };
 
-const BODY_STATUS_LABELS: Record<BodyStatus, string> = {
-  underweight: 'Rủi ro thấp cân',
-  normal: 'Rủi ro thấp',
-  overweight: 'Rủi ro tăng',
-  obese: 'Rủi ro cao',
+const BODY_STATUS_LABELS: Record<BodyStatus, I18nKey> = {
+  underweight: 'profile.bodyStatus.underweight',
+  normal: 'profile.bodyStatus.normal',
+  overweight: 'profile.bodyStatus.overweight',
+  obese: 'profile.bodyStatus.obese',
 };
 
-const WEIGHT_RECOMMENDATION_LABELS: Record<WeightRecommendation, string> = {
-  increase: 'Nên tăng cân',
-  maintain: 'Nên duy trì cân nặng',
-  decrease: 'Nên giảm cân',
+const WEIGHT_RECOMMENDATION_LABELS: Record<WeightRecommendation, I18nKey> = {
+  increase: 'profile.weightRecommendation.increase',
+  maintain: 'profile.weightRecommendation.maintain',
+  decrease: 'profile.weightRecommendation.decrease',
 };
 
-const ACTIVITY_RECOMMENDATION_LABELS: Record<ActivityLevel, string> = {
-  sedentary: 'Ít vận động',
-  light: 'Nhẹ',
-  moderate: 'Vừa',
-  active: 'Nhiều',
-  very_active: 'Rất nhiều',
+const ACTIVITY_RECOMMENDATION_LABELS: Record<ActivityLevel, I18nKey> = {
+  sedentary: 'profile.activityRecommendation.sedentary',
+  light: 'profile.activityRecommendation.light',
+  moderate: 'profile.activityRecommendation.moderate',
+  active: 'profile.activityRecommendation.active',
+  very_active: 'profile.activityRecommendation.veryActive',
 };
 
 function getBodyStatusTone(status: BodyStatus): { bg: string; border: string; accent: string; text: string; badgeBg: string } {
@@ -175,65 +176,65 @@ function buildExercisePlan(
   level: ActivityLevel,
   recommendation: WeightRecommendation,
   bodyStatus: BodyStatus,
-): string[] {
+): I18nKey[] {
   if (bodyStatus === 'underweight') {
     return [
-      'Tập sức mạnh 3-4 buổi/tuần (squat, push-up, row, hip hinge), tăng tạ nhẹ dần mỗi 1-2 tuần.',
-      'Cardio nhẹ 20-25 phút, 2-3 buổi/tuần (đi bộ nhanh hoặc xe đạp nhẹ), tránh đốt quá nhiều calo.',
-      'Bài tập core 2 buổi/tuần (plank, dead bug) + mobility 10 phút cuối buổi để hồi phục.',
-      'Ưu tiên số lần lặp 8-12 reps, nghỉ đủ 60-90 giây để hỗ trợ tăng cơ.',
+      'profile.exercisePlan.underweight.1',
+      'profile.exercisePlan.underweight.2',
+      'profile.exercisePlan.underweight.3',
+      'profile.exercisePlan.underweight.4',
     ];
   }
 
   if (bodyStatus === 'normal') {
     return [
-      'Cardio nền tảng 30-40 phút, 3-4 buổi/tuần (đi bộ nhanh, chạy nhẹ, bơi).',
-      'Tập sức mạnh toàn thân 2-3 buổi/tuần để duy trì cơ và tư thế tốt.',
-      'Thêm 1 buổi hoạt động yêu thích (thể thao, đạp xe, nhảy) để giữ thói quen bền vững.',
-      'Mỗi ngày 7.000-10.000 bước, kèm 5-10 phút giãn cơ.',
+      'profile.exercisePlan.normal.1',
+      'profile.exercisePlan.normal.2',
+      'profile.exercisePlan.normal.3',
+      'profile.exercisePlan.normal.4',
     ];
   }
 
   if (bodyStatus === 'obese') {
     return [
-      'Tuần 1-2: đi bộ 20-30 phút, 5 buổi/tuần; tăng dần lên 35-45 phút từ tuần 3.',
-      'Tập sức mạnh tác động thấp 2-3 buổi/tuần (sit-to-stand, wall push-up, glute bridge).',
-      'Thêm vận động ít áp lực khớp như xe đạp tại chỗ hoặc bơi 2 buổi/tuần.',
-      'Mục tiêu tăng dần thời gian vận động mỗi tuần, ưu tiên đều đặn hơn là cường độ cao.',
+      'profile.exercisePlan.obese.1',
+      'profile.exercisePlan.obese.2',
+      'profile.exercisePlan.obese.3',
+      'profile.exercisePlan.obese.4',
     ];
   }
 
   if (level === 'active' || level === 'very_active') {
     return [
-      'Cardio 45-60 phút, 5-6 buổi/tuần (zone 2 là chính) để giảm mỡ bền vững.',
-      'Tập sức mạnh 3-4 buổi/tuần, ưu tiên bài compound để giữ khối cơ khi giảm cân.',
-      'HIIT 1 buổi/tuần (12-18 phút) là đủ, tránh quá tải phục hồi.',
-      'Theo dõi nhịp tim và ngày nghỉ chủ động để kiểm soát mệt mỏi.',
+      'profile.exercisePlan.active.1',
+      'profile.exercisePlan.active.2',
+      'profile.exercisePlan.active.3',
+      'profile.exercisePlan.active.4',
     ];
   }
 
   if (level === 'moderate') {
     return [
-      'Cardio 35-45 phút, 4-5 buổi/tuần (đi bộ nhanh, đạp xe, elliptical).',
-      'Tập sức mạnh toàn thân 3 buổi/tuần, tập trung nhóm cơ lớn.',
-      '1 buổi interval nhẹ/tuần (nhanh 1 phút - chậm 2 phút, lặp 6-8 vòng).',
-      'Giãn cơ 10 phút sau tập và 1 ngày hồi phục chủ động/tuần.',
+      'profile.exercisePlan.moderate.1',
+      'profile.exercisePlan.moderate.2',
+      'profile.exercisePlan.moderate.3',
+      'profile.exercisePlan.moderate.4',
     ];
   }
 
   if (recommendation === 'decrease') {
     return [
-      'Đi bộ nhanh 30-40 phút, 5 buổi/tuần để tăng tiêu hao năng lượng ổn định.',
-      'Tập sức mạnh cơ bản 2-3 buổi/tuần (squat ghế, kéo dây, chống đẩy biến thể).',
-      'Tăng dần số bước hằng ngày (mục tiêu thêm 1.000 bước mỗi 2 tuần).',
-      'Ưu tiên kỹ thuật đúng và duy trì lịch tập đều trước khi tăng cường độ.',
+      'profile.exercisePlan.decrease.1',
+      'profile.exercisePlan.decrease.2',
+      'profile.exercisePlan.decrease.3',
+      'profile.exercisePlan.decrease.4',
     ];
   }
 
   return [
-    'Hoạt động nhẹ 25-35 phút, 4-5 buổi/tuần để duy trì thể lực nền.',
-    'Tập sức mạnh cơ bản 2 buổi/tuần để giữ cơ và độ linh hoạt.',
-    'Kết hợp 1 buổi kéo giãn hoặc yoga nhẹ giúp phục hồi tốt hơn.',
+    'profile.exercisePlan.default.1',
+    'profile.exercisePlan.default.2',
+    'profile.exercisePlan.default.3',
   ];
 }
 
@@ -248,7 +249,7 @@ function estimateExerciseCalories(activityType: ActivityType, durationMin: numbe
 function parseRoadmapNote(notes?: string): { taskId: string; taskTitle: string } | null {
   if (!notes || !notes.startsWith('ROADMAP_TASK:')) return null;
   const payload = notes.replace('ROADMAP_TASK:', '');
-  const [taskId, taskTitle = 'Bài tập lộ trình'] = payload.split('|');
+  const [taskId, taskTitle = 'profile.roadmap.defaultTask'] = payload.split('|');
   if (!taskId) return null;
   return { taskId, taskTitle };
 }
@@ -272,20 +273,20 @@ function buildExerciseRoadmap(
     bodyStatus === 'underweight'
       ? [
           {
-            title: 'Sức mạnh thân dưới',
-            detail: 'Squat, glute bridge, lunge nhẹ để tăng cơ nền.',
+            title: 'profile.roadmap.underweight.1.title',
+            detail: 'profile.roadmap.underweight.1.detail',
             activity_type: 'gym',
             duration_min: 35,
           },
           {
-            title: 'Đi bộ hồi phục',
-            detail: 'Đi bộ nhẹ sau bữa tối để tăng trao đổi chất nhẹ nhàng.',
+            title: 'profile.roadmap.underweight.2.title',
+            detail: 'profile.roadmap.underweight.2.detail',
             activity_type: 'walking',
             duration_min: 20,
           },
           {
             title: 'Core + mobility',
-            detail: 'Plank, dead bug và giãn cơ để cải thiện kỹ thuật tập.',
+            detail: 'profile.roadmap.underweight.3.detail',
             activity_type: 'yoga',
             duration_min: 18,
           },
@@ -293,20 +294,20 @@ function buildExerciseRoadmap(
       : bodyStatus === 'normal'
         ? [
             {
-              title: 'Cardio nền tảng',
-              detail: 'Đi bộ nhanh hoặc chạy rất nhẹ để giữ tim mạch tốt.',
+              title: 'profile.roadmap.normal.1.title',
+              detail: 'profile.roadmap.normal.1.detail',
               activity_type: 'walking',
               duration_min: 30,
             },
             {
-              title: 'Sức mạnh toàn thân',
-              detail: 'Push-up, row, squat bodyweight để giữ cơ.',
+              title: 'profile.roadmap.normal.2.title',
+              detail: 'profile.roadmap.normal.2.detail',
               activity_type: 'gym',
               duration_min: 30,
             },
             {
-              title: 'Kéo giãn chủ động',
-              detail: 'Yoga nhẹ để phục hồi và duy trì linh hoạt.',
+              title: 'profile.roadmap.normal.3.title',
+              detail: 'profile.roadmap.normal.3.detail',
               activity_type: 'yoga',
               duration_min: 20,
             },
@@ -314,20 +315,20 @@ function buildExerciseRoadmap(
         : bodyStatus === 'obese'
           ? [
               {
-                title: 'Đi bộ chia chặng',
-                detail: 'Đi bộ 3 chặng ngắn trong ngày để giảm áp lực khớp.',
+                title: 'profile.roadmap.obese.1.title',
+                detail: 'profile.roadmap.obese.1.detail',
                 activity_type: 'walking',
                 duration_min: 35,
               },
               {
-                title: 'Sức mạnh tác động thấp',
-                detail: 'Sit-to-stand, wall push-up, band pull để tăng nền cơ.',
+                title: 'profile.roadmap.obese.2.title',
+                detail: 'profile.roadmap.obese.2.detail',
                 activity_type: 'gym',
                 duration_min: 25,
               },
               {
-                title: 'Đạp xe nhẹ',
-                detail: 'Nhịp ổn định, ưu tiên đều đặn hơn cường độ cao.',
+                title: 'profile.roadmap.obese.3.title',
+                detail: 'profile.roadmap.obese.3.detail',
                 activity_type: 'cycling',
                 duration_min: 20,
               },
@@ -335,40 +336,40 @@ function buildExerciseRoadmap(
           : activityLevel === 'active' || activityLevel === 'very_active'
             ? [
                 {
-                  title: 'Chạy zone 2',
-                  detail: 'Giữ nhịp thở ổn định để đốt mỡ bền vững.',
+                  title: 'profile.roadmap.active.1.title',
+                  detail: 'profile.roadmap.active.1.detail',
                   activity_type: 'running',
                   duration_min: 35,
                 },
                 {
-                  title: 'Sức mạnh compound',
-                  detail: 'Ưu tiên squat/hinge/push/pull để giữ cơ khi giảm mỡ.',
+                  title: 'profile.roadmap.active.2.title',
+                  detail: 'profile.roadmap.active.2.detail',
                   activity_type: 'gym',
                   duration_min: 35,
                 },
                 {
-                  title: 'Đi bộ cooldown',
-                  detail: 'Đi bộ nhẹ sau tập để hồi phục và thêm tiêu hao.',
+                  title: 'profile.roadmap.active.3.title',
+                  detail: 'profile.roadmap.active.3.detail',
                   activity_type: 'walking',
                   duration_min: 20,
                 },
               ]
             : [
                 {
-                  title: 'Đi bộ nhanh',
-                  detail: 'Mục tiêu nhịp tim vừa phải, duy trì đều mỗi ngày.',
+                  title: 'profile.roadmap.default.1.title',
+                  detail: 'profile.roadmap.default.1.detail',
                   activity_type: 'walking',
                   duration_min: 30,
                 },
                 {
-                  title: 'Buổi sức mạnh ngắn',
-                  detail: 'Bài tập cơ bản toàn thân giúp giữ cơ và tăng trao đổi chất.',
+                  title: 'profile.roadmap.default.2.title',
+                  detail: 'profile.roadmap.default.2.detail',
                   activity_type: 'gym',
                   duration_min: 25,
                 },
                 {
-                  title: 'Yoga phục hồi',
-                  detail: 'Giảm căng cơ, cải thiện giấc ngủ và độ linh hoạt.',
+                  title: 'profile.roadmap.default.3.title',
+                  detail: 'profile.roadmap.default.3.detail',
                   activity_type: 'yoga',
                   duration_min: 15,
                 },
@@ -405,7 +406,7 @@ function buildInstantAssessment(profile: Partial<User>): InstantAssessmentResult
   if (!weight || !height || weight <= 0 || height <= 0) {
     return {
       assessment: null,
-      hint: 'Nhập chiều cao và cân nặng để xem BMI, cân nặng mục tiêu và bài tập phù hợp ngay lập tức.',
+      hint: 'profile.assessment.missingHint',
     };
   }
 
@@ -414,26 +415,26 @@ function buildInstantAssessment(profile: Partial<User>): InstantAssessmentResult
   const healthyMinWeight = round1(18.5 * heightM * heightM);
   const healthyMaxWeight = round1(24.9 * heightM * heightM);
   const safetyWarnings: string[] = [
-    'BMI là chỉ số sàng lọc/rủi ro và mục tiêu calo chỉ là ước tính wellness, không phải chẩn đoán.',
+    'profile.assessment.safety.bmi',
   ];
   if (profile.age && profile.age < 18) {
-    safetyWarnings.push('Người dưới 18 tuổi chỉ nên dùng mục tiêu duy trì và cần chuyên gia/người giám hộ theo dõi.');
-    safetyWarnings.push('Ngưỡng BMI người lớn không dùng để chẩn đoán cho trẻ vị thành niên.');
+    safetyWarnings.push('profile.assessment.safety.minorTarget');
+    safetyWarnings.push('profile.assessment.safety.minorBmi');
   }
   if (healthFlags.includes('pregnant') || healthFlags.includes('breastfeeding')) {
-    safetyWarnings.push('Thai kỳ/cho con bú cần mục tiêu năng lượng và vi chất riêng; app chỉ hiển thị ước tính duy trì tổng quát.');
+    safetyWarnings.push('profile.assessment.safety.pregnancy');
   }
   if (healthFlags.includes('kidney_disease')) {
-    safetyWarnings.push('Bệnh thận có thể cần giới hạn protein, sodium, kali/phosphorus và dịch; hãy dùng mục tiêu theo bác sĩ.');
+    safetyWarnings.push('profile.assessment.safety.kidney');
   }
   if (healthFlags.includes('diabetes')) {
-    safetyWarnings.push('Tiểu đường cần kế hoạch carb/đường gắn với thuốc và glucose; các ngưỡng trong app chỉ để theo dõi tổng quát.');
+    safetyWarnings.push('profile.assessment.safety.diabetes');
   }
   if (healthFlags.includes('eating_disorder_history')) {
-    safetyWarnings.push('Tiền sử/rủi ro rối loạn ăn uống: mục tiêu calo và cân nặng có thể gây hại nếu không có hỗ trợ chuyên môn.');
+    safetyWarnings.push('profile.assessment.safety.eatingDisorder');
   }
   if (healthFlags.includes('weight_affecting_medication')) {
-    safetyWarnings.push('Một số thuốc ảnh hưởng cảm giác đói, giữ nước hoặc cân nặng; nên xác nhận mục tiêu với người kê đơn.');
+    safetyWarnings.push('profile.assessment.safety.medication');
   }
 
   let bodyStatus: BodyStatus;
@@ -450,47 +451,38 @@ function buildInstantAssessment(profile: Partial<User>): InstantAssessmentResult
     recommendedGoal = 'gain_muscle';
     targetWeightKg = healthyMinWeight;
     recommendedActivityLevel = 'light';
-    recommendationNote =
-      'Thể trạng hiện nghiêng về gầy. Nên tăng cân theo hướng tăng cơ, ưu tiên ăn đủ đạm và tăng calo từ từ.';
-    activityNote =
-      'Mức vận động nên ở mức nhẹ-vừa, tập sức mạnh có kiểm soát để tăng cơ và hạn chế đốt quá nhiều calo.';
+    recommendationNote = 'profile.assessment.note.underweight';
+    activityNote = 'profile.assessment.activityNote.underweight';
   } else if (bmi < 25) {
     bodyStatus = 'normal';
     weightRecommendation = 'maintain';
     recommendedGoal = 'maintain';
     targetWeightKg = round1(weight);
     recommendedActivityLevel = 'moderate';
-    recommendationNote =
-      'Thể trạng đang ở vùng khỏe mạnh. Nên duy trì cân nặng hiện tại và giữ thói quen ăn uống-vận động đều đặn.';
-    activityNote =
-      'Mức vận động vừa là tối ưu để duy trì sức khỏe tim mạch, cơ bắp và độ bền.';
+    recommendationNote = 'profile.assessment.note.normal';
+    activityNote = 'profile.assessment.activityNote.normal';
   } else if (bmi < 30) {
     bodyStatus = 'overweight';
     weightRecommendation = 'decrease';
     recommendedGoal = 'lose_weight';
     targetWeightKg = healthyMaxWeight;
     recommendedActivityLevel = 'moderate';
-    recommendationNote =
-      'Thể trạng hơi thừa cân. Nên giảm cân từ từ với thâm hụt calo vừa phải để bảo vệ sức khỏe lâu dài.';
-    activityNote =
-      'Bắt đầu ở mức vận động vừa, ưu tiên cardio nền tảng và tập sức mạnh để giữ khối cơ.';
+    recommendationNote = 'profile.assessment.note.overweight';
+    activityNote = 'profile.assessment.activityNote.overweight';
   } else {
     bodyStatus = 'obese';
     weightRecommendation = 'decrease';
     recommendedGoal = 'lose_weight';
     targetWeightKg = healthyMaxWeight;
     recommendedActivityLevel = 'active';
-    recommendationNote =
-      'Thể trạng đang ở mức béo phì. Nên giảm cân theo lộ trình bền vững, kết hợp dinh dưỡng kiểm soát và vận động đều.';
-    activityNote =
-      'Nên hướng đến mức vận động cao dần theo từng tuần, tăng từ nhẹ lên vừa rồi đến nhiều để an toàn.';
+    recommendationNote = 'profile.assessment.note.obese';
+    activityNote = 'profile.assessment.activityNote.obese';
   }
 
   if (forcesMaintenanceGoal(profile.age, healthFlags)) {
     weightRecommendation = 'maintain';
     recommendedGoal = 'maintain';
-    recommendationNote =
-      'Hồ sơ có yếu tố cần chuyên gia xem lại, nên app chỉ dùng mục tiêu duy trì. Mục tiêu giảm/tăng cân cần được cá nhân hóa bởi chuyên gia.';
+    recommendationNote = 'profile.assessment.note.medicalReview';
   }
 
   const weightDeltaKg = round1(Math.abs(targetWeightKg - weight));
@@ -516,7 +508,7 @@ function buildInstantAssessment(profile: Partial<User>): InstantAssessmentResult
       activity_note: activityNote,
       exercise_plan: exercisePlan,
     },
-    hint: `Vùng cân nặng khỏe mạnh ước tính cho chiều cao này: ${healthyMinWeight} - ${healthyMaxWeight} kg.`,
+    hint: 'profile.assessment.healthyRangeHint',
   };
 }
 
@@ -662,7 +654,7 @@ export default function ProfileScreen() {
       id: item.id,
       task_id: item.id,
       title: item.title,
-      detail: 'Bài người dùng chọn trong Profile.',
+      detail: 'profile.roadmap.customDetail',
       activity_type: item.activity_type as ActivityType,
       duration_min: item.duration_min,
       estimated_kcal: estimateExerciseCalories(item.activity_type as ActivityType, item.duration_min, profile.weight_kg ?? 65),

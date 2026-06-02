@@ -80,8 +80,14 @@ function groupLogsByMeal(logs: FoodLog[]) {
 }
 
 function hasVeg(logs: FoodLog[]) {
-  const vegWords = ['rau', 'salad', 'xà lách', 'dưa leo', 'cải', 'canh', 'bông cải', 'giá'];
-  return logs.some((log) => vegWords.some((word) => `${log.name_vi ?? ''} ${log.name}`.toLowerCase().includes(word)));
+  const vegWords = ['rau', 'salad', 'xa lach', 'dua leo', 'cai', 'canh', 'bong cai', 'gia'];
+  return logs.some((log) => {
+    const normalizedName = `${log.name_vi ?? ''} ${log.name}`
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase();
+    return vegWords.some((word) => normalizedName.includes(word));
+  });
 }
 
 function buildNutritionTargets(target: number) {

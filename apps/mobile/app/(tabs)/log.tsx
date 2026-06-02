@@ -152,32 +152,32 @@ function buildExerciseRoadmap(
   const base: Omit<ExerciseRoadmapItem, 'id' | 'estimated_kcal'>[] =
     bodyStatus === 'underweight'
       ? [
-          { title: 'Buổi sức mạnh tăng cơ', detail: 'Gym toàn thân nhẹ để kích thích tăng cân theo hướng tăng cơ.', activity_type: 'gym', duration_min: 35 },
-          { title: 'Đi bộ hồi phục', detail: 'Đi bộ nhẹ sau bữa tối để tiêu hóa và phục hồi.', activity_type: 'walking', duration_min: 20 },
-          { title: 'Yoga linh hoạt', detail: 'Mở khớp và giãn cơ để tập sức mạnh an toàn hơn.', activity_type: 'yoga', duration_min: 18 },
+          { title: 'log.roadmap.underweight.1.title', detail: 'log.roadmap.underweight.1.detail', activity_type: 'gym', duration_min: 35 },
+          { title: 'log.roadmap.underweight.2.title', detail: 'log.roadmap.underweight.2.detail', activity_type: 'walking', duration_min: 20 },
+          { title: 'log.roadmap.underweight.3.title', detail: 'log.roadmap.underweight.3.detail', activity_type: 'yoga', duration_min: 18 },
         ]
       : bodyStatus === 'normal'
         ? [
-            { title: 'Cardio duy trì', detail: 'Đi bộ nhanh hoặc chạy chậm giữ nhịp tim mạch ổn định.', activity_type: 'walking', duration_min: 30 },
-            { title: 'Sức mạnh toàn thân', detail: 'Push-pull-legs cơ bản để duy trì khối cơ.', activity_type: 'gym', duration_min: 30 },
-            { title: 'Giãn cơ chủ động', detail: 'Yoga hoặc mobility giúp hạn chế đau cơ.', activity_type: 'yoga', duration_min: 20 },
+            { title: 'log.roadmap.normal.1.title', detail: 'log.roadmap.normal.1.detail', activity_type: 'walking', duration_min: 30 },
+            { title: 'profile.roadmap.normal.2.title', detail: 'log.roadmap.normal.2.detail', activity_type: 'gym', duration_min: 30 },
+            { title: 'profile.roadmap.normal.3.title', detail: 'log.roadmap.normal.3.detail', activity_type: 'yoga', duration_min: 20 },
           ]
         : bodyStatus === 'obese'
           ? [
-              { title: 'Đi bộ chia chặng', detail: '3 phiên ngắn trong ngày giúp giảm áp lực khớp.', activity_type: 'walking', duration_min: 35 },
-              { title: 'Sức mạnh tác động thấp', detail: 'Động tác thân người, ghế, dây kháng lực ở cường độ vừa.', activity_type: 'gym', duration_min: 25 },
-              { title: 'Đạp xe nhẹ', detail: 'Cardio ít tác động, dễ duy trì đều đặn mỗi tuần.', activity_type: 'cycling', duration_min: 20 },
+              { title: 'profile.roadmap.obese.1.title', detail: 'log.roadmap.obese.1.detail', activity_type: 'walking', duration_min: 35 },
+              { title: 'profile.roadmap.obese.2.title', detail: 'log.roadmap.obese.2.detail', activity_type: 'gym', duration_min: 25 },
+              { title: 'profile.roadmap.obese.3.title', detail: 'log.roadmap.obese.3.detail', activity_type: 'cycling', duration_min: 20 },
             ]
           : goal === 'lose_weight'
             ? [
-                { title: 'Chạy/đi bộ đốt mỡ', detail: 'Cardio nền tảng để tạo thâm hụt ổn định.', activity_type: 'running', duration_min: 30 },
-                { title: 'Buổi tạ giữ cơ', detail: 'Tập sức mạnh ngắn để bảo toàn cơ trong giai đoạn giảm cân.', activity_type: 'gym', duration_min: 30 },
-                { title: 'Đi bộ bổ sung', detail: 'Thêm bước chân trong ngày để tăng tổng tiêu hao.', activity_type: 'walking', duration_min: 20 },
+                { title: 'log.roadmap.loss.1.title', detail: 'log.roadmap.loss.1.detail', activity_type: 'running', duration_min: 30 },
+                { title: 'log.roadmap.loss.2.title', detail: 'log.roadmap.loss.2.detail', activity_type: 'gym', duration_min: 30 },
+                { title: 'log.roadmap.loss.3.title', detail: 'log.roadmap.loss.3.detail', activity_type: 'walking', duration_min: 20 },
               ]
             : [
-                { title: 'Cardio nhẹ', detail: 'Vận động đều để giữ nền tim mạch.', activity_type: 'walking', duration_min: 25 },
-                { title: 'Sức mạnh cơ bản', detail: 'Bài toàn thân giúp duy trì trao đổi chất.', activity_type: 'gym', duration_min: 25 },
-                { title: 'Yoga phục hồi', detail: 'Giảm mỏi cơ, tăng chất lượng giấc ngủ.', activity_type: 'yoga', duration_min: 15 },
+                { title: 'log.roadmap.default.1.title', detail: 'log.roadmap.default.1.detail', activity_type: 'walking', duration_min: 25 },
+                { title: 'log.roadmap.default.2.title', detail: 'log.roadmap.default.2.detail', activity_type: 'gym', duration_min: 25 },
+                { title: 'profile.roadmap.default.3.title', detail: 'log.roadmap.default.3.detail', activity_type: 'yoga', duration_min: 15 },
               ];
 
   return base.map((item, index) => ({
