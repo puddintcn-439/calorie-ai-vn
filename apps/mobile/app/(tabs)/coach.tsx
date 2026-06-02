@@ -563,9 +563,10 @@ export default function CoachScreen() {
   );
 
   return (
-    <ScreenShell scroll={false} reserveBottomNav={false}>
+    <ScreenShell scroll={false} reserveBottomNav={false} contentStyle={styles.screenFrame}>
       <ScrollView
         ref={coachScrollRef}
+        style={styles.scrollView}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
@@ -775,6 +776,13 @@ export default function CoachScreen() {
 }
 
 const styles = createThemedStyles((colors, radii) => ({
+  screenFrame: {
+    flex: 1,
+    minHeight: 0,
+  },
+  scrollView: {
+    flex: 1,
+  },
   scrollContent: {
     flexGrow: 1,
     paddingTop: 14,
