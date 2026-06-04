@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View } from 'react-native';
+import { Image, useWindowDimensions, View } from 'react-native';
 import { router } from 'expo-router';
 import { useAuthStore } from '../../store/auth.store';
 import { BodyText, Eyebrow, HeroTitle, ScreenShell, SurfaceCard } from '../../components/ui-shell';
@@ -9,8 +9,12 @@ import { createThemedStyles, useAppTheme } from '../../components/theme';
 import { Text } from '../../components/i18n-text';
 import { Alert } from '../../components/i18n-alert';
 
+const registerHeroImage = require('../../assets/images/profile-hero.jpg') as number;
+
 export default function RegisterScreen() {
   useAppTheme();
+  const { width } = useWindowDimensions();
+  const isCompact = width < 480;
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
@@ -31,6 +35,7 @@ export default function RegisterScreen() {
 
   return (
     <ScreenShell contentStyle={styles.centeredContent} scrollContentStyle={styles.authScrollContent}>
+      <Image source={registerHeroImage} resizeMode="cover" style={[styles.heroImage, isCompact && styles.heroImageCompact]} />
       <View style={styles.heroBlock}>
         <Eyebrow>auth.register.eyebrow</Eyebrow>
         <HeroTitle>auth.register.title</HeroTitle>
@@ -68,12 +73,25 @@ export default function RegisterScreen() {
   );
 }
 
-const styles = createThemedStyles((colors) => ({
-  authScrollContent: { flexGrow: 1, justifyContent: 'center' },
+const styles = createThemedStyles((colors, radii) => ({
+  authScrollContent: { flexGrow: 1, justifyContent: 'center', paddingVertical: 18 },
   centeredContent: { flex: 1, justifyContent: 'center', maxWidth: 560, alignSelf: 'center', width: '100%' },
-  heroBlock: { marginBottom: 18, paddingHorizontal: 4 },
-  formCard: { width: '100%', padding: 20 },
-  sectionTitle: { color: colors.text, fontSize: 24, fontWeight: '800', marginBottom: 6 },
-  subtitle: { color: colors.textMuted, marginBottom: 20, fontSize: 14, lineHeight: 21 },
-  submitBtn: { marginBottom: 8, marginTop: 4 },
+  heroImage: {
+    width: '100%',
+    height: 150,
+    borderRadius: radii.xl,
+    marginBottom: 18,
+    backgroundColor: colors.surfaceAlt,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+  },
+  heroImageCompact: {
+    height: 118,
+    marginBottom: 14,
+  },
+  heroBlock: { marginBottom: 16, paddingHorizontal: 2 },
+  formCard: { width: '100%', padding: 22 },
+  sectionTitle: { color: colors.text, fontSize: 23, lineHeight: 29, fontWeight: '900', marginBottom: 6 },
+  subtitle: { color: colors.textMuted, marginBottom: 22, fontSize: 14, lineHeight: 21 },
+  submitBtn: { marginBottom: 10, marginTop: 6 },
 }));

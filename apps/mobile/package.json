@@ -5,6 +5,7 @@
   "main": "expo-router/entry",
   "scripts": {
     "dev": "expo start",
+    "dev:client": "expo start --dev-client --host lan",
     "dev:web": "expo start --web --port 19006",
     "android": "expo run:android",
     "ios": "expo run:ios",
@@ -28,6 +29,7 @@
     "expo-asset": "^56.0.15",
     "expo-av": "^16.0.8",
     "expo-camera": "^56.0.7",
+    "expo-dev-client": "~56.0.18",
     "expo-file-system": "^56.0.7",
     "expo-font": "^56.0.5",
     "expo-haptics": "^56.0.3",
