@@ -1,4 +1,7 @@
 import { AIDetectedItem } from './ai.types';
+import { ActivityLog } from './activity.types';
+import { ActivityPreference, DailyRoadmapItem } from './roadmap.types';
+import { User } from './user.types';
 
 export interface FoodLog {
   id: string;
@@ -52,6 +55,46 @@ export interface DailyLog {
   };
   target_calories: number;
   remaining_calories: number;
+}
+
+export interface TodaySummary {
+  date: string;
+  timezone_offset_minutes: number;
+  daily_log: DailyLog | null;
+  activity_logs: ActivityLog[];
+  daily_roadmap: DailyRoadmapItem[];
+  activity_preferences: ActivityPreference[];
+  profile: Partial<Pick<
+    User,
+    | 'age'
+    | 'gender'
+    | 'height_cm'
+    | 'weight_kg'
+    | 'health_flags'
+    | 'activity_level'
+    | 'goal_plan'
+    | 'daily_calorie_target'
+    | 'goal'
+  >> | null;
+  plan: {
+    target_calories: number;
+    consumed_calories: number;
+    burned_calories: number;
+    net_calories: number;
+    remaining_calories: number;
+    roadmap_total: number;
+    roadmap_completed: number;
+    roadmap_remaining: number;
+    planned_activity_kcal: number;
+  };
+  status: {
+    daily_log: 'ok' | 'error';
+    activity_logs: 'ok' | 'error';
+    daily_roadmap: 'ok' | 'error';
+    activity_preferences: 'ok' | 'error';
+    profile: 'ok' | 'error';
+  };
+  errors?: Partial<Record<keyof TodaySummary['status'], string>>;
 }
 
 export interface CreateLogFromScanDto {

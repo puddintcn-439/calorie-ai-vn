@@ -2,6 +2,7 @@ import {
   DailyLog,
   FoodLog,
   MealType,
+  TodaySummary,
   SavedMeal,
   ActivityLog,
   CreateActivityLogDto,
@@ -28,7 +29,9 @@ interface LogState {
   activityLogs: ActivityLog[];
   dailyRoadmap: DailyRoadmapItem[];
   activityPreferences: ActivityPreference[];
+  todaySummary: TodaySummary | null;
   isLoading: boolean;
+  fetchTodaySummary: (date?: string) => Promise<void>;
   fetchDailyLog: (date?: string) => Promise<void>;
   fetchSavedMeals: () => Promise<void>;
   fetchActivityLogs: (date?: string) => Promise<void>;
@@ -60,7 +63,34 @@ export const useLogStore = create<LogState>((set, get) => ({
   activityLogs: [],
   dailyRoadmap: [],
   activityPreferences: [],
+  todaySummary: null,
   isLoading: false,
+
+  fetchTodaySummary: async (date) => {
+    set({ isLoading: true });
+    const d = date ?? getLocalDateYmd();
+    const tzOffset = getLocalTimezoneOffsetMinutes();
+    try {
+      const res = await apiClient.get<TodaySummary>(`/today/summary?date=${d}&tz_offset_minutes=${tzOffset}`);
+      set({
+        todaySummary: res.data,
+        dailyLog: res.data.daily_log,
+        activityLogs: res.data.activity_logs,
+        dailyRoadmap: res.data.daily_roadmap,
+        activityPreferences: res.data.activity_preferences,
+      });
+    } catch (error) {
+      appLogger.warn('LogStore', 'Failed to fetch today summary; falling back to split endpoints', error);
+      await Promise.allSettled([
+        get().fetchDailyLog(d),
+        get().fetchActivityLogs(d),
+        get().fetchDailyRoadmap(d),
+        get().fetchActivityPreferences(),
+      ]);
+    } finally {
+      set({ isLoading: false });
+    }
+  },
 
   fetchDailyLog: async (date) => {
     set({ isLoading: true });

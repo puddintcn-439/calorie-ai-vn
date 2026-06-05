@@ -691,6 +691,65 @@ describe('LogService.createActivityLog', () => {
 
     expect(captured[0]).toMatchObject({ exercises });
   });
+
+  it('auto-completes a matching roadmap item after activity log creation', async () => {
+    const roadmapUpdate = jest.fn().mockReturnThis();
+    const roadmapEq = jest.fn().mockReturnThis();
+    let roadmapCalls = 0;
+
+    const supabase = makeSupabase((table: string) => {
+      if (table === 'activity_logs') {
+        return {
+          insert: jest.fn().mockReturnValue({
+            select: jest.fn().mockReturnThis(),
+            single: jest.fn().mockResolvedValue({
+              data: {
+                id: 'a1',
+                user_id: 'u1',
+                activity_type: 'walking',
+                duration_min: 25,
+                calories_burned: 90,
+                logged_at: '2026-06-06T07:00:00.000Z',
+              },
+              error: null,
+            }),
+          }),
+        };
+      }
+
+      if (table === 'user_daily_roadmap') {
+        roadmapCalls += 1;
+        if (roadmapCalls === 1) {
+          return {
+            select: jest.fn().mockReturnThis(),
+            eq: jest.fn().mockReturnThis(),
+            lte: jest.fn().mockReturnThis(),
+            order: jest.fn().mockReturnThis(),
+            limit: jest.fn().mockResolvedValue({ data: [{ id: 'r1', duration_min: 20 }], error: null }),
+          };
+        }
+
+        return {
+          update: roadmapUpdate,
+          eq: roadmapEq,
+        };
+      }
+
+      return makeChain({ data: null, error: null });
+    });
+
+    const service = new LogService(supabase);
+    await service.createActivityLog('u1', {
+      activity_type: 'walking',
+      duration_min: 25,
+      calories_burned: 90,
+      logged_at: '2026-06-06T07:00:00.000Z',
+    } as any);
+
+    expect(roadmapUpdate).toHaveBeenCalledWith(expect.objectContaining({ is_completed: true }));
+    expect(roadmapEq).toHaveBeenCalledWith('id', 'r1');
+    expect(roadmapEq).toHaveBeenCalledWith('user_id', 'u1');
+  });
 });
 
 describe('LogService.syncActivityBatch', () => {

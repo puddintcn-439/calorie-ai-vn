@@ -725,10 +725,10 @@ export default function DashboardScreen() {
     activityLogs,
     dailyRoadmap,
     activityPreferences,
+    todaySummary,
+    fetchTodaySummary,
     fetchDailyLog,
     fetchActivityLogs,
-    fetchDailyRoadmap,
-    fetchActivityPreferences,
     addActivity,
     updateRoadmapItem,
   } = useLogStore();
@@ -758,17 +758,30 @@ export default function DashboardScreen() {
   }, []);
 
   const refreshDashboardData = useCallback(() => {
-    fetchDailyLog().catch(() => {});
-    fetchActivityLogs().catch(() => {});
-    fetchDailyRoadmap().catch(() => {});
-    fetchActivityPreferences().catch(() => {});
+    fetchTodaySummary().catch(() => {});
     fetchSummary().catch(() => {});
     fetchProfileMeta().catch(() => {});
-  }, [fetchActivityLogs, fetchActivityPreferences, fetchDailyLog, fetchDailyRoadmap, fetchProfileMeta, fetchSummary]);
+  }, [fetchProfileMeta, fetchSummary, fetchTodaySummary]);
 
   useEffect(() => {
     refreshDashboardData();
   }, [refreshDashboardData]);
+
+  useEffect(() => {
+    if (todaySummary?.profile) {
+      setProfileMeta({
+        age: todaySummary.profile.age,
+        gender: todaySummary.profile.gender,
+        height_cm: todaySummary.profile.height_cm,
+        weight_kg: todaySummary.profile.weight_kg,
+        health_flags: todaySummary.profile.health_flags,
+        activity_level: todaySummary.profile.activity_level,
+        goal_plan: todaySummary.profile.goal_plan,
+        daily_calorie_target: todaySummary.profile.daily_calorie_target,
+        goal: todaySummary.profile.goal,
+      });
+    }
+  }, [todaySummary?.profile]);
 
   useFocusEffect(
     useCallback(() => {
@@ -901,6 +914,9 @@ export default function DashboardScreen() {
   const activeGoalPlan = profileMeta?.goal_plan ?? null;
   const netCalories = Math.max(0, consumed - burned);
   const planRemaining = target - netCalories;
+  const todaySummaryHasPartialError = todaySummary
+    ? Object.values(todaySummary.status).some((value) => value === 'error')
+    : false;
   const planGoalDescription = activeGoalPlan ? describeGoalPlan(activeGoalPlan, locale) : describeGoalPlan(selectedGoalPlan, locale);
   const activeRoadmapItems = useMemo(
     () => dailyRoadmap.filter((item: DailyRoadmapItem) => !item.is_removed),
@@ -1184,6 +1200,9 @@ export default function DashboardScreen() {
             <Text style={styles.todayPlanEyebrow}>PLAN</Text>
             <Text style={styles.todayPlanTitle} i18nKey="screen.tabs.index.plan.title" />
             <Text style={styles.todayPlanBody}>{todayPlanBody}</Text>
+            {todaySummaryHasPartialError ? (
+              <Text style={styles.todayPlanWarning}>{t('screen.tabs.index.plan.partial')}</Text>
+            ) : null}
             <Text style={styles.todayPlanGoal}>{t('screen.tabs.index.plan.goal', { goal: planGoalDescription })}</Text>
           </View>
           <View style={styles.todayPlanMetric}>
@@ -1835,6 +1854,13 @@ const styles = createThemedStyles((colors, radii) => ({
     lineHeight: 18,
     fontWeight: '800',
     marginTop: 6,
+  },
+  todayPlanWarning: {
+    color: colors.accentAmber,
+    fontSize: 11,
+    lineHeight: 16,
+    fontWeight: '800',
+    marginTop: 5,
   },
   todayPlanMetric: {
     minWidth: 78,

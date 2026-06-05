@@ -61,6 +61,7 @@ export interface ReminderFeedbackEventDto {
   meal_type?: 'breakfast' | 'lunch' | 'dinner' | 'snack';
   local_date?: string;
   action_type?: 'food_log' | 'saved_meal_log' | 'activity_log' | 'scan_opened' | string;
+  attribution_window_minutes?: number;
 }
 
 export interface ReminderEffectivenessSummary {

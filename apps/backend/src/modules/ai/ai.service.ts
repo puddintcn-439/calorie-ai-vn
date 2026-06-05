@@ -639,6 +639,7 @@ Trả lời ngắn gọn, thân thiện bằng tiếng Việt. Không quá 3 câ
       return {
         message: text.trim(),
         suggestions: [],
+        actions: this.deriveCoachActions(message, context),
       };
     } catch (error) {
       this.logger.error(`[AI-PROVIDER] coach error_category=${this.isQuotaOrRateLimitError(error) ? 'quota_or_rate_limit' : 'error'}`);
@@ -652,11 +653,59 @@ Trả lời ngắn gọn, thân thiện bằng tiếng Việt. Không quá 3 câ
             'Mon uu tien: uc ga, trung, dau hu + rau luoc',
             `Con lai ${Math.max(0, context.target_calories - context.today_calories)} kcal hom nay`,
           ],
+          actions: this.deriveCoachActions(message, context),
         };
       }
 
       throw error;
     }
+  }
+
+  private deriveCoachActions(
+    message: string,
+    context: { today_calories: number; target_calories: number },
+  ): AICoachResponse['actions'] {
+    const normalized = message
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase();
+    const remaining = context.target_calories - context.today_calories;
+    const actions: NonNullable<AICoachResponse['actions']> = [];
+    const add = (action: NonNullable<AICoachResponse['actions']>[number]) => {
+      if (!actions.some((item) => item.type === action.type)) actions.push(action);
+    };
+
+    if (remaining > 250 || /(an|meal|mon|food|scan|chup|bua)/.test(normalized)) {
+      add({ type: 'open_scan', label: 'Scan/log meal', description: 'Open scanner to capture the next meal.' });
+    }
+
+    if (/(log|nhat ky|sua|edit|ghi lai)/.test(normalized) || context.today_calories > context.target_calories + 150) {
+      add({ type: 'open_log', label: 'Review log', description: 'Open food log to adjust entries.' });
+    }
+
+    if (/(can|weight|tien do|progress|muc tieu|goal)/.test(normalized)) {
+      add({ type: 'open_progress', label: 'View progress', description: 'Check trend and target status.' });
+    }
+
+    if (/(nhac|remind|notification|quen)/.test(normalized)) {
+      add({ type: 'open_reminders', label: 'Set reminders', description: 'Open reminder settings.' });
+    }
+
+    if (context.today_calories > context.target_calories || /(di bo|walk|van dong|activity|tap)/.test(normalized)) {
+      add({
+        type: 'add_activity',
+        label: 'Add 15 min walk',
+        description: 'Log a light walk as a recovery action.',
+        payload: {
+          activity_type: 'walking',
+          activity_name: 'Coach walk',
+          duration_min: 15,
+          calories_burned: 60,
+        },
+      });
+    }
+
+    return actions.slice(0, 3);
   }
 
   private recordAiScanResponse(response: AIScanResponse, startedAt: number): AIScanResponse {

@@ -155,6 +155,30 @@ describe('ReminderService.reminderFeedback', () => {
     expect(result.action_rate).toBe(33);
     expect(result.by_meal.breakfast.action_rate).toBe(100);
   });
+
+  it('does not record acted event outside the attribution window', async () => {
+    const update = jest.fn().mockReturnThis();
+    const eq = jest.fn().mockReturnThis();
+    const gte = jest.fn().mockReturnThis();
+    const service = makeService(() => ({
+      update,
+      eq,
+      gte,
+      select: jest.fn().mockReturnThis(),
+      single: jest.fn().mockResolvedValue({ data: null, error: { code: 'PGRST116' } }),
+    }));
+
+    const result = await service.recordReminderEvent('u1', {
+      event: 'acted',
+      reminder_log_id: '5ee3dc04-37d9-4929-9d07-e9f6ba24bb02',
+      action_type: 'food_log',
+      attribution_window_minutes: 120,
+    });
+
+    expect(result.recorded).toBe(false);
+    expect(result.reason).toBe('outside_attribution_window');
+    expect(gte).toHaveBeenCalledWith('sent_at', expect.any(String));
+  });
 });
 
 function ctx(overrides: Partial<NudgeContext>): NudgeContext {

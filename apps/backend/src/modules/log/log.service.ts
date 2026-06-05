@@ -1,6 +1,21 @@
 import { Injectable } from '@nestjs/common';
 import { SupabaseService } from '../../common/supabase/supabase.service';
-import { FoodLog, DailyLog, MealType, SavedMeal, SavedMealItem, ActivityLog, CreateActivityLogDto, ACTIVITY_MET, ActivitySyncBatchDto, ActivitySyncResult, UpdateFoodLogInput } from '@calorie-ai/types';
+import {
+  FoodLog,
+  DailyLog,
+  MealType,
+  SavedMeal,
+  SavedMealItem,
+  ActivityLog,
+  CreateActivityLogDto,
+  ACTIVITY_MET,
+  ActivitySyncBatchDto,
+  ActivitySyncResult,
+  UpdateFoodLogInput,
+  TodaySummary,
+  DailyRoadmapItem,
+  ActivityPreference,
+} from '@calorie-ai/types';
 
 @Injectable()
 export class LogService {
@@ -86,6 +101,104 @@ export class LogService {
       target_calories,
       remaining_calories: target_calories - total_calories,
     };
+  }
+
+  async getTodaySummary(userId: string, date: string, tzOffsetMinutes: number = 0): Promise<TodaySummary> {
+    const status: TodaySummary['status'] = {
+      daily_log: 'ok',
+      activity_logs: 'ok',
+      daily_roadmap: 'ok',
+      activity_preferences: 'ok',
+      profile: 'ok',
+    };
+    const errors: TodaySummary['errors'] = {};
+
+    const capture = async <T>(
+      key: keyof TodaySummary['status'],
+      fallback: T,
+      loader: () => Promise<T>,
+    ): Promise<T> => {
+      try {
+        return await loader();
+      } catch (error: any) {
+        status[key] = 'error';
+        errors[key] = String(error?.message ?? error ?? 'unknown_error');
+        return fallback;
+      }
+    };
+
+    const [dailyLog, activityLogs, dailyRoadmap, activityPreferences, profile] = await Promise.all([
+      capture('daily_log', null, () => this.getDailyLog(userId, date, tzOffsetMinutes)),
+      capture('activity_logs', [], () => this.getActivityLogs(userId, date, tzOffsetMinutes)),
+      capture('daily_roadmap', [], () => this.getDailyRoadmapForSummary(userId, date)),
+      capture('activity_preferences', [], () => this.getActivityPreferencesForSummary(userId)),
+      capture('profile', null, () => this.getProfileForSummary(userId)),
+    ]);
+
+    const consumed = dailyLog?.total_calories ?? 0;
+    const target = dailyLog?.target_calories ?? Number((profile as any)?.daily_calorie_target ?? 1800);
+    const burned = activityLogs.reduce((sum, item) => sum + Number(item.calories_burned ?? 0), 0);
+    const activeRoadmap = dailyRoadmap.filter((item) => !item.is_removed);
+    const roadmapCompleted = activeRoadmap.filter((item) => item.is_completed).length;
+
+    return {
+      date,
+      timezone_offset_minutes: tzOffsetMinutes,
+      daily_log: dailyLog,
+      activity_logs: activityLogs,
+      daily_roadmap: dailyRoadmap,
+      activity_preferences: activityPreferences,
+      profile,
+      plan: {
+        target_calories: target,
+        consumed_calories: consumed,
+        burned_calories: burned,
+        net_calories: Math.max(0, consumed - burned),
+        remaining_calories: target - Math.max(0, consumed - burned),
+        roadmap_total: activeRoadmap.length,
+        roadmap_completed: roadmapCompleted,
+        roadmap_remaining: Math.max(0, activeRoadmap.length - roadmapCompleted),
+        planned_activity_kcal: activeRoadmap.reduce((sum, item) => sum + Number(item.estimated_kcal ?? 0), 0),
+      },
+      status,
+      errors: Object.keys(errors).length > 0 ? errors : undefined,
+    };
+  }
+
+  private async getDailyRoadmapForSummary(userId: string, date: string): Promise<DailyRoadmapItem[]> {
+    const { data, error } = await this.supabase.db
+      .from('user_daily_roadmap')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('logged_date', date)
+      .order('created_at', { ascending: true });
+
+    if (error) throw error;
+    return (data ?? []) as DailyRoadmapItem[];
+  }
+
+  private async getActivityPreferencesForSummary(userId: string): Promise<ActivityPreference[]> {
+    const { data, error } = await this.supabase.db
+      .from('user_activity_preferences')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('is_active', true)
+      .order('sort_order', { ascending: true })
+      .order('created_at', { ascending: true });
+
+    if (error) throw error;
+    return (data ?? []) as ActivityPreference[];
+  }
+
+  private async getProfileForSummary(userId: string): Promise<TodaySummary['profile']> {
+    const { data, error } = await this.supabase.db
+      .from('users')
+      .select('age, gender, height_cm, weight_kg, health_flags, activity_level, goal_plan, daily_calorie_target, goal')
+      .eq('id', userId)
+      .single();
+
+    if (error) throw error;
+    return data as TodaySummary['profile'];
   }
 
   private sumOptional(logs: FoodLog[], key: 'fiber_g' | 'sugar_g' | 'saturated_fat_g' | 'sodium_mg'): number {
@@ -276,7 +389,9 @@ export class LogService {
       .single();
 
     if (error) throw error;
-    return data as ActivityLog;
+    const activity = data as ActivityLog;
+    await this.autoCompleteRoadmapFromActivity(userId, activity).catch(() => undefined);
+    return activity;
   }
 
   async syncActivityBatch(userId: string, dto: ActivitySyncBatchDto): Promise<ActivitySyncResult> {
@@ -315,6 +430,18 @@ export class LogService {
         .insert(rows);
 
       if (insertError) throw insertError;
+
+      await Promise.all(newEntries.map((entry) => this.autoCompleteRoadmapFromActivity(userId, {
+        id: entry.external_id,
+        user_id: userId,
+        source: dto.source,
+        activity_type: entry.activity_type,
+        activity_name: entry.activity_name,
+        duration_min: entry.duration_min,
+        calories_burned: entry.calories_burned,
+        logged_at: entry.logged_at,
+        created_at: entry.logged_at,
+      } as ActivityLog).catch(() => undefined)));
     }
 
     return {
@@ -350,6 +477,32 @@ export class LogService {
 
     if (error) throw error;
     return { success: true };
+  }
+
+  private async autoCompleteRoadmapFromActivity(userId: string, activity: ActivityLog): Promise<void> {
+    const loggedDate = (activity.logged_at ?? new Date().toISOString()).slice(0, 10);
+    const duration = Number(activity.duration_min ?? 0);
+    if (!activity.activity_type || duration <= 0) return;
+
+    const { data, error } = await this.supabase.db
+      .from('user_daily_roadmap')
+      .select('id, duration_min')
+      .eq('user_id', userId)
+      .eq('logged_date', loggedDate)
+      .eq('activity_type', activity.activity_type)
+      .eq('is_removed', false)
+      .eq('is_completed', false)
+      .lte('duration_min', duration + 5)
+      .order('duration_min', { ascending: false })
+      .limit(1);
+
+    if (error || !data?.[0]?.id) return;
+
+    await this.supabase.db
+      .from('user_daily_roadmap')
+      .update({ is_completed: true, updated_at: new Date().toISOString() })
+      .eq('id', data[0].id)
+      .eq('user_id', userId);
   }
 
   private buildFoodLogUpdate(existing: FoodLog, updates: UpdateFoodLogInput): Record<string, unknown> {

@@ -115,6 +115,8 @@ export class ReminderService {
 
   async recordReminderEvent(userId: string, dto: ReminderFeedbackEventDto) {
     const now = new Date().toISOString();
+    const attributionWindowMinutes = this.resolveAttributionWindowMinutes(dto.attribution_window_minutes);
+    const actedCutoffIso = new Date(Date.now() - attributionWindowMinutes * 60 * 1000).toISOString();
     const update = dto.event === 'opened'
       ? { opened_at: now }
       : { acted_at: now, acted_action_type: dto.action_type ?? null };
@@ -124,16 +126,26 @@ export class ReminderService {
       return { recorded: false, reason: 'reminder_log_not_found' };
     }
 
-    const { data, error } = await this.supabase.db
+    let query = this.supabase.db
       .from('reminder_notification_log')
       .update(update)
       .eq('user_id', userId)
-      .eq('id', reminderLogId)
+      .eq('id', reminderLogId);
+
+    if (dto.event === 'acted') {
+      query = query.gte('sent_at', actedCutoffIso);
+    }
+
+    const { data, error } = await query
       .select('id, meal_type, sent_at, opened_at, acted_at, acted_action_type')
       .single();
 
     if (error && this.isMissingTableError(error, 'reminder_notification_log') && this.allowMissingTableFallback()) {
       return { recorded: false, reason: 'reminder_log_table_missing' };
+    }
+
+    if (error?.code === 'PGRST116') {
+      return { recorded: false, reason: dto.event === 'acted' ? 'outside_attribution_window' : 'reminder_log_not_found' };
     }
 
     if (error) throw error;
@@ -190,6 +202,10 @@ export class ReminderService {
 
     if (dto.meal_type) query = query.eq('meal_type', dto.meal_type);
     if (dto.local_date) query = query.eq('local_date', dto.local_date);
+    if (dto.event === 'acted') {
+      const attributionWindowMinutes = this.resolveAttributionWindowMinutes(dto.attribution_window_minutes);
+      query = query.gte('sent_at', new Date(Date.now() - attributionWindowMinutes * 60 * 1000).toISOString());
+    }
 
     const { data, error } = await query;
     if (error && this.isMissingTableError(error, 'reminder_notification_log') && this.allowMissingTableFallback()) {
@@ -197,6 +213,12 @@ export class ReminderService {
     }
     if (error) throw error;
     return data?.[0]?.id ?? null;
+  }
+
+  private resolveAttributionWindowMinutes(value?: number): number {
+    const safe = Number(value);
+    if (!Number.isFinite(safe)) return 120;
+    return Math.min(Math.max(Math.round(safe), 5), 24 * 60);
   }
 
   private buildEmptyEffectivenessSummary(): ReminderEffectivenessSummary {

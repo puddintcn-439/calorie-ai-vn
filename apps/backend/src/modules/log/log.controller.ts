@@ -240,3 +240,22 @@ export class LogController {
     return this.logService.deleteActivityLog(id, req.user.id);
   }
 }
+
+@ApiTags('Today')
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard)
+@Controller('today')
+export class TodayController {
+  constructor(private readonly logService: LogService) {}
+
+  @Get('summary')
+  getSummary(
+    @Query('date') date: string,
+    @Request() req: any,
+    @Query('tz_offset_minutes') tzOffsetMinutes?: string,
+  ) {
+    const d = date ?? new Date().toISOString().slice(0, 10);
+    const tzOffset = Number.isFinite(Number(tzOffsetMinutes)) ? Number(tzOffsetMinutes) : 0;
+    return this.logService.getTodaySummary(req.user.id, d, tzOffset);
+  }
+}

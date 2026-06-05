@@ -11,6 +11,7 @@ type PendingReminderContext = {
 };
 
 const PENDING_REMINDER_KEY = 'pending_reminder_feedback';
+const ATTRIBUTION_WINDOW_MINUTES = 120;
 
 function asString(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim().length > 0 ? value : undefined;
@@ -43,6 +44,7 @@ class ReminderFeedbackService {
         event: 'opened',
         reminder_log_id: context.reminder_log_id,
         meal_type: context.meal_type,
+        attribution_window_minutes: ATTRIBUTION_WINDOW_MINUTES,
       } satisfies ReminderFeedbackEventDto);
       await authStorage.setItemAsync(PENDING_REMINDER_KEY, JSON.stringify(context));
     } catch (error) {
@@ -56,6 +58,12 @@ class ReminderFeedbackService {
     const context = await this.getPendingContext();
     if (!context) return;
 
+    const openedAt = Date.parse(context.opened_at);
+    if (Number.isFinite(openedAt) && Date.now() - openedAt > ATTRIBUTION_WINDOW_MINUTES * 60 * 1000) {
+      await authStorage.deleteItemAsync(PENDING_REMINDER_KEY);
+      return;
+    }
+
     if (mealType && context.meal_type && mealType !== context.meal_type) {
       return;
     }
@@ -66,6 +74,7 @@ class ReminderFeedbackService {
         reminder_log_id: context.reminder_log_id,
         meal_type: mealType ?? context.meal_type,
         action_type: actionType,
+        attribution_window_minutes: ATTRIBUTION_WINDOW_MINUTES,
       } satisfies ReminderFeedbackEventDto);
       await authStorage.deleteItemAsync(PENDING_REMINDER_KEY);
     } catch (error) {
