@@ -2,6 +2,26 @@ import { SubscriptionFeatures } from '@calorie-ai/types';
 import { apiClient } from './api';
 import { appLogger } from './logger.service';
 
+export class PremiumFeatureError extends Error {
+  feature: keyof SubscriptionFeatures;
+  featureName: string;
+
+  constructor(feature: keyof SubscriptionFeatures, featureName: string) {
+    super(`${featureName} is only available on Premium or Pro plans`);
+    this.name = 'PremiumFeatureError';
+    this.feature = feature;
+    this.featureName = featureName;
+  }
+}
+
+export function isPremiumFeatureError(error: unknown): error is PremiumFeatureError {
+  const err = error as Partial<PremiumFeatureError> & { message?: unknown; name?: unknown };
+  const message = String(err?.message ?? '').toLowerCase();
+  return err?.name === 'PremiumFeatureError'
+    || message.includes('only available on premium')
+    || message.includes('premium or pro');
+}
+
 class FeatureGatingService {
   private featureCache: SubscriptionFeatures | null = null;
   private cacheExpiry: number = 0;
@@ -55,7 +75,7 @@ class FeatureGatingService {
   async requireFeature(feature: keyof SubscriptionFeatures, featureName: string): Promise<void> {
     const hasAccess = await this.canAccessFeature(feature);
     if (!hasAccess) {
-      throw new Error(`${featureName} is only available on Premium or Pro plans`);
+      throw new PremiumFeatureError(feature, featureName);
     }
   }
 

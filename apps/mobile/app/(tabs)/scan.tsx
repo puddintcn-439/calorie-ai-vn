@@ -147,6 +147,8 @@ export default function ScanScreen() {
   const [lastFailedScan, setLastFailedScan] = useState<{ mode: InputMode; payload?: any } | null>(null);
   const [isRetrying, setIsRetrying] = useState(false);
   const [scanElapsedSeconds, setScanElapsedSeconds] = useState(0);
+  const [correctionCount, setCorrectionCount] = useState(0);
+  const [correctionFeedbackVisible, setCorrectionFeedbackVisible] = useState(false);
 
   // Context state
   const { activeContexts, toggleContext } = useContextStore();
@@ -212,6 +214,8 @@ export default function ScanScreen() {
     setLastFailedScan(null);
     setScanResult(result);
     setEditableItems(result.items.map((item) => ({ ...item })));
+    setCorrectionCount(0);
+    setCorrectionFeedbackVisible(false);
     
     // Flag low confidence scans for telemetry
     if (safeNumber(result.ai_confidence) < 0.6) {
@@ -219,6 +223,11 @@ export default function ScanScreen() {
       telemetryService.emitLowConfidenceFlag(summary, result.ai_confidence);
     }
   };
+
+  const markScanCorrection = useCallback(() => {
+    setCorrectionCount((count) => count + 1);
+    setCorrectionFeedbackVisible(true);
+  }, []);
 
   const updateItemGrams = (index: number, nextGramsRaw: number) => {
     setEditableItems((prev) => {
@@ -248,6 +257,7 @@ export default function ScanScreen() {
         old.calories,
         updated.calories,
       );
+      markScanCorrection();
       const clone = [...prev];
       clone[index] = updated;
       return clone;
@@ -259,6 +269,7 @@ export default function ScanScreen() {
       if (!prev[index]) return prev;
       const old = prev[index];
       void telemetryService.emitItemMismatch(old.name_vi ?? old.name, newName, old.confidence);
+      markScanCorrection();
       const clone = [...prev];
       clone[index] = { ...old, name_vi: newName, name: newName };
       return clone;
@@ -270,6 +281,7 @@ export default function ScanScreen() {
       const item = prev[index];
       if (!item) return prev;
       void telemetryService.emitItemMismatch(item.name_vi ?? item.name, '(removed)', item.confidence);
+      markScanCorrection();
       const newItems = prev.filter((_, i) => i !== index);
       return [...newItems]; // Create new array reference to ensure React detects change
     });
@@ -298,6 +310,8 @@ export default function ScanScreen() {
     setManualBarcode('');
     setBarcodeGrams('100');
     setSearchGramsById({});
+    setCorrectionCount(0);
+    setCorrectionFeedbackVisible(false);
   };
 
   const promptAfterLog = (logs: FoodLog[], summary: string) => {
@@ -555,7 +569,11 @@ export default function ScanScreen() {
     try {
       const summary = currentItems.map((i) => `- ${i.name_vi ?? i.name}: ${i.calories}kcal, ${i.estimated_grams}g`).join('\n');
       const refined = await refineScan(summary, refineContext.trim(), scanResult.scan_id);
-      if (refined.success && refined.items.length > 0) { applyScanResult(refined); setRefineContext(''); }
+      if (refined.success && refined.items.length > 0) {
+        applyScanResult(refined);
+        setRefineContext('');
+        markScanCorrection();
+      }
       else Alert.alert('screen.tabs.scan.alert.021', 'screen.tabs.scan.alert.022');
     } catch { Alert.alert('screen.tabs.scan.alert.023', 'screen.tabs.scan.alert.024'); }
     finally { setIsRefining(false); }
@@ -1185,6 +1203,15 @@ export default function ScanScreen() {
                 </Text>
               </SurfaceCard>
             ) : null}
+            {correctionFeedbackVisible ? (
+              <SurfaceCard style={styles.correctionCard}>
+                <Text style={styles.correctionTitle} i18nKey="screen.tabs.scan.correction.title" />
+                <Text style={styles.correctionBody} i18nKey="screen.tabs.scan.correction.body" />
+                {correctionCount > 1 ? (
+                  <Text style={styles.correctionMeta}>{correctionCount} corrections this scan</Text>
+                ) : null}
+              </SurfaceCard>
+            ) : null}
             <SurfaceCard style={styles.totalCard}>
               <Text style={styles.totalLabel} i18nKey="screen.tabs.scan.text.026" />
               <Text style={styles.totalCalorie}>{formatKcal(totalCalories)}</Text>
@@ -1561,6 +1588,10 @@ const styles = createThemedStyles((colors, radii) => ({
   lowConfidenceBanner: { backgroundColor: colors.surfaceDanger, borderColor: colors.borderDanger, borderWidth: 1, marginBottom: 12 },
   lowConfidenceTitle: { color: colors.danger, fontSize: 15, fontWeight: '800', marginBottom: 6 },
   lowConfidenceBody: { color: colors.danger, fontSize: 13, lineHeight: 19 },
+  correctionCard: { backgroundColor: colors.surfaceSuccess, borderColor: colors.borderSuccess, borderWidth: 1, marginBottom: 12 },
+  correctionTitle: { color: colors.accentMint, fontSize: 15, fontWeight: '900', marginBottom: 5 },
+  correctionBody: { color: colors.textSoft, fontSize: 13, lineHeight: 19 },
+  correctionMeta: { color: colors.textMuted, fontSize: 12, fontWeight: '800', marginTop: 6 },
   scanNoticeCard: { backgroundColor: colors.surfaceDanger, borderColor: colors.borderDanger, borderWidth: 1, marginBottom: 12 },
   scanNoticeTitle: { color: colors.danger, fontSize: 15, fontWeight: '800', marginBottom: 6 },
   scanNoticeBody: { color: colors.danger, fontSize: 13, lineHeight: 19 },

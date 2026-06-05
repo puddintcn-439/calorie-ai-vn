@@ -9,7 +9,18 @@ import {
 import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import Svg, { Circle } from 'react-native-svg';
-import { ACTIVITY_MET, ActivityLog, ActivityPreference, ActivityType, FoodLog, GoalPlan, MealType, User, UserGoal } from '@calorie-ai/types';
+import {
+  ACTIVITY_MET,
+  ActivityLog,
+  ActivityPreference,
+  ActivityType,
+  DailyRoadmapItem,
+  FoodLog,
+  GoalPlan,
+  MealType,
+  User,
+  UserGoal,
+} from '@calorie-ai/types';
 import { BodyText, Eyebrow, ScreenShell, SurfaceCard } from '../../components/ui-shell';
 import { EmptyState } from '../../components/empty-state';
 import { createThemedStyles, theme, useAppTheme } from '../../components/theme';
@@ -712,11 +723,14 @@ export default function DashboardScreen() {
   const {
     dailyLog,
     activityLogs,
+    dailyRoadmap,
     activityPreferences,
     fetchDailyLog,
     fetchActivityLogs,
+    fetchDailyRoadmap,
     fetchActivityPreferences,
     addActivity,
+    updateRoadmapItem,
   } = useLogStore();
   const { summary, fetchSummary } = useGamificationStore();
   const { fetchRecommendations } = useCalorieTargetStore();
@@ -725,6 +739,7 @@ export default function DashboardScreen() {
   const [selectedGoal, setSelectedGoal] = useState<string>(QUICK_GOAL_OPTIONS[1].key);
   const [isApplyingTarget, setIsApplyingTarget] = useState(false);
   const [isLoggingMovement, setIsLoggingMovement] = useState(false);
+  const [updatingRoadmapId, setUpdatingRoadmapId] = useState<string | null>(null);
   const [reward, setReward] = useState<RewardToastData | null>(null);
 
   const fetchProfileMeta = useCallback(async () => {
@@ -745,10 +760,11 @@ export default function DashboardScreen() {
   const refreshDashboardData = useCallback(() => {
     fetchDailyLog().catch(() => {});
     fetchActivityLogs().catch(() => {});
+    fetchDailyRoadmap().catch(() => {});
     fetchActivityPreferences().catch(() => {});
     fetchSummary().catch(() => {});
     fetchProfileMeta().catch(() => {});
-  }, [fetchActivityLogs, fetchActivityPreferences, fetchDailyLog, fetchProfileMeta, fetchSummary]);
+  }, [fetchActivityLogs, fetchActivityPreferences, fetchDailyLog, fetchDailyRoadmap, fetchProfileMeta, fetchSummary]);
 
   useEffect(() => {
     refreshDashboardData();
@@ -883,6 +899,39 @@ export default function DashboardScreen() {
   const selectedGoalPlan = buildQuickGoalPlan(selectedGoalOption);
   const selectedDailyDelta = computeDailyDelta(selectedGoalOption.kgPerWeek);
   const activeGoalPlan = profileMeta?.goal_plan ?? null;
+  const netCalories = Math.max(0, consumed - burned);
+  const planRemaining = target - netCalories;
+  const planGoalDescription = activeGoalPlan ? describeGoalPlan(activeGoalPlan, locale) : describeGoalPlan(selectedGoalPlan, locale);
+  const activeRoadmapItems = useMemo(
+    () => dailyRoadmap.filter((item: DailyRoadmapItem) => !item.is_removed),
+    [dailyRoadmap],
+  );
+  const remainingRoadmapItems = activeRoadmapItems.filter((item: DailyRoadmapItem) => !item.is_completed);
+  const plannedRoadmapKcal = activeRoadmapItems.reduce((sum, item) => sum + safeNumber(item.estimated_kcal), 0);
+  const visibleRoadmapItems = remainingRoadmapItems.length > 0 ? remainingRoadmapItems.slice(0, 2) : activeRoadmapItems.slice(0, 2);
+  const hasRoadmapPlan = activeRoadmapItems.length > 0;
+  const todayPlanBody = hasRoadmapPlan
+    ? t('screen.tabs.index.plan.roadmapBody', {
+        remaining: remainingRoadmapItems.length,
+        total: activeRoadmapItems.length,
+        kcal: formatNumber(plannedRoadmapKcal),
+      })
+    : t('screen.tabs.index.plan.body', {
+        remaining: formatNumber(planRemaining),
+        meals: logs.length,
+        activity: formatNumber(activityMinutes),
+      });
+  const todayPlanMetricValue = hasRoadmapPlan ? remainingRoadmapItems.length : Math.abs(planRemaining);
+  const todayPlanMetricLabel = hasRoadmapPlan ? 'tasks left' : planRemaining >= 0 ? 'left' : 'over';
+
+  async function toggleRoadmapItem(item: DailyRoadmapItem) {
+    setUpdatingRoadmapId(item.id);
+    try {
+      await updateRoadmapItem(item.id, { is_completed: !item.is_completed });
+    } finally {
+      setUpdatingRoadmapId(null);
+    }
+  }
 
   async function applySelectedTarget() {
     setIsApplyingTarget(true);
@@ -1128,6 +1177,61 @@ export default function DashboardScreen() {
           <Text style={styles.secondaryActionText} i18nKey="screen.tabs.index.text.003" />
         </TouchableOpacity>
       </View>
+
+      <SurfaceCard style={styles.todayPlanCard}>
+        <View style={styles.todayPlanHeader}>
+          <View style={styles.todayPlanCopy}>
+            <Text style={styles.todayPlanEyebrow}>PLAN</Text>
+            <Text style={styles.todayPlanTitle} i18nKey="screen.tabs.index.plan.title" />
+            <Text style={styles.todayPlanBody}>{todayPlanBody}</Text>
+            <Text style={styles.todayPlanGoal}>{t('screen.tabs.index.plan.goal', { goal: planGoalDescription })}</Text>
+          </View>
+          <View style={styles.todayPlanMetric}>
+            <Text style={[styles.todayPlanMetricValue, planRemaining < 0 && styles.todayPlanMetricOver]}>
+              {formatNumber(todayPlanMetricValue)}
+            </Text>
+            <Text style={styles.todayPlanMetricLabel}>{todayPlanMetricLabel}</Text>
+          </View>
+        </View>
+        {visibleRoadmapItems.length > 0 && (
+          <View style={styles.todayPlanRoadmapList}>
+            {visibleRoadmapItems.map((item) => (
+              <TouchableOpacity
+                key={item.id}
+                style={[styles.todayPlanRoadmapItem, item.is_completed && styles.todayPlanRoadmapItemDone]}
+                onPress={() => toggleRoadmapItem(item)}
+                disabled={updatingRoadmapId === item.id}
+              >
+                <Ionicons
+                  name={item.is_completed ? 'checkmark-circle' : 'ellipse-outline'}
+                  size={18}
+                  color={item.is_completed ? theme.colors.accentMint : theme.colors.textMuted}
+                />
+                <View style={styles.todayPlanRoadmapCopy}>
+                  <Text style={styles.todayPlanRoadmapTitle}>{item.task_title}</Text>
+                  <Text style={styles.todayPlanRoadmapMeta}>
+                    {t('screen.tabs.index.plan.roadmapMeta', {
+                      minutes: item.duration_min,
+                      kcal: formatNumber(item.estimated_kcal),
+                    })}
+                  </Text>
+                </View>
+                <Text style={styles.todayPlanRoadmapAction}>
+                  {item.is_completed ? t('screen.tabs.index.plan.done') : t('screen.tabs.index.plan.markDone')}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+        <View style={styles.todayPlanActions}>
+          <TouchableOpacity style={styles.todayPlanPrimary} onPress={() => router.push('/log' as never)}>
+            <Text style={styles.todayPlanPrimaryText} i18nKey="screen.tabs.index.plan.action" />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.todayPlanSecondary} onPress={() => router.push('/coach' as never)}>
+            <Text style={styles.todayPlanSecondaryText}>{t('screen.tabs.index.coach.open')}</Text>
+          </TouchableOpacity>
+        </View>
+      </SurfaceCard>
 
       <SurfaceCard style={[styles.cockpitCard, isCompact && styles.cockpitCardCompact]}>
         <View style={[styles.cockpitMain, isCompact && styles.cockpitMainCompact]}>
@@ -1687,6 +1791,146 @@ const styles = createThemedStyles((colors, radii) => ({
   },
   coachBridgeButtonText: {
     color: colors.textOnAccent,
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  todayPlanCard: {
+    marginBottom: 16,
+    borderColor: colors.borderInfo,
+    backgroundColor: colors.surfaceInfo,
+    gap: 12,
+  },
+  todayPlanHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 14,
+  },
+  todayPlanCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  todayPlanEyebrow: {
+    color: colors.textMuted,
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 0.6,
+    marginBottom: 3,
+  },
+  todayPlanTitle: {
+    color: colors.text,
+    fontSize: 17,
+    lineHeight: 22,
+    fontWeight: '900',
+  },
+  todayPlanBody: {
+    color: colors.textSoft,
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: 4,
+  },
+  todayPlanGoal: {
+    color: colors.accentCyan,
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: '800',
+    marginTop: 6,
+  },
+  todayPlanMetric: {
+    minWidth: 78,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.borderInfo,
+    backgroundColor: colors.surface,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    alignItems: 'center',
+  },
+  todayPlanMetricValue: {
+    color: colors.accentMint,
+    fontSize: 20,
+    lineHeight: 24,
+    fontWeight: '900',
+  },
+  todayPlanMetricOver: {
+    color: colors.accentCoral,
+  },
+  todayPlanMetricLabel: {
+    color: colors.textMuted,
+    fontSize: 11,
+    fontWeight: '800',
+    marginTop: 2,
+  },
+  todayPlanRoadmapList: {
+    gap: 8,
+  },
+  todayPlanRoadmapItem: {
+    minHeight: 48,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.borderInfo,
+    backgroundColor: colors.surface,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 9,
+  },
+  todayPlanRoadmapItemDone: {
+    borderColor: colors.borderSuccess,
+    backgroundColor: colors.surfaceSuccess,
+  },
+  todayPlanRoadmapCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  todayPlanRoadmapTitle: {
+    color: colors.text,
+    fontSize: 13,
+    lineHeight: 17,
+    fontWeight: '800',
+  },
+  todayPlanRoadmapMeta: {
+    color: colors.textMuted,
+    fontSize: 11,
+    lineHeight: 15,
+    marginTop: 2,
+  },
+  todayPlanRoadmapAction: {
+    color: colors.accentMint,
+    fontSize: 11,
+    fontWeight: '900',
+  },
+  todayPlanActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 9,
+  },
+  todayPlanPrimary: {
+    minHeight: 40,
+    borderRadius: radii.lg,
+    backgroundColor: colors.accentMint,
+    paddingHorizontal: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  todayPlanPrimaryText: {
+    color: colors.textOnAccent,
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  todayPlanSecondary: {
+    minHeight: 40,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.borderInfo,
+    backgroundColor: colors.surface,
+    paddingHorizontal: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  todayPlanSecondaryText: {
+    color: colors.info,
     fontSize: 12,
     fontWeight: '900',
   },

@@ -6,12 +6,14 @@ import {
   Delete,
   Body,
   Request,
+  Query,
   UseGuards,
   BadRequestException,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
-import { IsBoolean, IsEnum, IsOptional, IsString, Matches, IsNumber } from 'class-validator';
+import { IsBoolean, IsEnum, IsOptional, IsString, IsUUID, Matches, IsNumber } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { ReminderFeedbackEventDto } from '@calorie-ai/types';
 import { ReminderService } from './reminder.service';
 import { SupabaseService } from '../../common/supabase/supabase.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -119,6 +121,33 @@ class UnregisterPushTokenDto {
   token!: string;
 }
 
+class ReminderEventDto implements ReminderFeedbackEventDto {
+  @ApiProperty({ enum: ['opened', 'acted'] })
+  @IsEnum(['opened', 'acted'])
+  event!: 'opened' | 'acted';
+
+  @ApiProperty({ required: false })
+  @IsUUID()
+  @IsOptional()
+  reminder_log_id?: string;
+
+  @ApiProperty({ required: false, enum: ['breakfast', 'lunch', 'dinner', 'snack'] })
+  @IsEnum(['breakfast', 'lunch', 'dinner', 'snack'])
+  @IsOptional()
+  meal_type?: 'breakfast' | 'lunch' | 'dinner' | 'snack';
+
+  @ApiProperty({ required: false, example: '2026-06-05' })
+  @IsString()
+  @IsOptional()
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  local_date?: string;
+
+  @ApiProperty({ required: false, example: 'food_log' })
+  @IsString()
+  @IsOptional()
+  action_type?: string;
+}
+
 @ApiTags('Reminders')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
@@ -148,6 +177,18 @@ export class ReminderController {
     @Body() body: TestNudgeDto,
   ) {
     return this.reminder.generatePreviewNudge(req.user.id ?? req.user.sub, body.meal_type, body.calories_logged);
+  }
+
+  @Post('events')
+  @ApiOperation({ summary: 'Record reminder open/action feedback' })
+  async recordReminderEvent(@Request() req: any, @Body() body: ReminderEventDto) {
+    return this.reminder.recordReminderEvent(req.user.id ?? req.user.sub, body);
+  }
+
+  @Get('effectiveness')
+  @ApiOperation({ summary: 'Get reminder open and action rates' })
+  async getReminderEffectiveness(@Request() req: any, @Query('days') days?: string) {
+    return this.reminder.getReminderEffectiveness(req.user.id ?? req.user.sub, Number(days ?? 30));
   }
 
   @Post('push-token')

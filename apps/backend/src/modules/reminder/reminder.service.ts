@@ -1,6 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { SupabaseService } from '../../common/supabase/supabase.service';
-import { ReminderPreferences, ReminderPreferencesDto, NudgeMessage, NudgeContext } from '@calorie-ai/types';
+import {
+  ReminderEffectivenessSummary,
+  ReminderFeedbackEventDto,
+  ReminderPreferences,
+  ReminderPreferencesDto,
+  NudgeMessage,
+  NudgeContext,
+} from '@calorie-ai/types';
 import { GamificationService } from '../gamification/gamification.service';
 import { FirebaseService } from '../../common/firebase/firebase.service';
 
@@ -18,7 +25,7 @@ export class ReminderService {
 
   private isMissingTableError(error: any, tableName: string): boolean {
     const message = String(error?.message ?? error?.details ?? '');
-    return message.includes(`public.${tableName}`) && message.includes('schema cache');
+    return message.includes(tableName) && message.includes('schema cache');
   }
 
   private buildDefaultPreferences(userId: string): ReminderPreferences {
@@ -104,6 +111,121 @@ export class ReminderService {
 
     if (error) throw error;
     return data as ReminderPreferences;
+  }
+
+  async recordReminderEvent(userId: string, dto: ReminderFeedbackEventDto) {
+    const now = new Date().toISOString();
+    const update = dto.event === 'opened'
+      ? { opened_at: now }
+      : { acted_at: now, acted_action_type: dto.action_type ?? null };
+
+    const reminderLogId = dto.reminder_log_id ?? await this.findLatestReminderLogId(userId, dto);
+    if (!reminderLogId) {
+      return { recorded: false, reason: 'reminder_log_not_found' };
+    }
+
+    const { data, error } = await this.supabase.db
+      .from('reminder_notification_log')
+      .update(update)
+      .eq('user_id', userId)
+      .eq('id', reminderLogId)
+      .select('id, meal_type, sent_at, opened_at, acted_at, acted_action_type')
+      .single();
+
+    if (error && this.isMissingTableError(error, 'reminder_notification_log') && this.allowMissingTableFallback()) {
+      return { recorded: false, reason: 'reminder_log_table_missing' };
+    }
+
+    if (error) throw error;
+    return { recorded: true, event: dto.event, reminder: data };
+  }
+
+  async getReminderEffectiveness(userId: string, days = 30): Promise<ReminderEffectivenessSummary> {
+    const safeDays = Math.min(Math.max(Math.round(days), 1), 90);
+    const since = new Date(Date.now() - safeDays * 24 * 60 * 60 * 1000).toISOString();
+    const empty = this.buildEmptyEffectivenessSummary();
+
+    const { data, error } = await this.supabase.db
+      .from('reminder_notification_log')
+      .select('meal_type, sent_at, opened_at, acted_at')
+      .eq('user_id', userId)
+      .gte('sent_at', since);
+
+    if (error && this.isMissingTableError(error, 'reminder_notification_log') && this.allowMissingTableFallback()) {
+      return empty;
+    }
+
+    if (error) throw error;
+
+    const summary = (data ?? []).reduce((acc, row: any) => {
+      const meal = row.meal_type as keyof ReminderEffectivenessSummary['by_meal'];
+      if (!acc.by_meal[meal]) return acc;
+
+      acc.sent += 1;
+      acc.by_meal[meal].sent += 1;
+
+      if (row.opened_at) {
+        acc.opened += 1;
+        acc.by_meal[meal].opened += 1;
+      }
+
+      if (row.acted_at) {
+        acc.acted += 1;
+        acc.by_meal[meal].acted += 1;
+      }
+
+      return acc;
+    }, empty);
+
+    return this.finalizeEffectivenessRates(summary);
+  }
+
+  private async findLatestReminderLogId(userId: string, dto: ReminderFeedbackEventDto): Promise<string | null> {
+    let query = this.supabase.db
+      .from('reminder_notification_log')
+      .select('id')
+      .eq('user_id', userId)
+      .order('sent_at', { ascending: false })
+      .limit(1);
+
+    if (dto.meal_type) query = query.eq('meal_type', dto.meal_type);
+    if (dto.local_date) query = query.eq('local_date', dto.local_date);
+
+    const { data, error } = await query;
+    if (error && this.isMissingTableError(error, 'reminder_notification_log') && this.allowMissingTableFallback()) {
+      return null;
+    }
+    if (error) throw error;
+    return data?.[0]?.id ?? null;
+  }
+
+  private buildEmptyEffectivenessSummary(): ReminderEffectivenessSummary {
+    const emptyMeal = () => ({ sent: 0, opened: 0, acted: 0, open_rate: 0, action_rate: 0 });
+    return {
+      sent: 0,
+      opened: 0,
+      acted: 0,
+      open_rate: 0,
+      action_rate: 0,
+      by_meal: {
+        breakfast: emptyMeal(),
+        lunch: emptyMeal(),
+        dinner: emptyMeal(),
+        snack: emptyMeal(),
+      },
+    };
+  }
+
+  private finalizeEffectivenessRates(summary: ReminderEffectivenessSummary): ReminderEffectivenessSummary {
+    summary.open_rate = summary.sent > 0 ? Math.round((summary.opened / summary.sent) * 100) : 0;
+    summary.action_rate = summary.sent > 0 ? Math.round((summary.acted / summary.sent) * 100) : 0;
+
+    Object.values(summary.by_meal).forEach((meal) => {
+      meal.open_rate = meal.sent > 0 ? Math.round((meal.opened / meal.sent) * 100) : 0;
+      meal.action_rate = meal.sent > 0 ? Math.round((meal.acted / meal.sent) * 100) : 0;
+    });
+
+    return summary;
   }
 
   /**

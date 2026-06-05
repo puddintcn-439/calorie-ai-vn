@@ -7,7 +7,7 @@ import {
   ActivityIndicator,
   useWindowDimensions
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useSubscriptionStore } from '../store/subscription.store';
 import { SUBSCRIPTION_TIERS, SubscriptionTier } from '@calorie-ai/types';
@@ -39,6 +39,7 @@ export default function PaywallScreen() {
   useAppTheme();
   const { t } = useI18n();
   const router = useRouter();
+  const params = useLocalSearchParams<{ returnTo?: string; feature?: string }>();
   const { subscription, isLoading, error, changeTier } = useSubscriptionStore();
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
   const { width } = useWindowDimensions();
@@ -53,7 +54,11 @@ export default function PaywallScreen() {
     try {
       await changeTier(tier);
       Alert.alert('screen.paywall.alert.001', t('screen.paywall.alert.updatedBody', { tier: SUBSCRIPTION_TIERS[tier].name }));
-      router.back();
+      if (params.returnTo) {
+        router.replace(params.returnTo as any);
+      } else {
+        router.back();
+      }
     } catch (err: any) {
       Alert.alert('screen.paywall.alert.002', err?.response?.data?.message ?? err?.message ?? 'screen.paywall.alert.003');
     }
@@ -77,6 +82,15 @@ export default function PaywallScreen() {
       <View style={styles.header}>
         <Text style={styles.title} i18nKey="screen.paywall.text.001" />
         <Text style={styles.subtitle} i18nKey="screen.paywall.text.002" />
+        {params.feature ? (
+          <Text style={styles.returnHint}>
+            {params.feature === 'healthkit_sync'
+              ? t('screen.paywall.return.health')
+              : params.feature === 'ai_coach'
+                ? t('screen.paywall.return.coach')
+                : t('screen.paywall.return.generic')}
+          </Text>
+        ) : null}
       </View>
 
       {/* Billing Toggle */}
@@ -257,6 +271,15 @@ const styles = createThemedStyles((colors, radii) => ({
     lineHeight: 21,
     color: colors.textSoft,
     textAlign: 'center',
+    maxWidth: 560,
+  },
+  returnHint: {
+    fontSize: 13,
+    lineHeight: 19,
+    color: colors.accentMint,
+    textAlign: 'center',
+    fontWeight: '800',
+    marginTop: 10,
     maxWidth: 560,
   },
   billingToggle: {

@@ -109,6 +109,54 @@ describe('ReminderService.updateReminderPreferences', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 // generateNudgeMessage — pure function branches
 // ─────────────────────────────────────────────────────────────────────────────
+describe('ReminderService.reminderFeedback', () => {
+  it('records opened event by reminder log id', async () => {
+    const update = jest.fn().mockReturnThis();
+    const eq = jest.fn().mockReturnThis();
+    const service = makeService(() => ({
+      update,
+      eq,
+      select: jest.fn().mockReturnThis(),
+      single: jest.fn().mockResolvedValue({
+        data: { id: '5ee3dc04-37d9-4929-9d07-e9f6ba24bb02', opened_at: new Date().toISOString() },
+        error: null,
+      }),
+    }));
+
+    const result = await service.recordReminderEvent('u1', {
+      event: 'opened',
+      reminder_log_id: '5ee3dc04-37d9-4929-9d07-e9f6ba24bb02',
+    });
+
+    expect(result.recorded).toBe(true);
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({ opened_at: expect.any(String) }));
+    expect(eq).toHaveBeenCalledWith('user_id', 'u1');
+    expect(eq).toHaveBeenCalledWith('id', '5ee3dc04-37d9-4929-9d07-e9f6ba24bb02');
+  });
+
+  it('summarizes reminder effectiveness rates', async () => {
+    const rows = [
+      { meal_type: 'breakfast', sent_at: '2026-06-05T00:00:00.000Z', opened_at: '2026-06-05T00:01:00.000Z', acted_at: '2026-06-05T00:02:00.000Z' },
+      { meal_type: 'lunch', sent_at: '2026-06-05T04:00:00.000Z', opened_at: '2026-06-05T04:01:00.000Z', acted_at: null },
+      { meal_type: 'dinner', sent_at: '2026-06-05T12:00:00.000Z', opened_at: null, acted_at: null },
+    ];
+    const service = makeService(() => ({
+      select: jest.fn().mockReturnThis(),
+      eq: jest.fn().mockReturnThis(),
+      gte: jest.fn().mockResolvedValue({ data: rows, error: null }),
+    }));
+
+    const result = await service.getReminderEffectiveness('u1', 30);
+
+    expect(result.sent).toBe(3);
+    expect(result.opened).toBe(2);
+    expect(result.acted).toBe(1);
+    expect(result.open_rate).toBe(67);
+    expect(result.action_rate).toBe(33);
+    expect(result.by_meal.breakfast.action_rate).toBe(100);
+  });
+});
+
 function ctx(overrides: Partial<NudgeContext>): NudgeContext {
   return {
     mealType: 'lunch',

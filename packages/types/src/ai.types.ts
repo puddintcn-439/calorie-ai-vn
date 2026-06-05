@@ -71,4 +71,27 @@ export interface AICoachResponse {
   message: string;
   suggestions?: string[];
   meal_suggestions?: string[];
+  actions?: AICoachAction[];
+}
+
+export type AICoachActionType =
+  | 'open_scan'
+  | 'open_log'
+  | 'open_progress'
+  | 'open_reminders'
+  | 'open_paywall'
+  | 'add_activity';
+
+export interface AICoachAction {
+  type: AICoachActionType;
+  label: string;
+  description?: string;
+  payload?: {
+    activity_type?: string;
+    activity_name?: string;
+    duration_min?: number;
+    calories_burned?: number;
+    meal_type?: string;
+    return_to?: string;
+  };
 }

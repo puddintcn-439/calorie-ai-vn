@@ -18,6 +18,7 @@ import { apiClient } from '../services/api';
 import { activitySyncService } from '../services/activity-sync.service';
 import { getLocalDateYmd, getLocalTimezoneOffsetMinutes } from '../services/date';
 import { appLogger } from '../services/logger.service';
+import { reminderFeedbackService } from '../services/reminder-feedback.service';
 
 const create = require('zustand').create as typeof import('zustand').create;
 
@@ -98,6 +99,7 @@ export const useLogStore = create<LogState>((set, get) => ({
 
   addLog: async (data) => {
     const res = await apiClient.post('/log', data);
+    await reminderFeedbackService.recordActed('food_log', data.meal_type as MealType | undefined);
     await get().fetchDailyLog();
     return res.data;
   },
@@ -130,6 +132,7 @@ export const useLogStore = create<LogState>((set, get) => ({
 
   logSavedMeal: async (id, mealType) => {
     await apiClient.post(`/log/saved-meals/${id}/log`, { meal_type: mealType });
+    await reminderFeedbackService.recordActed('saved_meal_log', mealType);
     await get().fetchDailyLog();
   },
 
@@ -140,6 +143,7 @@ export const useLogStore = create<LogState>((set, get) => ({
 
   addActivity: async (dto) => {
     await apiClient.post('/log/activity', dto);
+    await reminderFeedbackService.recordActed('activity_log');
     await get().fetchActivityLogs();
   },
 

@@ -54,3 +54,26 @@ export interface NudgeContext {
   longestStreak?: number;
   nextStreakMilestone?: number | null;
 }
+
+export interface ReminderFeedbackEventDto {
+  event: 'opened' | 'acted';
+  reminder_log_id?: string;
+  meal_type?: 'breakfast' | 'lunch' | 'dinner' | 'snack';
+  local_date?: string;
+  action_type?: 'food_log' | 'saved_meal_log' | 'activity_log' | 'scan_opened' | string;
+}
+
+export interface ReminderEffectivenessSummary {
+  sent: number;
+  opened: number;
+  acted: number;
+  open_rate: number;
+  action_rate: number;
+  by_meal: Record<'breakfast' | 'lunch' | 'dinner' | 'snack', {
+    sent: number;
+    opened: number;
+    acted: number;
+    open_rate: number;
+    action_rate: number;
+  }>;
+}

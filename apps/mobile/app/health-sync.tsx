@@ -18,6 +18,7 @@ import {
   ActivitySyncPhoneCheckInfo,
   HEALTH_SYNC_SCREEN_LINK,
 } from '../services/activity-sync.service';
+import { featureGatingService, isPremiumFeatureError } from '../services/feature-gating.service';
 import { getLocalDateYmd } from '../services/date';
 import { Text } from '../components/i18n-text';
 import { Alert } from '../components/i18n-alert';
@@ -38,10 +39,21 @@ export default function HealthSyncScreen() {
   const [phoneCheckInfo, setPhoneCheckInfo] = useState<ActivitySyncPhoneCheckInfo | null>(null);
   const [diagnostics, setDiagnostics] = useState<ActivitySyncDiagnostics | null>(null);
   const [lastSyncResult, setLastSyncResult] = useState<ActivitySyncResult | null>(null);
+  const [hasHealthSyncAccess, setHasHealthSyncAccess] = useState<boolean | null>(null);
+
+  const openHealthSyncPaywall = () => {
+    router.push({
+      pathname: '/paywall',
+      params: { returnTo: '/health-sync', feature: 'healthkit_sync' },
+    } as never);
+  };
 
   useEffect(() => {
     const load = async (date: string) => {
       try {
+        featureGatingService.canAccessFeature('healthkit_sync')
+          .then(setHasHealthSyncAccess)
+          .catch(() => setHasHealthSyncAccess(false));
         const [info, details] = await Promise.all([
           activitySyncService.getPhoneCheckInfo(),
           activitySyncService.getDiagnostics(date),
@@ -204,11 +216,25 @@ export default function HealthSyncScreen() {
         )}
       </SurfaceCard>
 
+      {hasHealthSyncAccess === false ? (
+        <SurfaceCard style={styles.premiumGateCard}>
+          <Text style={styles.premiumGateTitle} i18nKey="screen.premiumGate.title" />
+          <Text style={styles.premiumGateBody} i18nKey="screen.premiumGate.healthBody" />
+          <TouchableOpacity style={styles.premiumGateButton} onPress={openHealthSyncPaywall}>
+            <Text style={styles.premiumGateButtonText} i18nKey="screen.premiumGate.cta" />
+          </TouchableOpacity>
+        </SurfaceCard>
+      ) : null}
+
       <SurfaceCard style={styles.syncCard}>
         <Text style={styles.sectionTitle} i18nKey="screen.healthSync.text.014" />
         <TouchableOpacity
           style={[styles.primaryButton, isSyncing && styles.disabledButton]}
           onPress={async () => {
+            if (hasHealthSyncAccess === false) {
+              openHealthSyncPaywall();
+              return;
+            }
             setIsSyncing(true);
             try {
               const result = await syncActivity(selectedDate);
@@ -220,6 +246,11 @@ export default function HealthSyncScreen() {
                 t('screen.healthSync.alert.syncSuccessBody', { count: result.imported_count, calories: result.total_calories_burned }),
               );
             } catch (error: any) {
+              if (isPremiumFeatureError(error)) {
+                setHasHealthSyncAccess(false);
+                openHealthSyncPaywall();
+                return;
+              }
               Alert.alert('screen.healthSync.alert.008', error?.message ?? 'screen.healthSync.alert.009');
             } finally {
               setIsSyncing(false);
@@ -387,6 +418,36 @@ const styles = createThemedStyles((colors, radii) => ({
   },
   syncCard: {
     marginBottom: 20,
+  },
+  premiumGateCard: {
+    marginBottom: 14,
+    borderColor: colors.borderWarning,
+    backgroundColor: colors.surfaceWarning,
+    gap: 9,
+  },
+  premiumGateTitle: {
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: '900',
+  },
+  premiumGateBody: {
+    color: colors.textSoft,
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  premiumGateButton: {
+    alignSelf: 'flex-start',
+    minHeight: 40,
+    borderRadius: radii.lg,
+    backgroundColor: colors.accentMint,
+    paddingHorizontal: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  premiumGateButtonText: {
+    color: colors.textOnAccent,
+    fontSize: 12,
+    fontWeight: '900',
   },
   disabledButton: {
     opacity: 0.6,

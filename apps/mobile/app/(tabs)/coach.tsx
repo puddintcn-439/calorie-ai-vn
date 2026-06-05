@@ -13,8 +13,9 @@ import { ScreenShell, SurfaceCard, useBottomNavContentPadding } from '../../comp
 import { UiButton } from '../../components/ui-button';
 import { UiInput } from '../../components/ui-input';
 import { askCoach } from '../../services/ai.service';
+import { isPremiumFeatureError } from '../../services/feature-gating.service';
 import { useLogStore } from '../../store/log.store';
-import { CoachingInsight, CoachingSummary, DailyLog } from '@calorie-ai/types';
+import { AICoachAction, CoachingInsight, CoachingSummary, DailyLog } from '@calorie-ai/types';
 import { apiClient } from '../../services/api';
 import { VisualHeroCard } from '../../components/visual-hero-card';
 import { createThemedStyles, theme, useAppTheme } from '../../components/theme';
@@ -29,6 +30,8 @@ interface ChatMessage {
   id: string;
   role: 'user' | 'coach';
   text: string;
+  actions?: AICoachAction[];
+  premiumBlocked?: boolean;
 }
 
 type ActivePlan = {
@@ -386,12 +389,65 @@ function getCoachErrorMessage(error: unknown, locale: Locale): string {
   return fallback;
 }
 
+function openPremiumUpgrade(feature: 'ai_coach' | 'healthkit_sync' = 'ai_coach') {
+  router.push({
+    pathname: '/paywall',
+    params: { returnTo: feature === 'ai_coach' ? '/coach' : '/health-sync', feature },
+  } as never);
+}
+
+function deriveCoachActions(
+  message: string,
+  responseActions: AICoachAction[] | undefined,
+  dailyLog: DailyLog | null,
+  locale: Locale,
+): AICoachAction[] {
+  const actions: AICoachAction[] = Array.isArray(responseActions) ? [...responseActions] : [];
+  const lower = message.toLowerCase();
+  const consumed = toFiniteNumber(dailyLog?.total_calories) ?? 0;
+  const target = toFiniteNumber(dailyLog?.target_calories) ?? 1800;
+  const remaining = target - consumed;
+
+  const addUnique = (action: AICoachAction) => {
+    if (!actions.some((item) => item.type === action.type && item.label === action.label)) {
+      actions.push(action);
+    }
+  };
+
+  if (remaining > 250 || lower.includes('ăn') || lower.includes('meal') || lower.includes('food')) {
+    addUnique({ type: 'open_scan', label: tr('screen.tabs.coach.action.scan', locale) });
+  }
+
+  if (lower.includes('log') || lower.includes('sửa') || lower.includes('nhật ký') || consumed > target + 150) {
+    addUnique({ type: 'open_log', label: tr('screen.tabs.coach.action.log', locale) });
+  }
+
+  if (lower.includes('cân') || lower.includes('tiến độ') || lower.includes('weight') || lower.includes('progress')) {
+    addUnique({ type: 'open_progress', label: tr('screen.tabs.coach.action.progress', locale) });
+  }
+
+  if (consumed > target + 150 || lower.includes('đi bộ') || lower.includes('walk')) {
+    addUnique({
+      type: 'add_activity',
+      label: tr('screen.tabs.coach.action.walk', locale),
+      payload: {
+        activity_type: 'walking',
+        activity_name: 'Coach walk',
+        duration_min: 15,
+        calories_burned: 60,
+      },
+    });
+  }
+
+  return actions.slice(0, 3);
+}
+
 export default function CoachScreen() {
   useAppTheme();
   const coachScrollRef = useRef<ScrollView>(null);
   const bottomContentPadding = useBottomNavContentPadding();
   const { locale, t } = useI18n();
-  const { dailyLog, fetchDailyLog } = useLogStore();
+  const { dailyLog, fetchDailyLog, addActivity, fetchActivityLogs } = useLogStore();
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [loadingInsights, setLoadingInsights] = useState(false);
@@ -504,6 +560,7 @@ export default function CoachScreen() {
         id: `c-${Date.now()}`,
         role: 'coach',
         text: res.message,
+        actions: deriveCoachActions(message, res.actions, dailyLog, locale),
       };
       setMessages((prev) => [...prev, coachMessage]);
     } catch (error) {
@@ -511,6 +568,10 @@ export default function CoachScreen() {
         id: `c-${Date.now()}`,
         role: 'coach',
         text: getCoachErrorMessage(error, locale),
+        premiumBlocked: isPremiumFeatureError(error),
+        actions: isPremiumFeatureError(error)
+          ? [{ type: 'open_paywall', label: tr('screen.tabs.coach.action.paywall', locale), payload: { return_to: '/coach' } }]
+          : undefined,
       };
       setMessages((prev) => [...prev, fallback]);
     } finally {
@@ -535,6 +596,54 @@ export default function CoachScreen() {
     setInput(prompt);
   };
 
+  const handleCoachAction = async (action: AICoachAction) => {
+    if (action.type === 'open_scan') {
+      router.push('/scan');
+      return;
+    }
+    if (action.type === 'open_log') {
+      router.push('/log');
+      return;
+    }
+    if (action.type === 'open_progress') {
+      router.push('/progress');
+      return;
+    }
+    if (action.type === 'open_reminders') {
+      router.push('/profile');
+      return;
+    }
+    if (action.type === 'open_paywall') {
+      openPremiumUpgrade('ai_coach');
+      return;
+    }
+    if (action.type === 'add_activity') {
+      try {
+        await addActivity({
+          activity_type: (action.payload?.activity_type as any) ?? 'walking',
+          activity_name: action.payload?.activity_name ?? action.label,
+          duration_min: Math.max(1, Number(action.payload?.duration_min ?? 15)),
+          calories_burned: Math.max(0, Number(action.payload?.calories_burned ?? 60)),
+          logged_at: new Date().toISOString(),
+          notes: 'Added from AI Coach action',
+        });
+        await Promise.all([fetchDailyLog(), fetchActivityLogs()]);
+        setMessages((prev) => [...prev, {
+          id: `c-action-${Date.now()}`,
+          role: 'coach',
+          text: t('screen.tabs.coach.action.addedActivity'),
+        }]);
+      } catch (error) {
+        appLogger.warn('Coach', 'Failed to run coach action', error);
+        setMessages((prev) => [...prev, {
+          id: `c-action-${Date.now()}`,
+          role: 'coach',
+          text: t('screen.tabs.coach.action.addActivityFailed'),
+        }]);
+      }
+    }
+  };
+
   const scrollToInput = useCallback(() => {
     setTimeout(() => {
       coachScrollRef.current?.scrollToEnd({ animated: true });
@@ -554,6 +663,26 @@ export default function CoachScreen() {
       {insight.action_suggestion && (
         <Text style={styles.insightAction}>💡 {localizeInsightTextForLocale(insight.action_suggestion, locale)}</Text>
       )}
+      <View style={styles.insightActionRow}>
+        <TouchableOpacity
+          style={styles.insightCta}
+          onPress={() => {
+            const type = String(insight.insight_type ?? '').toLowerCase();
+            const text = `${insight.title} ${insight.description} ${insight.action_suggestion ?? ''}`.toLowerCase();
+            if (insight.affected_meal_type || text.includes('meal') || text.includes('bữa') || text.includes('ăn')) {
+              router.push('/scan');
+              return;
+            }
+            if (type.includes('warning') || text.includes('log') || text.includes('nhật ký')) {
+              router.push('/log');
+              return;
+            }
+            router.push('/progress');
+          }}
+        >
+          <Text style={styles.insightCtaText}>{t('screen.tabs.coach.action.nextTitle')}</Text>
+        </TouchableOpacity>
+      </View>
       <UiButton
         label="screen.tabs.coach.label.001"
         onPress={() => handleAcknowledgeInsight(insight.id)}
@@ -752,6 +881,25 @@ export default function CoachScreen() {
             >
               <Text style={styles.roleLabel}>{msg.role === 'user' ? t('screen.tabs.coach.role.user') : 'Coach'}</Text>
               <Text style={styles.messageText}>{msg.text}</Text>
+              {msg.premiumBlocked ? (
+                <View style={styles.premiumGateBox}>
+                  <Text style={styles.premiumGateTitle}>{t('screen.premiumGate.title')}</Text>
+                  <Text style={styles.premiumGateBody}>{t('screen.premiumGate.coachBody')}</Text>
+                </View>
+              ) : null}
+              {msg.actions?.length ? (
+                <View style={styles.coachActionRow}>
+                  {msg.actions.map((action, index) => (
+                    <TouchableOpacity
+                      key={`${msg.id}-${action.type}-${index}`}
+                      style={styles.coachActionChip}
+                      onPress={() => void handleCoachAction(action)}
+                    >
+                      <Text style={styles.coachActionChipText}>{action.label}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              ) : null}
             </SurfaceCard>
           ))}
         </View>
@@ -1084,6 +1232,27 @@ const styles = createThemedStyles((colors, radii) => ({
     padding: 8,
     borderRadius: 8,
   },
+  insightActionRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 8,
+  },
+  insightCta: {
+    minHeight: 36,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.borderInfo,
+    backgroundColor: colors.surfaceInfo,
+    paddingHorizontal: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  insightCtaText: {
+    color: colors.info,
+    fontSize: 12,
+    fontWeight: '900',
+  },
   acknowledgeButton: {
     marginTop: 8,
   },
@@ -1155,6 +1324,46 @@ const styles = createThemedStyles((colors, radii) => ({
     color: colors.textSoft,
     fontSize: 14,
     lineHeight: 21,
+  },
+  premiumGateBox: {
+    marginTop: 10,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.borderWarning,
+    backgroundColor: colors.surfaceWarning,
+    padding: 10,
+    gap: 4,
+  },
+  premiumGateTitle: {
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  premiumGateBody: {
+    color: colors.textSoft,
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  coachActionRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 12,
+  },
+  coachActionChip: {
+    minHeight: 38,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.borderSuccess,
+    backgroundColor: colors.surfaceSuccess,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  coachActionChipText: {
+    color: colors.accentMint,
+    fontSize: 12,
+    fontWeight: '900',
   },
   inputCard: {
     marginBottom: 20,

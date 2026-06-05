@@ -55,14 +55,15 @@ export class ReminderSchedulerService {
             const messages = [];
             for (const meal of dueMeals) {
               if (!(await this.canSendReminder(pref.user_id, token.token, meal, localDate))) continue;
-              if (!(await this.recordReminderSent(pref.user_id, token.token, meal, localDate))) continue;
+              const reminderLogId = await this.recordReminderSent(pref.user_id, token.token, meal, localDate);
+              if (!reminderLogId) continue;
 
               const nudge = await this.reminderService.generateMealReminder(pref.user_id, meal, pref);
               messages.push({
                 to: token.token,
                 title: nudge.title,
                 body: nudge.body,
-                data: { mealType: nudge.mealType, type: nudge.type, route: '/scan' },
+                data: { mealType: nudge.mealType, type: nudge.type, route: '/scan', reminderLogId },
                 sound: 'default',
               });
             }
@@ -130,8 +131,8 @@ export class ReminderSchedulerService {
     return (dayLog ?? []).length < this.maxPushesPerTokenPerDay;
   }
 
-  private async recordReminderSent(userId: string, token: string, mealType: string, localDate: string): Promise<boolean> {
-    const { error } = await this.supabase.db
+  private async recordReminderSent(userId: string, token: string, mealType: string, localDate: string): Promise<string | null> {
+    const { data, error } = await this.supabase.db
       .from('reminder_notification_log')
       .insert({
         user_id: userId,
@@ -139,14 +140,16 @@ export class ReminderSchedulerService {
         meal_type: mealType,
         local_date: localDate,
         sent_at: new Date().toISOString(),
-      });
+      })
+      .select('id')
+      .single();
 
-    if (!error) return true;
-    if (this.isMissingLogTableError(error)) return false;
+    if (!error) return data?.id ?? null;
+    if (this.isMissingLogTableError(error)) return null;
 
     const message = String(error?.message ?? error?.details ?? '');
     if (error?.code === '23505' || message.toLowerCase().includes('duplicate')) {
-      return false;
+      return null;
     }
 
     throw error;

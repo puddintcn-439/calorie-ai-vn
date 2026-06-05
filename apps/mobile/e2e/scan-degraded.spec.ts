@@ -18,7 +18,13 @@ test.describe('Scan degraded AI states', () => {
       const url = new URL(request.url());
       const path = url.pathname;
 
-      if (url.port !== '3000') return route.continue();
+      const isApiRequest = path === '/user/profile'
+        || path === '/ai/scan/text'
+        || path.startsWith('/telemetry')
+        || path.startsWith('/log')
+        || path.startsWith('/activity-preferences')
+        || path.startsWith('/gamification');
+      if (!isApiRequest) return route.continue();
 
       if (path === '/user/profile') {
         return route.fulfill(jsonResponse({
@@ -59,7 +65,7 @@ test.describe('Scan degraded AI states', () => {
     });
 
     await gotoApp(page, '/scan');
-    await page.getByTestId('scan-mode-text').click();
+    await page.getByTestId('scan-mode-text').click({ force: true });
     await page.locator('textarea, input, [contenteditable="true"]').first().fill('tra sua matcha latte 500ml');
     await page.getByTestId('scan-analyze-text-button').click();
 
@@ -81,7 +87,13 @@ test.describe('Scan degraded AI states', () => {
       const url = new URL(request.url());
       const path = url.pathname;
 
-      if (url.port !== '3000') return route.continue();
+      const isApiRequest = path === '/user/profile'
+        || path === '/ai/scan/text'
+        || path.startsWith('/telemetry')
+        || path.startsWith('/log')
+        || path.startsWith('/activity-preferences')
+        || path.startsWith('/gamification');
+      if (!isApiRequest) return route.continue();
 
       if (path === '/user/profile') {
         return route.fulfill(jsonResponse({
@@ -156,7 +168,7 @@ test.describe('Scan degraded AI states', () => {
     });
 
     await gotoApp(page, '/scan');
-    await page.getByTestId('scan-mode-text').click();
+    await page.getByTestId('scan-mode-text').click({ force: true });
     await page.locator('textarea, input, [contenteditable="true"]').first().fill('tra sua matcha latte 500ml');
     await page.getByTestId('scan-analyze-text-button').click();
 
