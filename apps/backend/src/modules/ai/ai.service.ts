@@ -9,7 +9,7 @@ import {
   AICoachResponse,
   AIUnresolvedItem,
 } from '@calorie-ai/types';
-import type { BehaviorMemory, ReminderEffectivenessSummary, SuccessForecast, TodaySummary } from '@calorie-ai/types';
+import type { BehaviorMemory, DynamicIntervention, ReminderEffectivenessSummary, SuccessForecast, TodaySummary } from '@calorie-ai/types';
 import { createHash, randomUUID } from 'crypto';
 import { MetricsService } from '../../common/metrics/metrics.service';
 import { AiQueueService } from './ai.queue.service';
@@ -29,6 +29,7 @@ type CoachContext = {
   reminder_effectiveness?: ReminderEffectivenessSummary;
   success_forecast?: SuccessForecast;
   behavior_memory?: BehaviorMemory;
+  dynamic_intervention?: DynamicIntervention;
 };
 
 @Injectable()
@@ -640,6 +641,7 @@ ${this.formatCoachHealthScoreContext(context)}
 ${this.formatCoachReminderEffectivenessContext(context)}
 ${this.formatCoachSuccessForecastContext(context)}
 ${this.formatCoachBehaviorMemoryContext(context)}
+${this.formatCoachDynamicInterventionContext(context)}
 
 Người dùng hỏi: "${message}"
 
@@ -837,6 +839,30 @@ Behavior Memory (${memory.days_analyzed} days, ${memory.data_quality} confidence
 - Memory notes: ${memory.memory_notes.length > 0 ? memory.memory_notes.join('; ') : 'none'}
 
 Use Behavior Memory as long-term personalization, not diagnosis. When data_quality is low, phrase it as early signal. Prefer advice that matches the user's strongest known timing or repeated weak spot.`;
+  }
+
+  private formatCoachDynamicInterventionContext(context: CoachContext): string {
+    const intervention = context.dynamic_intervention;
+    if (!intervention) {
+      return '';
+    }
+
+    return `
+
+Dynamic Intervention Decision:
+- Mode: ${intervention.mode}
+- Priority: ${intervention.priority}
+- Should surface: ${intervention.should_surface}
+- Type: ${intervention.intervention_type}
+- Primary action: ${intervention.primary_action}
+- Action label: ${intervention.action_label}
+- Reasons: ${intervention.reasons.length > 0 ? intervention.reasons.join(', ') : 'none'}
+- Title: ${intervention.title}
+- Body: ${intervention.body}
+- Recovery steps: ${intervention.recovery_steps.length > 0 ? intervention.recovery_steps.join('; ') : 'none'}
+- Cooldown: ${intervention.cooldown_hours}h
+
+Follow the Dynamic Intervention Decision as the action policy. If mode is silent, avoid adding pressure. If mode is light_nudge, keep it brief. If mode is coach_action, recovery_plan, or high_risk, give exactly one clear next action first.`;
   }
 
   private recordAiScanResponse(response: AIScanResponse, startedAt: number): AIScanResponse {

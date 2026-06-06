@@ -24,6 +24,7 @@ import { Locale, tr, translateText, useI18n } from '../../components/i18n';
 import { formatPercent, safeRound, toFiniteNumber } from '../../services/number-format';
 import { appLogger } from '../../services/logger.service';
 import { buildSuccessForecast } from '../../services/success-forecast.service';
+import { buildDynamicIntervention } from '../../services/dynamic-intervention.service';
 
 const coachHeroIllustration = require('../../assets/images/coach-hero.jpg') as number;
 
@@ -557,6 +558,11 @@ export default function CoachScreen() {
     reminderEffectiveness,
     locale,
   }), [locale, reminderEffectiveness, todaySummary?.health_score]);
+  const dynamicIntervention = useMemo(() => buildDynamicIntervention({
+    successForecast,
+    behaviorMemory,
+    locale,
+  }), [behaviorMemory, locale, successForecast]);
 
   const context = useMemo(() => {
     const consumed = dailyLog?.total_calories ?? 0;
@@ -568,8 +574,9 @@ export default function CoachScreen() {
       reminder_effectiveness: reminderEffectiveness ?? undefined,
       success_forecast: successForecast ?? undefined,
       behavior_memory: behaviorMemory ?? undefined,
+      dynamic_intervention: dynamicIntervention ?? undefined,
     };
-  }, [behaviorMemory, dailyLog, reminderEffectiveness, successForecast, todaySummary?.health_score]);
+  }, [behaviorMemory, dailyLog, dynamicIntervention, reminderEffectiveness, successForecast, todaySummary?.health_score]);
   const activePlan = useMemo(() => buildActivePlan(dailyLog, locale), [dailyLog, locale]);
   const weeklyPlan = useMemo(() => buildWeeklyPlan(summary, dailyLog, locale), [summary, dailyLog, locale]);
   const summaryRecommendation = localizeInsightTextForLocale(summary?.recommended_action, locale) || t('screen.tabs.coach.summaryFallback');

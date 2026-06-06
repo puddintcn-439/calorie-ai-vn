@@ -260,6 +260,12 @@ test.describe('Coach flows', () => {
         often_skips_breakfast: true,
         low_activity_days: ['Thu', 'Sun'],
       }),
+      dynamic_intervention: expect.objectContaining({
+        mode: 'recovery_plan',
+        intervention_type: 'reminder_tuning',
+        primary_action: 'adjust_reminders',
+        should_surface: true,
+      }),
     });
     await expectNoUnsafeRenderedText(page);
     expect(consoleMessages).toEqual([]);

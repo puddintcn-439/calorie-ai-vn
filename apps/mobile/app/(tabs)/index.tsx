@@ -13,8 +13,10 @@ import {
   ACTIVITY_MET,
   ActivityLog,
   ActivityPreference,
+  BehaviorMemory,
   ActivityType,
   DailyRoadmapItem,
+  DynamicIntervention,
   FoodLog,
   GoalPlan,
   MealType,
@@ -40,6 +42,7 @@ import { Text } from '../../components/i18n-text';
 import { Alert } from '../../components/i18n-alert';
 import { Locale, tr, useI18n } from '../../components/i18n';
 import { buildSuccessForecast } from '../../services/success-forecast.service';
+import { buildDynamicIntervention } from '../../services/dynamic-intervention.service';
 
 const mealIllustration = require('../../assets/images/vietnamese-meal.jpg') as number;
 const todayHeroIllustration = require('../../assets/images/today-hero.jpg') as number;
@@ -92,6 +95,12 @@ function successForecastActionLabel(action: SuccessForecast['recovery_plan']['pr
   if (action === 'complete_plan') return tr('screen.tabs.index.success.action.plan', locale);
   if (action === 'maintain') return tr('screen.tabs.index.success.action.maintain', locale);
   return tr('screen.tabs.index.success.action.log', locale);
+}
+
+function dynamicInterventionTone(intervention: DynamicIntervention) {
+  if (intervention.priority === 'critical' || intervention.priority === 'high') return 'warn';
+  if (intervention.priority === 'medium') return 'info';
+  return 'good';
 }
 
 function formatNumber(value: unknown, fallback = '0') {
@@ -761,6 +770,7 @@ export default function DashboardScreen() {
   const [updatingRoadmapId, setUpdatingRoadmapId] = useState<string | null>(null);
   const [reward, setReward] = useState<RewardToastData | null>(null);
   const [reminderEffectiveness, setReminderEffectiveness] = useState<ReminderEffectivenessSummary | null>(null);
+  const [behaviorMemory, setBehaviorMemory] = useState<BehaviorMemory | null>(null);
 
   const fetchProfileMeta = useCallback(async () => {
     const res = await apiClient.get<User>('/user/profile');
@@ -782,13 +792,19 @@ export default function DashboardScreen() {
     setReminderEffectiveness(res.data);
   }, []);
 
+  const fetchBehaviorMemory = useCallback(async () => {
+    const res = await apiClient.get<BehaviorMemory>('/coaching/behavior-memory');
+    setBehaviorMemory(res.data);
+  }, []);
+
   const refreshDashboardData = useCallback(() => {
     if (authLoading || !token) return;
     fetchTodaySummary().catch(() => {});
     fetchSummary().catch(() => {});
     fetchProfileMeta().catch(() => {});
     fetchReminderEffectiveness().catch(() => setReminderEffectiveness(null));
-  }, [authLoading, fetchProfileMeta, fetchReminderEffectiveness, fetchSummary, fetchTodaySummary, token]);
+    fetchBehaviorMemory().catch(() => setBehaviorMemory(null));
+  }, [authLoading, fetchBehaviorMemory, fetchProfileMeta, fetchReminderEffectiveness, fetchSummary, fetchTodaySummary, token]);
 
   useEffect(() => {
     refreshDashboardData();
@@ -1000,6 +1016,12 @@ export default function DashboardScreen() {
     locale,
   }), [healthScore, locale, reminderEffectiveness]);
   const successForecastToneValue = successForecast ? successForecastTone(successForecast) : 'info';
+  const dynamicIntervention = useMemo(() => buildDynamicIntervention({
+    successForecast,
+    behaviorMemory,
+    locale,
+  }), [behaviorMemory, locale, successForecast]);
+  const dynamicInterventionToneValue = dynamicIntervention ? dynamicInterventionTone(dynamicIntervention) : 'info';
 
   async function toggleRoadmapItem(item: DailyRoadmapItem) {
     setUpdatingRoadmapId(item.id);
@@ -1373,6 +1395,54 @@ export default function DashboardScreen() {
             <Text style={styles.successForecastActionText}>
               {successForecastActionLabel(successForecast.recovery_plan.primary_action, locale)}
             </Text>
+            <Ionicons name="chevron-forward" size={15} color={theme.colors.textOnAccent} />
+          </TouchableOpacity>
+        </SurfaceCard>
+      ) : null}
+
+      {dynamicIntervention?.should_surface ? (
+        <SurfaceCard style={[
+          styles.dynamicInterventionCard,
+          dynamicInterventionToneValue === 'good' && styles.dynamicInterventionCardGood,
+          dynamicInterventionToneValue === 'warn' && styles.dynamicInterventionCardWarn,
+        ]}>
+          <View style={styles.dynamicInterventionHeader}>
+            <View style={styles.dynamicInterventionIcon}>
+              <Ionicons
+                name={dynamicIntervention.priority === 'critical' ? 'alert-circle' : dynamicIntervention.priority === 'high' ? 'pulse' : 'sparkles'}
+                size={18}
+                color={dynamicInterventionToneValue === 'warn' ? theme.colors.accentAmber : theme.colors.accentMint}
+              />
+            </View>
+            <View style={styles.dynamicInterventionCopy}>
+              <Text style={styles.dynamicInterventionEyebrow}>INTERVENTION</Text>
+              <Text style={styles.dynamicInterventionTitle}>{dynamicIntervention.title}</Text>
+              <Text style={styles.dynamicInterventionBody}>{dynamicIntervention.body}</Text>
+            </View>
+          </View>
+          {dynamicIntervention.recovery_steps.length > 0 ? (
+            <View style={styles.dynamicInterventionSteps}>
+              {dynamicIntervention.recovery_steps.map((step) => (
+                <View key={step} style={styles.dynamicInterventionStep}>
+                  <Ionicons name="arrow-forward-circle" size={14} color={theme.colors.accentCyan} />
+                  <Text style={styles.dynamicInterventionStepText}>{step}</Text>
+                </View>
+              ))}
+            </View>
+          ) : null}
+          <TouchableOpacity
+            style={[
+              styles.dynamicInterventionAction,
+              dynamicInterventionToneValue === 'warn' && styles.dynamicInterventionActionWarn,
+            ]}
+            onPress={() => {
+              if (dynamicIntervention.primary_action === 'adjust_reminders') router.push('/profile' as never);
+              else if (dynamicIntervention.primary_action === 'log_meal') router.push('/scan' as never);
+              else if (dynamicIntervention.primary_action === 'move' || dynamicIntervention.primary_action === 'complete_plan') router.push('/log' as never);
+              else router.push('/coach' as never);
+            }}
+          >
+            <Text style={styles.dynamicInterventionActionText}>{dynamicIntervention.action_label}</Text>
             <Ionicons name="chevron-forward" size={15} color={theme.colors.textOnAccent} />
           </TouchableOpacity>
         </SurfaceCard>
@@ -2308,6 +2378,92 @@ const styles = createThemedStyles((colors, radii) => ({
     backgroundColor: colors.accentAmber,
   },
   successForecastActionText: {
+    color: colors.textOnAccent,
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  dynamicInterventionCard: {
+    marginBottom: 16,
+    borderColor: colors.borderInfo,
+    backgroundColor: colors.surfaceInfo,
+    gap: 12,
+  },
+  dynamicInterventionCardGood: {
+    borderColor: colors.borderSuccess,
+    backgroundColor: colors.surfaceSuccess,
+  },
+  dynamicInterventionCardWarn: {
+    borderColor: colors.borderWarning,
+    backgroundColor: colors.surfaceWarning,
+  },
+  dynamicInterventionHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+  },
+  dynamicInterventionIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dynamicInterventionCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  dynamicInterventionEyebrow: {
+    color: colors.textMuted,
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+    marginBottom: 3,
+  },
+  dynamicInterventionTitle: {
+    color: colors.text,
+    fontSize: 17,
+    lineHeight: 22,
+    fontWeight: '900',
+  },
+  dynamicInterventionBody: {
+    color: colors.textSoft,
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: 4,
+  },
+  dynamicInterventionSteps: {
+    gap: 7,
+  },
+  dynamicInterventionStep: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 7,
+  },
+  dynamicInterventionStepText: {
+    flex: 1,
+    minWidth: 0,
+    color: colors.textSoft,
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: '700',
+  },
+  dynamicInterventionAction: {
+    minHeight: 44,
+    borderRadius: radii.lg,
+    backgroundColor: colors.accentMint,
+    paddingHorizontal: 13,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  dynamicInterventionActionWarn: {
+    backgroundColor: colors.accentAmber,
+  },
+  dynamicInterventionActionText: {
     color: colors.textOnAccent,
     fontSize: 13,
     fontWeight: '900',

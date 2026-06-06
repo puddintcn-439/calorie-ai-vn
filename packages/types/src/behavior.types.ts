@@ -55,3 +55,42 @@ export interface BehaviorMemory {
   memory_notes: string[];
   updated_at: string;
 }
+
+export type DynamicInterventionMode =
+  | 'silent'
+  | 'light_nudge'
+  | 'coach_action'
+  | 'recovery_plan'
+  | 'high_risk';
+
+export type DynamicInterventionPriority = 'low' | 'medium' | 'high' | 'critical';
+
+export type DynamicInterventionAction =
+  | 'none'
+  | 'log_meal'
+  | 'move'
+  | 'complete_plan'
+  | 'adjust_reminders'
+  | 'open_coach';
+
+export interface DynamicIntervention {
+  mode: DynamicInterventionMode;
+  priority: DynamicInterventionPriority;
+  should_surface: boolean;
+  intervention_type:
+    | 'maintain'
+    | 'protein_nudge'
+    | 'meal_logging'
+    | 'activity_recovery'
+    | 'plan_completion'
+    | 'reminder_tuning'
+    | 'high_risk_recovery';
+  title: string;
+  body: string;
+  primary_action: DynamicInterventionAction;
+  action_label: string;
+  reasons: SuccessForecastReason[];
+  recovery_steps: string[];
+  cooldown_hours: number;
+  generated_at: string;
+}

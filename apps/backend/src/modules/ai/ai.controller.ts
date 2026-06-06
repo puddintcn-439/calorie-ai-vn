@@ -106,6 +106,7 @@ export class AiController {
       reminder_effectiveness: dto.reminder_effectiveness,
       success_forecast: dto.success_forecast,
       behavior_memory: dto.behavior_memory,
+      dynamic_intervention: dto.dynamic_intervention,
     });
   }
 }

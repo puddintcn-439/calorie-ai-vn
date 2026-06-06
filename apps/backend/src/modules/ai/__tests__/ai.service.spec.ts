@@ -456,6 +456,20 @@ describe('AiService.getCoachReply', () => {
         memory_notes: ['Breakfast is frequently missing from logged days.', 'Reminder responses are strongest around 19:00.'],
         updated_at: '2026-06-06T00:00:00.000Z',
       },
+      dynamic_intervention: {
+        mode: 'recovery_plan',
+        priority: 'high',
+        should_surface: true,
+        intervention_type: 'activity_recovery',
+        title: 'Recovery plan activated',
+        body: 'Activity is the weakest spot. Pick a short, easy movement session.',
+        primary_action: 'move',
+        action_label: 'Add movement',
+        reasons: ['activity_gap', 'declining_health_score'],
+        recovery_steps: ['Add a 15-minute light walk to lift activity back up.'],
+        cooldown_hours: 4,
+        generated_at: '2026-06-06T00:00:00.000Z',
+      },
     });
 
     expect(prompt).toContain('Health Score today');
@@ -470,6 +484,9 @@ describe('AiService.getCoachReply', () => {
     expect(prompt).toContain('Behavior Memory (90 days, high confidence)');
     expect(prompt).toContain('Best reminder hour: 19:00');
     expect(prompt).toContain('Low activity days: Thu, Sun');
+    expect(prompt).toContain('Dynamic Intervention Decision');
+    expect(prompt).toContain('Mode: recovery_plan');
+    expect(prompt).toContain('Primary action: move');
     expect(prompt).toContain('Next best action: log_meal');
     expect(result.actions).toEqual(expect.arrayContaining([
       expect.objectContaining({ type: 'open_scan' }),
