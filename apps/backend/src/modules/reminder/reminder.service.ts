@@ -155,11 +155,11 @@ export class ReminderService {
   async getReminderEffectiveness(userId: string, days = 30): Promise<ReminderEffectivenessSummary> {
     const safeDays = Math.min(Math.max(Math.round(days), 1), 90);
     const since = new Date(Date.now() - safeDays * 24 * 60 * 60 * 1000).toISOString();
-    const empty = this.buildEmptyEffectivenessSummary();
+    const empty = this.buildEmptyEffectivenessSummary(safeDays);
 
     const { data, error } = await this.supabase.db
       .from('reminder_notification_log')
-      .select('meal_type, sent_at, opened_at, acted_at')
+      .select('meal_type, sent_at, opened_at, acted_at, acted_action_type')
       .eq('user_id', userId)
       .gte('sent_at', since);
 
@@ -176,14 +176,26 @@ export class ReminderService {
       acc.sent += 1;
       acc.by_meal[meal].sent += 1;
 
-      if (row.opened_at) {
+      const opened = Boolean(row.opened_at);
+      const acted = Boolean(row.acted_at);
+      const ignored = !opened && !acted;
+
+      if (opened) {
         acc.opened += 1;
         acc.by_meal[meal].opened += 1;
       }
 
-      if (row.acted_at) {
+      if (acted) {
         acc.acted += 1;
         acc.by_meal[meal].acted += 1;
+        const actionType = String(row.acted_action_type ?? 'unknown');
+        acc.by_action[actionType] = acc.by_action[actionType] ?? { acted: 0, action_rate: 0 };
+        acc.by_action[actionType].acted += 1;
+      }
+
+      if (ignored) {
+        acc.ignored += 1;
+        acc.by_meal[meal].ignored += 1;
       }
 
       return acc;
@@ -221,33 +233,98 @@ export class ReminderService {
     return Math.min(Math.max(Math.round(safe), 5), 24 * 60);
   }
 
-  private buildEmptyEffectivenessSummary(): ReminderEffectivenessSummary {
-    const emptyMeal = () => ({ sent: 0, opened: 0, acted: 0, open_rate: 0, action_rate: 0 });
+  private buildEmptyEffectivenessSummary(days = 30): ReminderEffectivenessSummary {
+    const emptyMeal = () => ({ sent: 0, opened: 0, acted: 0, ignored: 0, open_rate: 0, action_rate: 0, ignore_rate: 0 });
     return {
+      days,
       sent: 0,
       opened: 0,
       acted: 0,
+      ignored: 0,
       open_rate: 0,
       action_rate: 0,
+      ignore_rate: 0,
+      effectiveness_score: 0,
+      best_meal: null,
+      weakest_meal: null,
+      recommendation: 'No reminder data yet. Send reminders for a few days before judging timing.',
+      patterns: [],
       by_meal: {
         breakfast: emptyMeal(),
         lunch: emptyMeal(),
         dinner: emptyMeal(),
         snack: emptyMeal(),
       },
+      by_action: {},
     };
   }
 
   private finalizeEffectivenessRates(summary: ReminderEffectivenessSummary): ReminderEffectivenessSummary {
     summary.open_rate = summary.sent > 0 ? Math.round((summary.opened / summary.sent) * 100) : 0;
     summary.action_rate = summary.sent > 0 ? Math.round((summary.acted / summary.sent) * 100) : 0;
+    summary.ignore_rate = summary.sent > 0 ? Math.round((summary.ignored / summary.sent) * 100) : 0;
+    summary.effectiveness_score = Math.round(summary.action_rate * 0.75 + summary.open_rate * 0.25);
 
     Object.values(summary.by_meal).forEach((meal) => {
       meal.open_rate = meal.sent > 0 ? Math.round((meal.opened / meal.sent) * 100) : 0;
       meal.action_rate = meal.sent > 0 ? Math.round((meal.acted / meal.sent) * 100) : 0;
+      meal.ignore_rate = meal.sent > 0 ? Math.round((meal.ignored / meal.sent) * 100) : 0;
     });
 
+    Object.values(summary.by_action).forEach((action) => {
+      action.action_rate = summary.sent > 0 ? Math.round((action.acted / summary.sent) * 100) : 0;
+    });
+
+    const mealEntries = Object.entries(summary.by_meal)
+      .filter(([, meal]) => meal.sent > 0) as Array<[
+        keyof ReminderEffectivenessSummary['by_meal'],
+        ReminderEffectivenessSummary['by_meal'][keyof ReminderEffectivenessSummary['by_meal']],
+      ]>;
+    const byActionRateDesc = [...mealEntries].sort((a, b) => b[1].action_rate - a[1].action_rate);
+    summary.best_meal = byActionRateDesc[0]?.[0] ?? null;
+    summary.weakest_meal = byActionRateDesc.length > 0 ? byActionRateDesc[byActionRateDesc.length - 1][0] : null;
+    summary.patterns = this.detectEffectivenessPatterns(summary);
+    summary.recommendation = this.buildEffectivenessRecommendation(summary);
+
     return summary;
+  }
+
+  private detectEffectivenessPatterns(summary: ReminderEffectivenessSummary): string[] {
+    const patterns: string[] = [];
+
+    if (summary.sent === 0) return patterns;
+    if (summary.action_rate < 25) patterns.push(`Reminder action rate is low at ${summary.action_rate}%`);
+    if (summary.ignore_rate >= 50) patterns.push(`${summary.ignore_rate}% of reminders were ignored`);
+
+    for (const [meal, stats] of Object.entries(summary.by_meal)) {
+      if (stats.sent < 2) continue;
+      if (stats.action_rate >= 50) patterns.push(`${meal} reminders work best (${stats.action_rate}% action rate)`);
+      if (stats.ignore_rate >= 60) patterns.push(`${meal} reminders are often ignored (${stats.ignore_rate}%)`);
+    }
+
+    return patterns.slice(0, 4);
+  }
+
+  private buildEffectivenessRecommendation(summary: ReminderEffectivenessSummary): string {
+    if (summary.sent === 0) {
+      return 'No reminder data yet. Send reminders for a few days before judging timing.';
+    }
+
+    if (summary.action_rate >= 50) {
+      return summary.best_meal
+        ? `${summary.best_meal} reminders are converting well. Keep this timing and use Coach to reinforce the habit.`
+        : 'Reminder timing is converting well. Keep the current cadence.';
+    }
+
+    if (summary.ignore_rate >= 50 && summary.weakest_meal) {
+      return `${summary.weakest_meal} reminders are often ignored. Try shifting the time by 30-60 minutes or use a gentler reminder style.`;
+    }
+
+    if (summary.open_rate >= 50 && summary.action_rate < 30) {
+      return 'Users open reminders but do not act often. Make the next step smaller, such as one-tap scan or quick log.';
+    }
+
+    return 'Keep collecting reminder feedback. Prioritize the meal with the lowest action rate first.';
   }
 
   /**

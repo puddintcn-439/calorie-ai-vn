@@ -11,7 +11,7 @@ import {
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import type { TodaySummary } from '@calorie-ai/types';
+import type { ReminderEffectivenessSummary, TodaySummary } from '@calorie-ai/types';
 
 export enum MealHint {
   BREAKFAST = 'breakfast',
@@ -155,4 +155,8 @@ export class CoachMessageDto {
   })
   @IsOptional()
   health_score?: TodaySummary['health_score'];
+
+  @ApiProperty({ required: false, type: Object })
+  @IsOptional()
+  reminder_effectiveness?: ReminderEffectivenessSummary;
 }

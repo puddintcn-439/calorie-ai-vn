@@ -1,5 +1,6 @@
 import { Food, FoodCategory } from './food.types';
 import type { TodaySummary } from './log.types';
+import type { ReminderEffectivenessSummary } from './reminder.types';
 
 // ---- Request Types ----
 
@@ -66,6 +67,7 @@ export interface AICoachRequest {
     target_calories: number;
     recent_logs?: string[];
     health_score?: TodaySummary['health_score'];
+    reminder_effectiveness?: ReminderEffectivenessSummary;
   };
 }
 

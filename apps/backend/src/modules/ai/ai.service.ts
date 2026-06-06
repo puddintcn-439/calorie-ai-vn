@@ -9,7 +9,7 @@ import {
   AICoachResponse,
   AIUnresolvedItem,
 } from '@calorie-ai/types';
-import type { TodaySummary } from '@calorie-ai/types';
+import type { ReminderEffectivenessSummary, TodaySummary } from '@calorie-ai/types';
 import { createHash, randomUUID } from 'crypto';
 import { MetricsService } from '../../common/metrics/metrics.service';
 import { AiQueueService } from './ai.queue.service';
@@ -26,6 +26,7 @@ type CoachContext = {
   today_calories: number;
   target_calories: number;
   health_score?: TodaySummary['health_score'];
+  reminder_effectiveness?: ReminderEffectivenessSummary;
 };
 
 @Injectable()
@@ -634,6 +635,7 @@ Thông tin người dùng hôm nay:
 - Mục tiêu: ${context.target_calories} kcal
 - Còn lại: ${context.target_calories - context.today_calories} kcal
 ${this.formatCoachHealthScoreContext(context)}
+${this.formatCoachReminderEffectivenessContext(context)}
 
 Người dùng hỏi: "${message}"
 
@@ -766,6 +768,28 @@ Health Score today:
 - Patterns: ${score.weekly_adherence.patterns.length > 0 ? score.weekly_adherence.patterns.join('; ') : 'none'}
 
 Use Health Score, weekly adherence, and patterns to choose the most useful next action. If next_action is log_meal, suggest logging/scanning food. If it is move or complete_plan, suggest a light activity or plan completion. If it is recover, avoid pushing intensity. If weakest adherence area is logging, prioritize a tiny logging habit over stricter calories.`;
+  }
+
+  private formatCoachReminderEffectivenessContext(context: CoachContext): string {
+    const effectiveness = context.reminder_effectiveness;
+    if (!effectiveness) {
+      return '';
+    }
+
+    return `
+
+Reminder effectiveness (${effectiveness.days} days):
+- Score: ${effectiveness.effectiveness_score}/100
+- Sent/opened/acted/ignored: ${effectiveness.sent}/${effectiveness.opened}/${effectiveness.acted}/${effectiveness.ignored}
+- Open rate: ${effectiveness.open_rate}%
+- Action rate: ${effectiveness.action_rate}%
+- Ignore rate: ${effectiveness.ignore_rate}%
+- Best meal reminder: ${effectiveness.best_meal ?? 'unknown'}
+- Weakest meal reminder: ${effectiveness.weakest_meal ?? 'unknown'}
+- Patterns: ${effectiveness.patterns.length > 0 ? effectiveness.patterns.join('; ') : 'none'}
+- Recommendation: ${effectiveness.recommendation}
+
+Use reminder effectiveness only for habit/timing advice. If ignore rate is high, suggest changing reminder time or style. If open rate is high but action rate is low, suggest a smaller one-tap next action.`;
   }
 
   private recordAiScanResponse(response: AIScanResponse, startedAt: number): AIScanResponse {

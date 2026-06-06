@@ -393,12 +393,38 @@ describe('AiService.getCoachReply', () => {
         next_action: 'log_meal',
         signals: ['1/3 meals logged', 'No activity yet'],
       },
+      reminder_effectiveness: {
+        days: 30,
+        sent: 10,
+        opened: 7,
+        acted: 2,
+        ignored: 3,
+        open_rate: 70,
+        action_rate: 20,
+        ignore_rate: 30,
+        effectiveness_score: 33,
+        best_meal: 'breakfast',
+        weakest_meal: 'dinner',
+        recommendation: 'Users open reminders but do not act often. Make the next step smaller.',
+        patterns: ['Reminder action rate is low at 20%'],
+        by_meal: {
+          breakfast: { sent: 4, opened: 4, acted: 2, ignored: 0, open_rate: 100, action_rate: 50, ignore_rate: 0 },
+          lunch: { sent: 2, opened: 1, acted: 0, ignored: 1, open_rate: 50, action_rate: 0, ignore_rate: 50 },
+          dinner: { sent: 3, opened: 1, acted: 0, ignored: 2, open_rate: 33, action_rate: 0, ignore_rate: 67 },
+          snack: { sent: 1, opened: 1, acted: 0, ignored: 0, open_rate: 100, action_rate: 0, ignore_rate: 0 },
+        },
+        by_action: {
+          food_log: { acted: 2, action_rate: 20 },
+        },
+      },
     });
 
     expect(prompt).toContain('Health Score today');
     expect(prompt).toContain('Overall: 58/100 (building)');
     expect(prompt).toContain('Weekly adherence: 61/100');
     expect(prompt).toContain('Activity was missing 4/7 days');
+    expect(prompt).toContain('Reminder effectiveness (30 days)');
+    expect(prompt).toContain('Action rate: 20%');
     expect(prompt).toContain('Next best action: log_meal');
     expect(result.actions).toEqual(expect.arrayContaining([
       expect.objectContaining({ type: 'open_scan' }),

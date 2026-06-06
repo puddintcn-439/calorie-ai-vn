@@ -9,13 +9,18 @@ test.describe('Profile flows', () => {
 
     await page.route('**/*', async (route) => {
       const url = new URL(route.request().url());
-      if (url.port !== '3000') {
+      const path = url.pathname;
+      const isApiPath = /^\/(user|reminders|subscriptions|log|activity-preferences|calorie-target|insights)(\/|$)/.test(path);
+      if (route.request().resourceType() === 'document' && url.port !== '3000') {
+        await route.continue();
+        return;
+      }
+      if (url.port !== '3000' && !isApiPath) {
         await route.continue();
         return;
       }
 
       const method = route.request().method();
-      const path = url.pathname;
 
       if (path === '/user/profile' && method === 'GET') {
         await route.fulfill(jsonResponse({ full_name: '', weight_kg: 65, height_cm: 170, age: 25, gender: 'male' }));
@@ -33,6 +38,29 @@ test.describe('Profile flows', () => {
         }));
       } else if (path === '/reminders/nudge-test') {
         await route.fulfill(jsonResponse({ title: 'Lunch reminder', body: 'Keep it simple.' }));
+      } else if (path === '/reminders/effectiveness') {
+        await route.fulfill(jsonResponse({
+          days: 30,
+          sent: 0,
+          opened: 0,
+          acted: 0,
+          ignored: 0,
+          open_rate: 0,
+          action_rate: 0,
+          ignore_rate: 0,
+          effectiveness_score: 0,
+          best_meal: null,
+          weakest_meal: null,
+          recommendation: 'No reminder data yet.',
+          patterns: [],
+          by_meal: {
+            breakfast: { sent: 0, opened: 0, acted: 0, ignored: 0, open_rate: 0, action_rate: 0, ignore_rate: 0 },
+            lunch: { sent: 0, opened: 0, acted: 0, ignored: 0, open_rate: 0, action_rate: 0, ignore_rate: 0 },
+            dinner: { sent: 0, opened: 0, acted: 0, ignored: 0, open_rate: 0, action_rate: 0, ignore_rate: 0 },
+            snack: { sent: 0, opened: 0, acted: 0, ignored: 0, open_rate: 0, action_rate: 0, ignore_rate: 0 },
+          },
+          by_action: {},
+        }));
       } else if (path === '/subscriptions/current') {
         await route.fulfill(jsonResponse({ tier: 'free', is_active: true }));
       } else if (path === '/subscriptions/features') {

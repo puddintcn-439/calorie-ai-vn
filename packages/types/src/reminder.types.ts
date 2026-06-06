@@ -65,16 +65,30 @@ export interface ReminderFeedbackEventDto {
 }
 
 export interface ReminderEffectivenessSummary {
+  days: number;
   sent: number;
   opened: number;
   acted: number;
+  ignored: number;
   open_rate: number;
   action_rate: number;
+  ignore_rate: number;
+  effectiveness_score: number;
+  best_meal: 'breakfast' | 'lunch' | 'dinner' | 'snack' | null;
+  weakest_meal: 'breakfast' | 'lunch' | 'dinner' | 'snack' | null;
+  recommendation: string;
+  patterns: string[];
   by_meal: Record<'breakfast' | 'lunch' | 'dinner' | 'snack', {
     sent: number;
     opened: number;
     acted: number;
+    ignored: number;
     open_rate: number;
+    action_rate: number;
+    ignore_rate: number;
+  }>;
+  by_action: Record<string, {
+    acted: number;
     action_rate: number;
   }>;
 }

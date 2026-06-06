@@ -103,6 +103,7 @@ export class AiController {
       today_calories: dto.today_calories,
       target_calories: dto.target_calories,
       health_score: dto.health_score,
+      reminder_effectiveness: dto.reminder_effectiveness,
     });
   }
 }

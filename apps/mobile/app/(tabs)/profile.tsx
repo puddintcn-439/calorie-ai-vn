@@ -584,9 +584,11 @@ export default function ProfileScreen() {
   const { locale, setLocale, t, tx } = useI18n();
   const {
     preferences: reminderPrefs,
+    effectiveness: reminderEffectiveness,
     previewNudge,
     isPreviewLoading,
     fetchPreferences: fetchReminders,
+    fetchEffectiveness: fetchReminderEffectiveness,
     updatePreferences: updateReminders,
     fetchPreviewNudge,
   } = useReminderStore();
@@ -822,6 +824,7 @@ export default function ProfileScreen() {
         setReminders({});
       }),
       fetchSubscription(),
+      fetchReminderEffectiveness(30).catch(() => {}),
       fetchPreviewNudge('lunch').catch(() => {}),
       fetchActivityLogs().catch(() => {}),
       fetchActivityPreferences().catch(() => {}),
@@ -1741,6 +1744,54 @@ export default function ProfileScreen() {
               onTimeChange={(v) => setReminders((r) => ({ ...r, snack_reminder_time: v }))}
             />
 
+            {reminderEffectiveness ? (
+              <SurfaceCard style={styles.reminderEffectivenessCard}>
+                <View style={styles.reminderEffectivenessHeader}>
+                  <View style={styles.reminderEffectivenessCopy}>
+                    <Text style={styles.label} i18nKey="profile.reminderEffectiveness.title" />
+                    <Text style={styles.helperText}>{reminderEffectiveness.recommendation}</Text>
+                  </View>
+                  <View style={styles.reminderEffectivenessBadge}>
+                    <Text style={styles.reminderEffectivenessScore}>{reminderEffectiveness.effectiveness_score}</Text>
+                    <Text style={styles.reminderEffectivenessUnit}>/100</Text>
+                  </View>
+                </View>
+                <View style={styles.reminderEffectivenessGrid}>
+                  <View style={styles.reminderEffectivenessMetric}>
+                    <Text style={styles.reminderEffectivenessMetricValue}>{reminderEffectiveness.open_rate}%</Text>
+                    <Text style={styles.reminderEffectivenessMetricLabel} i18nKey="profile.reminderEffectiveness.openRate" />
+                  </View>
+                  <View style={styles.reminderEffectivenessMetric}>
+                    <Text style={styles.reminderEffectivenessMetricValue}>{reminderEffectiveness.action_rate}%</Text>
+                    <Text style={styles.reminderEffectivenessMetricLabel} i18nKey="profile.reminderEffectiveness.actionRate" />
+                  </View>
+                  <View style={styles.reminderEffectivenessMetric}>
+                    <Text style={styles.reminderEffectivenessMetricValue}>{reminderEffectiveness.ignore_rate}%</Text>
+                    <Text style={styles.reminderEffectivenessMetricLabel} i18nKey="profile.reminderEffectiveness.ignoreRate" />
+                  </View>
+                </View>
+                <View style={styles.reminderEffectivenessPills}>
+                  {reminderEffectiveness.best_meal ? (
+                    <Text style={styles.reminderEffectivenessPill}>
+                      {t('profile.reminderEffectiveness.bestMeal', { meal: reminderEffectiveness.best_meal })}
+                    </Text>
+                  ) : null}
+                  {reminderEffectiveness.weakest_meal ? (
+                    <Text style={styles.reminderEffectivenessPill}>
+                      {t('profile.reminderEffectiveness.weakestMeal', { meal: reminderEffectiveness.weakest_meal })}
+                    </Text>
+                  ) : null}
+                </View>
+                {reminderEffectiveness.patterns.length > 0 ? (
+                  <View style={styles.reminderEffectivenessPatterns}>
+                    {reminderEffectiveness.patterns.slice(0, 2).map((pattern) => (
+                      <Text key={pattern} style={styles.reminderEffectivenessPattern}>• {pattern}</Text>
+                    ))}
+                  </View>
+                ) : null}
+              </SurfaceCard>
+            ) : null}
+
             <View style={styles.previewSection}>
               <Text style={styles.label} i18nKey="screen.tabs.profile.text.031" />
               <View style={styles.chipRow}>
@@ -2455,6 +2506,46 @@ const styles = createThemedStyles((colors, radii) => ({
   reminderLabel: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
   reminderMealLabel: { color: colors.textSoft, fontSize: 14, fontWeight: '600' },
   reminderTimeInputs: { flexDirection: 'row', gap: 8, alignItems: 'flex-end' },
+  reminderEffectivenessCard: { marginBottom: 14, borderColor: colors.borderInfo, backgroundColor: colors.surfaceInfo },
+  reminderEffectivenessHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 },
+  reminderEffectivenessCopy: { flex: 1, minWidth: 0 },
+  reminderEffectivenessBadge: {
+    minWidth: 70,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.borderInfo,
+    backgroundColor: colors.surface,
+    paddingHorizontal: 9,
+    paddingVertical: 8,
+    alignItems: 'center',
+  },
+  reminderEffectivenessScore: { color: colors.accentCyan, fontSize: 22, lineHeight: 26, fontWeight: '900' },
+  reminderEffectivenessUnit: { color: colors.textMuted, fontSize: 10, fontWeight: '800' },
+  reminderEffectivenessGrid: { flexDirection: 'row', gap: 8, marginTop: 12 },
+  reminderEffectivenessMetric: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    borderRadius: radii.sm,
+    padding: 8,
+  },
+  reminderEffectivenessMetricValue: { color: colors.text, fontSize: 16, fontWeight: '900' },
+  reminderEffectivenessMetricLabel: { color: colors.textMuted, fontSize: 10, fontWeight: '800', marginTop: 2 },
+  reminderEffectivenessPills: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
+  reminderEffectivenessPill: {
+    color: colors.textSoft,
+    fontSize: 11,
+    fontWeight: '800',
+    borderWidth: 1,
+    borderColor: colors.borderInfo,
+    borderRadius: 999,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    backgroundColor: colors.surface,
+  },
+  reminderEffectivenessPatterns: { gap: 4, marginTop: 10 },
+  reminderEffectivenessPattern: { color: colors.textSoft, fontSize: 12, lineHeight: 17 },
   timeInputGroup: { flex: 1 },
   timeInputLabel: { color: colors.textMuted, fontSize: 12, marginBottom: 4, fontWeight: '500' },
   timeInput: { textAlign: 'center', fontSize: 16, fontWeight: '700', color: colors.accentMint },

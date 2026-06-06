@@ -146,6 +146,11 @@ class ReminderEventDto implements ReminderFeedbackEventDto {
   @IsString()
   @IsOptional()
   action_type?: string;
+
+  @ApiProperty({ required: false, example: 120 })
+  @IsNumber()
+  @IsOptional()
+  attribution_window_minutes?: number;
 }
 
 @ApiTags('Reminders')

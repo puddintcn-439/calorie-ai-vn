@@ -356,6 +356,31 @@ export function createNinetyDayJourneyMock() {
       created_at: `${today.date}T10:00:00.000Z`,
       updated_at: `${today.date}T10:00:00.000Z`,
     },
+    reminderEffectiveness: {
+      days: 30,
+      sent: 24,
+      opened: 18,
+      acted: 11,
+      ignored: 6,
+      open_rate: 75,
+      action_rate: 46,
+      ignore_rate: 25,
+      effectiveness_score: 53,
+      best_meal: 'breakfast',
+      weakest_meal: 'dinner',
+      recommendation: 'Breakfast reminders are working. Dinner reminders may need a gentler time.',
+      patterns: ['breakfast reminders work best (58% action rate)', 'dinner reminders are often ignored (60%)'],
+      by_meal: {
+        breakfast: { sent: 6, opened: 6, acted: 4, ignored: 0, open_rate: 100, action_rate: 67, ignore_rate: 0 },
+        lunch: { sent: 6, opened: 5, acted: 3, ignored: 1, open_rate: 83, action_rate: 50, ignore_rate: 17 },
+        dinner: { sent: 6, opened: 2, acted: 1, ignored: 4, open_rate: 33, action_rate: 17, ignore_rate: 67 },
+        snack: { sent: 6, opened: 5, acted: 3, ignored: 1, open_rate: 83, action_rate: 50, ignore_rate: 17 },
+      },
+      by_action: {
+        food_log: { acted: 9, action_rate: 38 },
+        activity_log: { acted: 2, action_rate: 8 },
+      },
+    },
   };
 }
 
@@ -445,6 +470,7 @@ export async function mockNinetyDayJourneyApi(page: Page) {
     }
     if (path.startsWith('/roadmap')) return route.fulfill(jsonResponse([]));
     if (path.startsWith('/subscriptions')) return route.fulfill(jsonResponse({ tier: 'premium', active: true }));
+    if (path === '/reminders/effectiveness') return route.fulfill(jsonResponse(mock.reminderEffectiveness));
     if (path.startsWith('/reminders')) return route.fulfill(jsonResponse({ enabled: false }));
     if (request.method() !== 'GET') return route.fulfill(jsonResponse({ ok: true }));
 

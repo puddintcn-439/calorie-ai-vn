@@ -136,9 +136,10 @@ describe('ReminderService.reminderFeedback', () => {
 
   it('summarizes reminder effectiveness rates', async () => {
     const rows = [
-      { meal_type: 'breakfast', sent_at: '2026-06-05T00:00:00.000Z', opened_at: '2026-06-05T00:01:00.000Z', acted_at: '2026-06-05T00:02:00.000Z' },
-      { meal_type: 'lunch', sent_at: '2026-06-05T04:00:00.000Z', opened_at: '2026-06-05T04:01:00.000Z', acted_at: null },
-      { meal_type: 'dinner', sent_at: '2026-06-05T12:00:00.000Z', opened_at: null, acted_at: null },
+      { meal_type: 'breakfast', sent_at: '2026-06-05T00:00:00.000Z', opened_at: '2026-06-05T00:01:00.000Z', acted_at: '2026-06-05T00:02:00.000Z', acted_action_type: 'food_log' },
+      { meal_type: 'breakfast', sent_at: '2026-06-06T00:00:00.000Z', opened_at: '2026-06-06T00:01:00.000Z', acted_at: '2026-06-06T00:02:00.000Z', acted_action_type: 'food_log' },
+      { meal_type: 'lunch', sent_at: '2026-06-05T04:00:00.000Z', opened_at: '2026-06-05T04:01:00.000Z', acted_at: null, acted_action_type: null },
+      { meal_type: 'dinner', sent_at: '2026-06-05T12:00:00.000Z', opened_at: null, acted_at: null, acted_action_type: null },
     ];
     const service = makeService(() => ({
       select: jest.fn().mockReturnThis(),
@@ -148,12 +149,19 @@ describe('ReminderService.reminderFeedback', () => {
 
     const result = await service.getReminderEffectiveness('u1', 30);
 
-    expect(result.sent).toBe(3);
-    expect(result.opened).toBe(2);
-    expect(result.acted).toBe(1);
-    expect(result.open_rate).toBe(67);
-    expect(result.action_rate).toBe(33);
+    expect(result.sent).toBe(4);
+    expect(result.opened).toBe(3);
+    expect(result.acted).toBe(2);
+    expect(result.ignored).toBe(1);
+    expect(result.open_rate).toBe(75);
+    expect(result.action_rate).toBe(50);
+    expect(result.ignore_rate).toBe(25);
+    expect(result.effectiveness_score).toBe(56);
+    expect(result.best_meal).toBe('breakfast');
+    expect(result.weakest_meal).toBe('dinner');
     expect(result.by_meal.breakfast.action_rate).toBe(100);
+    expect(result.by_action.food_log.acted).toBe(2);
+    expect(result.patterns).toContain('breakfast reminders work best (100% action rate)');
   });
 
   it('does not record acted event outside the attribution window', async () => {

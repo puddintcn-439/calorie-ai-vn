@@ -1,17 +1,19 @@
 import { create } from 'zustand';
-import { NudgeMessage, ReminderPreferences } from '@calorie-ai/types';
+import { NudgeMessage, ReminderEffectivenessSummary, ReminderPreferences } from '@calorie-ai/types';
 import { apiClient } from '../services/api';
 
 type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snack';
 
 interface ReminderState {
   preferences: ReminderPreferences | null;
+  effectiveness: ReminderEffectivenessSummary | null;
   previewNudge: NudgeMessage | null;
   isLoading: boolean;
   isPreviewLoading: boolean;
   error: string | null;
 
   fetchPreferences: () => Promise<void>;
+  fetchEffectiveness: (days?: number) => Promise<void>;
   updatePreferences: (prefs: Partial<ReminderPreferences>) => Promise<void>;
   fetchPreviewNudge: (mealType: MealType, caloriesLogged?: number) => Promise<void>;
   clear: () => void;
@@ -19,6 +21,7 @@ interface ReminderState {
 
 export const useReminderStore = create<ReminderState>((set) => ({
   preferences: null,
+  effectiveness: null,
   previewNudge: null,
   isLoading: false,
   isPreviewLoading: false,
@@ -31,6 +34,16 @@ export const useReminderStore = create<ReminderState>((set) => ({
       set({ preferences: res.data, isLoading: false });
     } catch (err: any) {
       set({ error: err.message ?? 'Failed to fetch preferences', isLoading: false });
+    }
+  },
+
+  fetchEffectiveness: async (days = 30) => {
+    set({ error: null });
+    try {
+      const res = await apiClient.get<ReminderEffectivenessSummary>(`/reminders/effectiveness?days=${days}`);
+      set({ effectiveness: res.data });
+    } catch (err: any) {
+      set({ error: err.message ?? 'Failed to fetch reminder effectiveness' });
     }
   },
 
@@ -57,5 +70,5 @@ export const useReminderStore = create<ReminderState>((set) => ({
     }
   },
 
-  clear: () => set({ preferences: null, previewNudge: null, isLoading: false, isPreviewLoading: false, error: null }),
+  clear: () => set({ preferences: null, effectiveness: null, previewNudge: null, isLoading: false, isPreviewLoading: false, error: null }),
 }));

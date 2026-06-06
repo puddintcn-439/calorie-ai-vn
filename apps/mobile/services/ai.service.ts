@@ -1,6 +1,6 @@
 import { Platform } from 'react-native';
 import { AIScanResponse, AICoachResponse } from '@calorie-ai/types';
-import type { TodaySummary } from '@calorie-ai/types';
+import type { ReminderEffectivenessSummary, TodaySummary } from '@calorie-ai/types';
 import { apiClient } from './api';
 import { featureGatingService } from './feature-gating.service';
 
@@ -145,6 +145,7 @@ export async function askCoach(
     today_calories: number;
     target_calories: number;
     health_score?: TodaySummary['health_score'];
+    reminder_effectiveness?: ReminderEffectivenessSummary;
   },
 ): Promise<AICoachResponse> {
   // Check subscription access to AI Coach

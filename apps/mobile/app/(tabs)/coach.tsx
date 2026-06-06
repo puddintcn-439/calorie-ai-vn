@@ -15,7 +15,7 @@ import { UiInput } from '../../components/ui-input';
 import { askCoach } from '../../services/ai.service';
 import { isPremiumFeatureError } from '../../services/feature-gating.service';
 import { useLogStore } from '../../store/log.store';
-import { AICoachAction, CoachingInsight, CoachingSummary, DailyLog } from '@calorie-ai/types';
+import { AICoachAction, CoachingInsight, CoachingSummary, DailyLog, ReminderEffectivenessSummary } from '@calorie-ai/types';
 import { apiClient } from '../../services/api';
 import { VisualHeroCard } from '../../components/visual-hero-card';
 import { createThemedStyles, theme, useAppTheme } from '../../components/theme';
@@ -454,6 +454,7 @@ export default function CoachScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [insights, setInsights] = useState<CoachingInsight[]>([]);
   const [summary, setSummary] = useState<CoachingSummary | null>(null);
+  const [reminderEffectiveness, setReminderEffectiveness] = useState<ReminderEffectivenessSummary | null>(null);
   const [insightsError, setInsightsError] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
@@ -475,9 +476,10 @@ export default function CoachScreen() {
     try {
       setLoadingInsights(true);
       setInsightsError(null);
-      const [insightsResult, summaryResult] = await Promise.allSettled([
+      const [insightsResult, summaryResult, reminderResult] = await Promise.allSettled([
         apiClient.get('/coaching/insights'),
         apiClient.get('/coaching/weekly-summary'),
+        apiClient.get('/reminders/effectiveness?days=30'),
       ]);
 
       if (insightsResult.status === 'fulfilled') {
@@ -495,9 +497,16 @@ export default function CoachScreen() {
           setInsightsError(getCoachErrorMessage(summaryResult.reason, locale));
         }
       }
+
+      if (reminderResult.status === 'fulfilled') {
+        setReminderEffectiveness(reminderResult.value.data || null);
+      } else {
+        setReminderEffectiveness(null);
+      }
     } catch (error) {
       setInsights([]);
       setSummary(null);
+      setReminderEffectiveness(null);
       setInsightsError(getCoachErrorMessage(error, locale));
     } finally {
       setLoadingInsights(false);
@@ -540,8 +549,9 @@ export default function CoachScreen() {
       today_calories: consumed,
       target_calories: target,
       health_score: todaySummary?.health_score,
+      reminder_effectiveness: reminderEffectiveness ?? undefined,
     };
-  }, [dailyLog, todaySummary?.health_score]);
+  }, [dailyLog, reminderEffectiveness, todaySummary?.health_score]);
   const activePlan = useMemo(() => buildActivePlan(dailyLog, locale), [dailyLog, locale]);
   const weeklyPlan = useMemo(() => buildWeeklyPlan(summary, dailyLog, locale), [summary, dailyLog, locale]);
   const summaryRecommendation = localizeInsightTextForLocale(summary?.recommended_action, locale) || t('screen.tabs.coach.summaryFallback');

@@ -132,6 +132,32 @@ test.describe('Coach flows', () => {
 
       if (path === '/coaching/insights') return route.fulfill(jsonResponse([]));
       if (path === '/coaching/weekly-summary') return route.fulfill(jsonResponse(null));
+      if (path === '/reminders/effectiveness') {
+        return route.fulfill(jsonResponse({
+          days: 30,
+          sent: 8,
+          opened: 5,
+          acted: 2,
+          ignored: 3,
+          open_rate: 63,
+          action_rate: 25,
+          ignore_rate: 38,
+          effectiveness_score: 35,
+          best_meal: 'breakfast',
+          weakest_meal: 'dinner',
+          recommendation: 'Dinner reminders are often ignored. Try shifting the time.',
+          patterns: ['Reminder action rate is low at 25%'],
+          by_meal: {
+            breakfast: { sent: 2, opened: 2, acted: 1, ignored: 0, open_rate: 100, action_rate: 50, ignore_rate: 0 },
+            lunch: { sent: 2, opened: 1, acted: 1, ignored: 1, open_rate: 50, action_rate: 50, ignore_rate: 50 },
+            dinner: { sent: 3, opened: 1, acted: 0, ignored: 2, open_rate: 33, action_rate: 0, ignore_rate: 67 },
+            snack: { sent: 1, opened: 1, acted: 0, ignored: 0, open_rate: 100, action_rate: 0, ignore_rate: 0 },
+          },
+          by_action: {
+            food_log: { acted: 2, action_rate: 25 },
+          },
+        }));
+      }
       if (path === '/subscriptions/features') {
         return route.fulfill(jsonResponse({
           daily_insights: true,
@@ -161,6 +187,7 @@ test.describe('Coach flows', () => {
         path.startsWith('/log/')
         || path.startsWith('/user/')
         || path.startsWith('/coaching/')
+        || path.startsWith('/reminders/')
         || path.startsWith('/subscriptions/')
         || path.startsWith('/ai/')
       ) {
@@ -195,6 +222,10 @@ test.describe('Coach flows', () => {
           overall: 48,
           weakest_area: 'activity',
         }),
+      }),
+      reminder_effectiveness: expect.objectContaining({
+        effectiveness_score: 35,
+        weakest_meal: 'dinner',
       }),
     });
     await expectNoUnsafeRenderedText(page);
