@@ -4,6 +4,8 @@ import {
   CorrectionEvent,
   CorrectionEventDto,
   CorrectionStats,
+  ForecastSnapshot,
+  ForecastSnapshotDto,
   LoggingEvent,
   LoggingEventDto,
 } from '@calorie-ai/types';
@@ -29,6 +31,38 @@ export class TelemetryService {
 
     if (error) throw error;
     return data as LoggingEvent;
+  }
+
+  async createForecastSnapshot(userId: string, snapshot: ForecastSnapshotDto): Promise<ForecastSnapshot> {
+    if (!snapshot.local_date) {
+      throw new BadRequestException('local_date is required');
+    }
+
+    if (!snapshot.source) {
+      throw new BadRequestException('source is required');
+    }
+
+    const { data, error } = await this.supabase.db
+      .from('behavior_forecast_snapshots')
+      .upsert({
+        user_id: userId,
+        local_date: snapshot.local_date,
+        source: snapshot.source,
+        forecast_score: snapshot.forecast_score,
+        forecast_label: snapshot.forecast_label,
+        risk_level: snapshot.risk_level,
+        confidence: snapshot.confidence,
+        health_score_overall: snapshot.health_score_overall ?? null,
+        adherence_score: snapshot.adherence_score ?? null,
+        weakest_area: snapshot.weakest_area ?? null,
+        forecast: snapshot.forecast ?? {},
+        health_score: snapshot.health_score ?? {},
+      }, { onConflict: 'user_id,local_date,source' })
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data as ForecastSnapshot;
   }
 
   /**

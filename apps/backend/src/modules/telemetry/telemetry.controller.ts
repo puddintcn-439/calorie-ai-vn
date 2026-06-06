@@ -22,7 +22,7 @@ import {
 import { ApiProperty } from '@nestjs/swagger';
 import { TelemetryService } from './telemetry.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { CorrectionEventType, LoggingEventType, LoggingInputMode, ContextMode } from '@calorie-ai/types';
+import { CorrectionEventType, ForecastSnapshotDto, ForecastSnapshotSource, LoggingEventType, LoggingInputMode, ContextMode } from '@calorie-ai/types';
 
 class CreateCorrectionEventDto {
   @ApiProperty({ enum: ['item_mismatch', 'portion_adjusted', 'confidence_low', 'ai_result_corrected'] })
@@ -140,6 +140,63 @@ class CreateContextEventDto {
   timestamp?: string;
 }
 
+class CreateForecastSnapshotDto implements ForecastSnapshotDto {
+  @ApiProperty({ example: '2026-06-07' })
+  @IsString()
+  local_date: string;
+
+  @ApiProperty({ enum: ['today', 'coach'] })
+  @IsEnum(['today', 'coach'])
+  source: ForecastSnapshotSource;
+
+  @ApiProperty({ example: 78 })
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  forecast_score: number;
+
+  @ApiProperty({ example: 'on_track' })
+  @IsString()
+  forecast_label: string;
+
+  @ApiProperty({ example: 'medium' })
+  @IsString()
+  risk_level: string;
+
+  @ApiProperty({ example: 'high' })
+  @IsString()
+  confidence: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  health_score_overall?: number;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  adherence_score?: number;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsString()
+  weakest_area?: string;
+
+  @ApiProperty({ required: false, type: Object })
+  @IsOptional()
+  @IsObject()
+  forecast?: Record<string, unknown>;
+
+  @ApiProperty({ required: false, type: Object })
+  @IsOptional()
+  @IsObject()
+  health_score?: Record<string, unknown>;
+}
+
 @ApiTags('Telemetry')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
@@ -159,6 +216,13 @@ export class TelemetryController {
   @ApiOperation({ summary: 'Record logging funnel telemetry event (attempted/parsed/failed)' })
   async createLoggingEvent(@Request() req: any, @Body() dto: CreateLoggingEventDto) {
     return this.telemetry.createLoggingEvent(req.user.id ?? req.user.sub, dto);
+  }
+
+  @Post('forecast-snapshots')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Record Success Forecast snapshot for beta accuracy measurement' })
+  async createForecastSnapshot(@Request() req: any, @Body() dto: CreateForecastSnapshotDto) {
+    return this.telemetry.createForecastSnapshot(req.user.id ?? req.user.sub, dto);
   }
 
   @Post('context-events')

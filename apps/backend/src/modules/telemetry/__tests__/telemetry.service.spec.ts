@@ -43,6 +43,59 @@ describe('TelemetryService.createCorrectionEvent', () => {
   });
 });
 
+describe('TelemetryService.createForecastSnapshot', () => {
+  it('upserts and returns forecast snapshot', async () => {
+    const upsert = jest.fn().mockReturnThis();
+    const db = makeDb(() => ({
+      upsert,
+      select: jest.fn().mockReturnThis(),
+      single: jest.fn().mockResolvedValue({
+        data: {
+          id: 'snapshot-1',
+          user_id: 'u1',
+          local_date: '2026-06-07',
+          source: 'today',
+          forecast_score: 78,
+          forecast_label: 'on_track',
+          risk_level: 'medium',
+          confidence: 'high',
+        },
+        error: null,
+      }),
+    }));
+    const service = new TelemetryService({ db } as unknown as SupabaseService);
+
+    const result = await service.createForecastSnapshot('u1', {
+      local_date: '2026-06-07',
+      source: 'today',
+      forecast_score: 78,
+      forecast_label: 'on_track',
+      risk_level: 'medium',
+      confidence: 'high',
+      health_score_overall: 80,
+      adherence_score: 76,
+      weakest_area: 'activity',
+      forecast: { score: 78 },
+      health_score: { overall: 80 },
+    });
+
+    expect(result.id).toBe('snapshot-1');
+    expect(upsert).toHaveBeenCalledWith(expect.objectContaining({
+      user_id: 'u1',
+      local_date: '2026-06-07',
+      source: 'today',
+      forecast_score: 78,
+      health_score_overall: 80,
+    }), { onConflict: 'user_id,local_date,source' });
+  });
+
+  it('throws BadRequestException when local_date is missing', async () => {
+    const service = new TelemetryService({ db: makeDb() } as unknown as SupabaseService);
+    await expect(service.createForecastSnapshot('u1', { source: 'today' } as any))
+      .rejects.toThrow(BadRequestException);
+  });
+});
+
 describe('TelemetryService.getUserCorrectionEvents', () => {
   it('returns list of events', async () => {
     const events = [{ id: 'e1', event_type: 'portion_adjusted' }];

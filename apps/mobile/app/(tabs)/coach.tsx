@@ -26,6 +26,7 @@ import { appLogger } from '../../services/logger.service';
 import { buildSuccessForecast } from '../../services/success-forecast.service';
 import { buildDynamicIntervention } from '../../services/dynamic-intervention.service';
 import { fetchInterventionAnalytics } from '../../services/intervention-memory.service';
+import { telemetryService } from '../../services/telemetry.service';
 
 const coachHeroIllustration = require('../../assets/images/coach-hero.jpg') as number;
 
@@ -456,6 +457,7 @@ function deriveCoachActions(
 export default function CoachScreen() {
   useAppTheme();
   const coachScrollRef = useRef<ScrollView>(null);
+  const forecastSnapshotKeysRef = useRef<Set<string>>(new Set());
   const bottomContentPadding = useBottomNavContentPadding();
   const { locale, t } = useI18n();
   const { dailyLog, todaySummary, fetchDailyLog, fetchTodaySummary, addActivity, fetchActivityLogs } = useLogStore();
@@ -576,6 +578,28 @@ export default function CoachScreen() {
     reminderEffectiveness,
     locale,
   }), [locale, reminderEffectiveness, todaySummary?.health_score]);
+
+  useEffect(() => {
+    if (!successForecast || !todaySummary?.health_score || !todaySummary?.date) return;
+    const key = `${todaySummary.date}:coach:${successForecast.score}:${successForecast.risk_level}`;
+    if (forecastSnapshotKeysRef.current.has(key)) return;
+    forecastSnapshotKeysRef.current.add(key);
+
+    void telemetryService.emitForecastSnapshot({
+      local_date: todaySummary.date,
+      source: 'coach',
+      forecast_score: successForecast.score,
+      forecast_label: successForecast.label,
+      risk_level: successForecast.risk_level,
+      confidence: successForecast.confidence,
+      health_score_overall: todaySummary.health_score.overall,
+      adherence_score: todaySummary.health_score.weekly_adherence.overall,
+      weakest_area: todaySummary.health_score.weekly_adherence.weakest_area,
+      forecast: successForecast as unknown as Record<string, unknown>,
+      health_score: todaySummary.health_score as unknown as Record<string, unknown>,
+    });
+  }, [successForecast, todaySummary?.date, todaySummary?.health_score]);
+
   const dynamicIntervention = useMemo(() => buildDynamicIntervention({
     successForecast,
     behaviorMemory,

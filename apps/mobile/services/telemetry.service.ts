@@ -1,5 +1,5 @@
 import { apiClient } from './api';
-import { CorrectionEventDto, LoggingEventDto, LoggingInputMode, ContextMode } from '@calorie-ai/types';
+import { CorrectionEventDto, ForecastSnapshotDto, LoggingEventDto, LoggingInputMode, ContextMode } from '@calorie-ai/types';
 import { appLogger } from './logger.service';
 
 class TelemetryService {
@@ -8,6 +8,14 @@ class TelemetryService {
       await apiClient.post('/telemetry/logging-events', event);
     } catch (error) {
       appLogger.warn('Telemetry', 'Failed to emit logging event', error);
+    }
+  }
+
+  async emitForecastSnapshot(snapshot: ForecastSnapshotDto): Promise<void> {
+    try {
+      await apiClient.post('/telemetry/forecast-snapshots', snapshot);
+    } catch (error) {
+      appLogger.warn('Telemetry', 'Failed to emit forecast snapshot', error);
     }
   }
 

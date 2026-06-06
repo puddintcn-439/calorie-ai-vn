@@ -231,6 +231,10 @@ test.describe('Coach flows', () => {
         }));
       }
 
+      if (path === '/telemetry/forecast-snapshots') {
+        return route.fulfill(jsonResponse({ recorded: true }));
+      }
+
       if (path === '/ai/coach') {
         coachRequestBody = request.postDataJSON();
         return route.fulfill(jsonResponse({
@@ -248,6 +252,7 @@ test.describe('Coach flows', () => {
         || path.startsWith('/reminders/')
         || path.startsWith('/subscriptions/')
         || path.startsWith('/ai/')
+        || path.startsWith('/telemetry/')
       ) {
         return route.fulfill(jsonResponse({}));
       }

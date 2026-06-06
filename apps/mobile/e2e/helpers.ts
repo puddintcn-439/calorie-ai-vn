@@ -521,7 +521,7 @@ export async function mockNinetyDayJourneyApi(page: Page) {
     const request = route.request();
     const url = new URL(request.url());
     const path = url.pathname;
-    const isApiPath = /^\/(user|log|today|activity-preferences|gamification|body-progress|insights|coaching|calorie-target|roadmap|subscriptions|reminders)(\/|$)/.test(path);
+    const isApiPath = /^\/(user|log|today|activity-preferences|gamification|body-progress|insights|coaching|calorie-target|roadmap|subscriptions|reminders|telemetry)(\/|$)/.test(path);
 
     if (request.resourceType() === 'document' && url.port !== '3000') {
       return route.continue();
@@ -546,6 +546,7 @@ export async function mockNinetyDayJourneyApi(page: Page) {
     if (path === '/coaching/interventions/analytics') return route.fulfill(jsonResponse(mock.interventionAnalytics));
     if (path === '/coaching/interventions/memory') return route.fulfill(jsonResponse(mock.interventionMemory));
     if (path === '/coaching/interventions/events') return route.fulfill(jsonResponse({ recorded: true }));
+    if (path === '/telemetry/forecast-snapshots') return route.fulfill(jsonResponse({ recorded: true }));
     if (path === '/calorie-target/me') {
       return route.fulfill(jsonResponse({
         daily_calorie_target: 1850,

@@ -74,3 +74,37 @@ export interface LoggingEventDto {
   reason_code?: string;
   metadata?: Record<string, unknown>;
 }
+
+export type ForecastSnapshotSource = 'today' | 'coach';
+
+export interface ForecastSnapshot {
+  id?: string;
+  user_id: string;
+  local_date: string;
+  source: ForecastSnapshotSource;
+  forecast_score: number;
+  forecast_label: string;
+  risk_level: string;
+  confidence: string;
+  health_score_overall?: number;
+  adherence_score?: number;
+  weakest_area?: string;
+  forecast?: Record<string, unknown>;
+  health_score?: Record<string, unknown>;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface ForecastSnapshotDto {
+  local_date: string;
+  source: ForecastSnapshotSource;
+  forecast_score: number;
+  forecast_label: string;
+  risk_level: string;
+  confidence: string;
+  health_score_overall?: number;
+  adherence_score?: number;
+  weakest_area?: string;
+  forecast?: Record<string, unknown>;
+  health_score?: Record<string, unknown>;
+}

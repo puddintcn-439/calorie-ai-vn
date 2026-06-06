@@ -44,6 +44,7 @@ import { Locale, tr, useI18n } from '../../components/i18n';
 import { buildSuccessForecast } from '../../services/success-forecast.service';
 import { buildDynamicIntervention } from '../../services/dynamic-intervention.service';
 import { buildInterventionEvent, recordInterventionEvent } from '../../services/intervention-memory.service';
+import { telemetryService } from '../../services/telemetry.service';
 
 const mealIllustration = require('../../assets/images/vietnamese-meal.jpg') as number;
 const todayHeroIllustration = require('../../assets/images/today-hero.jpg') as number;
@@ -746,6 +747,7 @@ function buildMovementPlan(
 export default function DashboardScreen() {
   useAppTheme();
   const shownInterventionKeysRef = useRef<Set<string>>(new Set());
+  const forecastSnapshotKeysRef = useRef<Set<string>>(new Set());
   const { locale, t } = useI18n();
   const { width } = useWindowDimensions();
   const isCompact = width < 480;
@@ -1017,6 +1019,28 @@ export default function DashboardScreen() {
     reminderEffectiveness,
     locale,
   }), [healthScore, locale, reminderEffectiveness]);
+
+  useEffect(() => {
+    if (!successForecast || !healthScore || !todaySummary?.date) return;
+    const key = `${todaySummary.date}:today:${successForecast.score}:${successForecast.risk_level}`;
+    if (forecastSnapshotKeysRef.current.has(key)) return;
+    forecastSnapshotKeysRef.current.add(key);
+
+    void telemetryService.emitForecastSnapshot({
+      local_date: todaySummary.date,
+      source: 'today',
+      forecast_score: successForecast.score,
+      forecast_label: successForecast.label,
+      risk_level: successForecast.risk_level,
+      confidence: successForecast.confidence,
+      health_score_overall: healthScore.overall,
+      adherence_score: healthScore.weekly_adherence.overall,
+      weakest_area: healthScore.weekly_adherence.weakest_area,
+      forecast: successForecast as unknown as Record<string, unknown>,
+      health_score: healthScore as unknown as Record<string, unknown>,
+    });
+  }, [healthScore, successForecast, todaySummary?.date]);
+
   const successForecastToneValue = successForecast ? successForecastTone(successForecast) : 'info';
   const dynamicIntervention = useMemo(() => buildDynamicIntervention({
     successForecast,
