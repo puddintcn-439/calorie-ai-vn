@@ -417,6 +417,25 @@ describe('AiService.getCoachReply', () => {
           food_log: { acted: 2, action_rate: 20 },
         },
       },
+      success_forecast: {
+        score: 44,
+        label: 'at_risk',
+        risk_level: 'high',
+        confidence: 'high',
+        drivers: {
+          adherence: 61,
+          trend: 25,
+          reminder_response: 33,
+          pattern_risk: 42,
+        },
+        reasons: ['activity_gap', 'declining_health_score', 'low_reminder_action'],
+        patterns: ['Activity was missing 4/7 days', 'Reminder action rate is low at 20%'],
+        recovery_plan: {
+          title: 'Recovery plan for this week',
+          steps: ['Add a 15-minute light walk to lift activity back up.', 'Shift the weakest reminder by 30-60 minutes.'],
+          primary_action: 'move',
+        },
+      },
     });
 
     expect(prompt).toContain('Health Score today');
@@ -425,6 +444,9 @@ describe('AiService.getCoachReply', () => {
     expect(prompt).toContain('Activity was missing 4/7 days');
     expect(prompt).toContain('Reminder effectiveness (30 days)');
     expect(prompt).toContain('Action rate: 20%');
+    expect(prompt).toContain('Success Forecast');
+    expect(prompt).toContain("Chance of completing this week's goal: 44%");
+    expect(prompt).toContain('Primary recovery action: move');
     expect(prompt).toContain('Next best action: log_meal');
     expect(result.actions).toEqual(expect.arrayContaining([
       expect.objectContaining({ type: 'open_scan' }),

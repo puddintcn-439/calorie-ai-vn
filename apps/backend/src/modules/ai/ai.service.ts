@@ -9,7 +9,7 @@ import {
   AICoachResponse,
   AIUnresolvedItem,
 } from '@calorie-ai/types';
-import type { ReminderEffectivenessSummary, TodaySummary } from '@calorie-ai/types';
+import type { ReminderEffectivenessSummary, SuccessForecast, TodaySummary } from '@calorie-ai/types';
 import { createHash, randomUUID } from 'crypto';
 import { MetricsService } from '../../common/metrics/metrics.service';
 import { AiQueueService } from './ai.queue.service';
@@ -27,6 +27,7 @@ type CoachContext = {
   target_calories: number;
   health_score?: TodaySummary['health_score'];
   reminder_effectiveness?: ReminderEffectivenessSummary;
+  success_forecast?: SuccessForecast;
 };
 
 @Injectable()
@@ -636,6 +637,7 @@ Thông tin người dùng hôm nay:
 - Còn lại: ${context.target_calories - context.today_calories} kcal
 ${this.formatCoachHealthScoreContext(context)}
 ${this.formatCoachReminderEffectivenessContext(context)}
+${this.formatCoachSuccessForecastContext(context)}
 
 Người dùng hỏi: "${message}"
 
@@ -790,6 +792,28 @@ Reminder effectiveness (${effectiveness.days} days):
 - Recommendation: ${effectiveness.recommendation}
 
 Use reminder effectiveness only for habit/timing advice. If ignore rate is high, suggest changing reminder time or style. If open rate is high but action rate is low, suggest a smaller one-tap next action.`;
+  }
+
+  private formatCoachSuccessForecastContext(context: CoachContext): string {
+    const forecast = context.success_forecast;
+    if (!forecast) {
+      return '';
+    }
+
+    return `
+
+Success Forecast:
+- Chance of completing this week's goal: ${forecast.score}%
+- Risk level: ${forecast.risk_level}
+- Confidence: ${forecast.confidence}
+- Drivers: adherence ${forecast.drivers.adherence}, trend ${forecast.drivers.trend}, reminder response ${forecast.drivers.reminder_response}, pattern risk ${forecast.drivers.pattern_risk}
+- Reasons: ${forecast.reasons.length > 0 ? forecast.reasons.join(', ') : 'none'}
+- Patterns: ${forecast.patterns.length > 0 ? forecast.patterns.join('; ') : 'none'}
+- Recovery plan: ${forecast.recovery_plan.title}
+- Recovery steps: ${forecast.recovery_plan.steps.join('; ')}
+- Primary recovery action: ${forecast.recovery_plan.primary_action}
+
+If Success Forecast risk is high, prioritize a short recovery plan over stricter targets. Mention the chance of success in user-friendly language, then give one tiny action the user can do now.`;
   }
 
   private recordAiScanResponse(response: AIScanResponse, startedAt: number): AIScanResponse {

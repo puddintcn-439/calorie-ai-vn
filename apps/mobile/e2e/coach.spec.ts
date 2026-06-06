@@ -200,7 +200,7 @@ test.describe('Coach flows', () => {
     await gotoApp(page, '/coach');
 
     const input = page.getByPlaceholder(/400 kcal left/i);
-    await input.scrollIntoViewIfNeeded();
+    await input.evaluate((element) => element.scrollIntoView({ block: 'center' }));
     await expect(input).toBeVisible({ timeout: 15000 });
 
     await input.fill('I have 400 kcal left. What should I eat tonight?');
@@ -226,6 +226,12 @@ test.describe('Coach flows', () => {
       reminder_effectiveness: expect.objectContaining({
         effectiveness_score: 35,
         weakest_meal: 'dinner',
+      }),
+      success_forecast: expect.objectContaining({
+        risk_level: 'high',
+        recovery_plan: expect.objectContaining({
+          primary_action: 'adjust_reminders',
+        }),
       }),
     });
     await expectNoUnsafeRenderedText(page);

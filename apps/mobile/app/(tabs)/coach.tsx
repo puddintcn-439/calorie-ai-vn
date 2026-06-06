@@ -23,6 +23,7 @@ import { Text } from '../../components/i18n-text';
 import { Locale, tr, translateText, useI18n } from '../../components/i18n';
 import { formatPercent, safeRound, toFiniteNumber } from '../../services/number-format';
 import { appLogger } from '../../services/logger.service';
+import { buildSuccessForecast } from '../../services/success-forecast.service';
 
 const coachHeroIllustration = require('../../assets/images/coach-hero.jpg') as number;
 
@@ -542,6 +543,12 @@ export default function CoachScreen() {
     }
   };
 
+  const successForecast = useMemo(() => buildSuccessForecast({
+    healthScore: todaySummary?.health_score,
+    reminderEffectiveness,
+    locale,
+  }), [locale, reminderEffectiveness, todaySummary?.health_score]);
+
   const context = useMemo(() => {
     const consumed = dailyLog?.total_calories ?? 0;
     const target = dailyLog?.target_calories ?? 1800;
@@ -550,8 +557,9 @@ export default function CoachScreen() {
       target_calories: target,
       health_score: todaySummary?.health_score,
       reminder_effectiveness: reminderEffectiveness ?? undefined,
+      success_forecast: successForecast ?? undefined,
     };
-  }, [dailyLog, reminderEffectiveness, todaySummary?.health_score]);
+  }, [dailyLog, reminderEffectiveness, successForecast, todaySummary?.health_score]);
   const activePlan = useMemo(() => buildActivePlan(dailyLog, locale), [dailyLog, locale]);
   const weeklyPlan = useMemo(() => buildWeeklyPlan(summary, dailyLog, locale), [summary, dailyLog, locale]);
   const summaryRecommendation = localizeInsightTextForLocale(summary?.recommended_action, locale) || t('screen.tabs.coach.summaryFallback');

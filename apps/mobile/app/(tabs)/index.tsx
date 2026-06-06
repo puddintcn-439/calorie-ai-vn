@@ -18,6 +18,8 @@ import {
   FoodLog,
   GoalPlan,
   MealType,
+  ReminderEffectivenessSummary,
+  SuccessForecast,
   User,
   UserGoal,
 } from '@calorie-ai/types';
@@ -37,6 +39,7 @@ import { RewardToast, RewardToastData } from '../../components/reward-toast';
 import { Text } from '../../components/i18n-text';
 import { Alert } from '../../components/i18n-alert';
 import { Locale, tr, useI18n } from '../../components/i18n';
+import { buildSuccessForecast } from '../../services/success-forecast.service';
 
 const mealIllustration = require('../../assets/images/vietnamese-meal.jpg') as number;
 const todayHeroIllustration = require('../../assets/images/today-hero.jpg') as number;
@@ -76,6 +79,20 @@ type TodayCoachBridge = {
   status: string;
   tone: 'good' | 'warn' | 'info';
 };
+
+function successForecastTone(forecast: SuccessForecast) {
+  if (forecast.risk_level === 'high') return 'warn';
+  if (forecast.risk_level === 'medium') return 'info';
+  return 'good';
+}
+
+function successForecastActionLabel(action: SuccessForecast['recovery_plan']['primary_action'], locale: Locale) {
+  if (action === 'adjust_reminders') return tr('screen.tabs.index.success.action.reminders', locale);
+  if (action === 'move') return tr('screen.tabs.index.success.action.move', locale);
+  if (action === 'complete_plan') return tr('screen.tabs.index.success.action.plan', locale);
+  if (action === 'maintain') return tr('screen.tabs.index.success.action.maintain', locale);
+  return tr('screen.tabs.index.success.action.log', locale);
+}
 
 function formatNumber(value: unknown, fallback = '0') {
   return formatNumberVi(value, fallback);
@@ -743,6 +760,7 @@ export default function DashboardScreen() {
   const [isLoggingMovement, setIsLoggingMovement] = useState(false);
   const [updatingRoadmapId, setUpdatingRoadmapId] = useState<string | null>(null);
   const [reward, setReward] = useState<RewardToastData | null>(null);
+  const [reminderEffectiveness, setReminderEffectiveness] = useState<ReminderEffectivenessSummary | null>(null);
 
   const fetchProfileMeta = useCallback(async () => {
     const res = await apiClient.get<User>('/user/profile');
@@ -759,12 +777,18 @@ export default function DashboardScreen() {
     });
   }, []);
 
+  const fetchReminderEffectiveness = useCallback(async () => {
+    const res = await apiClient.get<ReminderEffectivenessSummary>('/reminders/effectiveness?days=30');
+    setReminderEffectiveness(res.data);
+  }, []);
+
   const refreshDashboardData = useCallback(() => {
     if (authLoading || !token) return;
     fetchTodaySummary().catch(() => {});
     fetchSummary().catch(() => {});
     fetchProfileMeta().catch(() => {});
-  }, [authLoading, fetchProfileMeta, fetchSummary, fetchTodaySummary, token]);
+    fetchReminderEffectiveness().catch(() => setReminderEffectiveness(null));
+  }, [authLoading, fetchProfileMeta, fetchReminderEffectiveness, fetchSummary, fetchTodaySummary, token]);
 
   useEffect(() => {
     refreshDashboardData();
@@ -970,6 +994,12 @@ export default function DashboardScreen() {
         { key: 'weekly', label: t('screen.tabs.index.health.weekly'), value: healthScore.weekly_adherence.overall },
       ]
     : [];
+  const successForecast = useMemo(() => buildSuccessForecast({
+    healthScore,
+    reminderEffectiveness,
+    locale,
+  }), [healthScore, locale, reminderEffectiveness]);
+  const successForecastToneValue = successForecast ? successForecastTone(successForecast) : 'info';
 
   async function toggleRoadmapItem(item: DailyRoadmapItem) {
     setUpdatingRoadmapId(item.id);
@@ -1282,6 +1312,66 @@ export default function DashboardScreen() {
           >
             <Text style={styles.healthScoreActionText}>
               {t(`screen.tabs.index.health.action.${healthScore.next_action}` as any)}
+            </Text>
+            <Ionicons name="chevron-forward" size={15} color={theme.colors.textOnAccent} />
+          </TouchableOpacity>
+        </SurfaceCard>
+      ) : null}
+
+      {successForecast ? (
+        <SurfaceCard style={[
+          styles.successForecastCard,
+          successForecastToneValue === 'good' && styles.successForecastCardGood,
+          successForecastToneValue === 'warn' && styles.successForecastCardWarn,
+        ]}>
+          <View style={styles.successForecastHeader}>
+            <View style={styles.successForecastCopy}>
+              <Text style={styles.successForecastEyebrow}>{t('screen.tabs.index.success.eyebrow')}</Text>
+              <Text style={styles.successForecastTitle}>{t(`screen.tabs.index.success.label.${successForecast.label}` as any)}</Text>
+              <Text style={styles.successForecastBody}>{successForecast.recovery_plan.title}</Text>
+            </View>
+            <View style={styles.successForecastBadge}>
+              <Text style={[
+                styles.successForecastValue,
+                successForecastToneValue === 'warn' && styles.successForecastValueWarn,
+              ]}>
+                {formatNumber(successForecast.score)}
+              </Text>
+              <Text style={styles.successForecastUnit}>%</Text>
+            </View>
+          </View>
+          <View style={styles.successForecastDriverGrid}>
+            {Object.entries(successForecast.drivers).map(([key, value]) => (
+              <View key={key} style={styles.successForecastDriver}>
+                <Text style={styles.successForecastDriverLabel}>
+                  {t(`screen.tabs.index.success.driver.${key}` as any)}
+                </Text>
+                <Text style={styles.successForecastDriverValue}>{formatNumber(value)}</Text>
+              </View>
+            ))}
+          </View>
+          <View style={styles.successForecastSteps}>
+            {successForecast.recovery_plan.steps.map((step) => (
+              <View key={step} style={styles.successForecastStep}>
+                <Ionicons name="checkmark-circle" size={14} color={theme.colors.accentMint} />
+                <Text style={styles.successForecastStepText}>{step}</Text>
+              </View>
+            ))}
+          </View>
+          <TouchableOpacity
+            style={[
+              styles.successForecastAction,
+              successForecastToneValue === 'warn' && styles.successForecastActionWarn,
+            ]}
+            onPress={() => {
+              if (successForecast.recovery_plan.primary_action === 'adjust_reminders') router.push('/profile' as never);
+              else if (successForecast.recovery_plan.primary_action === 'log_meal') router.push('/scan' as never);
+              else if (successForecast.recovery_plan.primary_action === 'move' || successForecast.recovery_plan.primary_action === 'complete_plan') router.push('/log' as never);
+              else router.push('/coach' as never);
+            }}
+          >
+            <Text style={styles.successForecastActionText}>
+              {successForecastActionLabel(successForecast.recovery_plan.primary_action, locale)}
             </Text>
             <Ionicons name="chevron-forward" size={15} color={theme.colors.textOnAccent} />
           </TouchableOpacity>
@@ -2088,6 +2178,136 @@ const styles = createThemedStyles((colors, radii) => ({
     gap: 6,
   },
   healthScoreActionText: {
+    color: colors.textOnAccent,
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  successForecastCard: {
+    marginBottom: 16,
+    borderColor: colors.borderInfo,
+    backgroundColor: colors.surfaceInfo,
+    gap: 12,
+  },
+  successForecastCardGood: {
+    borderColor: colors.borderSuccess,
+    backgroundColor: colors.surfaceSuccess,
+  },
+  successForecastCardWarn: {
+    borderColor: colors.borderWarning,
+    backgroundColor: colors.surfaceWarning,
+  },
+  successForecastHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 14,
+  },
+  successForecastCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  successForecastEyebrow: {
+    color: colors.textMuted,
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+    marginBottom: 4,
+  },
+  successForecastTitle: {
+    color: colors.text,
+    fontSize: 17,
+    lineHeight: 22,
+    fontWeight: '900',
+  },
+  successForecastBody: {
+    color: colors.textSoft,
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: 4,
+  },
+  successForecastBadge: {
+    minWidth: 76,
+    borderRadius: radii.lg,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    alignItems: 'center',
+  },
+  successForecastValue: {
+    color: colors.accentMint,
+    fontSize: 28,
+    lineHeight: 32,
+    fontWeight: '900',
+  },
+  successForecastValueWarn: {
+    color: colors.accentAmber,
+  },
+  successForecastUnit: {
+    color: colors.textMuted,
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  successForecastDriverGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  successForecastDriver: {
+    flexGrow: 1,
+    flexBasis: '22%',
+    minWidth: 92,
+    borderRadius: radii.sm,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    paddingHorizontal: 9,
+    paddingVertical: 8,
+  },
+  successForecastDriverLabel: {
+    color: colors.textMuted,
+    fontSize: 10,
+    lineHeight: 14,
+    fontWeight: '800',
+  },
+  successForecastDriverValue: {
+    color: colors.text,
+    fontSize: 14,
+    lineHeight: 18,
+    fontWeight: '900',
+    marginTop: 2,
+  },
+  successForecastSteps: {
+    gap: 7,
+  },
+  successForecastStep: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 7,
+  },
+  successForecastStepText: {
+    flex: 1,
+    minWidth: 0,
+    color: colors.textSoft,
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: '700',
+  },
+  successForecastAction: {
+    minHeight: 44,
+    borderRadius: radii.lg,
+    backgroundColor: colors.accentMint,
+    paddingHorizontal: 13,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  successForecastActionWarn: {
+    backgroundColor: colors.accentAmber,
+  },
+  successForecastActionText: {
     color: colors.textOnAccent,
     fontSize: 13,
     fontWeight: '900',
