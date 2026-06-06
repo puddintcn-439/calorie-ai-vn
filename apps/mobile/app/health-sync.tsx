@@ -220,7 +220,13 @@ export default function HealthSyncScreen() {
         <SurfaceCard style={styles.premiumGateCard}>
           <Text style={styles.premiumGateTitle} i18nKey="screen.premiumGate.title" />
           <Text style={styles.premiumGateBody} i18nKey="screen.premiumGate.healthBody" />
-          <TouchableOpacity style={styles.premiumGateButton} onPress={openHealthSyncPaywall}>
+          <TouchableOpacity
+            style={styles.premiumGateButton}
+            onPress={openHealthSyncPaywall}
+            accessibilityRole="button"
+            accessibilityLabel={t('screen.premiumGate.cta')}
+            testID="health-sync-upgrade-button"
+          >
             <Text style={styles.premiumGateButtonText} i18nKey="screen.premiumGate.cta" />
           </TouchableOpacity>
         </SurfaceCard>

@@ -787,7 +787,7 @@ export default function ScanScreen() {
   return (
     <View style={styles.screenRoot}>
       <ScreenShell
-        scrollContentStyle={showStickyResultActions ? { paddingBottom: bottomNavPadding + 122 } : undefined}
+        scrollContentStyle={showStickyResultActions ? { paddingBottom: bottomNavPadding + 240 } : undefined}
       >
         <VisualHeroCard
           imageSource={scanHeroIllustration}

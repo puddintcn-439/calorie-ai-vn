@@ -431,3 +431,21 @@ export async function expectBottomNavDoesNotCoverInteractiveContent(page: Page) 
 
   expect(offenders).toEqual([]);
 }
+
+export async function expectElementAboveBottomNav(page: Page, testId: string) {
+  const layout = await page.evaluate((targetTestId) => {
+    const target = document.querySelector(`[data-testid="${targetTestId}"]`);
+    const tablist = document.querySelector('[role="tablist"]');
+    const targetRect = target?.getBoundingClientRect();
+    const tabRect = tablist?.getBoundingClientRect();
+    return {
+      targetFound: Boolean(targetRect),
+      targetBottom: targetRect ? Math.round(targetRect.bottom) : null,
+      protectedTop: tabRect ? Math.round(tabRect.top) : Math.round(window.innerHeight - 86),
+    };
+  }, testId);
+
+  expect(layout.targetFound).toBe(true);
+  expect(layout.targetBottom).not.toBeNull();
+  expect(layout.targetBottom as number).toBeLessThanOrEqual((layout.protectedTop as number) - 6);
+}

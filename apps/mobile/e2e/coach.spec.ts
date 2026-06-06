@@ -65,6 +65,9 @@ test.describe('Coach flows', () => {
         coachRequestBody = request.postDataJSON();
         return route.fulfill(jsonResponse({
           message: 'Use a protein-forward dinner around 450 kcal and keep drinks unsweetened.',
+          actions: [
+            { type: 'open_scan', label: 'Scan meal' },
+          ],
         }));
       }
 
@@ -88,10 +91,13 @@ test.describe('Coach flows', () => {
     await expect(input).toBeVisible({ timeout: 15000 });
 
     await input.fill('I have 400 kcal left. What should I eat tonight?');
-    await page.getByText('Send to Coach').click();
+    await page.getByRole('button', { name: 'Send to Coach' }).click();
 
     await expect(page.getByText('I have 400 kcal left. What should I eat tonight?')).toBeVisible();
     await expect(page.getByText(/protein-forward dinner around 450 kcal/i)).toBeVisible({ timeout: 15000 });
+    await expect(page.getByTestId('coach-action-open_scan')).toBeVisible();
+    await page.getByTestId('coach-action-open_scan').click();
+    await expect(page).toHaveURL(/\/scan$/);
     expect(coachRequestBody).toMatchObject({
       message: 'I have 400 kcal left. What should I eat tonight?',
       today_calories: 0,

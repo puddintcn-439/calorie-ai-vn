@@ -894,6 +894,9 @@ export default function CoachScreen() {
                       key={`${msg.id}-${action.type}-${index}`}
                       style={styles.coachActionChip}
                       onPress={() => void handleCoachAction(action)}
+                      accessibilityRole="button"
+                      accessibilityLabel={action.label}
+                      testID={`coach-action-${action.type}`}
                     >
                       <Text style={styles.coachActionChipText}>{action.label}</Text>
                     </TouchableOpacity>

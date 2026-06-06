@@ -187,6 +187,10 @@ export default function PaywallScreen() {
                 ]}
                 onPress={() => void handleChangeTier(tier)}
                 disabled={isCurrentTier}
+                accessibilityRole="button"
+                accessibilityLabel={`${tierInfo.name} ${isCurrentTier ? t('screen.paywall.action.current') : tier === 'free' ? t('screen.paywall.action.free') : t('screen.paywall.action.apply')}`}
+                accessibilityState={{ disabled: isCurrentTier }}
+                testID={`paywall-tier-${tier}-button`}
               >
                 <Text
                   style={[
@@ -232,7 +236,12 @@ export default function PaywallScreen() {
 
       {/* Footer */}
       <View style={styles.footer}>
-        <TouchableOpacity onPress={() => router.back()}>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          accessibilityRole="button"
+          accessibilityLabel={t('screen.paywall.text.012')}
+          testID="paywall-back-button"
+        >
           <Text style={styles.footerLink} i18nKey="screen.paywall.text.012" />
         </TouchableOpacity>
       </View>

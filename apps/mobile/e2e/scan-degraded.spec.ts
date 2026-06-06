@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import {
   collectImportantConsoleMessages,
+  expectElementAboveBottomNav,
   expectNoUnsafeRenderedText,
   gotoApp,
   jsonResponse,
@@ -177,7 +178,8 @@ test.describe('Scan degraded AI states', () => {
     await page.getByTestId('scan-retry-button').click();
 
     await expect(page.getByTestId('scan-notice-body')).toHaveCount(0, { timeout: 15000 });
-    await expect(page.getByText('Log meal')).toBeVisible({ timeout: 15000 });
+    await expect(page.getByTestId('scan-log-meal-button')).toBeVisible({ timeout: 15000 });
+    await expectElementAboveBottomNav(page, 'scan-log-meal-button');
     await expectNoUnsafeRenderedText(page);
     expect(scanAttempts).toBe(2);
     expect(consoleMessages).toEqual([]);
