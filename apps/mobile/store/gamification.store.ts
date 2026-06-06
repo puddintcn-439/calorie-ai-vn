@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { GamificationSummary } from '@calorie-ai/types';
 import { apiClient } from '../services/api';
+import { authStorage } from '../services/auth-storage';
 import { getLocalTimezoneOffsetMinutes } from '../services/date';
 import { safeNumber } from '../services/number-format';
 
@@ -14,6 +15,10 @@ function normalizeSummary(summary: Partial<GamificationSummary> | null | undefin
     next_streak_milestone: summary?.next_streak_milestone == null ? null : safeNumber(summary.next_streak_milestone),
     badges: Array.isArray(summary?.badges) ? summary.badges : [],
   };
+}
+
+async function hasAuthToken(): Promise<boolean> {
+  return Boolean(await authStorage.getItemAsync('auth_token'));
 }
 
 interface GamificationState {
@@ -30,6 +35,10 @@ export const useGamificationStore = create<GamificationState>((set) => ({
   error: null,
 
   fetchSummary: async () => {
+    if (!(await hasAuthToken())) {
+      set({ isLoading: false, error: null });
+      return;
+    }
     set({ isLoading: true, error: null });
     try {
       const tzOffset = getLocalTimezoneOffsetMinutes();

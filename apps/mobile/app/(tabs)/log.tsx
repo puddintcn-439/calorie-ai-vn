@@ -9,6 +9,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import { useLogStore } from '../../store/log.store';
+import { useAuthStore } from '../../store/auth.store';
 import { FoodLog, MealType, SavedMeal, ActivityLog, ActivityType, ACTIVITY_LABELS, User, ActivityLevel, UserGoal, HealthFlag } from '@calorie-ai/types';
 import { ScreenShell, SkeletonBlock, SurfaceCard } from '../../components/ui-shell';
 import { EmptyState } from '../../components/empty-state';
@@ -189,6 +190,7 @@ function buildExerciseRoadmap(
 export default function LogScreen() {
   useAppTheme();
   const { t, tx } = useI18n();
+  const { token, isLoading: authLoading } = useAuthStore();
   const { dailyLog, savedMeals, activityLogs, activityPreferences, isLoading, fetchDailyLog, fetchSavedMeals, fetchActivityLogs, fetchActivityPreferences, updateLog, removeLog, restoreLog, logSavedMeal, updateSavedMeal, deleteSavedMeal, addActivity, deleteActivity } = useLogStore();
   const [perMealTargets, setPerMealTargets] = useState<Record<MealType, number>>({
     breakfast: 400, lunch: 600, dinner: 600, snack: 200,
@@ -212,6 +214,7 @@ export default function LogScreen() {
   const [reward, setReward] = useState<RewardToastData | null>(null);
 
   const loadLogData = useCallback(() => {
+    if (authLoading || !token) return;
     fetchDailyLog().catch(() => {});
     fetchSavedMeals().catch(() => {});
     fetchActivityLogs().catch(() => {});
@@ -226,7 +229,7 @@ export default function LogScreen() {
         snack: u.target_snack_cal ?? 200,
       });
     }).catch(() => {});
-  }, [fetchActivityLogs, fetchActivityPreferences, fetchDailyLog, fetchSavedMeals]);
+  }, [authLoading, fetchActivityLogs, fetchActivityPreferences, fetchDailyLog, fetchSavedMeals, token]);
 
   useEffect(() => {
     loadLogData();

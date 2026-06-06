@@ -26,7 +26,7 @@ import { formatKcal, formatMacro, formatPercent, roundTo, safeNumber, safePositi
 const IMAGE_MEDIA_TYPES = ['images'] as any;
 import { telemetryService } from '../../services/telemetry.service';
 import { router } from 'expo-router';
-import { ScreenShell, SkeletonBlock, SurfaceCard } from '../../components/ui-shell';
+import { ScreenShell, SkeletonBlock, SurfaceCard, useBottomNavContentPadding } from '../../components/ui-shell';
 import { EmptyState } from '../../components/empty-state';
 import { createThemedStyles, theme, useAppTheme } from '../../components/theme';
 import { AnimatedIonicon } from '../../components/animated-icon';
@@ -173,6 +173,8 @@ export default function ScanScreen() {
   const totalProtein = currentItems.reduce((s, i) => s + safeNumber(i.protein_g), 0);
   const totalCarbs = currentItems.reduce((s, i) => s + safeNumber(i.carbs_g), 0);
   const totalFat = currentItems.reduce((s, i) => s + safeNumber(i.fat_g), 0);
+  const bottomNavPadding = useBottomNavContentPadding(12);
+  const showStickyResultActions = Boolean(scanResult && !isScanning && currentItems.length);
 
   useEffect(() => {
     if (!isAiScanning) {
@@ -783,7 +785,10 @@ export default function ScanScreen() {
   // ─────────────────────── Render ───────────────────────
 
   return (
-    <ScreenShell>
+    <View style={styles.screenRoot}>
+      <ScreenShell
+        scrollContentStyle={showStickyResultActions ? { paddingBottom: bottomNavPadding + 122 } : undefined}
+      >
         <VisualHeroCard
           imageSource={scanHeroIllustration}
           eyebrow="screen.tabs.scan.eyebrow.001"
@@ -796,6 +801,9 @@ export default function ScanScreen() {
           {PRIMARY_INPUT_MODES.map((m) => (
             <TouchableOpacity key={m} style={[styles.modeTab, mode === m && styles.modeTabActive]}
               testID={`scan-mode-${m}`}
+              accessibilityRole="button"
+              accessibilityLabel={t(MODE_LABEL_KEYS[m])}
+              accessibilityState={{ selected: mode === m }}
               onPress={() => selectInputMode(m)}>
               <AnimatedIonicon
                 name={MODE_ICONS[m]}
@@ -810,6 +818,9 @@ export default function ScanScreen() {
           <TouchableOpacity
             style={[styles.modeTab, styles.modeMoreTab, (showMoreModes || SECONDARY_INPUT_MODES.includes(mode)) && styles.modeTabActive]}
             testID="scan-mode-more"
+            accessibilityRole="button"
+            accessibilityLabel={t('screen.tabs.scan.text.001')}
+            accessibilityState={{ expanded: showMoreModes }}
             onPress={() => setShowMoreModes((value) => !value)}
           >
             <AnimatedIonicon
@@ -825,7 +836,15 @@ export default function ScanScreen() {
         {(showMoreModes || SECONDARY_INPUT_MODES.includes(mode)) && (
           <View style={styles.modeMorePanel}>
             {SECONDARY_INPUT_MODES.map((m) => (
-              <TouchableOpacity key={m} style={[styles.modeTab, styles.modeSecondaryTab, mode === m && styles.modeTabActive]} testID={`scan-mode-${m}`} onPress={() => selectInputMode(m)}>
+              <TouchableOpacity
+                key={m}
+                style={[styles.modeTab, styles.modeSecondaryTab, mode === m && styles.modeTabActive]}
+                testID={`scan-mode-${m}`}
+                accessibilityRole="button"
+                accessibilityLabel={t(MODE_LABEL_KEYS[m])}
+                accessibilityState={{ selected: mode === m }}
+                onPress={() => selectInputMode(m)}
+              >
                 <AnimatedIonicon
                   name={MODE_ICONS[m]}
                   size={15}
@@ -870,7 +889,13 @@ export default function ScanScreen() {
                 placeholder="screen.tabs.scan.placeholder.001"
                 placeholderTextColor={theme.colors.textDisabled}
               />
-              <TouchableOpacity style={styles.analyzeButton} onPress={handleSearchFoods}>
+              <TouchableOpacity
+                style={styles.analyzeButton}
+                onPress={handleSearchFoods}
+                accessibilityRole="button"
+                accessibilityLabel={t('screen.tabs.scan.text.003')}
+                testID="scan-search-food-button"
+              >
                 <Text style={styles.analyzeButtonText} i18nKey="screen.tabs.scan.text.003" />
               </TouchableOpacity>
             </View>
@@ -905,7 +930,15 @@ export default function ScanScreen() {
                 <Text style={styles.resultMacros}>
                   P: {formatMacro(roundTo(safeNumber(food.protein_g) * ratio, 1))}  C: {formatMacro(roundTo(safeNumber(food.carbs_g) * ratio, 1))}  F: {formatMacro(roundTo(safeNumber(food.fat_g) * ratio, 1))}
                 </Text>
-                <TouchableOpacity style={[styles.saveButton, isLogging && styles.buttonDisabled]} onPress={() => handleLogSearchedFood(food)} disabled={isLogging}>
+                <TouchableOpacity
+                  style={[styles.saveButton, isLogging && styles.buttonDisabled]}
+                  onPress={() => handleLogSearchedFood(food)}
+                  disabled={isLogging}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('screen.tabs.scan.button.logFood')}
+                  accessibilityState={{ disabled: isLogging }}
+                  testID={`scan-log-search-result-${food.id}`}
+                >
                   <Text style={styles.saveButtonText}>{isLogging ? t('screen.tabs.scan.button.logging') : t('screen.tabs.scan.button.logFood')}</Text>
                 </TouchableOpacity>
               </SurfaceCard>
@@ -998,7 +1031,15 @@ export default function ScanScreen() {
               />
             </View>
             <MealPicker selected={selectedMeal} onSelect={setSelectedMeal} />
-            <TouchableOpacity style={[styles.saveButton, isLogging && styles.buttonDisabled]} onPress={handleLogBarcode} disabled={isLogging}>
+            <TouchableOpacity
+              style={[styles.saveButton, isLogging && styles.buttonDisabled]}
+              onPress={handleLogBarcode}
+              disabled={isLogging}
+              accessibilityRole="button"
+              accessibilityLabel={t('screen.tabs.scan.button.logFood')}
+              accessibilityState={{ disabled: isLogging }}
+              testID="scan-log-barcode-button"
+            >
               <Text style={styles.saveButtonText}>{isLogging ? t('screen.tabs.scan.button.logging') : t('screen.tabs.scan.button.logFood')}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.secondaryButton} onPress={() => { setBarcodeScanned(false); setBarcodeResult(null); setBarcodeGrams('100'); }}>
@@ -1058,6 +1099,9 @@ export default function ScanScreen() {
               testID="scan-analyze-text-button"
               onPress={handleTextScan}
               disabled={!textInput.trim() || isScanning}
+              accessibilityRole="button"
+              accessibilityLabel={t('screen.tabs.scan.action.analyze')}
+              accessibilityState={{ disabled: !textInput.trim() || isScanning }}
             >
               <Text style={styles.analyzeButtonText}>
                 {isScanning ? t('screen.tabs.scan.action.analyzing') : t('screen.tabs.scan.action.analyze')}
@@ -1218,12 +1262,12 @@ export default function ScanScreen() {
               <Text style={styles.totalRange}>{t('screen.tabs.scan.label.range', { range: formatCalorieRange(totalCaloriesMin, totalCaloriesMax) })}</Text>
               <Text style={styles.totalMacros}>P: {formatMacro(totalProtein)}  C: {formatMacro(totalCarbs)}  F: {formatMacro(totalFat)}</Text>
             </SurfaceCard>
-            <TouchableOpacity style={[styles.saveButton, isLogging && styles.buttonDisabled]} onPress={handleSaveLog} disabled={isLogging}>
-              <Text style={styles.saveButtonText}>{isLogging ? t('screen.tabs.scan.button.logging') : t('screen.tabs.scan.button.logMeal')}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.secondaryButton, isSavingMeal && styles.buttonDisabled]} onPress={handleSaveAsMeal} disabled={isSavingMeal}>
-              <Text style={styles.secondaryButtonText} i18nKey="screen.tabs.scan.text.027" />
-            </TouchableOpacity>
+            <SurfaceCard style={styles.resultActionHintCard}>
+              <Text style={styles.resultActionHintTitle} i18nKey="screen.tabs.scan.text.026" />
+              <Text style={styles.resultActionHintBody}>
+                {t('screen.tabs.scan.label.range', { range: formatCalorieRange(totalCaloriesMin, totalCaloriesMax) })}
+              </Text>
+            </SurfaceCard>
             {/* Refine */}
             <SurfaceCard style={styles.refineContainer}>
               <Text style={styles.refineTitle} i18nKey="screen.tabs.scan.text.028" />
@@ -1247,7 +1291,48 @@ export default function ScanScreen() {
           />
         )}
         <RewardToast reward={reward} onHide={() => setReward(null)} />
-    </ScreenShell>
+      </ScreenShell>
+
+      {showStickyResultActions ? (
+        <View
+          style={[styles.stickyResultActions, { bottom: bottomNavPadding - 10 }]}
+          pointerEvents="box-none"
+        >
+          <SurfaceCard style={styles.stickyResultCard}>
+            <View style={styles.stickyResultSummary}>
+              <Text style={styles.stickyResultLabel}>{t(`screen.tabs.scan.meal.${selectedMeal}` as I18nKey)}</Text>
+              <Text style={styles.stickyResultCalories}>{formatKcal(totalCalories)}</Text>
+            </View>
+            <View style={styles.stickyResultButtons}>
+              <TouchableOpacity
+                style={[styles.stickySaveButton, isLogging && styles.buttonDisabled]}
+                onPress={handleSaveLog}
+                disabled={isLogging}
+                accessibilityRole="button"
+                accessibilityLabel={t('screen.tabs.scan.button.logMeal')}
+                accessibilityState={{ disabled: isLogging }}
+                testID="scan-log-meal-button"
+              >
+                <Text style={styles.stickySaveButtonText}>
+                  {isLogging ? t('screen.tabs.scan.button.logging') : t('screen.tabs.scan.button.logMeal')}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.stickySecondaryButton, isSavingMeal && styles.buttonDisabled]}
+                onPress={handleSaveAsMeal}
+                disabled={isSavingMeal}
+                accessibilityRole="button"
+                accessibilityLabel={t('screen.tabs.scan.text.027')}
+                accessibilityState={{ disabled: isSavingMeal }}
+                testID="scan-save-meal-template-button"
+              >
+                <Text style={styles.stickySecondaryButtonText} i18nKey="screen.tabs.scan.text.027" />
+              </TouchableOpacity>
+            </View>
+          </SurfaceCard>
+        </View>
+      ) : null}
+    </View>
   );
 }
 
@@ -1282,7 +1367,15 @@ function MealPicker({ selected, onSelect }: { selected: MealType; onSelect: (m: 
   return (
     <View style={styles.mealPicker}>
       {(Object.keys(labels) as MealType[]).map((m) => (
-        <TouchableOpacity key={m} style={[styles.mealChip, selected === m && styles.mealChipActive]} onPress={() => onSelect(m)}>
+        <TouchableOpacity
+          key={m}
+          style={[styles.mealChip, selected === m && styles.mealChipActive]}
+          onPress={() => onSelect(m)}
+          accessibilityRole="button"
+          accessibilityLabel={t(labels[m])}
+          accessibilityState={{ selected: selected === m }}
+          testID={`scan-meal-${m}`}
+        >
           <Text style={[styles.mealChipText, selected === m && styles.mealChipTextActive]}>{t(labels[m])}</Text>
         </TouchableOpacity>
       ))}
@@ -1332,6 +1425,10 @@ function ContextPicker({ activeContexts, onToggle }: { activeContexts: ContextMo
             key={mode}
             style={[styles.contextChip, activeContexts.includes(mode) && styles.contextChipActive]}
             onPress={() => onToggle(mode)}
+            accessibilityRole="button"
+            accessibilityLabel={t(contextLabels[mode])}
+            accessibilityState={{ selected: activeContexts.includes(mode) }}
+            testID={`scan-context-${mode}`}
           >
             <Text style={styles.contextChipIcon}>{contextIcons[mode]}</Text>
             <Text style={[styles.contextChipText, activeContexts.includes(mode) && styles.contextChipTextActive]}>
@@ -1380,7 +1477,14 @@ function ScanResultItem({
         <Text style={[styles.confidenceBadge, { color: confidenceColor }]}>
           ● {formatPercent(confidence * 100)} {confidenceLabel}
         </Text>
-        <TouchableOpacity onPress={onRemove} style={styles.removeBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+        <TouchableOpacity
+          onPress={onRemove}
+          style={styles.removeBtn}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          accessibilityRole="button"
+          accessibilityLabel={t('screen.tabs.scan.text.032')}
+          testID="scan-remove-result-item"
+        >
           <Text style={styles.removeBtnText} i18nKey="screen.tabs.scan.text.032" />
         </TouchableOpacity>
       </View>
@@ -1407,6 +1511,9 @@ function ScanResultItem({
             onPress={() => { setNameInput(item.name_vi ?? item.name); setEditingName(true); }}
             style={styles.resultNameButton}
             hitSlop={{ top: 4, bottom: 4, left: 0, right: 0 }}
+            accessibilityRole="button"
+            accessibilityLabel={item.name_vi ?? item.name}
+            testID="scan-edit-result-name"
           >
             <Text style={styles.resultName}>{item.name_vi ?? item.name}</Text>
             <Text style={styles.editHint}>✏️</Text>
@@ -1421,10 +1528,22 @@ function ScanResultItem({
       <Text style={styles.resultDetail}>{safeNumber(item.quantity)} {item.unit} (~{formatMacro(item.estimated_grams)})</Text>
       <Text style={styles.resultMacros}>P: {formatMacro(item.protein_g)}  C: {formatMacro(item.carbs_g)}  F: {formatMacro(item.fat_g)}</Text>
       <View style={styles.adjustRow}>
-        <TouchableOpacity style={styles.adjustBtn} onPress={onDecrease}>
+        <TouchableOpacity
+          style={styles.adjustBtn}
+          onPress={onDecrease}
+          accessibilityRole="button"
+          accessibilityLabel={t('screen.tabs.scan.text.033')}
+          testID="scan-decrease-portion"
+        >
           <Text style={styles.adjustBtnText} i18nKey="screen.tabs.scan.text.033" />
         </TouchableOpacity>
-        <TouchableOpacity style={styles.adjustBtn} onPress={onIncrease}>
+        <TouchableOpacity
+          style={styles.adjustBtn}
+          onPress={onIncrease}
+          accessibilityRole="button"
+          accessibilityLabel={t('screen.tabs.scan.text.034')}
+          testID="scan-increase-portion"
+        >
           <Text style={styles.adjustBtnText} i18nKey="screen.tabs.scan.text.034" />
         </TouchableOpacity>
       </View>
@@ -1433,6 +1552,9 @@ function ScanResultItem({
 }
 
 const styles = createThemedStyles((colors, radii) => ({
+  screenRoot: {
+    flex: 1,
+  },
   scanHeroCard: {
     borderRadius: 8,
     overflow: 'hidden',
@@ -1600,6 +1722,91 @@ const styles = createThemedStyles((colors, radii) => ({
   totalCalorie: { color: colors.accentMint, fontSize: 32, lineHeight: 38, fontWeight: '900' },
   totalRange: { color: colors.textMuted, fontSize: 13, marginTop: 4 },
   totalMacros: { color: colors.textMuted, fontSize: 13, marginTop: 4 },
+  resultActionHintCard: {
+    marginBottom: 12,
+    backgroundColor: colors.surfaceSuccess,
+    borderColor: colors.borderSuccess,
+    borderWidth: 1,
+  },
+  resultActionHintTitle: {
+    color: colors.accentMint,
+    fontSize: 15,
+    fontWeight: '900',
+    marginBottom: 4,
+  },
+  resultActionHintBody: {
+    color: colors.textSoft,
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  stickyResultActions: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    zIndex: 20,
+  },
+  stickyResultCard: {
+    padding: 12,
+    gap: 10,
+    backgroundColor: colors.surface,
+    borderColor: colors.borderStrong,
+  },
+  stickyResultSummary: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 12,
+  },
+  stickyResultLabel: {
+    color: colors.textMuted,
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '900',
+  },
+  stickyResultCalories: {
+    color: colors.accentMint,
+    fontSize: 18,
+    lineHeight: 23,
+    fontWeight: '900',
+  },
+  stickyResultButtons: {
+    flexDirection: 'row',
+    gap: 9,
+  },
+  stickySaveButton: {
+    flex: 1.35,
+    minHeight: 48,
+    borderRadius: 8,
+    backgroundColor: colors.accentMint,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  stickySaveButtonText: {
+    color: colors.textOnAccent,
+    fontSize: 15,
+    fontWeight: '900',
+    textAlign: 'center',
+  },
+  stickySecondaryButton: {
+    flex: 1,
+    minHeight: 48,
+    borderRadius: 8,
+    backgroundColor: colors.surfaceInfo,
+    borderWidth: 1,
+    borderColor: colors.borderInfo,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+  },
+  stickySecondaryButtonText: {
+    color: colors.info,
+    fontSize: 13,
+    fontWeight: '900',
+    textAlign: 'center',
+  },
   saveButton: { backgroundColor: colors.accentMint, borderRadius: 8, padding: 16, alignItems: 'center', marginBottom: 11, minHeight: 52, justifyContent: 'center' },
   saveButtonText: { color: colors.textOnAccent, fontWeight: '900', fontSize: 16 },
   secondaryButton: { borderRadius: 8, padding: 15, alignItems: 'center', marginBottom: 11, borderWidth: 1, borderColor: colors.borderInfo, backgroundColor: colors.surfaceInfo, minHeight: 50, justifyContent: 'center' },

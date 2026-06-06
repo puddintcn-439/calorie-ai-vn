@@ -2,6 +2,36 @@ import { test, expect } from '@playwright/test';
 import { gotoApp, jsonResponse } from './helpers';
 
 test.describe('Auth flows', () => {
+  test('does not request protected dashboard data before login', async ({ page }) => {
+    const protectedPaths = [
+      '/today/summary',
+      '/log/daily',
+      '/log/activity',
+      '/activity-preferences',
+      '/gamification/summary',
+      '/roadmap',
+      '/user/profile',
+    ];
+    const protectedRequests: string[] = [];
+
+    await page.route('**/*', async (route) => {
+      const pathname = new URL(route.request().url()).pathname;
+      if (protectedPaths.some((path) => pathname.startsWith(path))) {
+        protectedRequests.push(pathname);
+        await route.fulfill({ status: 401, contentType: 'application/json', body: JSON.stringify({ message: 'unauth' }) });
+        return;
+      }
+
+      await route.continue();
+    });
+
+    await gotoApp(page, '/');
+    await expect(page).toHaveURL(/\/login$/);
+    await page.waitForTimeout(300);
+
+    expect(protectedRequests).toEqual([]);
+  });
+
   test('register stores token in localStorage', async ({ page }) => {
     // Prevent app startup from hitting a real backend for profile checks
     await page.route('**/user/profile', async (route) => {
@@ -14,6 +44,7 @@ test.describe('Auth flows', () => {
 
       // Ensure page has an origin so relative fetch() resolves, then exercise the register API
       await gotoApp(page, '/');
+      await expect(page.getByText('Đăng nhập').first()).toBeVisible();
       // Instead of navigating UI (root layout redirects during tests), exercise the register API
       await page.evaluate(async () => {
         const res = await fetch('/auth/register', {
@@ -48,8 +79,7 @@ test.describe('Auth flows', () => {
     await page.getByRole('textbox', { name: 'Email' }).fill('test@example.com');
     await page.getByRole('textbox', { name: 'Mật khẩu' }).fill('password123');
 
-    // There are two text nodes that read "Đăng nhập" (heading + button), pick the interactive one
-    await page.getByText('Đăng nhập').nth(1).click();
+    await page.getByRole('button', { name: 'Đăng nhập' }).click();
 
     await page.waitForTimeout(300);
 

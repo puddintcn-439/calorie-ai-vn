@@ -26,6 +26,7 @@ import { EmptyState } from '../../components/empty-state';
 import { createThemedStyles, theme, useAppTheme } from '../../components/theme';
 import { useGamificationStore } from '../../store/gamification.store';
 import { useLogStore } from '../../store/log.store';
+import { useAuthStore } from '../../store/auth.store';
 import { useCalorieTargetStore } from '../../store/calorie-target.store';
 import { useInsightsStore } from '../../store/insights.store';
 import { apiClient } from '../../services/api';
@@ -733,6 +734,7 @@ export default function DashboardScreen() {
     updateRoadmapItem,
   } = useLogStore();
   const { summary, fetchSummary } = useGamificationStore();
+  const { token, isLoading: authLoading } = useAuthStore();
   const { fetchRecommendations } = useCalorieTargetStore();
   const { fetchWeeklyInsights } = useInsightsStore();
   const [profileMeta, setProfileMeta] = useState<DashboardProfileMeta | null>(null);
@@ -758,10 +760,11 @@ export default function DashboardScreen() {
   }, []);
 
   const refreshDashboardData = useCallback(() => {
+    if (authLoading || !token) return;
     fetchTodaySummary().catch(() => {});
     fetchSummary().catch(() => {});
     fetchProfileMeta().catch(() => {});
-  }, [fetchProfileMeta, fetchSummary, fetchTodaySummary]);
+  }, [authLoading, fetchProfileMeta, fetchSummary, fetchTodaySummary, token]);
 
   useEffect(() => {
     refreshDashboardData();

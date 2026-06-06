@@ -21,6 +21,8 @@ interface UiButtonProps {
   loading?: boolean;
   disabled?: boolean;
   style?: StyleProp<ViewStyle>;
+  accessibilityLabel?: string;
+  testID?: string;
 }
 
 export function UiButton({
@@ -30,6 +32,8 @@ export function UiButton({
   loading = false,
   disabled = false,
   style,
+  accessibilityLabel,
+  testID,
 }: UiButtonProps) {
   const scale = useRef(new Animated.Value(1)).current;
   const useNativeDriver = Platform.OS !== 'web';
@@ -93,6 +97,14 @@ export function UiButton({
   ];
 
   const textStyle = [styles.baseText, variantTextStyle[variant]];
+  const translatedLabel = tx(label);
+  const resolvedTestID = testID ?? `${label.replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-|-$/g, '')}-button`;
+  const webAccessibilityProps = Platform.OS === 'web'
+    ? ({
+        role: 'button',
+        'aria-label': accessibilityLabel ?? translatedLabel,
+      } as any)
+    : {};
 
   return (
     <Animated.View
@@ -108,6 +120,11 @@ export function UiButton({
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
         disabled={disabled || loading}
+        accessibilityRole="button"
+        accessibilityLabel={accessibilityLabel ?? translatedLabel}
+        accessibilityState={{ disabled: disabled || loading }}
+        testID={resolvedTestID}
+        {...webAccessibilityProps}
       >
         {loading ? (
           <View style={styles.loadingRow}>
@@ -116,7 +133,7 @@ export function UiButton({
             <View style={[styles.loadingDot, { backgroundColor: variant === 'primary' ? colors.textOnAccent : colors.accentMint, opacity: 0.48 }]} />
           </View>
         ) : (
-          <Text style={textStyle}>{tx(label)}</Text>
+          <Text style={textStyle}>{translatedLabel}</Text>
         )}
       </Pressable>
     </Animated.View>

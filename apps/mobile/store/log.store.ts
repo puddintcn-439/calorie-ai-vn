@@ -16,12 +16,17 @@ import {
   UpdateActivityPreferenceDto,
 } from '@calorie-ai/types';
 import { apiClient } from '../services/api';
+import { authStorage } from '../services/auth-storage';
 import { activitySyncService } from '../services/activity-sync.service';
 import { getLocalDateYmd, getLocalTimezoneOffsetMinutes } from '../services/date';
 import { appLogger } from '../services/logger.service';
 import { reminderFeedbackService } from '../services/reminder-feedback.service';
 
 const create = require('zustand').create as typeof import('zustand').create;
+
+async function hasAuthToken(): Promise<boolean> {
+  return Boolean(await authStorage.getItemAsync('auth_token'));
+}
 
 interface LogState {
   dailyLog: DailyLog | null;
@@ -67,6 +72,10 @@ export const useLogStore = create<LogState>((set, get) => ({
   isLoading: false,
 
   fetchTodaySummary: async (date) => {
+    if (!(await hasAuthToken())) {
+      set({ isLoading: false });
+      return;
+    }
     set({ isLoading: true });
     const d = date ?? getLocalDateYmd();
     const tzOffset = getLocalTimezoneOffsetMinutes();
@@ -93,6 +102,10 @@ export const useLogStore = create<LogState>((set, get) => ({
   },
 
   fetchDailyLog: async (date) => {
+    if (!(await hasAuthToken())) {
+      set({ isLoading: false });
+      return;
+    }
     set({ isLoading: true });
     try {
       const d = date ?? getLocalDateYmd();
@@ -105,11 +118,13 @@ export const useLogStore = create<LogState>((set, get) => ({
   },
 
   fetchSavedMeals: async () => {
+    if (!(await hasAuthToken())) return;
     const res = await apiClient.get('/log/saved-meals');
     set({ savedMeals: res.data });
   },
 
   fetchActivityLogs: async (date) => {
+    if (!(await hasAuthToken())) return;
     const d = date ?? getLocalDateYmd();
     const tzOffset = getLocalTimezoneOffsetMinutes();
     const res = await apiClient.get(`/log/activity?date=${d}&tz_offset_minutes=${tzOffset}`);
@@ -117,6 +132,7 @@ export const useLogStore = create<LogState>((set, get) => ({
   },
 
   fetchDailyRoadmap: async (date) => {
+    if (!(await hasAuthToken())) return;
     try {
       const d = date ?? getLocalDateYmd();
       const res = await apiClient.get(`/roadmap/${d}`);
@@ -216,6 +232,7 @@ export const useLogStore = create<LogState>((set, get) => ({
   },
 
   fetchActivityPreferences: async () => {
+    if (!(await hasAuthToken())) return;
     try {
       const res = await apiClient.get('/activity-preferences');
       set({ activityPreferences: res.data });

@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppTheme } from '../../components/theme';
 import { AnimatedIonicon } from '../../components/animated-icon';
 import { useI18n } from '../../components/i18n';
+import { useAuthStore } from '../../store/auth.store';
 
 type TabIconName = ComponentProps<typeof Ionicons>['name'];
 
@@ -52,8 +53,13 @@ export default function TabsLayout() {
   const desktopTabWidth = Math.min(600, width - 80);
   const { colors } = useAppTheme();
   const { t } = useI18n();
+  const { token, isLoading } = useAuthStore();
   const insets = useSafeAreaInsets();
   const bottomInset = insets?.bottom ?? 0;
+
+  if (isLoading || !token) {
+    return <View style={[styles.authGate, { backgroundColor: colors.bgTop }]} />;
+  }
 
   return (
     <Tabs
@@ -160,6 +166,9 @@ export default function TabsLayout() {
 }
 
 const styles = StyleSheet.create({
+  authGate: {
+    flex: 1,
+  },
   tabIconWrap: {
     width: 30,
     height: 27,
