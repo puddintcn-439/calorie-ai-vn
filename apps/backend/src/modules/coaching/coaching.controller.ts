@@ -1,9 +1,60 @@
-import { Controller, Get, Post, Put, Param, Body, Request, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Put, Param, Body, Request, UseGuards, Query } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
+import { ApiProperty } from '@nestjs/swagger';
+import { IsEnum, IsNumber, IsObject, IsOptional, IsString } from 'class-validator';
 import { CoachingService } from './coaching.service';
 import { SupabaseService } from '../../common/supabase/supabase.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { BehaviorMemory, CoachingInsight, CoachingSummary } from '@calorie-ai/types';
+import {
+  BehaviorMemory,
+  DynamicIntervention,
+  InterventionEventInput,
+  InterventionMemory,
+  CoachingInsight,
+  CoachingSummary,
+} from '@calorie-ai/types';
+
+class InterventionEventDto implements InterventionEventInput {
+  @ApiProperty({ enum: ['maintain', 'protein_nudge', 'meal_logging', 'activity_recovery', 'plan_completion', 'reminder_tuning', 'high_risk_recovery'] })
+  @IsEnum(['maintain', 'protein_nudge', 'meal_logging', 'activity_recovery', 'plan_completion', 'reminder_tuning', 'high_risk_recovery'])
+  intervention_type!: DynamicIntervention['intervention_type'];
+
+  @ApiProperty({ enum: ['silent', 'light_nudge', 'coach_action', 'recovery_plan', 'high_risk'] })
+  @IsEnum(['silent', 'light_nudge', 'coach_action', 'recovery_plan', 'high_risk'])
+  mode!: InterventionEventInput['mode'];
+
+  @ApiProperty({ enum: ['low', 'medium', 'high', 'critical'] })
+  @IsEnum(['low', 'medium', 'high', 'critical'])
+  priority!: InterventionEventInput['priority'];
+
+  @ApiProperty({ enum: ['none', 'log_meal', 'move', 'complete_plan', 'adjust_reminders', 'open_coach'] })
+  @IsEnum(['none', 'log_meal', 'move', 'complete_plan', 'adjust_reminders', 'open_coach'])
+  primary_action!: InterventionEventInput['primary_action'];
+
+  @ApiProperty({ enum: ['shown', 'acted', 'dismissed'] })
+  @IsEnum(['shown', 'acted', 'dismissed'])
+  event_type!: InterventionEventInput['event_type'];
+
+  @ApiProperty({ required: false, enum: ['today', 'coach', 'notification'] })
+  @IsEnum(['today', 'coach', 'notification'])
+  @IsOptional()
+  source?: InterventionEventInput['source'];
+
+  @ApiProperty({ required: false })
+  @IsNumber()
+  @IsOptional()
+  forecast_score?: number;
+
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  intervention_generated_at?: string;
+
+  @ApiProperty({ required: false, type: Object })
+  @IsObject()
+  @IsOptional()
+  metadata?: Record<string, unknown>;
+}
 
 @ApiTags('Coaching')
 @ApiBearerAuth()
@@ -27,6 +78,26 @@ export class CoachingController {
   async getBehaviorMemory(@Request() req: any): Promise<BehaviorMemory> {
     const userId = req.user.id ?? req.user.sub;
     return this.coaching.getBehaviorMemory(userId);
+  }
+
+  @Post('interventions/events')
+  @ApiOperation({ summary: 'Record an intervention shown/acted/dismissed event' })
+  async recordInterventionEvent(
+    @Request() req: any,
+    @Body() dto: InterventionEventDto,
+  ): Promise<{ recorded: boolean }> {
+    const userId = req.user.id ?? req.user.sub;
+    return this.coaching.recordInterventionEvent(userId, dto);
+  }
+
+  @Get('interventions/memory')
+  @ApiOperation({ summary: 'Get intervention effectiveness ranking for adaptive coaching' })
+  async getInterventionMemory(
+    @Request() req: any,
+    @Query('days') days?: string,
+  ): Promise<InterventionMemory> {
+    const userId = req.user.id ?? req.user.sub;
+    return this.coaching.getInterventionMemory(userId, days ? Number(days) : 90);
   }
 
   @Get('insights')

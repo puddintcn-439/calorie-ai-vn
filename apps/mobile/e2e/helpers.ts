@@ -401,6 +401,43 @@ export function createNinetyDayJourneyMock() {
       memory_notes: ['Reminder responses are strongest around 19:00.', 'Best logging streak is 21 days.'],
       updated_at: `${today.date}T10:00:00.000Z`,
     },
+    interventionMemory: {
+      days_analyzed: 90,
+      total_shown: 18,
+      total_acted: 11,
+      total_dismissed: 2,
+      overall_action_rate: 61,
+      best_intervention: 'activity_recovery',
+      weakest_intervention: 'reminder_tuning',
+      ranking: [
+        {
+          intervention_type: 'activity_recovery',
+          shown: 7,
+          acted: 5,
+          dismissed: 0,
+          action_rate: 71,
+          dismiss_rate: 0,
+          effectiveness_score: 71,
+          last_shown_at: `${today.date}T08:00:00.000Z`,
+          last_acted_at: `${today.date}T08:05:00.000Z`,
+          primary_action: 'move',
+        },
+        {
+          intervention_type: 'reminder_tuning',
+          shown: 6,
+          acted: 2,
+          dismissed: 2,
+          action_rate: 33,
+          dismiss_rate: 33,
+          effectiveness_score: 25,
+          last_shown_at: `${today.date}T07:00:00.000Z`,
+          last_acted_at: `${today.date}T07:20:00.000Z`,
+          primary_action: 'adjust_reminders',
+        },
+      ],
+      by_type: {},
+      updated_at: `${today.date}T10:00:00.000Z`,
+    },
   };
 }
 
@@ -433,6 +470,8 @@ export async function mockNinetyDayJourneyApi(page: Page) {
     if (path === '/coaching/insights') return route.fulfill(jsonResponse(mock.coachingInsights));
     if (path === '/coaching/weekly-summary') return route.fulfill(jsonResponse(mock.coachingSummary));
     if (path === '/coaching/behavior-memory') return route.fulfill(jsonResponse(mock.behaviorMemory));
+    if (path === '/coaching/interventions/memory') return route.fulfill(jsonResponse(mock.interventionMemory));
+    if (path === '/coaching/interventions/events') return route.fulfill(jsonResponse({ recorded: true }));
     if (path === '/calorie-target/me') {
       return route.fulfill(jsonResponse({
         daily_calorie_target: 1850,

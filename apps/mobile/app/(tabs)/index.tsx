@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Image,
   StyleSheet,
@@ -43,6 +43,7 @@ import { Alert } from '../../components/i18n-alert';
 import { Locale, tr, useI18n } from '../../components/i18n';
 import { buildSuccessForecast } from '../../services/success-forecast.service';
 import { buildDynamicIntervention } from '../../services/dynamic-intervention.service';
+import { buildInterventionEvent, recordInterventionEvent } from '../../services/intervention-memory.service';
 
 const mealIllustration = require('../../assets/images/vietnamese-meal.jpg') as number;
 const todayHeroIllustration = require('../../assets/images/today-hero.jpg') as number;
@@ -744,6 +745,7 @@ function buildMovementPlan(
 
 export default function DashboardScreen() {
   useAppTheme();
+  const shownInterventionKeysRef = useRef<Set<string>>(new Set());
   const { locale, t } = useI18n();
   const { width } = useWindowDimensions();
   const isCompact = width < 480;
@@ -1022,6 +1024,18 @@ export default function DashboardScreen() {
     locale,
   }), [behaviorMemory, locale, successForecast]);
   const dynamicInterventionToneValue = dynamicIntervention ? dynamicInterventionTone(dynamicIntervention) : 'info';
+
+  useEffect(() => {
+    if (!dynamicIntervention?.should_surface) return;
+    const key = `${dynamicIntervention.generated_at}:${dynamicIntervention.intervention_type}:${dynamicIntervention.mode}`;
+    if (shownInterventionKeysRef.current.has(key)) return;
+    shownInterventionKeysRef.current.add(key);
+
+    void recordInterventionEvent({
+      ...buildInterventionEvent(dynamicIntervention, 'shown', 'today'),
+      forecast_score: successForecast?.score,
+    });
+  }, [dynamicIntervention, successForecast?.score]);
 
   async function toggleRoadmapItem(item: DailyRoadmapItem) {
     setUpdatingRoadmapId(item.id);
@@ -1436,6 +1450,10 @@ export default function DashboardScreen() {
               dynamicInterventionToneValue === 'warn' && styles.dynamicInterventionActionWarn,
             ]}
             onPress={() => {
+              void recordInterventionEvent({
+                ...buildInterventionEvent(dynamicIntervention, 'acted', 'today', { action_label: dynamicIntervention.action_label }),
+                forecast_score: successForecast?.score,
+              });
               if (dynamicIntervention.primary_action === 'adjust_reminders') router.push('/profile' as never);
               else if (dynamicIntervention.primary_action === 'log_meal') router.push('/scan' as never);
               else if (dynamicIntervention.primary_action === 'move' || dynamicIntervention.primary_action === 'complete_plan') router.push('/log' as never);

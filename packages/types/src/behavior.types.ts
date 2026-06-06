@@ -94,3 +94,45 @@ export interface DynamicIntervention {
   cooldown_hours: number;
   generated_at: string;
 }
+
+export type InterventionEventType = 'shown' | 'acted' | 'dismissed';
+
+export type InterventionEventSource = 'today' | 'coach' | 'notification';
+
+export interface InterventionEventInput {
+  intervention_type: DynamicIntervention['intervention_type'];
+  mode: DynamicInterventionMode;
+  priority: DynamicInterventionPriority;
+  primary_action: DynamicInterventionAction;
+  event_type: InterventionEventType;
+  source?: InterventionEventSource;
+  forecast_score?: number;
+  intervention_generated_at?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface InterventionMemoryStats {
+  intervention_type: DynamicIntervention['intervention_type'];
+  shown: number;
+  acted: number;
+  dismissed: number;
+  action_rate: number;
+  dismiss_rate: number;
+  effectiveness_score: number;
+  last_shown_at: string | null;
+  last_acted_at: string | null;
+  primary_action: DynamicInterventionAction | null;
+}
+
+export interface InterventionMemory {
+  days_analyzed: number;
+  total_shown: number;
+  total_acted: number;
+  total_dismissed: number;
+  overall_action_rate: number;
+  best_intervention: DynamicIntervention['intervention_type'] | null;
+  weakest_intervention: DynamicIntervention['intervention_type'] | null;
+  ranking: InterventionMemoryStats[];
+  by_type: Partial<Record<DynamicIntervention['intervention_type'], InterventionMemoryStats>>;
+  updated_at: string;
+}

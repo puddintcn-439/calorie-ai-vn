@@ -116,6 +116,83 @@ describe('CoachingService.getBehaviorMemory', () => {
   });
 });
 
+describe('CoachingService intervention memory', () => {
+  it('records intervention events', async () => {
+    const insert = jest.fn().mockResolvedValue({ error: null });
+    const supabase = makeSupabase((table) => {
+      if (table === 'user_intervention_events') {
+        return { insert };
+      }
+      return {};
+    });
+
+    const service = new CoachingService(supabase);
+    const result = await service.recordInterventionEvent('user-1', {
+      intervention_type: 'activity_recovery',
+      mode: 'recovery_plan',
+      priority: 'high',
+      primary_action: 'move',
+      event_type: 'shown',
+      source: 'today',
+      forecast_score: 42,
+      intervention_generated_at: '2026-06-06T10:00:00.000Z',
+      metadata: { reasons: ['activity_gap'] },
+    });
+
+    expect(result).toEqual({ recorded: true });
+    expect(insert).toHaveBeenCalledWith(expect.objectContaining({
+      user_id: 'user-1',
+      intervention_type: 'activity_recovery',
+      event_type: 'shown',
+      forecast_score: 42,
+    }));
+  });
+
+  it('ranks interventions by effectiveness', async () => {
+    const rows = [
+      { intervention_type: 'activity_recovery', mode: 'recovery_plan', priority: 'high', primary_action: 'move', event_type: 'shown', created_at: '2026-06-01T08:00:00.000Z' },
+      { intervention_type: 'activity_recovery', mode: 'recovery_plan', priority: 'high', primary_action: 'move', event_type: 'shown', created_at: '2026-06-02T08:00:00.000Z' },
+      { intervention_type: 'activity_recovery', mode: 'recovery_plan', priority: 'high', primary_action: 'move', event_type: 'acted', created_at: '2026-06-02T08:10:00.000Z' },
+      { intervention_type: 'activity_recovery', mode: 'recovery_plan', priority: 'high', primary_action: 'move', event_type: 'acted', created_at: '2026-06-03T08:10:00.000Z' },
+      { intervention_type: 'reminder_tuning', mode: 'light_nudge', priority: 'low', primary_action: 'adjust_reminders', event_type: 'shown', created_at: '2026-06-01T19:00:00.000Z' },
+      { intervention_type: 'reminder_tuning', mode: 'light_nudge', priority: 'low', primary_action: 'adjust_reminders', event_type: 'shown', created_at: '2026-06-02T19:00:00.000Z' },
+      { intervention_type: 'reminder_tuning', mode: 'light_nudge', priority: 'low', primary_action: 'adjust_reminders', event_type: 'dismissed', created_at: '2026-06-02T19:02:00.000Z' },
+    ];
+    const supabase = makeSupabase((table) => {
+      if (table === 'user_intervention_events') {
+        return {
+          select: jest.fn().mockReturnThis(),
+          eq: jest.fn().mockReturnThis(),
+          gte: jest.fn().mockReturnThis(),
+          order: jest.fn().mockResolvedValue({ data: rows, error: null }),
+        };
+      }
+      return {};
+    });
+
+    const service = new CoachingService(supabase);
+    const memory = await service.getInterventionMemory('user-1', 90);
+
+    expect(memory).toMatchObject({
+      total_shown: 4,
+      total_acted: 2,
+      total_dismissed: 1,
+      overall_action_rate: 50,
+      best_intervention: 'activity_recovery',
+      weakest_intervention: 'reminder_tuning',
+    });
+    expect(memory.ranking[0]).toMatchObject({
+      intervention_type: 'activity_recovery',
+      action_rate: 100,
+      effectiveness_score: 100,
+    });
+    expect(memory.by_type.reminder_tuning).toMatchObject({
+      dismiss_rate: 50,
+      effectiveness_score: 0,
+    });
+  });
+});
+
 describe('CoachingService.detectWeekendVariance', () => {
   it('does not emit a weekend pattern when weekday data is missing', () => {
     const service = new CoachingService({} as SupabaseService);

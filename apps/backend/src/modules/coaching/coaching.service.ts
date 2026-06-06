@@ -6,6 +6,11 @@ import {
   CoachingInsight,
   CoachingSummary,
   DailyNutritionData,
+  DynamicIntervention,
+  DynamicInterventionAction,
+  InterventionEventInput,
+  InterventionMemory,
+  InterventionMemoryStats,
   PatternType,
   InsightType,
   PriorityLevel,
@@ -16,6 +21,51 @@ export class CoachingService {
   private readonly logger = new Logger(CoachingService.name);
 
   constructor(private supabase: SupabaseService) {}
+
+  async recordInterventionEvent(userId: string, dto: InterventionEventInput): Promise<{ recorded: boolean }> {
+    const { error } = await this.supabase.db
+      .from('user_intervention_events')
+      .insert({
+        user_id: userId,
+        intervention_type: dto.intervention_type,
+        mode: dto.mode,
+        priority: dto.priority,
+        primary_action: dto.primary_action,
+        event_type: dto.event_type,
+        source: dto.source ?? 'today',
+        forecast_score: dto.forecast_score ?? null,
+        intervention_generated_at: dto.intervention_generated_at ?? null,
+        metadata: dto.metadata ?? {},
+      });
+
+    if (error) {
+      this.logger.warn(`Failed to record intervention event: ${error.message ?? error}`);
+      return { recorded: false };
+    }
+
+    return { recorded: true };
+  }
+
+  async getInterventionMemory(userId: string, days = 90): Promise<InterventionMemory> {
+    const daysAnalyzed = Math.max(7, Math.min(180, Math.round(days)));
+    const since = new Date();
+    since.setDate(since.getDate() - (daysAnalyzed - 1));
+    since.setHours(0, 0, 0, 0);
+
+    const { data, error } = await this.supabase.db
+      .from('user_intervention_events')
+      .select('intervention_type, mode, priority, primary_action, event_type, created_at')
+      .eq('user_id', userId)
+      .gte('created_at', since.toISOString())
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      this.logger.warn(`Failed to fetch intervention memory: ${error.message ?? error}`);
+      return this.emptyInterventionMemory(daysAnalyzed);
+    }
+
+    return this.buildInterventionMemory(data ?? [], daysAnalyzed);
+  }
 
   async getBehaviorMemory(userId: string, days = 90): Promise<BehaviorMemory> {
     const daysAnalyzed = Math.max(14, Math.min(180, Math.round(days)));
@@ -318,6 +368,93 @@ export class CoachingService {
   }
 
   // ======================== Helper Methods ========================
+
+  private emptyInterventionMemory(daysAnalyzed: number): InterventionMemory {
+    return {
+      days_analyzed: daysAnalyzed,
+      total_shown: 0,
+      total_acted: 0,
+      total_dismissed: 0,
+      overall_action_rate: 0,
+      best_intervention: null,
+      weakest_intervention: null,
+      ranking: [],
+      by_type: {},
+      updated_at: new Date().toISOString(),
+    };
+  }
+
+  private buildInterventionMemory(rows: any[], daysAnalyzed: number): InterventionMemory {
+    const byType = rows.reduce<Record<string, InterventionMemoryStats>>((acc, row) => {
+      const type = String(row.intervention_type ?? 'maintain') as DynamicIntervention['intervention_type'];
+      acc[type] = acc[type] ?? {
+        intervention_type: type,
+        shown: 0,
+        acted: 0,
+        dismissed: 0,
+        action_rate: 0,
+        dismiss_rate: 0,
+        effectiveness_score: 0,
+        last_shown_at: null,
+        last_acted_at: null,
+        primary_action: null,
+      };
+
+      const stats = acc[type];
+      const eventType = String(row.event_type ?? '');
+      if (eventType === 'shown') {
+        stats.shown += 1;
+        stats.last_shown_at = row.created_at ?? stats.last_shown_at;
+      } else if (eventType === 'acted') {
+        stats.acted += 1;
+        stats.last_acted_at = row.created_at ?? stats.last_acted_at;
+      } else if (eventType === 'dismissed') {
+        stats.dismissed += 1;
+      }
+
+      if (row.primary_action) {
+        stats.primary_action = String(row.primary_action) as DynamicInterventionAction;
+      }
+
+      return acc;
+    }, {});
+
+    const ranking = Object.values(byType).map((stats) => {
+      const shownBase = Math.max(stats.shown, 1);
+      stats.action_rate = Math.round((stats.acted / shownBase) * 100);
+      stats.dismiss_rate = Math.round((stats.dismissed / shownBase) * 100);
+      stats.effectiveness_score = Math.max(0, Math.min(100, Math.round(stats.action_rate - stats.dismiss_rate * 0.25)));
+      return stats;
+    }).sort((a, b) => (
+      b.effectiveness_score - a.effectiveness_score
+      || b.acted - a.acted
+      || b.shown - a.shown
+      || a.intervention_type.localeCompare(b.intervention_type)
+    ));
+
+    const totalShown = ranking.reduce((sum, item) => sum + item.shown, 0);
+    const totalActed = ranking.reduce((sum, item) => sum + item.acted, 0);
+    const totalDismissed = ranking.reduce((sum, item) => sum + item.dismissed, 0);
+    const rankedWithData = ranking.filter((item) => item.shown > 0);
+    const weakest = [...rankedWithData].sort((a, b) => (
+      a.effectiveness_score - b.effectiveness_score
+      || b.shown - a.shown
+      || a.intervention_type.localeCompare(b.intervention_type)
+    ))[0];
+
+    return {
+      days_analyzed: daysAnalyzed,
+      total_shown: totalShown,
+      total_acted: totalActed,
+      total_dismissed: totalDismissed,
+      overall_action_rate: totalShown > 0 ? Math.round((totalActed / totalShown) * 100) : 0,
+      best_intervention: rankedWithData[0]?.intervention_type ?? null,
+      weakest_intervention: weakest?.intervention_type ?? null,
+      ranking,
+      by_type: byType as InterventionMemory['by_type'],
+      updated_at: new Date().toISOString(),
+    };
+  }
 
   private toDateKey(value: string | null | undefined): string {
     if (!value) return '';
