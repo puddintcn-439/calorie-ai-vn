@@ -17,6 +17,8 @@ import {
   ActivityPreference,
 } from '@calorie-ai/types';
 
+type HealthScoreBehaviorMetrics = Pick<TodaySummary['health_score'], 'trend' | 'weekly_adherence'>;
+
 @Injectable()
 export class LogService {
   constructor(private supabase: SupabaseService) {}
@@ -151,6 +153,8 @@ export class LogService {
       roadmap_remaining: Math.max(0, activeRoadmap.length - roadmapCompleted),
       planned_activity_kcal: activeRoadmap.reduce((sum, item) => sum + Number(item.estimated_kcal ?? 0), 0),
     };
+    const baseHealthScore = this.buildHealthScore(dailyLog, activityLogs, activeRoadmap, plan, profile);
+    const behaviorMetrics = await this.buildHealthScoreBehaviorMetrics(userId, date, tzOffsetMinutes, baseHealthScore, profile);
 
     return {
       date,
@@ -161,7 +165,15 @@ export class LogService {
       activity_preferences: activityPreferences,
       profile,
       plan,
-      health_score: this.buildHealthScore(dailyLog, activityLogs, activeRoadmap, plan, profile),
+      health_score: {
+        ...baseHealthScore,
+        trend: behaviorMetrics.trend,
+        weekly_adherence: behaviorMetrics.weekly_adherence,
+        signals: [
+          ...behaviorMetrics.weekly_adherence.patterns,
+          ...baseHealthScore.signals,
+        ].slice(0, 4),
+      },
       status,
       errors: Object.keys(errors).length > 0 ? errors : undefined,
     };
@@ -173,6 +185,7 @@ export class LogService {
     roadmap: DailyRoadmapItem[],
     plan: TodaySummary['plan'],
     profile: TodaySummary['profile'],
+    behaviorMetrics?: HealthScoreBehaviorMetrics,
   ): TodaySummary['health_score'] {
     const clamp = (value: number, min = 0, max = 100) => Math.max(min, Math.min(max, Math.round(value)));
     const safeTarget = Math.max(Number(plan.target_calories || profile?.daily_calorie_target || 1800), 1);
@@ -232,9 +245,209 @@ export class LogService {
       activity,
       consistency,
       recovery,
+      ...(behaviorMetrics ?? this.emptyHealthScoreBehaviorMetrics()),
       signals: signals.slice(0, 4),
       next_action: nextAction,
     };
+  }
+
+  private async buildHealthScoreBehaviorMetrics(
+    userId: string,
+    date: string,
+    tzOffsetMinutes: number,
+    currentScore: TodaySummary['health_score'],
+    profile: TodaySummary['profile'],
+  ): Promise<HealthScoreBehaviorMetrics> {
+    const days = Array.from({ length: 7 }, (_, index) => this.addDays(date, index - 6));
+    const dayResults = await Promise.allSettled(days.map(async (day) => {
+      const [dailyLog, activityLogs, roadmap] = await Promise.all([
+        this.getDailyLog(userId, day, tzOffsetMinutes),
+        this.getActivityLogs(userId, day, tzOffsetMinutes),
+        this.getDailyRoadmapForSummary(userId, day),
+      ]);
+      const activeRoadmap = roadmap.filter((item) => !item.is_removed);
+      const plan = this.buildSummaryPlan(dailyLog, activityLogs, activeRoadmap, profile);
+      const score = day === date
+        ? currentScore
+        : this.buildHealthScore(dailyLog, activityLogs, activeRoadmap, plan, profile);
+      return { date: day, dailyLog, activityLogs, roadmap: activeRoadmap, plan, score };
+    }));
+
+    const daysWithData = dayResults
+      .filter((result): result is PromiseFulfilledResult<{
+        date: string;
+        dailyLog: DailyLog;
+        activityLogs: ActivityLog[];
+        roadmap: DailyRoadmapItem[];
+        plan: TodaySummary['plan'];
+        score: TodaySummary['health_score'];
+      }> => result.status === 'fulfilled')
+      .map((result) => result.value);
+
+    if (daysWithData.length === 0) {
+      return this.emptyHealthScoreBehaviorMetrics();
+    }
+
+    const dataDays = daysWithData.filter((day) => (
+      day.dailyLog.logs.length > 0 || day.activityLogs.length > 0 || day.roadmap.length > 0
+    ));
+    const trendBase = dataDays.length > 0 ? dataDays : daysWithData;
+    const average7d = this.round(
+      trendBase.reduce((sum, day) => sum + day.score.overall, 0) / Math.max(trendBase.length, 1),
+    );
+    const delta = this.round(currentScore.overall - average7d);
+    const direction: TodaySummary['health_score']['trend']['direction'] =
+      Math.abs(delta) < 3 ? 'flat' : delta > 0 ? 'up' : 'down';
+
+    const loggingScores = daysWithData.map((day) => {
+      const mealTypesLogged = new Set(day.dailyLog.logs.map((log) => log.meal_type)).size;
+      return this.clamp((mealTypesLogged / 3) * 100);
+    });
+    const nutritionScores = daysWithData.map((day) => day.score.nutrition);
+    const activityScores = daysWithData.map((day) => day.score.activity);
+    const planScores = daysWithData.map((day) => {
+      const total = day.roadmap.length;
+      if (total > 0) {
+        const completed = day.roadmap.filter((item) => item.is_completed).length;
+        return this.clamp((completed / total) * 100);
+      }
+      return day.activityLogs.length > 0 ? 75 : 45;
+    });
+
+    const logging = this.averageScore(loggingScores);
+    const nutrition = this.averageScore(nutritionScores);
+    const activity = this.averageScore(activityScores);
+    const plan = this.averageScore(planScores);
+    const overall = this.clamp(logging * 0.35 + nutrition * 0.3 + activity * 0.2 + plan * 0.15);
+    const weakestArea = this.weakestAdherenceArea({ nutrition, activity, logging, plan });
+
+    return {
+      trend: {
+        average_7d: average7d,
+        delta_vs_7d: delta,
+        direction,
+        days_with_data: dataDays.length,
+      },
+      weekly_adherence: {
+        overall,
+        nutrition,
+        activity,
+        logging,
+        plan,
+        days_tracked: daysWithData.length,
+        days_with_logs: daysWithData.filter((day) => day.dailyLog.logs.length > 0).length,
+        days_with_activity: daysWithData.filter((day) => day.activityLogs.length > 0).length,
+        weakest_area: weakestArea,
+        patterns: this.detectWeeklyBehaviorPatterns(daysWithData, profile),
+      },
+    };
+  }
+
+  private buildSummaryPlan(
+    dailyLog: DailyLog | null,
+    activityLogs: ActivityLog[],
+    activeRoadmap: DailyRoadmapItem[],
+    profile: TodaySummary['profile'],
+  ): TodaySummary['plan'] {
+    const consumed = dailyLog?.total_calories ?? 0;
+    const target = dailyLog?.target_calories ?? Number(profile?.daily_calorie_target ?? 1800);
+    const burned = activityLogs.reduce((sum, item) => sum + Number(item.calories_burned ?? 0), 0);
+    const roadmapCompleted = activeRoadmap.filter((item) => item.is_completed).length;
+    return {
+      target_calories: target,
+      consumed_calories: consumed,
+      burned_calories: burned,
+      net_calories: Math.max(0, consumed - burned),
+      remaining_calories: target - Math.max(0, consumed - burned),
+      roadmap_total: activeRoadmap.length,
+      roadmap_completed: roadmapCompleted,
+      roadmap_remaining: Math.max(0, activeRoadmap.length - roadmapCompleted),
+      planned_activity_kcal: activeRoadmap.reduce((sum, item) => sum + Number(item.estimated_kcal ?? 0), 0),
+    };
+  }
+
+  private emptyHealthScoreBehaviorMetrics(): HealthScoreBehaviorMetrics {
+    return {
+      trend: {
+        average_7d: null,
+        delta_vs_7d: null,
+        direction: 'unknown',
+        days_with_data: 0,
+      },
+      weekly_adherence: {
+        overall: 0,
+        nutrition: 0,
+        activity: 0,
+        logging: 0,
+        plan: 0,
+        days_tracked: 0,
+        days_with_logs: 0,
+        days_with_activity: 0,
+        weakest_area: 'none',
+        patterns: [],
+      },
+    };
+  }
+
+  private detectWeeklyBehaviorPatterns(
+    days: Array<{
+      dailyLog: DailyLog;
+      activityLogs: ActivityLog[];
+      roadmap: DailyRoadmapItem[];
+      score: TodaySummary['health_score'];
+    }>,
+    profile: TodaySummary['profile'],
+  ): string[] {
+    const patterns: string[] = [];
+    const loggedDays = days.filter((day) => day.dailyLog.logs.length > 0);
+    const missingBreakfast = days.filter((day) => !day.dailyLog.logs.some((log) => log.meal_type === 'breakfast')).length;
+    const missingDinner = days.filter((day) => !day.dailyLog.logs.some((log) => log.meal_type === 'dinner')).length;
+    const noActivity = days.filter((day) => day.activityLogs.length === 0).length;
+    const proteinTarget = Math.max(Number(profile?.weight_kg ?? 65) * 1.2, 60);
+    const lowProtein = loggedDays.filter((day) => Number(day.dailyLog.total_protein_g ?? 0) < proteinTarget * 0.7).length;
+    const incompletePlanDays = days.filter((day) => (
+      day.roadmap.length > 0 && day.roadmap.some((item) => !item.is_completed)
+    )).length;
+
+    if (missingBreakfast >= 4) patterns.push(`Breakfast was missed ${missingBreakfast}/7 days`);
+    if (missingDinner >= 4) patterns.push(`Dinner was not logged ${missingDinner}/7 days`);
+    if (noActivity >= 4) patterns.push(`Activity was missing ${noActivity}/7 days`);
+    if (lowProtein >= 4) patterns.push(`Protein ran low ${lowProtein}/${Math.max(loggedDays.length, 1)} logged days`);
+    if (incompletePlanDays >= 3) patterns.push(`Daily plan was incomplete ${incompletePlanDays}/7 days`);
+
+    return patterns.slice(0, 3);
+  }
+
+  private weakestAdherenceArea(scores: {
+    nutrition: number;
+    activity: number;
+    logging: number;
+    plan: number;
+  }): TodaySummary['health_score']['weekly_adherence']['weakest_area'] {
+    const entries = Object.entries(scores) as Array<[
+      TodaySummary['health_score']['weekly_adherence']['weakest_area'],
+      number,
+    ]>;
+    const weakest = entries.reduce((current, item) => (item[1] < current[1] ? item : current));
+    return weakest[1] >= 80 ? 'none' : weakest[0];
+  }
+
+  private averageScore(values: number[]): number {
+    if (values.length === 0) return 0;
+    return this.clamp(values.reduce((sum, value) => sum + value, 0) / values.length);
+  }
+
+  private clamp(value: number, min = 0, max = 100): number {
+    return Math.max(min, Math.min(max, Math.round(value)));
+  }
+
+  private round(value: number): number {
+    return Math.round(value);
+  }
+
+  private addDays(date: string, days: number): string {
+    const [year, month, day] = date.split('-').map((part) => parseInt(part, 10));
+    return new Date(Date.UTC(year, month - 1, day) + days * 86_400_000).toISOString().split('T')[0];
   }
 
   private async getDailyRoadmapForSummary(userId: string, date: string): Promise<DailyRoadmapItem[]> {

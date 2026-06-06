@@ -263,6 +263,14 @@ describe('LogService.getTodaySummary', () => {
     expect(summary.health_score.label).toBe('steady');
     expect(summary.health_score.nutrition).toBeGreaterThanOrEqual(85);
     expect(summary.health_score.activity).toBe(60);
+    expect(summary.health_score.trend.average_7d).toBeGreaterThanOrEqual(70);
+    expect(summary.health_score.trend.direction).toBe('flat');
+    expect(summary.health_score.trend.days_with_data).toBe(7);
+    expect(summary.health_score.weekly_adherence.overall).toBeGreaterThanOrEqual(80);
+    expect(summary.health_score.weekly_adherence.logging).toBe(100);
+    expect(summary.health_score.weekly_adherence.days_with_logs).toBe(7);
+    expect(summary.health_score.weekly_adherence.weakest_area).toBe('plan');
+    expect(summary.health_score.weekly_adherence.patterns).toContain('Daily plan was incomplete 7/7 days');
     expect(summary.health_score.next_action).toBe('complete_plan');
     expect(summary.health_score.signals).toContain('30 activity minutes logged');
     expect(summary.health_score.signals).toContain('1/2 plan tasks complete');

@@ -256,6 +256,72 @@ export function createNinetyDayJourneyMock() {
         data_status: 'ready',
       },
     },
+    todaySummary: {
+      date: today.date,
+      timezone_offset_minutes: -420,
+      daily_log: today,
+      activity_logs: [
+        {
+          id: 'activity-today',
+          user_id: 'user-1',
+          activity_type: 'walking',
+          duration_min: 35,
+          calories_burned: 160,
+          logged_at: `${today.date}T17:30:00.000Z`,
+          notes: 'MOVEMENT_PLAN:Walk',
+          created_at: `${today.date}T17:30:00.000Z`,
+        },
+      ],
+      daily_roadmap: [],
+      activity_preferences: [],
+      profile: null,
+      plan: {
+        target_calories: 1850,
+        consumed_calories: today.total_calories,
+        burned_calories: 160,
+        net_calories: Math.max(0, today.total_calories - 160),
+        remaining_calories: 1850 - Math.max(0, today.total_calories - 160),
+        roadmap_total: 0,
+        roadmap_completed: 0,
+        roadmap_remaining: 0,
+        planned_activity_kcal: 0,
+      },
+      health_score: {
+        overall: 83,
+        label: 'strong',
+        nutrition: 88,
+        activity: 82,
+        consistency: 90,
+        recovery: 78,
+        trend: {
+          average_7d: 76,
+          delta_vs_7d: 7,
+          direction: 'up',
+          days_with_data: 7,
+        },
+        weekly_adherence: {
+          overall: 86,
+          nutrition: 88,
+          activity: 80,
+          logging: 100,
+          plan: 75,
+          days_tracked: 7,
+          days_with_logs: 7,
+          days_with_activity: 5,
+          weakest_area: 'plan',
+          patterns: ['Daily plan was incomplete 3/7 days'],
+        },
+        signals: ['Daily plan was incomplete 3/7 days', 'Nutrition is close to plan'],
+        next_action: 'complete_plan',
+      },
+      status: {
+        daily_log: 'ok',
+        activity_logs: 'ok',
+        daily_roadmap: 'ok',
+        activity_preferences: 'ok',
+        profile: 'ok',
+      },
+    },
     weeklyInsights: buildWeeklyInsights(logsByDay),
     coachingInsights: [
       {
@@ -300,8 +366,13 @@ export async function mockNinetyDayJourneyApi(page: Page) {
     const request = route.request();
     const url = new URL(request.url());
     const path = url.pathname;
+    const isApiPath = /^\/(user|log|today|activity-preferences|gamification|body-progress|insights|coaching|calorie-target|roadmap|subscriptions|reminders)(\/|$)/.test(path);
 
-    if (url.port !== '3000') {
+    if (request.resourceType() === 'document' && url.port !== '3000') {
+      return route.continue();
+    }
+
+    if (url.port !== '3000' && !isApiPath) {
       return route.continue();
     }
 
@@ -309,6 +380,7 @@ export async function mockNinetyDayJourneyApi(page: Page) {
     if (path === '/log/daily') return route.fulfill(jsonResponse(mock.today));
     if (path === '/log/activity') return route.fulfill(jsonResponse(mock.activityLogs));
     if (path === '/log/saved-meals') return route.fulfill(jsonResponse(mock.savedMeals));
+    if (path === '/today/summary') return route.fulfill(jsonResponse(mock.todaySummary));
     if (path === '/activity-preferences') return route.fulfill(jsonResponse(mock.activityPreferences));
     if (path === '/gamification/summary') return route.fulfill(jsonResponse(mock.gamification));
     if (path === '/body-progress/trend') return route.fulfill(jsonResponse(mock.bodyTrend));

@@ -372,6 +372,24 @@ describe('AiService.getCoachReply', () => {
         activity: 40,
         consistency: 45,
         recovery: 80,
+        trend: {
+          average_7d: 66,
+          delta_vs_7d: -8,
+          direction: 'down',
+          days_with_data: 5,
+        },
+        weekly_adherence: {
+          overall: 61,
+          nutrition: 55,
+          activity: 48,
+          logging: 58,
+          plan: 70,
+          days_tracked: 7,
+          days_with_logs: 5,
+          days_with_activity: 3,
+          weakest_area: 'activity',
+          patterns: ['Activity was missing 4/7 days'],
+        },
         next_action: 'log_meal',
         signals: ['1/3 meals logged', 'No activity yet'],
       },
@@ -379,6 +397,8 @@ describe('AiService.getCoachReply', () => {
 
     expect(prompt).toContain('Health Score today');
     expect(prompt).toContain('Overall: 58/100 (building)');
+    expect(prompt).toContain('Weekly adherence: 61/100');
+    expect(prompt).toContain('Activity was missing 4/7 days');
     expect(prompt).toContain('Next best action: log_meal');
     expect(result.actions).toEqual(expect.arrayContaining([
       expect.objectContaining({ type: 'open_scan' }),

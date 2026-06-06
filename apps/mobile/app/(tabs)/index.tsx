@@ -943,12 +943,31 @@ export default function DashboardScreen() {
   const todayPlanMetricValue = hasRoadmapPlan ? remainingRoadmapItems.length : Math.abs(planRemaining);
   const todayPlanMetricLabel = hasRoadmapPlan ? 'tasks left' : planRemaining >= 0 ? 'left' : 'over';
   const healthScore = todaySummary?.health_score;
+  const healthTrendDelta = healthScore?.trend.delta_vs_7d ?? null;
+  const healthTrendTone = healthScore?.trend.direction === 'up'
+    ? 'good'
+    : healthScore?.trend.direction === 'down'
+      ? 'warn'
+      : 'neutral';
+  const healthTrendText = healthScore && healthScore.trend.average_7d !== null && healthTrendDelta !== null
+    ? t('screen.tabs.index.health.trend', {
+        average: formatNumber(healthScore.trend.average_7d),
+        delta: `${healthTrendDelta >= 0 ? '+' : ''}${formatNumber(healthTrendDelta)}`,
+      })
+    : t('screen.tabs.index.health.trend.empty');
+  const healthAdherenceText = healthScore
+    ? t('screen.tabs.index.health.adherence', {
+        score: formatNumber(healthScore.weekly_adherence.overall),
+        weakest: t(`screen.tabs.index.health.weakest.${healthScore.weekly_adherence.weakest_area}` as any),
+      })
+    : '';
   const healthScoreBreakdown = healthScore
     ? [
         { key: 'nutrition', label: t('screen.tabs.index.health.nutrition'), value: healthScore.nutrition },
         { key: 'activity', label: t('screen.tabs.index.health.activity'), value: healthScore.activity },
         { key: 'consistency', label: t('screen.tabs.index.health.consistency'), value: healthScore.consistency },
         { key: 'recovery', label: t('screen.tabs.index.health.recovery'), value: healthScore.recovery },
+        { key: 'weekly', label: t('screen.tabs.index.health.weekly'), value: healthScore.weekly_adherence.overall },
       ]
     : [];
 
@@ -1209,6 +1228,26 @@ export default function DashboardScreen() {
               <Text style={styles.healthScoreValue}>{formatNumber(healthScore.overall)}</Text>
               <Text style={styles.healthScoreUnit}>/100</Text>
             </View>
+          </View>
+          <View style={styles.healthTrendRow}>
+            <View style={[
+              styles.healthTrendPill,
+              healthTrendTone === 'good' && styles.healthTrendPillGood,
+              healthTrendTone === 'warn' && styles.healthTrendPillWarn,
+            ]}>
+              <Ionicons
+                name={healthTrendTone === 'good' ? 'trending-up' : healthTrendTone === 'warn' ? 'trending-down' : 'remove'}
+                size={14}
+                color={healthTrendTone === 'warn' ? theme.colors.accentAmber : theme.colors.accentMint}
+              />
+              <Text style={[
+                styles.healthTrendText,
+                healthTrendTone === 'warn' && styles.healthTrendTextWarn,
+              ]}>
+                {healthTrendText}
+              </Text>
+            </View>
+            <Text style={styles.healthAdherenceText}>{healthAdherenceText}</Text>
           </View>
           <View style={styles.healthScoreBreakdown}>
             {healthScoreBreakdown.map((item) => (
@@ -1933,6 +1972,45 @@ const styles = createThemedStyles((colors, radii) => ({
   healthScoreUnit: {
     color: colors.textMuted,
     fontSize: 11,
+    fontWeight: '800',
+  },
+  healthTrendRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 8,
+  },
+  healthTrendPill: {
+    minHeight: 30,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colors.borderSuccess,
+    backgroundColor: colors.surface,
+    paddingHorizontal: 9,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  healthTrendPillGood: {
+    borderColor: colors.borderSuccess,
+  },
+  healthTrendPillWarn: {
+    borderColor: colors.borderWarning,
+    backgroundColor: colors.surfaceWarning,
+  },
+  healthTrendText: {
+    color: colors.accentMint,
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  healthTrendTextWarn: {
+    color: colors.accentAmber,
+  },
+  healthAdherenceText: {
+    flexShrink: 1,
+    color: colors.textSoft,
+    fontSize: 12,
+    lineHeight: 18,
     fontWeight: '800',
   },
   healthScoreBreakdown: {

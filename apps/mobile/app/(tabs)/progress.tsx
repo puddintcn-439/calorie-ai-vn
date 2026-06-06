@@ -8,7 +8,7 @@ import {
   RefreshControl
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { BodyProgressEntry, BodyProgressSummary, BodyProgressTrend, CreateBodyProgressDto } from '@calorie-ai/types';
+import { BodyProgressEntry, BodyProgressSummary, BodyProgressTrend, CreateBodyProgressDto, TodaySummary } from '@calorie-ai/types';
 import { ScreenShell, SurfaceCard, Eyebrow, HeroTitle, BodyText, useBottomNavContentPadding } from '../../components/ui-shell';
 import { UiButton } from '../../components/ui-button';
 import MacrosCard from '../../components/macros-card';
@@ -22,7 +22,7 @@ import {
   CalorieTargetResponse,
   WeeklyAdaptiveResult,
 } from '../../services/calorie-target.service';
-import { getLocalDateYmd } from '../../services/date';
+import { getLocalDateYmd, getLocalTimezoneOffsetMinutes } from '../../services/date';
 import { formatNumberVi, formatPercent, safeNumber, toFiniteNumber } from '../../services/number-format';
 import { Text } from '../../components/i18n-text';
 import { TextInput } from '../../components/i18n-text-input';
@@ -131,6 +131,7 @@ export default function BodyProgressScreen() {
   const { t } = useI18n();
   const bottomContentPadding = useBottomNavContentPadding();
   const [trend, setTrend] = useState<BodyProgressTrend | null>(null);
+  const [todaySummary, setTodaySummary] = useState<TodaySummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -146,13 +147,25 @@ export default function BodyProgressScreen() {
 
   const loadData = useCallback(async () => {
     try {
-      const res = await apiClient.get('/body-progress/trend');
-      setTrend(res.data);
+      const today = getLocalDateYmd();
+      const tzOffset = getLocalTimezoneOffsetMinutes();
+      const [trendResult, summaryResult] = await Promise.allSettled([
+        apiClient.get('/body-progress/trend'),
+        apiClient.get(`/today/summary?date=${today}&tz_offset_minutes=${tzOffset}`),
+      ]);
+
+      if (trendResult.status === 'fulfilled') {
+        setTrend(trendResult.value.data);
+      }
+
+      if (summaryResult.status === 'fulfilled') {
+        setTodaySummary(summaryResult.value.data);
+      }
 
       // Pre-fill form with today's entry if exists
-      const todayEntry = res.data?.entries?.find(
-        (e: BodyProgressEntry) => e.recorded_at === getLocalDateYmd(),
-      );
+      const todayEntry = trendResult.status === 'fulfilled'
+        ? trendResult.value.data?.entries?.find((e: BodyProgressEntry) => e.recorded_at === today)
+        : null;
       if (todayEntry) {
         setWeightKg(todayEntry.weight_kg?.toString() ?? '');
         setWaistCm(todayEntry.waist_cm?.toString() ?? '');
@@ -313,6 +326,18 @@ export default function BodyProgressScreen() {
 
   const latest = trend?.latest_entry;
   const progressSummary = trend?.progress_summary;
+  const healthScore = todaySummary?.health_score;
+  const healthTrendDelta = healthScore?.trend.delta_vs_7d ?? null;
+  const healthTrendLabel = healthScore && healthScore.trend.average_7d !== null && healthTrendDelta !== null
+    ? t('screen.tabs.progress.behavior.trend', {
+        score: formatNumberVi(healthScore.overall, '0'),
+        average: formatNumberVi(healthScore.trend.average_7d, '0'),
+        delta: `${healthTrendDelta >= 0 ? '+' : ''}${formatNumberVi(healthTrendDelta, '0')}`,
+      })
+    : t('screen.tabs.progress.behavior.trendEmpty');
+  const weakestBehavior = healthScore
+    ? t(`screen.tabs.progress.behavior.weakest.${healthScore.weekly_adherence.weakest_area}` as any)
+    : '';
 
   return (
     <ScreenShell scroll={false} reserveBottomNav={false}>
@@ -361,6 +386,52 @@ export default function BodyProgressScreen() {
         )}
 
         <ProgressSummaryCard summary={progressSummary} />
+
+        {healthScore ? (
+          <SurfaceCard style={styles.behaviorCard}>
+            <View style={styles.behaviorHeader}>
+              <View style={styles.behaviorCopy}>
+                <Text style={styles.trendTitle} i18nKey="screen.tabs.progress.behavior.title" />
+                <Text style={styles.behaviorBody}>{healthTrendLabel}</Text>
+              </View>
+              <View style={styles.behaviorScoreBadge}>
+                <Text style={styles.behaviorScoreValue}>{formatNumberVi(healthScore.weekly_adherence.overall, '0')}/100</Text>
+                <Text style={styles.behaviorScoreLabel} i18nKey="screen.tabs.progress.behavior.adherence" />
+              </View>
+            </View>
+            <View style={styles.behaviorGrid}>
+              <ProgressMetric
+                label={t('screen.tabs.progress.behavior.logging')}
+                value={formatPercent(healthScore.weekly_adherence.logging)}
+                hint={t('screen.tabs.progress.behavior.daysWithLogs', {
+                  days: healthScore.weekly_adherence.days_with_logs,
+                })}
+              />
+              <ProgressMetric
+                label={t('screen.tabs.progress.behavior.activity')}
+                value={formatPercent(healthScore.weekly_adherence.activity)}
+                hint={t('screen.tabs.progress.behavior.daysWithActivity', {
+                  days: healthScore.weekly_adherence.days_with_activity,
+                })}
+              />
+              <ProgressMetric
+                label={t('screen.tabs.progress.behavior.weakest')}
+                value={weakestBehavior}
+                hint={t('screen.tabs.progress.behavior.weakestHint')}
+              />
+            </View>
+            {healthScore.weekly_adherence.patterns.length > 0 ? (
+              <View style={styles.behaviorPatternList}>
+                {healthScore.weekly_adherence.patterns.map((pattern) => (
+                  <View key={pattern} style={styles.behaviorPatternChip}>
+                    <Ionicons name="analytics-outline" size={14} color={theme.colors.accentCyan} />
+                    <Text style={styles.behaviorPatternText}>{pattern}</Text>
+                  </View>
+                ))}
+              </View>
+            ) : null}
+          </SurfaceCard>
+        ) : null}
 
         {/* ── Why This Target (Preview) ── */}
         <SurfaceCard style={styles.previewCard}>
@@ -606,6 +677,36 @@ const styles = createThemedStyles((colors, radii) => ({
   previewRow: { color: colors.textSoft, fontSize: 13, marginTop: 4 },
   progressSummaryCard: { marginBottom: 14, borderColor: colors.borderInfo, backgroundColor: colors.surface },
   progressSummaryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  behaviorCard: { marginBottom: 14, borderColor: colors.borderSuccess, backgroundColor: colors.surfaceSuccess },
+  behaviorHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, marginBottom: 12 },
+  behaviorCopy: { flex: 1, minWidth: 0 },
+  behaviorBody: { color: colors.textSoft, fontSize: 13, lineHeight: 19 },
+  behaviorScoreBadge: {
+    minWidth: 84,
+    borderWidth: 1,
+    borderColor: colors.borderSuccess,
+    backgroundColor: colors.surface,
+    borderRadius: radii.lg,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    alignItems: 'center',
+  },
+  behaviorScoreValue: { color: colors.accentMint, fontSize: 24, lineHeight: 28, fontWeight: '900' },
+  behaviorScoreLabel: { color: colors.textMuted, fontSize: 10, fontWeight: '800' },
+  behaviorGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  behaviorPatternList: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 },
+  behaviorPatternChip: {
+    borderWidth: 1,
+    borderColor: colors.borderInfo,
+    backgroundColor: colors.surface,
+    borderRadius: 999,
+    paddingHorizontal: 9,
+    paddingVertical: 7,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  behaviorPatternText: { color: colors.textSoft, fontSize: 12, fontWeight: '800', flexShrink: 1 },
   progressMetric: {
     flex: 1,
     minWidth: 140,

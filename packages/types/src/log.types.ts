@@ -94,6 +94,24 @@ export interface TodaySummary {
     activity: number;
     consistency: number;
     recovery: number;
+    trend: {
+      average_7d: number | null;
+      delta_vs_7d: number | null;
+      direction: 'up' | 'down' | 'flat' | 'unknown';
+      days_with_data: number;
+    };
+    weekly_adherence: {
+      overall: number;
+      nutrition: number;
+      activity: number;
+      logging: number;
+      plan: number;
+      days_tracked: number;
+      days_with_logs: number;
+      days_with_activity: number;
+      weakest_area: 'nutrition' | 'activity' | 'logging' | 'plan' | 'none';
+      patterns: string[];
+    };
     signals: string[];
     next_action: 'log_meal' | 'move' | 'complete_plan' | 'recover' | 'maintain';
   };

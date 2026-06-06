@@ -708,7 +708,7 @@ export default function CoachScreen() {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomContentPadding }]}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomContentPadding + 40 }]}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
         <VisualHeroCard
@@ -1015,7 +1015,7 @@ const styles = createThemedStyles((colors, radii) => ({
     color: colors.accentAmber,
   },
   planSteps: {
-    gap: 8,
+    gap: 5,
   },
   planStep: {
     flexDirection: 'row',
@@ -1038,20 +1038,20 @@ const styles = createThemedStyles((colors, radii) => ({
     flex: 1,
     color: colors.textSoft,
     fontSize: 13,
-    lineHeight: 19,
+    lineHeight: 18,
   },
   planActions: {
     flexDirection: 'row',
     gap: 10,
-    marginTop: 14,
+    marginTop: 4,
   },
   planPrimaryAction: {
     flex: 1.1,
-    paddingVertical: 11,
+    paddingVertical: 4,
   },
   planSecondaryAction: {
     flex: 0.9,
-    paddingVertical: 11,
+    paddingVertical: 4,
   },
   promptRow: {
     flexDirection: 'row',

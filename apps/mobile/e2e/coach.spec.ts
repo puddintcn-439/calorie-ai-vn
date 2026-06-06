@@ -99,6 +99,24 @@ test.describe('Coach flows', () => {
             activity: 30,
             consistency: 25,
             recovery: 80,
+            trend: {
+              average_7d: 55,
+              delta_vs_7d: -13,
+              direction: 'down',
+              days_with_data: 4,
+            },
+            weekly_adherence: {
+              overall: 48,
+              nutrition: 40,
+              activity: 35,
+              logging: 45,
+              plan: 60,
+              days_tracked: 7,
+              days_with_logs: 3,
+              days_with_activity: 2,
+              weakest_area: 'activity',
+              patterns: ['Activity was missing 5/7 days'],
+            },
             next_action: 'log_meal',
             signals: ['No meal logged yet'],
           },
@@ -173,6 +191,10 @@ test.describe('Coach flows', () => {
       health_score: expect.objectContaining({
         overall: 42,
         next_action: 'log_meal',
+        weekly_adherence: expect.objectContaining({
+          overall: 48,
+          weakest_area: 'activity',
+        }),
       }),
     });
     await expectNoUnsafeRenderedText(page);

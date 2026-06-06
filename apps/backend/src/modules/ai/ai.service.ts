@@ -753,14 +753,19 @@ Trả lời ngắn gọn, thân thiện bằng tiếng Việt. Không quá 3 câ
 
 Health Score today:
 - Overall: ${score.overall}/100 (${score.label})
+- 7-day average: ${score.trend.average_7d ?? 'unknown'}/100
+- Trend: ${score.trend.direction}${score.trend.delta_vs_7d === null ? '' : ` (${score.trend.delta_vs_7d >= 0 ? '+' : ''}${score.trend.delta_vs_7d})`}
+- Weekly adherence: ${score.weekly_adherence.overall}/100
+- Weakest adherence area: ${score.weekly_adherence.weakest_area}
 - Nutrition: ${score.nutrition}/100
 - Activity: ${score.activity}/100
 - Consistency: ${score.consistency}/100
 - Recovery: ${score.recovery}/100
 - Next best action: ${score.next_action}
 - Signals: ${signals}
+- Patterns: ${score.weekly_adherence.patterns.length > 0 ? score.weekly_adherence.patterns.join('; ') : 'none'}
 
-Use Health Score to choose the most useful next action. If next_action is log_meal, suggest logging/scanning food. If it is move or complete_plan, suggest a light activity or plan completion. If it is recover, avoid pushing intensity.`;
+Use Health Score, weekly adherence, and patterns to choose the most useful next action. If next_action is log_meal, suggest logging/scanning food. If it is move or complete_plan, suggest a light activity or plan completion. If it is recover, avoid pushing intensity. If weakest adherence area is logging, prioritize a tiny logging habit over stricter calories.`;
   }
 
   private recordAiScanResponse(response: AIScanResponse, startedAt: number): AIScanResponse {
