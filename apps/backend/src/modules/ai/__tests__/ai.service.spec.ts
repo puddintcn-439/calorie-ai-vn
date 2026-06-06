@@ -456,6 +456,66 @@ describe('AiService.getCoachReply', () => {
         memory_notes: ['Breakfast is frequently missing from logged days.', 'Reminder responses are strongest around 19:00.'],
         updated_at: '2026-06-06T00:00:00.000Z',
       },
+      intervention_analytics: {
+        min_sample: 20,
+        sample_status: 'learning',
+        windows: {
+          seven_day: {
+            days: 7,
+            total_shown: 4,
+            total_acted: 2,
+            total_dismissed: 1,
+            action_rate: 50,
+            dismiss_rate: 25,
+            top_effective: [],
+            top_ignored: [],
+            ranking: [],
+          },
+          thirty_day: {
+            days: 30,
+            total_shown: 18,
+            total_acted: 9,
+            total_dismissed: 4,
+            action_rate: 50,
+            dismiss_rate: 22,
+            top_effective: [
+              {
+                intervention_type: 'activity_recovery',
+                shown: 7,
+                acted: 5,
+                dismissed: 0,
+                action_rate: 71,
+                dismiss_rate: 0,
+                effectiveness_score: 71,
+                last_shown_at: '2026-06-06T00:00:00.000Z',
+                last_acted_at: '2026-06-06T00:10:00.000Z',
+                primary_action: 'move',
+              },
+            ],
+            top_ignored: [
+              {
+                intervention_type: 'reminder_tuning',
+                shown: 6,
+                acted: 1,
+                dismissed: 3,
+                action_rate: 17,
+                dismiss_rate: 50,
+                effectiveness_score: 5,
+                last_shown_at: '2026-06-06T00:00:00.000Z',
+                last_acted_at: '2026-06-06T00:10:00.000Z',
+                primary_action: 'adjust_reminders',
+              },
+            ],
+            ranking: [],
+          },
+        },
+        ready_interventions: [],
+        insufficient_interventions: ['activity_recovery', 'reminder_tuning'],
+        best_intervention: 'activity_recovery',
+        weakest_intervention: 'reminder_tuning',
+        recommendations: ['Overall sample is usable, but each intervention still needs 20 shown events before ranking drives decisions.'],
+        updated_at: '2026-06-06T00:00:00.000Z',
+      },
       dynamic_intervention: {
         mode: 'recovery_plan',
         priority: 'high',
@@ -484,6 +544,10 @@ describe('AiService.getCoachReply', () => {
     expect(prompt).toContain('Behavior Memory (90 days, high confidence)');
     expect(prompt).toContain('Best reminder hour: 19:00');
     expect(prompt).toContain('Low activity days: Thu, Sun');
+    expect(prompt).toContain('Intervention Analytics');
+    expect(prompt).toContain('Sample status: learning');
+    expect(prompt).toContain('Best intervention: activity_recovery');
+    expect(prompt).toContain('Weakest intervention: reminder_tuning');
     expect(prompt).toContain('Dynamic Intervention Decision');
     expect(prompt).toContain('Mode: recovery_plan');
     expect(prompt).toContain('Primary action: move');

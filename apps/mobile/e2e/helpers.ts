@@ -438,6 +438,79 @@ export function createNinetyDayJourneyMock() {
       by_type: {},
       updated_at: `${today.date}T10:00:00.000Z`,
     },
+    interventionAnalytics: {
+      min_sample: 20,
+      sample_status: 'learning',
+      windows: {
+        seven_day: {
+          days: 7,
+          total_shown: 6,
+          total_acted: 4,
+          total_dismissed: 1,
+          action_rate: 67,
+          dismiss_rate: 17,
+          top_effective: [
+            {
+              intervention_type: 'activity_recovery',
+              shown: 3,
+              acted: 3,
+              dismissed: 0,
+              action_rate: 100,
+              dismiss_rate: 0,
+              effectiveness_score: 100,
+              last_shown_at: `${today.date}T08:00:00.000Z`,
+              last_acted_at: `${today.date}T08:05:00.000Z`,
+              primary_action: 'move',
+            },
+          ],
+          top_ignored: [],
+          ranking: [],
+        },
+        thirty_day: {
+          days: 30,
+          total_shown: 18,
+          total_acted: 11,
+          total_dismissed: 2,
+          action_rate: 61,
+          dismiss_rate: 11,
+          top_effective: [
+            {
+              intervention_type: 'activity_recovery',
+              shown: 7,
+              acted: 5,
+              dismissed: 0,
+              action_rate: 71,
+              dismiss_rate: 0,
+              effectiveness_score: 71,
+              last_shown_at: `${today.date}T08:00:00.000Z`,
+              last_acted_at: `${today.date}T08:05:00.000Z`,
+              primary_action: 'move',
+            },
+          ],
+          top_ignored: [
+            {
+              intervention_type: 'reminder_tuning',
+              shown: 6,
+              acted: 2,
+              dismissed: 2,
+              action_rate: 33,
+              dismiss_rate: 33,
+              effectiveness_score: 25,
+              last_shown_at: `${today.date}T07:00:00.000Z`,
+              last_acted_at: `${today.date}T07:20:00.000Z`,
+              primary_action: 'adjust_reminders',
+            },
+          ],
+          ranking: [],
+        },
+      },
+      ready_interventions: [],
+      insufficient_interventions: ['activity_recovery', 'reminder_tuning'],
+      best_intervention: 'activity_recovery',
+      weakest_intervention: 'reminder_tuning',
+      recommendations: ['Overall sample is usable, but each intervention still needs 20 shown events before ranking drives decisions.'],
+      updated_at: `${today.date}T10:00:00.000Z`,
+    },
   };
 }
 
@@ -470,6 +543,7 @@ export async function mockNinetyDayJourneyApi(page: Page) {
     if (path === '/coaching/insights') return route.fulfill(jsonResponse(mock.coachingInsights));
     if (path === '/coaching/weekly-summary') return route.fulfill(jsonResponse(mock.coachingSummary));
     if (path === '/coaching/behavior-memory') return route.fulfill(jsonResponse(mock.behaviorMemory));
+    if (path === '/coaching/interventions/analytics') return route.fulfill(jsonResponse(mock.interventionAnalytics));
     if (path === '/coaching/interventions/memory') return route.fulfill(jsonResponse(mock.interventionMemory));
     if (path === '/coaching/interventions/events') return route.fulfill(jsonResponse({ recorded: true }));
     if (path === '/calorie-target/me') {

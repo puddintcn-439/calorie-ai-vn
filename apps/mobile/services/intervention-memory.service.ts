@@ -1,4 +1,4 @@
-import type { DynamicIntervention, InterventionEventInput, InterventionMemory } from '@calorie-ai/types';
+import type { DynamicIntervention, InterventionAnalytics, InterventionEventInput, InterventionMemory } from '@calorie-ai/types';
 import { apiClient } from './api';
 import { appLogger } from './logger.service';
 
@@ -36,5 +36,10 @@ export async function recordInterventionEvent(event: InterventionEventInput): Pr
 
 export async function fetchInterventionMemory(days = 90): Promise<InterventionMemory> {
   const res = await apiClient.get<InterventionMemory>(`/coaching/interventions/memory?days=${days}`);
+  return res.data;
+}
+
+export async function fetchInterventionAnalytics(minSample = 20): Promise<InterventionAnalytics> {
+  const res = await apiClient.get<InterventionAnalytics>(`/coaching/interventions/analytics?min_sample=${minSample}`);
   return res.data;
 }

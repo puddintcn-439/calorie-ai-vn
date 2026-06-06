@@ -136,3 +136,30 @@ export interface InterventionMemory {
   by_type: Partial<Record<DynamicIntervention['intervention_type'], InterventionMemoryStats>>;
   updated_at: string;
 }
+
+export interface InterventionAnalyticsWindow {
+  days: number;
+  total_shown: number;
+  total_acted: number;
+  total_dismissed: number;
+  action_rate: number;
+  dismiss_rate: number;
+  top_effective: InterventionMemoryStats[];
+  top_ignored: InterventionMemoryStats[];
+  ranking: InterventionMemoryStats[];
+}
+
+export interface InterventionAnalytics {
+  min_sample: number;
+  sample_status: 'insufficient' | 'learning' | 'ready';
+  windows: {
+    seven_day: InterventionAnalyticsWindow;
+    thirty_day: InterventionAnalyticsWindow;
+  };
+  ready_interventions: DynamicIntervention['intervention_type'][];
+  insufficient_interventions: DynamicIntervention['intervention_type'][];
+  best_intervention: DynamicIntervention['intervention_type'] | null;
+  weakest_intervention: DynamicIntervention['intervention_type'] | null;
+  recommendations: string[];
+  updated_at: string;
+}

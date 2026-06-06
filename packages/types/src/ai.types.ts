@@ -1,7 +1,7 @@
 import { Food, FoodCategory } from './food.types';
 import type { TodaySummary } from './log.types';
 import type { ReminderEffectivenessSummary } from './reminder.types';
-import type { BehaviorMemory, DynamicIntervention, SuccessForecast } from './behavior.types';
+import type { BehaviorMemory, DynamicIntervention, InterventionAnalytics, SuccessForecast } from './behavior.types';
 
 // ---- Request Types ----
 
@@ -71,6 +71,7 @@ export interface AICoachRequest {
     reminder_effectiveness?: ReminderEffectivenessSummary;
     success_forecast?: SuccessForecast;
     behavior_memory?: BehaviorMemory;
+    intervention_analytics?: InterventionAnalytics;
     dynamic_intervention?: DynamicIntervention;
   };
 }

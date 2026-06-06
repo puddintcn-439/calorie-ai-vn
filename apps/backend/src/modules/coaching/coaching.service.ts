@@ -9,6 +9,8 @@ import {
   DynamicIntervention,
   DynamicInterventionAction,
   InterventionEventInput,
+  InterventionAnalytics,
+  InterventionAnalyticsWindow,
   InterventionMemory,
   InterventionMemoryStats,
   PatternType,
@@ -65,6 +67,27 @@ export class CoachingService {
     }
 
     return this.buildInterventionMemory(data ?? [], daysAnalyzed);
+  }
+
+  async getInterventionAnalytics(userId: string, minSample = 20): Promise<InterventionAnalytics> {
+    const sampleThreshold = Math.max(5, Math.min(100, Math.round(minSample)));
+    const since = new Date();
+    since.setDate(since.getDate() - 29);
+    since.setHours(0, 0, 0, 0);
+
+    const { data, error } = await this.supabase.db
+      .from('user_intervention_events')
+      .select('intervention_type, mode, priority, primary_action, event_type, created_at')
+      .eq('user_id', userId)
+      .gte('created_at', since.toISOString())
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      this.logger.warn(`Failed to fetch intervention analytics: ${error.message ?? error}`);
+      return this.buildInterventionAnalytics([], sampleThreshold);
+    }
+
+    return this.buildInterventionAnalytics(data ?? [], sampleThreshold);
   }
 
   async getBehaviorMemory(userId: string, days = 90): Promise<BehaviorMemory> {
@@ -382,6 +405,105 @@ export class CoachingService {
       by_type: {},
       updated_at: new Date().toISOString(),
     };
+  }
+
+  private buildInterventionAnalytics(rows: any[], minSample: number): InterventionAnalytics {
+    const sevenDayStart = new Date();
+    sevenDayStart.setDate(sevenDayStart.getDate() - 6);
+    sevenDayStart.setHours(0, 0, 0, 0);
+    const sevenDayRows = rows.filter((row) => {
+      const time = Date.parse(row.created_at);
+      return Number.isFinite(time) && time >= sevenDayStart.getTime();
+    });
+
+    const sevenDayMemory = this.buildInterventionMemory(sevenDayRows, 7);
+    const thirtyDayMemory = this.buildInterventionMemory(rows, 30);
+    const thirtyDayWindow = this.buildInterventionAnalyticsWindow(thirtyDayMemory, 30);
+    const readyInterventions = thirtyDayMemory.ranking
+      .filter((item) => item.shown >= minSample)
+      .map((item) => item.intervention_type);
+    const insufficientInterventions = thirtyDayMemory.ranking
+      .filter((item) => item.shown > 0 && item.shown < minSample)
+      .map((item) => item.intervention_type);
+
+    const sampleStatus: InterventionAnalytics['sample_status'] = thirtyDayWindow.total_shown < minSample
+      ? 'insufficient'
+      : readyInterventions.length > 0
+        ? 'ready'
+        : 'learning';
+
+    return {
+      min_sample: minSample,
+      sample_status: sampleStatus,
+      windows: {
+        seven_day: this.buildInterventionAnalyticsWindow(sevenDayMemory, 7),
+        thirty_day: thirtyDayWindow,
+      },
+      ready_interventions: readyInterventions,
+      insufficient_interventions: insufficientInterventions,
+      best_intervention: thirtyDayMemory.best_intervention,
+      weakest_intervention: thirtyDayMemory.weakest_intervention,
+      recommendations: this.buildInterventionAnalyticsRecommendations(
+        sampleStatus,
+        thirtyDayWindow,
+        readyInterventions,
+        insufficientInterventions,
+        minSample,
+      ),
+      updated_at: new Date().toISOString(),
+    };
+  }
+
+  private buildInterventionAnalyticsWindow(memory: InterventionMemory, days: number): InterventionAnalyticsWindow {
+    const rankedWithData = memory.ranking.filter((item) => item.shown > 0);
+    const topIgnored = [...rankedWithData].sort((a, b) => (
+      b.dismiss_rate - a.dismiss_rate
+      || a.action_rate - b.action_rate
+      || b.shown - a.shown
+      || a.intervention_type.localeCompare(b.intervention_type)
+    ));
+
+    return {
+      days,
+      total_shown: memory.total_shown,
+      total_acted: memory.total_acted,
+      total_dismissed: memory.total_dismissed,
+      action_rate: memory.overall_action_rate,
+      dismiss_rate: memory.total_shown > 0 ? Math.round((memory.total_dismissed / memory.total_shown) * 100) : 0,
+      top_effective: rankedWithData.slice(0, 3),
+      top_ignored: topIgnored.slice(0, 3),
+      ranking: memory.ranking,
+    };
+  }
+
+  private buildInterventionAnalyticsRecommendations(
+    status: InterventionAnalytics['sample_status'],
+    window: InterventionAnalyticsWindow,
+    readyInterventions: DynamicIntervention['intervention_type'][],
+    insufficientInterventions: DynamicIntervention['intervention_type'][],
+    minSample: number,
+  ): string[] {
+    const recommendations: string[] = [];
+
+    if (window.total_shown === 0) {
+      return ['Collect intervention events before adapting the engine.'];
+    }
+
+    if (status === 'insufficient') {
+      recommendations.push(`Keep the rule engine active until at least ${minSample} shown events are collected.`);
+    } else if (status === 'learning') {
+      recommendations.push(`Overall sample is usable, but each intervention still needs ${minSample} shown events before ranking drives decisions.`);
+    } else if (readyInterventions.length > 0) {
+      recommendations.push(`Ranking is ready for: ${readyInterventions.join(', ')}.`);
+    }
+
+    const best = window.top_effective[0];
+    const weakest = window.top_ignored[0];
+    if (best) recommendations.push(`Lean into ${best.intervention_type}: ${best.action_rate}% action rate over ${best.shown} shown events.`);
+    if (weakest && weakest.dismiss_rate >= 30) recommendations.push(`Review ${weakest.intervention_type}: ${weakest.dismiss_rate}% dismiss rate suggests this intervention may need different timing or copy.`);
+    if (insufficientInterventions.length > 0) recommendations.push(`Need more samples for: ${insufficientInterventions.join(', ')}.`);
+
+    return recommendations.slice(0, 4);
   }
 
   private buildInterventionMemory(rows: any[], daysAnalyzed: number): InterventionMemory {

@@ -9,6 +9,7 @@ import {
   BehaviorMemory,
   DynamicIntervention,
   InterventionEventInput,
+  InterventionAnalytics,
   InterventionMemory,
   CoachingInsight,
   CoachingSummary,
@@ -98,6 +99,16 @@ export class CoachingController {
   ): Promise<InterventionMemory> {
     const userId = req.user.id ?? req.user.sub;
     return this.coaching.getInterventionMemory(userId, days ? Number(days) : 90);
+  }
+
+  @Get('interventions/analytics')
+  @ApiOperation({ summary: 'Get intervention analytics for PM and coach learning views' })
+  async getInterventionAnalytics(
+    @Request() req: any,
+    @Query('min_sample') minSample?: string,
+  ): Promise<InterventionAnalytics> {
+    const userId = req.user.id ?? req.user.sub;
+    return this.coaching.getInterventionAnalytics(userId, minSample ? Number(minSample) : 20);
   }
 
   @Get('insights')

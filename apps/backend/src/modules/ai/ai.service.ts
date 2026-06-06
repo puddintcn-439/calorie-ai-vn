@@ -9,7 +9,7 @@ import {
   AICoachResponse,
   AIUnresolvedItem,
 } from '@calorie-ai/types';
-import type { BehaviorMemory, DynamicIntervention, ReminderEffectivenessSummary, SuccessForecast, TodaySummary } from '@calorie-ai/types';
+import type { BehaviorMemory, DynamicIntervention, InterventionAnalytics, ReminderEffectivenessSummary, SuccessForecast, TodaySummary } from '@calorie-ai/types';
 import { createHash, randomUUID } from 'crypto';
 import { MetricsService } from '../../common/metrics/metrics.service';
 import { AiQueueService } from './ai.queue.service';
@@ -29,6 +29,7 @@ type CoachContext = {
   reminder_effectiveness?: ReminderEffectivenessSummary;
   success_forecast?: SuccessForecast;
   behavior_memory?: BehaviorMemory;
+  intervention_analytics?: InterventionAnalytics;
   dynamic_intervention?: DynamicIntervention;
 };
 
@@ -641,6 +642,7 @@ ${this.formatCoachHealthScoreContext(context)}
 ${this.formatCoachReminderEffectivenessContext(context)}
 ${this.formatCoachSuccessForecastContext(context)}
 ${this.formatCoachBehaviorMemoryContext(context)}
+${this.formatCoachInterventionAnalyticsContext(context)}
 ${this.formatCoachDynamicInterventionContext(context)}
 
 Người dùng hỏi: "${message}"
@@ -839,6 +841,32 @@ Behavior Memory (${memory.days_analyzed} days, ${memory.data_quality} confidence
 - Memory notes: ${memory.memory_notes.length > 0 ? memory.memory_notes.join('; ') : 'none'}
 
 Use Behavior Memory as long-term personalization, not diagnosis. When data_quality is low, phrase it as early signal. Prefer advice that matches the user's strongest known timing or repeated weak spot.`;
+  }
+
+  private formatCoachInterventionAnalyticsContext(context: CoachContext): string {
+    const analytics = context.intervention_analytics;
+    if (!analytics) {
+      return '';
+    }
+
+    const thirtyDay = analytics.windows.thirty_day;
+    const best = thirtyDay.top_effective[0];
+    const ignored = thirtyDay.top_ignored[0];
+
+    return `
+
+Intervention Analytics:
+- Sample status: ${analytics.sample_status}
+- Minimum sample threshold: ${analytics.min_sample} shown events
+- 30-day shown/acted/dismissed: ${thirtyDay.total_shown}/${thirtyDay.total_acted}/${thirtyDay.total_dismissed}
+- 30-day action rate: ${thirtyDay.action_rate}%
+- 30-day dismiss rate: ${thirtyDay.dismiss_rate}%
+- Best intervention: ${analytics.best_intervention ?? 'unknown'}${best ? ` (${best.action_rate}% action rate, ${best.shown} shown)` : ''}
+- Weakest intervention: ${analytics.weakest_intervention ?? 'unknown'}${ignored ? ` (${ignored.dismiss_rate}% dismiss rate, ${ignored.shown} shown)` : ''}
+- Ready interventions: ${analytics.ready_interventions.length > 0 ? analytics.ready_interventions.join(', ') : 'none'}
+- Recommendations: ${analytics.recommendations.length > 0 ? analytics.recommendations.join('; ') : 'none'}
+
+Use Intervention Analytics as learning evidence. If sample_status is insufficient or learning, do not overfit. If a weak intervention has high dismiss rate, avoid repeating it unless the Dynamic Intervention Decision requires it.`;
   }
 
   private formatCoachDynamicInterventionContext(context: CoachContext): string {

@@ -191,6 +191,57 @@ describe('CoachingService intervention memory', () => {
       effectiveness_score: 0,
     });
   });
+
+  it('summarizes intervention analytics with minimum sample guidance', async () => {
+    const recent = new Date().toISOString();
+    const rows = [
+      { intervention_type: 'activity_recovery', mode: 'recovery_plan', priority: 'high', primary_action: 'move', event_type: 'shown', created_at: recent },
+      { intervention_type: 'activity_recovery', mode: 'recovery_plan', priority: 'high', primary_action: 'move', event_type: 'shown', created_at: recent },
+      { intervention_type: 'activity_recovery', mode: 'recovery_plan', priority: 'high', primary_action: 'move', event_type: 'acted', created_at: recent },
+      { intervention_type: 'activity_recovery', mode: 'recovery_plan', priority: 'high', primary_action: 'move', event_type: 'acted', created_at: recent },
+      { intervention_type: 'reminder_tuning', mode: 'light_nudge', priority: 'low', primary_action: 'adjust_reminders', event_type: 'shown', created_at: recent },
+      { intervention_type: 'reminder_tuning', mode: 'light_nudge', priority: 'low', primary_action: 'adjust_reminders', event_type: 'shown', created_at: recent },
+      { intervention_type: 'reminder_tuning', mode: 'light_nudge', priority: 'low', primary_action: 'adjust_reminders', event_type: 'dismissed', created_at: recent },
+    ];
+    const supabase = makeSupabase((table) => {
+      if (table === 'user_intervention_events') {
+        return {
+          select: jest.fn().mockReturnThis(),
+          eq: jest.fn().mockReturnThis(),
+          gte: jest.fn().mockReturnThis(),
+          order: jest.fn().mockResolvedValue({ data: rows, error: null }),
+        };
+      }
+      return {};
+    });
+
+    const service = new CoachingService(supabase);
+    const analytics = await service.getInterventionAnalytics('user-1', 2);
+
+    expect(analytics).toMatchObject({
+      min_sample: 5,
+      sample_status: 'insufficient',
+      best_intervention: 'activity_recovery',
+      weakest_intervention: 'reminder_tuning',
+      windows: {
+        thirty_day: expect.objectContaining({
+          total_shown: 4,
+          action_rate: 50,
+          dismiss_rate: 25,
+        }),
+      },
+    });
+    expect(analytics.windows.thirty_day.top_effective[0]).toMatchObject({
+      intervention_type: 'activity_recovery',
+      action_rate: 100,
+    });
+    expect(analytics.windows.thirty_day.top_ignored[0]).toMatchObject({
+      intervention_type: 'reminder_tuning',
+      dismiss_rate: 50,
+    });
+    expect(analytics.insufficient_interventions).toEqual(['activity_recovery', 'reminder_tuning']);
+    expect(analytics.recommendations[0]).toContain('Keep the rule engine active');
+  });
 });
 
 describe('CoachingService.detectWeekendVariance', () => {

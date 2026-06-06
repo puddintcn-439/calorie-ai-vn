@@ -15,7 +15,7 @@ import { UiInput } from '../../components/ui-input';
 import { askCoach } from '../../services/ai.service';
 import { isPremiumFeatureError } from '../../services/feature-gating.service';
 import { useLogStore } from '../../store/log.store';
-import { AICoachAction, BehaviorMemory, CoachingInsight, CoachingSummary, DailyLog, ReminderEffectivenessSummary } from '@calorie-ai/types';
+import { AICoachAction, BehaviorMemory, CoachingInsight, CoachingSummary, DailyLog, InterventionAnalytics, ReminderEffectivenessSummary } from '@calorie-ai/types';
 import { apiClient } from '../../services/api';
 import { VisualHeroCard } from '../../components/visual-hero-card';
 import { createThemedStyles, theme, useAppTheme } from '../../components/theme';
@@ -25,6 +25,7 @@ import { formatPercent, safeRound, toFiniteNumber } from '../../services/number-
 import { appLogger } from '../../services/logger.service';
 import { buildSuccessForecast } from '../../services/success-forecast.service';
 import { buildDynamicIntervention } from '../../services/dynamic-intervention.service';
+import { fetchInterventionAnalytics } from '../../services/intervention-memory.service';
 
 const coachHeroIllustration = require('../../assets/images/coach-hero.jpg') as number;
 
@@ -360,6 +361,14 @@ function formatSummaryPercent(value: unknown) {
   return formatPercent(value);
 }
 
+function formatInterventionName(value: string | null | undefined) {
+  if (!value) return '--';
+  return value
+    .split('_')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
 function getCoachErrorMessage(error: unknown, locale: Locale): string {
   const fallback = tr('screen.tabs.coach.error.connection', locale);
 
@@ -458,6 +467,7 @@ export default function CoachScreen() {
   const [summary, setSummary] = useState<CoachingSummary | null>(null);
   const [reminderEffectiveness, setReminderEffectiveness] = useState<ReminderEffectivenessSummary | null>(null);
   const [behaviorMemory, setBehaviorMemory] = useState<BehaviorMemory | null>(null);
+  const [interventionAnalytics, setInterventionAnalytics] = useState<InterventionAnalytics | null>(null);
   const [insightsError, setInsightsError] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
@@ -479,11 +489,12 @@ export default function CoachScreen() {
     try {
       setLoadingInsights(true);
       setInsightsError(null);
-      const [insightsResult, summaryResult, reminderResult, memoryResult] = await Promise.allSettled([
+      const [insightsResult, summaryResult, reminderResult, memoryResult, interventionAnalyticsResult] = await Promise.allSettled([
         apiClient.get('/coaching/insights'),
         apiClient.get('/coaching/weekly-summary'),
         apiClient.get('/reminders/effectiveness?days=30'),
         apiClient.get('/coaching/behavior-memory'),
+        fetchInterventionAnalytics(20),
       ]);
 
       if (insightsResult.status === 'fulfilled') {
@@ -513,11 +524,18 @@ export default function CoachScreen() {
       } else {
         setBehaviorMemory(null);
       }
+
+      if (interventionAnalyticsResult.status === 'fulfilled') {
+        setInterventionAnalytics(interventionAnalyticsResult.value || null);
+      } else {
+        setInterventionAnalytics(null);
+      }
     } catch (error) {
       setInsights([]);
       setSummary(null);
       setReminderEffectiveness(null);
       setBehaviorMemory(null);
+      setInterventionAnalytics(null);
       setInsightsError(getCoachErrorMessage(error, locale));
     } finally {
       setLoadingInsights(false);
@@ -574,9 +592,10 @@ export default function CoachScreen() {
       reminder_effectiveness: reminderEffectiveness ?? undefined,
       success_forecast: successForecast ?? undefined,
       behavior_memory: behaviorMemory ?? undefined,
+      intervention_analytics: interventionAnalytics ?? undefined,
       dynamic_intervention: dynamicIntervention ?? undefined,
     };
-  }, [behaviorMemory, dailyLog, dynamicIntervention, reminderEffectiveness, successForecast, todaySummary?.health_score]);
+  }, [behaviorMemory, dailyLog, dynamicIntervention, interventionAnalytics, reminderEffectiveness, successForecast, todaySummary?.health_score]);
   const activePlan = useMemo(() => buildActivePlan(dailyLog, locale), [dailyLog, locale]);
   const weeklyPlan = useMemo(() => buildWeeklyPlan(summary, dailyLog, locale), [summary, dailyLog, locale]);
   const summaryRecommendation = localizeInsightTextForLocale(summary?.recommended_action, locale) || t('screen.tabs.coach.summaryFallback');
@@ -866,6 +885,72 @@ export default function CoachScreen() {
             <Text style={styles.summaryRecommendation}>{summaryRecommendation}</Text>
           </SurfaceCard>
         )}
+
+        {interventionAnalytics ? (
+          <SurfaceCard style={styles.interventionAnalyticsCard}>
+            <View style={styles.interventionAnalyticsHeader}>
+              <View style={styles.interventionAnalyticsCopy}>
+                <Text style={styles.interventionAnalyticsEyebrow}>INTERVENTION LEARNING</Text>
+                <Text style={styles.interventionAnalyticsTitle}>
+                  {interventionAnalytics.sample_status === 'ready'
+                    ? 'Coach has enough signal to rank actions'
+                    : interventionAnalytics.sample_status === 'learning'
+                      ? 'Coach is learning which actions work'
+                      : 'Collecting first intervention signals'}
+                </Text>
+              </View>
+              <View style={[
+                styles.interventionStatusPill,
+                interventionAnalytics.sample_status === 'ready' && styles.interventionStatusReady,
+              ]}>
+                <Text style={styles.interventionStatusText}>
+                  {interventionAnalytics.sample_status === 'ready' ? 'Ready' : 'Learning'}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.interventionMetricGrid}>
+              <View style={styles.interventionMetric}>
+                <Text style={styles.interventionMetricLabel}>30d shown</Text>
+                <Text style={styles.interventionMetricValue}>
+                  {interventionAnalytics.windows.thirty_day.total_shown}
+                </Text>
+              </View>
+              <View style={styles.interventionMetric}>
+                <Text style={styles.interventionMetricLabel}>Action</Text>
+                <Text style={styles.interventionMetricValue}>
+                  {interventionAnalytics.windows.thirty_day.action_rate}%
+                </Text>
+              </View>
+              <View style={styles.interventionMetric}>
+                <Text style={styles.interventionMetricLabel}>Dismiss</Text>
+                <Text style={styles.interventionMetricValue}>
+                  {interventionAnalytics.windows.thirty_day.dismiss_rate}%
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.interventionInsightGrid}>
+              <View style={styles.interventionInsightBox}>
+                <Text style={styles.interventionInsightLabel}>Best action</Text>
+                <Text style={styles.interventionInsightValue}>
+                  {formatInterventionName(interventionAnalytics.best_intervention)}
+                </Text>
+              </View>
+              <View style={styles.interventionInsightBox}>
+                <Text style={styles.interventionInsightLabel}>Review</Text>
+                <Text style={styles.interventionInsightValue}>
+                  {formatInterventionName(interventionAnalytics.weakest_intervention)}
+                </Text>
+              </View>
+            </View>
+
+            <Text style={styles.interventionRecommendation}>
+              {interventionAnalytics.recommendations[0]
+                ?? `Need ${interventionAnalytics.min_sample} shown events before adaptive ranking drives decisions.`}
+            </Text>
+          </SurfaceCard>
+        ) : null}
 
         {/* Insights List */}
         {loadingInsights ? (
@@ -1223,6 +1308,107 @@ const styles = createThemedStyles((colors, radii) => ({
     fontSize: 13,
     lineHeight: 19,
     fontStyle: 'italic',
+  },
+  interventionAnalyticsCard: {
+    marginBottom: 12,
+    borderColor: colors.borderInfo,
+    backgroundColor: colors.surfaceInfo,
+  },
+  interventionAnalyticsHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 10,
+    marginBottom: 12,
+  },
+  interventionAnalyticsCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  interventionAnalyticsEyebrow: {
+    color: colors.textMuted,
+    fontSize: 11,
+    fontWeight: '900',
+    marginBottom: 4,
+  },
+  interventionAnalyticsTitle: {
+    color: colors.text,
+    fontSize: 15,
+    lineHeight: 20,
+    fontWeight: '900',
+  },
+  interventionStatusPill: {
+    minHeight: 30,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.borderInfo,
+    backgroundColor: colors.surface,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  interventionStatusReady: {
+    borderColor: colors.borderSuccess,
+    backgroundColor: colors.surfaceSuccess,
+  },
+  interventionStatusText: {
+    color: colors.accentCyan,
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  interventionMetricGrid: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 10,
+  },
+  interventionMetric: {
+    flex: 1,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    padding: 10,
+  },
+  interventionMetricLabel: {
+    color: colors.textMuted,
+    fontSize: 11,
+    fontWeight: '800',
+    marginBottom: 3,
+  },
+  interventionMetricValue: {
+    color: colors.accentMint,
+    fontSize: 17,
+    fontWeight: '900',
+  },
+  interventionInsightGrid: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 10,
+  },
+  interventionInsightBox: {
+    flex: 1,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceAlt,
+    padding: 10,
+  },
+  interventionInsightLabel: {
+    color: colors.textMuted,
+    fontSize: 11,
+    fontWeight: '800',
+    marginBottom: 3,
+  },
+  interventionInsightValue: {
+    color: colors.text,
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '900',
+  },
+  interventionRecommendation: {
+    color: colors.textSoft,
+    fontSize: 12,
+    lineHeight: 18,
   },
   insightsContainer: {
     marginBottom: 12,

@@ -154,6 +154,42 @@ test.describe('Coach flows', () => {
           updated_at: '2026-06-06T00:00:00.000Z',
         }));
       }
+      if (path === '/coaching/interventions/analytics') {
+        return route.fulfill(jsonResponse({
+          min_sample: 20,
+          sample_status: 'learning',
+          windows: {
+            seven_day: {
+              days: 7,
+              total_shown: 4,
+              total_acted: 2,
+              total_dismissed: 1,
+              action_rate: 50,
+              dismiss_rate: 25,
+              top_effective: [],
+              top_ignored: [],
+              ranking: [],
+            },
+            thirty_day: {
+              days: 30,
+              total_shown: 18,
+              total_acted: 9,
+              total_dismissed: 4,
+              action_rate: 50,
+              dismiss_rate: 22,
+              top_effective: [],
+              top_ignored: [],
+              ranking: [],
+            },
+          },
+          ready_interventions: [],
+          insufficient_interventions: ['activity_recovery', 'reminder_tuning'],
+          best_intervention: 'activity_recovery',
+          weakest_intervention: 'reminder_tuning',
+          recommendations: ['Overall sample is usable, but each intervention still needs 20 shown events before ranking drives decisions.'],
+          updated_at: '2026-06-06T00:00:00.000Z',
+        }));
+      }
       if (path === '/reminders/effectiveness') {
         return route.fulfill(jsonResponse({
           days: 30,
@@ -221,6 +257,8 @@ test.describe('Coach flows', () => {
 
     await gotoApp(page, '/coach');
 
+    await expect(page.getByText('INTERVENTION LEARNING')).toBeVisible({ timeout: 15000 });
+
     const input = page.getByPlaceholder(/400 kcal left/i);
     await input.evaluate((element) => element.scrollIntoView({ block: 'center' }));
     await expect(input).toBeVisible({ timeout: 15000 });
@@ -259,6 +297,11 @@ test.describe('Coach flows', () => {
         best_reminder_hour: 19,
         often_skips_breakfast: true,
         low_activity_days: ['Thu', 'Sun'],
+      }),
+      intervention_analytics: expect.objectContaining({
+        sample_status: 'learning',
+        best_intervention: 'activity_recovery',
+        weakest_intervention: 'reminder_tuning',
       }),
       dynamic_intervention: expect.objectContaining({
         mode: 'recovery_plan',
