@@ -1,5 +1,5 @@
 import { apiClient } from './api';
-import { CorrectionEventDto, ForecastSnapshotDto, LoggingEventDto, LoggingInputMode, ContextMode } from '@calorie-ai/types';
+import { BetaAnalyticsSummary, CorrectionEventDto, ForecastSnapshotDto, LoggingEventDto, LoggingInputMode, ContextMode } from '@calorie-ai/types';
 import { appLogger } from './logger.service';
 
 class TelemetryService {
@@ -17,6 +17,11 @@ class TelemetryService {
     } catch (error) {
       appLogger.warn('Telemetry', 'Failed to emit forecast snapshot', error);
     }
+  }
+
+  async fetchBetaAnalytics(days = 30): Promise<BetaAnalyticsSummary> {
+    const res = await apiClient.get<BetaAnalyticsSummary>(`/telemetry/beta-analytics?days=${days}`);
+    return res.data;
   }
 
   async emitLogAttempted(inputMode: LoggingInputMode): Promise<void> {

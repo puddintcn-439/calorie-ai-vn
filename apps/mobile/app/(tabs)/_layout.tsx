@@ -161,6 +161,13 @@ export default function TabsLayout() {
           title: t('tabs.strength'),
         }}
       />
+      <Tabs.Screen
+        name="beta-analytics"
+        options={{
+          href: null,
+          title: 'Beta Analytics',
+        }}
+      />
     </Tabs>
   );
 }

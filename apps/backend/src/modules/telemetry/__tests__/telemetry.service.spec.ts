@@ -96,6 +96,85 @@ describe('TelemetryService.createForecastSnapshot', () => {
   });
 });
 
+describe('TelemetryService.getBetaAnalyticsSummary', () => {
+  function query(data: unknown[]) {
+    return {
+      select: jest.fn().mockReturnThis(),
+      gte: jest.fn().mockReturnThis(),
+      lte: jest.fn().mockResolvedValue({ data, error: null }),
+    };
+  }
+
+  it('rejects non-admin users', async () => {
+    const service = new TelemetryService(
+      { db: makeDb() } as unknown as SupabaseService,
+      { get: jest.fn().mockReturnValue('admin@example.com') } as any,
+    );
+
+    await expect(service.getBetaAnalyticsSummary('user@example.com')).rejects.toThrow('restricted');
+  });
+
+  it('returns aggregate beta analytics for configured admin email', async () => {
+    const db = {
+      from: jest.fn().mockImplementation((table: string) => {
+        if (table === 'beta_forecast_accuracy_weekly') {
+          return query([
+            { local_date: '2026-06-01', forecast_score: 80, actual_adherence_score: 70, absolute_error: 10, predicted_success: true, actual_success: true },
+            { local_date: '2026-06-02', forecast_score: 40, actual_adherence_score: 75, absolute_error: 35, predicted_success: false, actual_success: true },
+          ]);
+        }
+        if (table === 'beta_intervention_performance_30d') {
+          return {
+            select: jest.fn().mockResolvedValue({
+              data: [
+                { intervention_type: 'protein_nudge', mode: 'coach_action', primary_action: 'log_meal', shown: 25, acted: 18, dismissed: 2, action_rate: 72, dismiss_rate: 8, sample_status: 'ready' },
+                { intervention_type: 'reminder_tuning', mode: 'light_nudge', primary_action: 'adjust_reminders', shown: 12, acted: 1, dismissed: 6, action_rate: 8, dismiss_rate: 50, sample_status: 'learning' },
+              ],
+              error: null,
+            }),
+          };
+        }
+        if (table === 'beta_reminder_fatigue_weekly') {
+          return {
+            select: jest.fn().mockReturnThis(),
+            gte: jest.fn().mockResolvedValue({
+              data: [
+                { week_start: '2026-06-01', open_rate: 70, action_rate: 40, fatigue_flag: false },
+                { week_start: '2026-06-08', open_rate: 40, action_rate: 18, fatigue_flag: true },
+              ],
+              error: null,
+            }),
+          };
+        }
+        return {
+          select: jest.fn().mockReturnThis(),
+          gte: jest.fn().mockResolvedValue({
+            data: [
+              { local_date: '2026-06-01', user_id: 'u1', food_logs: 2, activity_logs: 1, roadmap_completed: 1, interventions_shown: 1, interventions_acted: 1, forecast_snapshots: 1 },
+              { local_date: '2026-06-01', user_id: 'u2', food_logs: 0, activity_logs: 0, roadmap_completed: 0, interventions_shown: 1, interventions_acted: 0, forecast_snapshots: 1 },
+            ],
+            error: null,
+          }),
+        };
+      }),
+    };
+    const service = new TelemetryService(
+      { db } as unknown as SupabaseService,
+      { get: jest.fn().mockReturnValue('admin@example.com') } as any,
+    );
+
+    const summary = await service.getBetaAnalyticsSummary('admin@example.com');
+
+    expect(summary.forecast.snapshots).toBe(2);
+    expect(summary.forecast.classification_accuracy).toBe(50);
+    expect(summary.interventions.ready_count).toBe(1);
+    expect(summary.interventions.top_effective[0].intervention_type).toBe('protein_nudge');
+    expect(summary.reminders.fatigue_level).toBe('medium');
+    expect(summary.engagement.active_users_30d).toBe(1);
+    expect(summary.recommendations.length).toBeGreaterThan(0);
+  });
+});
+
 describe('TelemetryService.getUserCorrectionEvents', () => {
   it('returns list of events', async () => {
     const events = [{ id: 'e1', event_type: 'portion_adjusted' }];

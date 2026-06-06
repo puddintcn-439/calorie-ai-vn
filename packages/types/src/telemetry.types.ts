@@ -108,3 +108,65 @@ export interface ForecastSnapshotDto {
   forecast?: Record<string, unknown>;
   health_score?: Record<string, unknown>;
 }
+
+export interface BetaAnalyticsInterventionItem {
+  intervention_type: string;
+  mode: string;
+  primary_action: string;
+  shown: number;
+  acted: number;
+  dismissed: number;
+  action_rate: number;
+  dismiss_rate: number;
+  sample_status: 'insufficient' | 'learning' | 'ready';
+}
+
+export interface BetaAnalyticsDailyEngagementItem {
+  local_date: string;
+  active_users: number;
+  food_logs: number;
+  activity_logs: number;
+  roadmap_completed: number;
+  interventions_shown: number;
+  interventions_acted: number;
+  forecast_snapshots: number;
+}
+
+export interface BetaAnalyticsSummary {
+  generated_at: string;
+  window_days: number;
+  access: 'admin';
+  forecast: {
+    snapshots: number;
+    avg_absolute_error: number;
+    classification_accuracy: number;
+    avg_forecast_score: number;
+    avg_actual_adherence: number;
+    sample_status: 'insufficient' | 'learning' | 'ready';
+  };
+  interventions: {
+    total_shown: number;
+    total_acted: number;
+    total_dismissed: number;
+    action_rate: number;
+    dismiss_rate: number;
+    ready_count: number;
+    top_effective: BetaAnalyticsInterventionItem[];
+    top_ignored: BetaAnalyticsInterventionItem[];
+  };
+  reminders: {
+    weeks: number;
+    avg_open_rate: number;
+    avg_action_rate: number;
+    fatigue_weeks: number;
+    fatigue_level: 'low' | 'medium' | 'high';
+  };
+  engagement: {
+    active_users_7d: number;
+    active_users_30d: number;
+    avg_food_logs_per_active_day: number;
+    avg_activity_logs_per_active_day: number;
+    recent_daily: BetaAnalyticsDailyEngagementItem[];
+  };
+  recommendations: string[];
+}

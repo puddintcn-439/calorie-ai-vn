@@ -1,6 +1,10 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, ForbiddenException, Optional } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { SupabaseService } from '../../common/supabase/supabase.service';
 import {
+  BetaAnalyticsDailyEngagementItem,
+  BetaAnalyticsInterventionItem,
+  BetaAnalyticsSummary,
   CorrectionEvent,
   CorrectionEventDto,
   CorrectionStats,
@@ -12,7 +16,10 @@ import {
 
 @Injectable()
 export class TelemetryService {
-  constructor(private supabase: SupabaseService) {}
+  constructor(
+    private supabase: SupabaseService,
+    @Optional() private config?: ConfigService,
+  ) {}
 
   async createLoggingEvent(userId: string, event: LoggingEventDto): Promise<LoggingEvent> {
     if (!event.event_type) {
@@ -63,6 +70,59 @@ export class TelemetryService {
 
     if (error) throw error;
     return data as ForecastSnapshot;
+  }
+
+  async getBetaAnalyticsSummary(requesterEmail: string | undefined, days = 30): Promise<BetaAnalyticsSummary> {
+    this.assertBetaAnalyticsAdmin(requesterEmail);
+
+    const windowDays = Math.max(7, Math.min(120, Math.round(days)));
+    const sinceDate = this.toDateKey(new Date(Date.now() - (windowDays - 1) * 24 * 60 * 60 * 1000));
+    const completedForecastCutoff = this.toDateKey(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000));
+
+    const [forecastRes, interventionRes, reminderRes, engagementRes] = await Promise.all([
+      this.supabase.db
+        .from('beta_forecast_accuracy_weekly')
+        .select('local_date, forecast_score, actual_adherence_score, absolute_error, predicted_success, actual_success')
+        .gte('local_date', sinceDate)
+        .lte('local_date', completedForecastCutoff),
+      this.supabase.db
+        .from('beta_intervention_performance_30d')
+        .select('intervention_type, mode, primary_action, shown, acted, dismissed, action_rate, dismiss_rate, sample_status'),
+      this.supabase.db
+        .from('beta_reminder_fatigue_weekly')
+        .select('week_start, sent, opened, acted, open_rate, action_rate, fatigue_flag')
+        .gte('week_start', sinceDate),
+      this.supabase.db
+        .from('beta_daily_engagement_30d')
+        .select('local_date, user_id, food_logs, activity_logs, roadmap_completed, interventions_shown, interventions_acted, forecast_snapshots')
+        .gte('local_date', sinceDate),
+    ]);
+
+    if (forecastRes.error) throw forecastRes.error;
+    if (interventionRes.error) throw interventionRes.error;
+    if (reminderRes.error) throw reminderRes.error;
+    if (engagementRes.error) throw engagementRes.error;
+
+    const forecastRows = Array.isArray(forecastRes.data) ? forecastRes.data : [];
+    const interventionRows = Array.isArray(interventionRes.data) ? interventionRes.data : [];
+    const reminderRows = Array.isArray(reminderRes.data) ? reminderRes.data : [];
+    const engagementRows = Array.isArray(engagementRes.data) ? engagementRes.data : [];
+
+    const forecast = this.buildForecastAnalytics(forecastRows);
+    const interventions = this.buildInterventionAnalyticsSummary(interventionRows);
+    const reminders = this.buildReminderAnalytics(reminderRows);
+    const engagement = this.buildEngagementAnalytics(engagementRows);
+
+    return {
+      generated_at: new Date().toISOString(),
+      window_days: windowDays,
+      access: 'admin',
+      forecast,
+      interventions,
+      reminders,
+      engagement,
+      recommendations: this.buildBetaAnalyticsRecommendations(forecast, interventions, reminders, engagement),
+    };
   }
 
   /**
@@ -192,5 +252,167 @@ export class TelemetryService {
     }
 
     return data;
+  }
+
+  private assertBetaAnalyticsAdmin(email: string | undefined) {
+    const normalizedEmail = String(email ?? '').trim().toLowerCase();
+    const raw = [
+      this.config?.get<string>('BETA_ANALYTICS_ADMIN_EMAILS'),
+      this.config?.get<string>('ADMIN_EMAILS'),
+    ].filter(Boolean).join(',');
+    const admins = raw
+      .split(',')
+      .map((item) => item.trim().toLowerCase())
+      .filter(Boolean);
+
+    if (!normalizedEmail || admins.length === 0 || (!admins.includes('*') && !admins.includes(normalizedEmail))) {
+      throw new ForbiddenException('Beta analytics is restricted to configured admin emails');
+    }
+  }
+
+  private buildForecastAnalytics(rows: any[]): BetaAnalyticsSummary['forecast'] {
+    const snapshots = rows.length;
+    const avgAbsoluteError = this.avg(rows.map((row) => Number(row.absolute_error)));
+    const classificationAccuracy = snapshots > 0
+      ? Math.round((rows.filter((row) => row.predicted_success === row.actual_success).length / snapshots) * 100)
+      : 0;
+    const avgForecastScore = this.avg(rows.map((row) => Number(row.forecast_score)));
+    const avgActualAdherence = this.avg(rows.map((row) => Number(row.actual_adherence_score)));
+    const sampleStatus: BetaAnalyticsSummary['forecast']['sample_status'] = snapshots >= 100
+      ? 'ready'
+      : snapshots >= 20
+        ? 'learning'
+        : 'insufficient';
+
+    return {
+      snapshots,
+      avg_absolute_error: avgAbsoluteError,
+      classification_accuracy: classificationAccuracy,
+      avg_forecast_score: avgForecastScore,
+      avg_actual_adherence: avgActualAdherence,
+      sample_status: sampleStatus,
+    };
+  }
+
+  private buildInterventionAnalyticsSummary(rows: any[]): BetaAnalyticsSummary['interventions'] {
+    const items = rows.map((row): BetaAnalyticsInterventionItem => ({
+      intervention_type: String(row.intervention_type ?? 'unknown'),
+      mode: String(row.mode ?? 'unknown'),
+      primary_action: String(row.primary_action ?? 'unknown'),
+      shown: Number(row.shown) || 0,
+      acted: Number(row.acted) || 0,
+      dismissed: Number(row.dismissed) || 0,
+      action_rate: Number(row.action_rate) || 0,
+      dismiss_rate: Number(row.dismiss_rate) || 0,
+      sample_status: ['ready', 'learning', 'insufficient'].includes(String(row.sample_status))
+        ? row.sample_status
+        : 'insufficient',
+    }));
+    const totalShown = items.reduce((sum, item) => sum + item.shown, 0);
+    const totalActed = items.reduce((sum, item) => sum + item.acted, 0);
+    const totalDismissed = items.reduce((sum, item) => sum + item.dismissed, 0);
+
+    return {
+      total_shown: totalShown,
+      total_acted: totalActed,
+      total_dismissed: totalDismissed,
+      action_rate: totalShown > 0 ? Math.round((totalActed / totalShown) * 100) : 0,
+      dismiss_rate: totalShown > 0 ? Math.round((totalDismissed / totalShown) * 100) : 0,
+      ready_count: items.filter((item) => item.sample_status === 'ready').length,
+      top_effective: [...items].sort((a, b) => b.action_rate - a.action_rate || b.shown - a.shown).slice(0, 5),
+      top_ignored: [...items].sort((a, b) => b.dismiss_rate - a.dismiss_rate || b.shown - a.shown).slice(0, 5),
+    };
+  }
+
+  private buildReminderAnalytics(rows: any[]): BetaAnalyticsSummary['reminders'] {
+    const weeks = rows.length;
+    const avgOpenRate = this.avg(rows.map((row) => Number(row.open_rate)));
+    const avgActionRate = this.avg(rows.map((row) => Number(row.action_rate)));
+    const fatigueWeeks = rows.filter((row) => row.fatigue_flag === true).length;
+    const fatigueLevel: BetaAnalyticsSummary['reminders']['fatigue_level'] = fatigueWeeks >= 3
+      ? 'high'
+      : fatigueWeeks >= 1
+        ? 'medium'
+        : 'low';
+
+    return {
+      weeks,
+      avg_open_rate: avgOpenRate,
+      avg_action_rate: avgActionRate,
+      fatigue_weeks: fatigueWeeks,
+      fatigue_level: fatigueLevel,
+    };
+  }
+
+  private buildEngagementAnalytics(rows: any[]): BetaAnalyticsSummary['engagement'] {
+    const byDate = rows.reduce<Record<string, BetaAnalyticsDailyEngagementItem>>((acc, row) => {
+      const key = String(row.local_date ?? '');
+      if (!key) return acc;
+      acc[key] = acc[key] ?? {
+        local_date: key,
+        active_users: 0,
+        food_logs: 0,
+        activity_logs: 0,
+        roadmap_completed: 0,
+        interventions_shown: 0,
+        interventions_acted: 0,
+        forecast_snapshots: 0,
+      };
+
+      const foodLogs = Number(row.food_logs) || 0;
+      const activityLogs = Number(row.activity_logs) || 0;
+      const roadmapCompleted = Number(row.roadmap_completed) || 0;
+      const interventionsShown = Number(row.interventions_shown) || 0;
+      const interventionsActed = Number(row.interventions_acted) || 0;
+      const forecastSnapshots = Number(row.forecast_snapshots) || 0;
+      const active = foodLogs > 0 || activityLogs > 0 || roadmapCompleted > 0 || interventionsActed > 0;
+
+      acc[key].active_users += active ? 1 : 0;
+      acc[key].food_logs += foodLogs;
+      acc[key].activity_logs += activityLogs;
+      acc[key].roadmap_completed += roadmapCompleted;
+      acc[key].interventions_shown += interventionsShown;
+      acc[key].interventions_acted += interventionsActed;
+      acc[key].forecast_snapshots += forecastSnapshots;
+      return acc;
+    }, {});
+    const daily = Object.values(byDate).sort((a, b) => b.local_date.localeCompare(a.local_date));
+    const recent7 = daily.slice(0, 7);
+    const activeUsers7d = Math.max(...recent7.map((day) => day.active_users), 0);
+    const activeUsers30d = Math.max(...daily.slice(0, 30).map((day) => day.active_users), 0);
+    const activeDays = daily.filter((day) => day.active_users > 0);
+
+    return {
+      active_users_7d: activeUsers7d,
+      active_users_30d: activeUsers30d,
+      avg_food_logs_per_active_day: this.avg(activeDays.map((day) => day.food_logs)),
+      avg_activity_logs_per_active_day: this.avg(activeDays.map((day) => day.activity_logs)),
+      recent_daily: daily.slice(0, 14),
+    };
+  }
+
+  private buildBetaAnalyticsRecommendations(
+    forecast: BetaAnalyticsSummary['forecast'],
+    interventions: BetaAnalyticsSummary['interventions'],
+    reminders: BetaAnalyticsSummary['reminders'],
+    engagement: BetaAnalyticsSummary['engagement'],
+  ): string[] {
+    const notes: string[] = [];
+    if (forecast.sample_status !== 'ready') notes.push(`Collect more forecast outcomes before tuning weights (${forecast.snapshots}/100).`);
+    if (forecast.snapshots > 0 && forecast.avg_absolute_error > 20) notes.push('Forecast error is high; inspect high-confidence misses before changing intervention logic.');
+    if (interventions.ready_count === 0) notes.push('Keep Dynamic Intervention rules conservative until at least one intervention has 20 shown events.');
+    if (interventions.dismiss_rate >= 30) notes.push('Intervention dismiss rate is high; review copy/timing before increasing frequency.');
+    if (reminders.fatigue_level !== 'low') notes.push('Reminder fatigue is visible; reduce frequency or shift timing for ignored reminders.');
+    if (engagement.active_users_7d < 10) notes.push('Treat metrics as instrumentation checks until at least 10 active beta users are present.');
+    return notes.slice(0, 5);
+  }
+
+  private avg(values: number[]): number {
+    const clean = values.filter((value) => Number.isFinite(value));
+    return clean.length > 0 ? Math.round((clean.reduce((sum, value) => sum + value, 0) / clean.length) * 10) / 10 : 0;
+  }
+
+  private toDateKey(date: Date): string {
+    return date.toISOString().split('T')[0];
   }
 }

@@ -250,4 +250,13 @@ export class TelemetryController {
   ) {
     return this.telemetry.getUserCorrectionStats(req.user.id ?? req.user.sub, days);
   }
+
+  @Get('beta-analytics')
+  @ApiOperation({ summary: 'Get aggregate beta analytics for configured admin emails' })
+  async getBetaAnalytics(
+    @Request() req: any,
+    @Query('days') days: number = 30,
+  ) {
+    return this.telemetry.getBetaAnalyticsSummary(req.user.email, Number(days) || 30);
+  }
 }
