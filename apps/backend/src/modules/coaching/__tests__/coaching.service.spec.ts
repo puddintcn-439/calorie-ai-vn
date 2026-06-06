@@ -48,6 +48,74 @@ describe('CoachingService.generateWeeklySummary', () => {
   });
 });
 
+describe('CoachingService.getBehaviorMemory', () => {
+  function daysAgo(days: number, hour = 12) {
+    const date = new Date();
+    date.setDate(date.getDate() - days);
+    date.setUTCHours(hour, 0, 0, 0);
+    return date.toISOString();
+  }
+
+  function query(data: unknown[]) {
+    return {
+      select: jest.fn().mockReturnThis(),
+      eq: jest.fn().mockReturnThis(),
+      gte: jest.fn().mockReturnThis(),
+      order: jest.fn().mockResolvedValue({ data, error: null }),
+    };
+  }
+
+  it('summarizes long-running user behavior for coach personalization', async () => {
+    const foodLogs = Array.from({ length: 10 }, (_, index) => ([
+      { logged_at: daysAgo(index, 12), meal_type: 'lunch', protein_g: 45 },
+      { logged_at: daysAgo(index, 19), meal_type: 'dinner', protein_g: 45 },
+    ])).flat();
+    const activityLogs = Array.from({ length: 4 }, (_, index) => ({
+      logged_at: daysAgo(index * 2, 18),
+      duration_min: 30,
+    }));
+    const reminders = [
+      { sent_at: daysAgo(1, 19), opened_at: daysAgo(1, 19), acted_at: daysAgo(1, 20) },
+      { sent_at: daysAgo(2, 19), opened_at: daysAgo(2, 19), acted_at: daysAgo(2, 20) },
+      { sent_at: daysAgo(1, 8), opened_at: daysAgo(1, 8), acted_at: null },
+      { sent_at: daysAgo(2, 8), opened_at: daysAgo(2, 8), acted_at: null },
+    ];
+    const supabase = makeSupabase((table) => {
+      if (table === 'food_logs') return query(foodLogs);
+      if (table === 'activity_logs') return query(activityLogs);
+      if (table === 'reminder_events') return query(reminders);
+      if (table === 'users') {
+        return {
+          select: jest.fn().mockReturnThis(),
+          eq: jest.fn().mockReturnThis(),
+          single: jest.fn().mockResolvedValue({ data: { daily_calorie_target: 1800 }, error: null }),
+        };
+      }
+      return {};
+    });
+
+    const service = new CoachingService(supabase);
+    const memory = await service.getBehaviorMemory('user-1');
+
+    expect(memory).toMatchObject({
+      days_analyzed: 90,
+      data_quality: 'medium',
+      best_reminder_hour: 19,
+      often_skips_breakfast: true,
+      high_protein_adherence: 1,
+      meal_skip_rates: expect.objectContaining({
+        breakfast: 1,
+      }),
+    });
+    expect(memory.best_logging_streak).toBeGreaterThanOrEqual(9);
+    expect(memory.activity_adherence).toBeGreaterThan(0);
+    expect(memory.memory_notes).toEqual(expect.arrayContaining([
+      'Breakfast is frequently missing from logged days.',
+      'Reminder responses are strongest around 19:00.',
+    ]));
+  });
+});
+
 describe('CoachingService.detectWeekendVariance', () => {
   it('does not emit a weekend pattern when weekday data is missing', () => {
     const service = new CoachingService({} as SupabaseService);

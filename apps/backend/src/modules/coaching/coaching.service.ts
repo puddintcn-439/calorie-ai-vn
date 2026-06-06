@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { SupabaseService } from '../../common/supabase/supabase.service';
 import {
+  BehaviorMemory,
   BehavioralPattern,
   CoachingInsight,
   CoachingSummary,
@@ -15,6 +16,92 @@ export class CoachingService {
   private readonly logger = new Logger(CoachingService.name);
 
   constructor(private supabase: SupabaseService) {}
+
+  async getBehaviorMemory(userId: string, days = 90): Promise<BehaviorMemory> {
+    const daysAnalyzed = Math.max(14, Math.min(180, Math.round(days)));
+    const since = new Date();
+    since.setDate(since.getDate() - (daysAnalyzed - 1));
+    since.setHours(0, 0, 0, 0);
+    const sinceIso = since.toISOString();
+
+    const [foodRes, activityRes, reminderRes, userRes] = await Promise.all([
+      this.supabase.db
+        .from('food_logs')
+        .select('logged_at, meal_type, protein_g')
+        .eq('user_id', userId)
+        .gte('logged_at', sinceIso)
+        .order('logged_at', { ascending: true }),
+      this.supabase.db
+        .from('activity_logs')
+        .select('logged_at, duration_min')
+        .eq('user_id', userId)
+        .gte('logged_at', sinceIso)
+        .order('logged_at', { ascending: true }),
+      this.supabase.db
+        .from('reminder_events')
+        .select('sent_at, opened_at, acted_at')
+        .eq('user_id', userId)
+        .gte('sent_at', sinceIso)
+        .order('sent_at', { ascending: true }),
+      this.supabase.db
+        .from('users')
+        .select('daily_calorie_target')
+        .eq('id', userId)
+        .single(),
+    ]);
+
+    if (foodRes.error) this.logger.warn(`Behavior memory food log query failed: ${foodRes.error.message ?? foodRes.error}`);
+    if (activityRes.error) this.logger.warn(`Behavior memory activity query failed: ${activityRes.error.message ?? activityRes.error}`);
+    if (reminderRes.error) this.logger.warn(`Behavior memory reminder query failed: ${reminderRes.error.message ?? reminderRes.error}`);
+
+    const foodLogs = foodRes.error ? [] : foodRes.data ?? [];
+    const activityLogs = activityRes.error ? [] : activityRes.data ?? [];
+    const reminderEvents = reminderRes.error ? [] : reminderRes.data ?? [];
+    const dayKeys = this.buildDayKeys(daysAnalyzed);
+    const foodByDay = this.groupFoodLogsByDay(foodLogs);
+    const activityDayKeys = new Set(activityLogs.map((log: any) => this.toDateKey(log.logged_at)).filter(Boolean));
+    const activeDayKeys = new Set<string>([
+      ...Object.keys(foodByDay),
+      ...activityDayKeys,
+    ]);
+    const trackedFoodDays = Object.keys(foodByDay).length;
+    const dailyTarget = Number((userRes as any).data?.daily_calorie_target) > 0
+      ? Number((userRes as any).data?.daily_calorie_target)
+      : 1800;
+    const proteinTarget = Math.max(70, Math.round((dailyTarget * 0.075) / 4));
+    const highProteinDays = Object.values(foodByDay)
+      .filter((day) => day.protein_g >= proteinTarget).length;
+    const mealSkipRates = this.calculateMealSkipRates(foodByDay);
+    const lowActivityDays = this.detectLowActivityWeekdays(dayKeys, activityDayKeys);
+    const bestReminderHour = this.detectBestReminderHour(reminderEvents);
+    const bestLoggingStreak = this.calculateBestStreak(dayKeys, activeDayKeys);
+    const highProteinAdherence = trackedFoodDays > 0 ? this.round2(highProteinDays / trackedFoodDays) : 0;
+    const activityAdherence = this.round2(activityDayKeys.size / Math.max(daysAnalyzed, 1));
+    const dataQuality: BehaviorMemory['data_quality'] = activeDayKeys.size >= 30
+      ? 'high'
+      : activeDayKeys.size >= 7
+        ? 'medium'
+        : 'low';
+
+    const memory: BehaviorMemory = {
+      days_analyzed: daysAnalyzed,
+      data_quality: dataQuality,
+      best_reminder_hour: bestReminderHour,
+      often_skips_breakfast: trackedFoodDays >= 7 && mealSkipRates.breakfast >= 0.45,
+      often_skips_lunch: trackedFoodDays >= 7 && mealSkipRates.lunch >= 0.45,
+      often_skips_dinner: trackedFoodDays >= 7 && mealSkipRates.dinner >= 0.45,
+      low_activity_days: lowActivityDays,
+      best_logging_streak: bestLoggingStreak,
+      high_protein_adherence: highProteinAdherence,
+      activity_adherence: activityAdherence,
+      meal_skip_rates: mealSkipRates,
+      memory_notes: [],
+      updated_at: new Date().toISOString(),
+    };
+
+    memory.memory_notes = this.buildBehaviorMemoryNotes(memory);
+    return memory;
+  }
 
   /**
    * Analyze user's past 7 days and detect behavioral patterns
@@ -231,6 +318,124 @@ export class CoachingService {
   }
 
   // ======================== Helper Methods ========================
+
+  private toDateKey(value: string | null | undefined): string {
+    if (!value) return '';
+    const time = Date.parse(value);
+    return Number.isFinite(time) ? new Date(time).toISOString().split('T')[0] : '';
+  }
+
+  private buildDayKeys(days: number): string[] {
+    return Array.from({ length: days }, (_, index) => {
+      const day = new Date();
+      day.setDate(day.getDate() - (days - 1 - index));
+      day.setHours(0, 0, 0, 0);
+      return day.toISOString().split('T')[0];
+    });
+  }
+
+  private round2(value: number): number {
+    return Math.round(Math.max(0, Math.min(1, value)) * 100) / 100;
+  }
+
+  private groupFoodLogsByDay(logs: any[]): Record<string, { meals: Set<string>; protein_g: number }> {
+    return logs.reduce<Record<string, { meals: Set<string>; protein_g: number }>>((acc, log) => {
+      const key = this.toDateKey(log.logged_at);
+      if (!key) return acc;
+      acc[key] = acc[key] ?? { meals: new Set<string>(), protein_g: 0 };
+      if (log.meal_type) acc[key].meals.add(String(log.meal_type));
+      acc[key].protein_g += Number(log.protein_g) || 0;
+      return acc;
+    }, {});
+  }
+
+  private calculateMealSkipRates(foodByDay: Record<string, { meals: Set<string>; protein_g: number }>): BehaviorMemory['meal_skip_rates'] {
+    const days = Object.values(foodByDay);
+    const total = days.length;
+    const rate = (meal: 'breakfast' | 'lunch' | 'dinner' | 'snack') => (
+      total > 0 ? this.round2(days.filter((day) => !day.meals.has(meal)).length / total) : 0
+    );
+
+    return {
+      breakfast: rate('breakfast'),
+      lunch: rate('lunch'),
+      dinner: rate('dinner'),
+      snack: rate('snack'),
+    };
+  }
+
+  private detectLowActivityWeekdays(dayKeys: string[], activityDayKeys: Set<string>): BehaviorMemory['low_activity_days'] {
+    const labels: BehaviorMemory['low_activity_days'] = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const stats = labels.map((label) => ({ label, total: 0, active: 0 }));
+
+    for (const key of dayKeys) {
+      const weekday = new Date(`${key}T00:00:00.000Z`).getUTCDay();
+      stats[weekday].total += 1;
+      if (activityDayKeys.has(key)) stats[weekday].active += 1;
+    }
+
+    return stats
+      .filter((item) => item.total >= 6 && item.active / item.total <= 0.35)
+      .map((item) => item.label);
+  }
+
+  private detectBestReminderHour(events: any[]): number | null {
+    const byHour = events.reduce<Record<number, { sent: number; opened: number; acted: number }>>((acc, event) => {
+      const time = Date.parse(event.sent_at);
+      if (!Number.isFinite(time)) return acc;
+      const hour = new Date(time).getUTCHours();
+      acc[hour] = acc[hour] ?? { sent: 0, opened: 0, acted: 0 };
+      acc[hour].sent += 1;
+      if (event.opened_at) acc[hour].opened += 1;
+      if (event.acted_at) acc[hour].acted += 1;
+      return acc;
+    }, {});
+
+    const candidates = Object.entries(byHour)
+      .map(([hour, stats]) => ({
+        hour: Number(hour),
+        ...stats,
+        actionRate: stats.sent > 0 ? stats.acted / stats.sent : 0,
+        openRate: stats.sent > 0 ? stats.opened / stats.sent : 0,
+      }))
+      .filter((item) => item.sent >= 2);
+
+    candidates.sort((a, b) => (
+      b.actionRate - a.actionRate
+      || b.acted - a.acted
+      || b.openRate - a.openRate
+      || a.hour - b.hour
+    ));
+
+    return candidates[0]?.hour ?? null;
+  }
+
+  private calculateBestStreak(dayKeys: string[], activeDayKeys: Set<string>): number {
+    let current = 0;
+    let best = 0;
+    for (const key of dayKeys) {
+      if (activeDayKeys.has(key)) {
+        current += 1;
+        best = Math.max(best, current);
+      } else {
+        current = 0;
+      }
+    }
+    return best;
+  }
+
+  private buildBehaviorMemoryNotes(memory: BehaviorMemory): string[] {
+    const notes: string[] = [];
+    if (memory.data_quality === 'low') notes.push('Behavior memory is still warming up; use suggestions gently.');
+    if (memory.often_skips_breakfast) notes.push('Breakfast is frequently missing from logged days.');
+    if (memory.often_skips_lunch) notes.push('Lunch is frequently missing from logged days.');
+    if (memory.often_skips_dinner) notes.push('Dinner is frequently missing from logged days.');
+    if (memory.low_activity_days.length > 0) notes.push(`Activity is usually lowest on ${memory.low_activity_days.join(', ')}.`);
+    if (memory.best_reminder_hour !== null) notes.push(`Reminder responses are strongest around ${memory.best_reminder_hour}:00.`);
+    if (memory.high_protein_adherence < 0.5 && memory.data_quality !== 'low') notes.push('Protein adherence is a recurring weak point.');
+    if (memory.best_logging_streak >= 7) notes.push(`Best logging streak is ${memory.best_logging_streak} days.`);
+    return notes.slice(0, 5);
+  }
 
   private createEmptyWeeklySummary(userId: string, weekStart: Date, dailyGoal: number): CoachingSummary {
     return {

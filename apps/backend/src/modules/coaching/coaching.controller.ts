@@ -3,7 +3,7 @@ import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { CoachingService } from './coaching.service';
 import { SupabaseService } from '../../common/supabase/supabase.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { CoachingInsight, CoachingSummary } from '@calorie-ai/types';
+import { BehaviorMemory, CoachingInsight, CoachingSummary } from '@calorie-ai/types';
 
 @ApiTags('Coaching')
 @ApiBearerAuth()
@@ -20,6 +20,13 @@ export class CoachingController {
   async getWeeklySummary(@Request() req: any): Promise<CoachingSummary | null> {
     const userId = req.user.id ?? req.user.sub;
     return this.coaching.generateWeeklySummary(userId);
+  }
+
+  @Get('behavior-memory')
+  @ApiOperation({ summary: 'Get long-running behavior memory for coach personalization' })
+  async getBehaviorMemory(@Request() req: any): Promise<BehaviorMemory> {
+    const userId = req.user.id ?? req.user.sub;
+    return this.coaching.getBehaviorMemory(userId);
   }
 
   @Get('insights')

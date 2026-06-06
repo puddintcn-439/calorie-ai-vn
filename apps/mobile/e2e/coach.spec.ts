@@ -132,6 +132,28 @@ test.describe('Coach flows', () => {
 
       if (path === '/coaching/insights') return route.fulfill(jsonResponse([]));
       if (path === '/coaching/weekly-summary') return route.fulfill(jsonResponse(null));
+      if (path === '/coaching/behavior-memory') {
+        return route.fulfill(jsonResponse({
+          days_analyzed: 90,
+          data_quality: 'high',
+          best_reminder_hour: 19,
+          often_skips_breakfast: true,
+          often_skips_lunch: false,
+          often_skips_dinner: false,
+          low_activity_days: ['Thu', 'Sun'],
+          best_logging_streak: 14,
+          high_protein_adherence: 0.82,
+          activity_adherence: 0.56,
+          meal_skip_rates: {
+            breakfast: 0.57,
+            lunch: 0.12,
+            dinner: 0.08,
+            snack: 0.48,
+          },
+          memory_notes: ['Breakfast is frequently missing from logged days.', 'Reminder responses are strongest around 19:00.'],
+          updated_at: '2026-06-06T00:00:00.000Z',
+        }));
+      }
       if (path === '/reminders/effectiveness') {
         return route.fulfill(jsonResponse({
           days: 30,
@@ -232,6 +254,11 @@ test.describe('Coach flows', () => {
         recovery_plan: expect.objectContaining({
           primary_action: 'adjust_reminders',
         }),
+      }),
+      behavior_memory: expect.objectContaining({
+        best_reminder_hour: 19,
+        often_skips_breakfast: true,
+        low_activity_days: ['Thu', 'Sun'],
       }),
     });
     await expectNoUnsafeRenderedText(page);

@@ -15,7 +15,7 @@ import { UiInput } from '../../components/ui-input';
 import { askCoach } from '../../services/ai.service';
 import { isPremiumFeatureError } from '../../services/feature-gating.service';
 import { useLogStore } from '../../store/log.store';
-import { AICoachAction, CoachingInsight, CoachingSummary, DailyLog, ReminderEffectivenessSummary } from '@calorie-ai/types';
+import { AICoachAction, BehaviorMemory, CoachingInsight, CoachingSummary, DailyLog, ReminderEffectivenessSummary } from '@calorie-ai/types';
 import { apiClient } from '../../services/api';
 import { VisualHeroCard } from '../../components/visual-hero-card';
 import { createThemedStyles, theme, useAppTheme } from '../../components/theme';
@@ -456,6 +456,7 @@ export default function CoachScreen() {
   const [insights, setInsights] = useState<CoachingInsight[]>([]);
   const [summary, setSummary] = useState<CoachingSummary | null>(null);
   const [reminderEffectiveness, setReminderEffectiveness] = useState<ReminderEffectivenessSummary | null>(null);
+  const [behaviorMemory, setBehaviorMemory] = useState<BehaviorMemory | null>(null);
   const [insightsError, setInsightsError] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
@@ -477,10 +478,11 @@ export default function CoachScreen() {
     try {
       setLoadingInsights(true);
       setInsightsError(null);
-      const [insightsResult, summaryResult, reminderResult] = await Promise.allSettled([
+      const [insightsResult, summaryResult, reminderResult, memoryResult] = await Promise.allSettled([
         apiClient.get('/coaching/insights'),
         apiClient.get('/coaching/weekly-summary'),
         apiClient.get('/reminders/effectiveness?days=30'),
+        apiClient.get('/coaching/behavior-memory'),
       ]);
 
       if (insightsResult.status === 'fulfilled') {
@@ -504,10 +506,17 @@ export default function CoachScreen() {
       } else {
         setReminderEffectiveness(null);
       }
+
+      if (memoryResult.status === 'fulfilled') {
+        setBehaviorMemory(memoryResult.value.data || null);
+      } else {
+        setBehaviorMemory(null);
+      }
     } catch (error) {
       setInsights([]);
       setSummary(null);
       setReminderEffectiveness(null);
+      setBehaviorMemory(null);
       setInsightsError(getCoachErrorMessage(error, locale));
     } finally {
       setLoadingInsights(false);
@@ -558,8 +567,9 @@ export default function CoachScreen() {
       health_score: todaySummary?.health_score,
       reminder_effectiveness: reminderEffectiveness ?? undefined,
       success_forecast: successForecast ?? undefined,
+      behavior_memory: behaviorMemory ?? undefined,
     };
-  }, [dailyLog, reminderEffectiveness, successForecast, todaySummary?.health_score]);
+  }, [behaviorMemory, dailyLog, reminderEffectiveness, successForecast, todaySummary?.health_score]);
   const activePlan = useMemo(() => buildActivePlan(dailyLog, locale), [dailyLog, locale]);
   const weeklyPlan = useMemo(() => buildWeeklyPlan(summary, dailyLog, locale), [summary, dailyLog, locale]);
   const summaryRecommendation = localizeInsightTextForLocale(summary?.recommended_action, locale) || t('screen.tabs.coach.summaryFallback');

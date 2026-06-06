@@ -34,3 +34,24 @@ export interface SuccessForecast {
     primary_action: 'log_meal' | 'move' | 'complete_plan' | 'adjust_reminders' | 'maintain';
   };
 }
+
+export interface BehaviorMemory {
+  days_analyzed: number;
+  data_quality: 'low' | 'medium' | 'high';
+  best_reminder_hour: number | null;
+  often_skips_breakfast: boolean;
+  often_skips_lunch: boolean;
+  often_skips_dinner: boolean;
+  low_activity_days: Array<'Sun' | 'Mon' | 'Tue' | 'Wed' | 'Thu' | 'Fri' | 'Sat'>;
+  best_logging_streak: number;
+  high_protein_adherence: number;
+  activity_adherence: number;
+  meal_skip_rates: {
+    breakfast: number;
+    lunch: number;
+    dinner: number;
+    snack: number;
+  };
+  memory_notes: string[];
+  updated_at: string;
+}

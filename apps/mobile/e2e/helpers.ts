@@ -381,6 +381,26 @@ export function createNinetyDayJourneyMock() {
         activity_log: { acted: 2, action_rate: 8 },
       },
     },
+    behaviorMemory: {
+      days_analyzed: 90,
+      data_quality: 'high',
+      best_reminder_hour: 19,
+      often_skips_breakfast: false,
+      often_skips_lunch: false,
+      often_skips_dinner: false,
+      low_activity_days: ['Sun'],
+      best_logging_streak: 21,
+      high_protein_adherence: 0.78,
+      activity_adherence: 0.62,
+      meal_skip_rates: {
+        breakfast: 0.18,
+        lunch: 0.04,
+        dinner: 0.02,
+        snack: 0.42,
+      },
+      memory_notes: ['Reminder responses are strongest around 19:00.', 'Best logging streak is 21 days.'],
+      updated_at: `${today.date}T10:00:00.000Z`,
+    },
   };
 }
 
@@ -412,6 +432,7 @@ export async function mockNinetyDayJourneyApi(page: Page) {
     if (path === '/insights/weekly') return route.fulfill(jsonResponse(mock.weeklyInsights));
     if (path === '/coaching/insights') return route.fulfill(jsonResponse(mock.coachingInsights));
     if (path === '/coaching/weekly-summary') return route.fulfill(jsonResponse(mock.coachingSummary));
+    if (path === '/coaching/behavior-memory') return route.fulfill(jsonResponse(mock.behaviorMemory));
     if (path === '/calorie-target/me') {
       return route.fulfill(jsonResponse({
         daily_calorie_target: 1850,

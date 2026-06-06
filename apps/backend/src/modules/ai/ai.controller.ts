@@ -105,6 +105,7 @@ export class AiController {
       health_score: dto.health_score,
       reminder_effectiveness: dto.reminder_effectiveness,
       success_forecast: dto.success_forecast,
+      behavior_memory: dto.behavior_memory,
     });
   }
 }

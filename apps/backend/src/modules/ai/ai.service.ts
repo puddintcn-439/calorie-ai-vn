@@ -9,7 +9,7 @@ import {
   AICoachResponse,
   AIUnresolvedItem,
 } from '@calorie-ai/types';
-import type { ReminderEffectivenessSummary, SuccessForecast, TodaySummary } from '@calorie-ai/types';
+import type { BehaviorMemory, ReminderEffectivenessSummary, SuccessForecast, TodaySummary } from '@calorie-ai/types';
 import { createHash, randomUUID } from 'crypto';
 import { MetricsService } from '../../common/metrics/metrics.service';
 import { AiQueueService } from './ai.queue.service';
@@ -28,6 +28,7 @@ type CoachContext = {
   health_score?: TodaySummary['health_score'];
   reminder_effectiveness?: ReminderEffectivenessSummary;
   success_forecast?: SuccessForecast;
+  behavior_memory?: BehaviorMemory;
 };
 
 @Injectable()
@@ -638,6 +639,7 @@ Thông tin người dùng hôm nay:
 ${this.formatCoachHealthScoreContext(context)}
 ${this.formatCoachReminderEffectivenessContext(context)}
 ${this.formatCoachSuccessForecastContext(context)}
+${this.formatCoachBehaviorMemoryContext(context)}
 
 Người dùng hỏi: "${message}"
 
@@ -814,6 +816,27 @@ Success Forecast:
 - Primary recovery action: ${forecast.recovery_plan.primary_action}
 
 If Success Forecast risk is high, prioritize a short recovery plan over stricter targets. Mention the chance of success in user-friendly language, then give one tiny action the user can do now.`;
+  }
+
+  private formatCoachBehaviorMemoryContext(context: CoachContext): string {
+    const memory = context.behavior_memory;
+    if (!memory) {
+      return '';
+    }
+
+    return `
+
+Behavior Memory (${memory.days_analyzed} days, ${memory.data_quality} confidence):
+- Best reminder hour: ${memory.best_reminder_hour === null ? 'unknown' : `${memory.best_reminder_hour}:00`}
+- Often skips breakfast/lunch/dinner: ${memory.often_skips_breakfast}/${memory.often_skips_lunch}/${memory.often_skips_dinner}
+- Low activity days: ${memory.low_activity_days.length > 0 ? memory.low_activity_days.join(', ') : 'none'}
+- Best logging streak: ${memory.best_logging_streak} days
+- Protein adherence: ${Math.round(memory.high_protein_adherence * 100)}%
+- Activity adherence: ${Math.round(memory.activity_adherence * 100)}%
+- Meal skip rates: breakfast ${Math.round(memory.meal_skip_rates.breakfast * 100)}%, lunch ${Math.round(memory.meal_skip_rates.lunch * 100)}%, dinner ${Math.round(memory.meal_skip_rates.dinner * 100)}%
+- Memory notes: ${memory.memory_notes.length > 0 ? memory.memory_notes.join('; ') : 'none'}
+
+Use Behavior Memory as long-term personalization, not diagnosis. When data_quality is low, phrase it as early signal. Prefer advice that matches the user's strongest known timing or repeated weak spot.`;
   }
 
   private recordAiScanResponse(response: AIScanResponse, startedAt: number): AIScanResponse {

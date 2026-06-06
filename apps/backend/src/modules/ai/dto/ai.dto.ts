@@ -11,7 +11,7 @@ import {
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import type { ReminderEffectivenessSummary, SuccessForecast, TodaySummary } from '@calorie-ai/types';
+import type { BehaviorMemory, ReminderEffectivenessSummary, SuccessForecast, TodaySummary } from '@calorie-ai/types';
 
 export enum MealHint {
   BREAKFAST = 'breakfast',
@@ -163,4 +163,8 @@ export class CoachMessageDto {
   @ApiProperty({ required: false, type: Object })
   @IsOptional()
   success_forecast?: SuccessForecast;
+
+  @ApiProperty({ required: false, type: Object })
+  @IsOptional()
+  behavior_memory?: BehaviorMemory;
 }
