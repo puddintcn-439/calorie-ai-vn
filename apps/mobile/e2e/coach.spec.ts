@@ -44,6 +44,74 @@ test.describe('Coach flows', () => {
         }));
       }
 
+      if (path === '/today/summary') {
+        return route.fulfill(jsonResponse({
+          date: '2026-06-02',
+          timezone_offset_minutes: -420,
+          daily_log: {
+            date: '2026-06-02',
+            logs: [],
+            total_calories: 0,
+            total_protein_g: 0,
+            total_carbs_g: 0,
+            total_fat_g: 0,
+            total_fiber_g: 0,
+            total_sugar_g: 0,
+            total_saturated_fat_g: 0,
+            total_sodium_mg: 0,
+            nutrition_quality_coverage: {
+              total_items: 0,
+              fiber_items: 0,
+              sugar_items: 0,
+              saturated_fat_items: 0,
+              sodium_items: 0,
+            },
+            target_calories: 1850,
+            remaining_calories: 1850,
+          },
+          activity_logs: [],
+          daily_roadmap: [],
+          activity_preferences: [],
+          profile: {
+            age: 30,
+            gender: 'male',
+            height_cm: 170,
+            weight_kg: 70,
+            goal: 'lose_weight',
+            activity_level: 'moderate',
+            daily_calorie_target: 1850,
+          },
+          plan: {
+            target_calories: 1850,
+            consumed_calories: 0,
+            burned_calories: 0,
+            net_calories: 0,
+            remaining_calories: 1850,
+            roadmap_total: 0,
+            roadmap_completed: 0,
+            roadmap_remaining: 0,
+            planned_activity_kcal: 0,
+          },
+          health_score: {
+            overall: 42,
+            label: 'needs_data',
+            nutrition: 0,
+            activity: 30,
+            consistency: 25,
+            recovery: 80,
+            next_action: 'log_meal',
+            signals: ['No meal logged yet'],
+          },
+          status: {
+            daily_log: 'ok',
+            activity_logs: 'ok',
+            daily_roadmap: 'ok',
+            activity_preferences: 'ok',
+            profile: 'ok',
+          },
+        }));
+      }
+
       if (path === '/coaching/insights') return route.fulfill(jsonResponse([]));
       if (path === '/coaching/weekly-summary') return route.fulfill(jsonResponse(null));
       if (path === '/subscriptions/features') {
@@ -102,6 +170,10 @@ test.describe('Coach flows', () => {
       message: 'I have 400 kcal left. What should I eat tonight?',
       today_calories: 0,
       target_calories: 1850,
+      health_score: expect.objectContaining({
+        overall: 42,
+        next_action: 'log_meal',
+      }),
     });
     await expectNoUnsafeRenderedText(page);
     expect(consoleMessages).toEqual([]);

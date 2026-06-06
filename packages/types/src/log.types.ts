@@ -87,6 +87,16 @@ export interface TodaySummary {
     roadmap_remaining: number;
     planned_activity_kcal: number;
   };
+  health_score: {
+    overall: number;
+    label: 'needs_data' | 'building' | 'steady' | 'strong';
+    nutrition: number;
+    activity: number;
+    consistency: number;
+    recovery: number;
+    signals: string[];
+    next_action: 'log_meal' | 'move' | 'complete_plan' | 'recover' | 'maintain';
+  };
   status: {
     daily_log: 'ok' | 'error';
     activity_logs: 'ok' | 'error';

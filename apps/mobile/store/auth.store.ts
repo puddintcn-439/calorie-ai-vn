@@ -1,8 +1,15 @@
 import { apiClient } from '../services/api';
 import { authStorage } from '../services/auth-storage';
+import { featureGatingService } from '../services/feature-gating.service';
 import { pushNotificationService } from '../services/push-notification.service';
+import { useSubscriptionStore } from './subscription.store';
 
 const create = require('zustand').create as typeof import('zustand').create;
+
+function clearAccountScopedState() {
+  featureGatingService.invalidateCache();
+  useSubscriptionStore.getState().clear();
+}
 
 interface AuthState {
   token: string | null;
@@ -23,6 +30,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     const token = await authStorage.getItemAsync('auth_token');
     const userId = await authStorage.getItemAsync('user_id');
     if (!token) {
+      clearAccountScopedState();
       set({ token: null, userId: null, isLoading: false });
       return;
     }
@@ -35,6 +43,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     } catch {
       await authStorage.deleteItemAsync('auth_token');
       await authStorage.deleteItemAsync('user_id');
+      clearAccountScopedState();
       set({ token: null, userId: null, isLoading: false });
     }
   },
@@ -42,6 +51,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   login: async (email, password) => {
     const res = await apiClient.post('/auth/login', { email, password });
     const { access_token, user_id } = res.data;
+    clearAccountScopedState();
     await authStorage.setItemAsync('auth_token', access_token);
     await authStorage.setItemAsync('user_id', user_id);
     set({ token: access_token, userId: user_id });
@@ -51,6 +61,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   register: async (email, password, fullName) => {
     const res = await apiClient.post('/auth/register', { email, password, full_name: fullName });
     const { access_token, user_id } = res.data;
+    clearAccountScopedState();
     await authStorage.setItemAsync('auth_token', access_token);
     await authStorage.setItemAsync('user_id', user_id);
     set({ token: access_token, userId: user_id });
@@ -61,6 +72,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     await pushNotificationService.unregisterPushToken();
     await authStorage.deleteItemAsync('auth_token');
     await authStorage.deleteItemAsync('user_id');
+    clearAccountScopedState();
     set({ token: null, userId: null });
   },
 }));

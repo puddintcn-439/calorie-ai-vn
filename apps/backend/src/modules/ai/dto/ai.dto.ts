@@ -11,6 +11,7 @@ import {
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
+import type { TodaySummary } from '@calorie-ai/types';
 
 export enum MealHint {
   BREAKFAST = 'breakfast',
@@ -137,4 +138,21 @@ export class CoachMessageDto {
   @IsNumber()
   @Min(500)
   target_calories: number;
+
+  @ApiProperty({
+    required: false,
+    type: Object,
+    example: {
+      overall: 78,
+      label: 'steady',
+      nutrition: 82,
+      activity: 75,
+      consistency: 85,
+      recovery: 70,
+      next_action: 'complete_plan',
+      signals: ['2/3 meals logged', '20 activity minutes logged'],
+    },
+  })
+  @IsOptional()
+  health_score?: TodaySummary['health_score'];
 }

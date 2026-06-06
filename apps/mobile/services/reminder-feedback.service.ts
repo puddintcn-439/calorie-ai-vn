@@ -39,6 +39,8 @@ class ReminderFeedbackService {
     const context = extractPendingContext(data);
     if (!context) return null;
 
+    await authStorage.setItemAsync(PENDING_REMINDER_KEY, JSON.stringify(context));
+
     try {
       await apiClient.post('/reminders/events', {
         event: 'opened',
@@ -46,7 +48,6 @@ class ReminderFeedbackService {
         meal_type: context.meal_type,
         attribution_window_minutes: ATTRIBUTION_WINDOW_MINUTES,
       } satisfies ReminderFeedbackEventDto);
-      await authStorage.setItemAsync(PENDING_REMINDER_KEY, JSON.stringify(context));
     } catch (error) {
       appLogger.warn('ReminderFeedback', 'Failed to record reminder open', error);
     }

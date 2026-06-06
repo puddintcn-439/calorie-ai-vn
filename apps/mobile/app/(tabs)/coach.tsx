@@ -447,7 +447,7 @@ export default function CoachScreen() {
   const coachScrollRef = useRef<ScrollView>(null);
   const bottomContentPadding = useBottomNavContentPadding();
   const { locale, t } = useI18n();
-  const { dailyLog, fetchDailyLog, addActivity, fetchActivityLogs } = useLogStore();
+  const { dailyLog, todaySummary, fetchDailyLog, fetchTodaySummary, addActivity, fetchActivityLogs } = useLogStore();
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [loadingInsights, setLoadingInsights] = useState(false);
@@ -505,9 +505,11 @@ export default function CoachScreen() {
   }, []);
 
   const refreshCoachData = useCallback(() => {
-    fetchDailyLog().catch(() => {});
+    fetchTodaySummary().catch(() => {
+      fetchDailyLog().catch(() => {});
+    });
     loadInsights().catch(() => {});
-  }, [fetchDailyLog, loadInsights]);
+  }, [fetchDailyLog, fetchTodaySummary, loadInsights]);
 
   useEffect(() => {
     refreshCoachData();
@@ -522,7 +524,10 @@ export default function CoachScreen() {
   const onRefresh = async () => {
     setRefreshing(true);
     try {
-      await Promise.all([fetchDailyLog(), loadInsights()]);
+      await Promise.all([
+        fetchTodaySummary().catch(() => fetchDailyLog()),
+        loadInsights(),
+      ]);
     } finally {
       setRefreshing(false);
     }
@@ -534,8 +539,9 @@ export default function CoachScreen() {
     return {
       today_calories: consumed,
       target_calories: target,
+      health_score: todaySummary?.health_score,
     };
-  }, [dailyLog]);
+  }, [dailyLog, todaySummary?.health_score]);
   const activePlan = useMemo(() => buildActivePlan(dailyLog, locale), [dailyLog, locale]);
   const weeklyPlan = useMemo(() => buildWeeklyPlan(summary, dailyLog, locale), [summary, dailyLog, locale]);
   const summaryRecommendation = localizeInsightTextForLocale(summary?.recommended_action, locale) || t('screen.tabs.coach.summaryFallback');
@@ -627,7 +633,10 @@ export default function CoachScreen() {
           logged_at: new Date().toISOString(),
           notes: 'Added from AI Coach action',
         });
-        await Promise.all([fetchDailyLog(), fetchActivityLogs()]);
+        await Promise.all([
+          fetchTodaySummary().catch(() => fetchDailyLog()),
+          fetchActivityLogs(),
+        ]);
         setMessages((prev) => [...prev, {
           id: `c-action-${Date.now()}`,
           role: 'coach',

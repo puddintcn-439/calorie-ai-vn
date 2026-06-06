@@ -942,6 +942,15 @@ export default function DashboardScreen() {
       });
   const todayPlanMetricValue = hasRoadmapPlan ? remainingRoadmapItems.length : Math.abs(planRemaining);
   const todayPlanMetricLabel = hasRoadmapPlan ? 'tasks left' : planRemaining >= 0 ? 'left' : 'over';
+  const healthScore = todaySummary?.health_score;
+  const healthScoreBreakdown = healthScore
+    ? [
+        { key: 'nutrition', label: t('screen.tabs.index.health.nutrition'), value: healthScore.nutrition },
+        { key: 'activity', label: t('screen.tabs.index.health.activity'), value: healthScore.activity },
+        { key: 'consistency', label: t('screen.tabs.index.health.consistency'), value: healthScore.consistency },
+        { key: 'recovery', label: t('screen.tabs.index.health.recovery'), value: healthScore.recovery },
+      ]
+    : [];
 
   async function toggleRoadmapItem(item: DailyRoadmapItem) {
     setUpdatingRoadmapId(item.id);
@@ -1185,6 +1194,60 @@ export default function DashboardScreen() {
           <Text style={styles.coachBridgeButtonText}>{t('screen.tabs.index.coach.open')}</Text>
         </TouchableOpacity>
       </SurfaceCard>
+
+      {healthScore ? (
+        <SurfaceCard style={styles.healthScoreCard}>
+          <View style={styles.healthScoreHeader}>
+            <View style={styles.healthScoreCopy}>
+              <Text style={styles.healthScoreEyebrow} i18nKey="screen.tabs.index.health.eyebrow" />
+              <Text style={styles.healthScoreTitle} i18nKey="screen.tabs.index.health.title" />
+              <Text style={styles.healthScoreBody}>
+                {t(`screen.tabs.index.health.label.${healthScore.label}` as any)}
+              </Text>
+            </View>
+            <View style={styles.healthScoreBadge}>
+              <Text style={styles.healthScoreValue}>{formatNumber(healthScore.overall)}</Text>
+              <Text style={styles.healthScoreUnit}>/100</Text>
+            </View>
+          </View>
+          <View style={styles.healthScoreBreakdown}>
+            {healthScoreBreakdown.map((item) => (
+              <View key={item.key} style={styles.healthScoreMetric}>
+                <View style={styles.healthScoreMetricHeader}>
+                  <Text style={styles.healthScoreMetricLabel}>{item.label}</Text>
+                  <Text style={styles.healthScoreMetricValue}>{formatNumber(item.value)}</Text>
+                </View>
+                <View style={styles.healthScoreTrack}>
+                  <View style={[styles.healthScoreFill, { width: `${Math.max(0, Math.min(100, item.value))}%` as any }]} />
+                </View>
+              </View>
+            ))}
+          </View>
+          {healthScore.signals.length > 0 ? (
+            <View style={styles.healthSignalList}>
+              {healthScore.signals.slice(0, 2).map((signal) => (
+                <View key={signal} style={styles.healthSignalChip}>
+                  <Ionicons name="sparkles" size={13} color={theme.colors.accentCyan} />
+                  <Text style={styles.healthSignalText}>{signal}</Text>
+                </View>
+              ))}
+            </View>
+          ) : null}
+          <TouchableOpacity
+            style={styles.healthScoreAction}
+            onPress={() => {
+              if (healthScore.next_action === 'log_meal') router.push('/scan' as never);
+              else if (healthScore.next_action === 'move' || healthScore.next_action === 'complete_plan') router.push('/log' as never);
+              else router.push('/coach' as never);
+            }}
+          >
+            <Text style={styles.healthScoreActionText}>
+              {t(`screen.tabs.index.health.action.${healthScore.next_action}` as any)}
+            </Text>
+            <Ionicons name="chevron-forward" size={15} color={theme.colors.textOnAccent} />
+          </TouchableOpacity>
+        </SurfaceCard>
+      ) : null}
 
       <View style={[styles.actionGrid, isCompact && styles.actionGridCompact]}>
         <TouchableOpacity style={[styles.primaryAction, isCompact && styles.primaryActionCompact]} onPress={() => router.push('/scan' as never)}>
@@ -1814,6 +1877,141 @@ const styles = createThemedStyles((colors, radii) => ({
   coachBridgeButtonText: {
     color: colors.textOnAccent,
     fontSize: 12,
+    fontWeight: '900',
+  },
+  healthScoreCard: {
+    marginBottom: 16,
+    borderColor: colors.borderSuccess,
+    backgroundColor: colors.surfaceSuccess,
+    gap: 13,
+  },
+  healthScoreHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 14,
+  },
+  healthScoreCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  healthScoreEyebrow: {
+    color: colors.textMuted,
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+    marginBottom: 4,
+  },
+  healthScoreTitle: {
+    color: colors.text,
+    fontSize: 18,
+    lineHeight: 23,
+    fontWeight: '900',
+  },
+  healthScoreBody: {
+    color: colors.textSoft,
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: 4,
+  },
+  healthScoreBadge: {
+    minWidth: 76,
+    borderRadius: radii.lg,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    alignItems: 'center',
+  },
+  healthScoreValue: {
+    color: colors.accentMint,
+    fontSize: 28,
+    lineHeight: 32,
+    fontWeight: '900',
+  },
+  healthScoreUnit: {
+    color: colors.textMuted,
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  healthScoreBreakdown: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  healthScoreMetric: {
+    flexGrow: 1,
+    flexBasis: '46%',
+    minWidth: 136,
+    borderRadius: radii.lg,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    padding: 10,
+  },
+  healthScoreMetricHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 8,
+    marginBottom: 8,
+  },
+  healthScoreMetricLabel: {
+    color: colors.textSoft,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  healthScoreMetricValue: {
+    color: colors.text,
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  healthScoreTrack: {
+    height: 6,
+    borderRadius: 999,
+    backgroundColor: colors.surfacePressed,
+    overflow: 'hidden',
+  },
+  healthScoreFill: {
+    height: '100%',
+    borderRadius: 999,
+    backgroundColor: colors.accentMint,
+  },
+  healthSignalList: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  healthSignalChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    borderRadius: radii.sm,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    paddingHorizontal: 9,
+    paddingVertical: 7,
+  },
+  healthSignalText: {
+    color: colors.textSoft,
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: '700',
+  },
+  healthScoreAction: {
+    minHeight: 44,
+    borderRadius: radii.lg,
+    backgroundColor: colors.accentMint,
+    paddingHorizontal: 13,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  healthScoreActionText: {
+    color: colors.textOnAccent,
+    fontSize: 13,
     fontWeight: '900',
   },
   todayPlanCard: {

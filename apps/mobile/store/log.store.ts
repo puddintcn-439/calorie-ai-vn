@@ -28,6 +28,16 @@ async function hasAuthToken(): Promise<boolean> {
   return Boolean(await authStorage.getItemAsync('auth_token'));
 }
 
+function getLocalDateFromIso(value?: string): string | undefined {
+  if (!value) return undefined;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return undefined;
+  const year = parsed.getFullYear();
+  const month = String(parsed.getMonth() + 1).padStart(2, '0');
+  const day = String(parsed.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 interface LogState {
   dailyLog: DailyLog | null;
   savedMeals: SavedMeal[];
@@ -146,24 +156,24 @@ export const useLogStore = create<LogState>((set, get) => ({
   addLog: async (data) => {
     const res = await apiClient.post('/log', data);
     await reminderFeedbackService.recordActed('food_log', data.meal_type as MealType | undefined);
-    await get().fetchDailyLog();
+    await get().fetchTodaySummary(getLocalDateFromIso(data.logged_at));
     return res.data;
   },
 
   updateLog: async (id, data) => {
     await apiClient.patch(`/log/${id}`, data);
-    await get().fetchDailyLog();
+    await get().fetchTodaySummary(getLocalDateFromIso(data.logged_at));
   },
 
   removeLog: async (id) => {
     const res = await apiClient.delete(`/log/${id}`);
-    await get().fetchDailyLog();
+    await get().fetchTodaySummary();
     return res.data?.deleted ?? null;
   },
 
   restoreLog: async (id) => {
     await apiClient.post(`/log/${id}/restore`);
-    await get().fetchDailyLog();
+    await get().fetchTodaySummary();
   },
 
   saveMeal: async (name, items) => {
@@ -179,7 +189,7 @@ export const useLogStore = create<LogState>((set, get) => ({
   logSavedMeal: async (id, mealType) => {
     await apiClient.post(`/log/saved-meals/${id}/log`, { meal_type: mealType });
     await reminderFeedbackService.recordActed('saved_meal_log', mealType);
-    await get().fetchDailyLog();
+    await get().fetchTodaySummary();
   },
 
   deleteSavedMeal: async (id) => {
@@ -190,23 +200,23 @@ export const useLogStore = create<LogState>((set, get) => ({
   addActivity: async (dto) => {
     await apiClient.post('/log/activity', dto);
     await reminderFeedbackService.recordActed('activity_log');
-    await get().fetchActivityLogs();
+    await get().fetchTodaySummary(getLocalDateFromIso(dto.logged_at));
   },
 
   deleteActivity: async (id) => {
     await apiClient.delete(`/log/activity/${id}`);
-    await get().fetchActivityLogs();
+    await get().fetchTodaySummary();
   },
 
   syncActivity: async (date) => {
     const result = await activitySyncService.syncToday(date);
-    await get().fetchActivityLogs(date);
+    await get().fetchTodaySummary(date);
     return result;
   },
 
   addRoadmapItem: async (dto) => {
     const res = await apiClient.post('/roadmap', dto);
-    await get().fetchDailyRoadmap(dto.logged_date);
+    await get().fetchTodaySummary(dto.logged_date);
     return res.data;
   },
 
@@ -214,7 +224,7 @@ export const useLogStore = create<LogState>((set, get) => ({
     await apiClient.put(`/roadmap/${itemId}`, dto);
     const roadmap = get().dailyRoadmap;
     if (roadmap.length > 0) {
-      await get().fetchDailyRoadmap(roadmap[0].logged_date);
+      await get().fetchTodaySummary(roadmap[0].logged_date);
     }
   },
 
@@ -222,13 +232,13 @@ export const useLogStore = create<LogState>((set, get) => ({
     await apiClient.delete(`/roadmap/${itemId}`);
     const roadmap = get().dailyRoadmap;
     if (roadmap.length > 0) {
-      await get().fetchDailyRoadmap(roadmap[0].logged_date);
+      await get().fetchTodaySummary(roadmap[0].logged_date);
     }
   },
 
   syncRoadmapBatch: async (dto) => {
     await apiClient.post('/roadmap/sync/daily', dto);
-    await get().fetchDailyRoadmap(dto.logged_date);
+    await get().fetchTodaySummary(dto.logged_date);
   },
 
   fetchActivityPreferences: async () => {
@@ -244,18 +254,18 @@ export const useLogStore = create<LogState>((set, get) => ({
 
   addActivityPreference: async (dto) => {
     const res = await apiClient.post('/activity-preferences', dto);
-    await get().fetchActivityPreferences();
+    await get().fetchTodaySummary();
     return res.data;
   },
 
   updateActivityPreference: async (preferenceId, dto) => {
     await apiClient.put(`/activity-preferences/${preferenceId}`, dto);
-    await get().fetchActivityPreferences();
+    await get().fetchTodaySummary();
   },
 
   deleteActivityPreference: async (preferenceId) => {
     await apiClient.delete(`/activity-preferences/${preferenceId}`);
-    await get().fetchActivityPreferences();
+    await get().fetchTodaySummary();
   },
 }));
 

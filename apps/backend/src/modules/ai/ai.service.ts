@@ -9,6 +9,7 @@ import {
   AICoachResponse,
   AIUnresolvedItem,
 } from '@calorie-ai/types';
+import type { TodaySummary } from '@calorie-ai/types';
 import { createHash, randomUUID } from 'crypto';
 import { MetricsService } from '../../common/metrics/metrics.service';
 import { AiQueueService } from './ai.queue.service';
@@ -20,6 +21,12 @@ interface WebEvidence {
   digest: string;
   sources: string[];
 }
+
+type CoachContext = {
+  today_calories: number;
+  target_calories: number;
+  health_score?: TodaySummary['health_score'];
+};
 
 @Injectable()
 export class AiService {
@@ -616,7 +623,7 @@ Yeu cau bo sung:
 
   async getCoachReply(
     message: string,
-    context: { today_calories: number; target_calories: number },
+    context: CoachContext,
   ): Promise<AICoachResponse> {
     const model = this.createDeterministicModel();
 
@@ -626,6 +633,7 @@ Thông tin người dùng hôm nay:
 - Đã ăn: ${context.today_calories} kcal
 - Mục tiêu: ${context.target_calories} kcal
 - Còn lại: ${context.target_calories - context.today_calories} kcal
+${this.formatCoachHealthScoreContext(context)}
 
 Người dùng hỏi: "${message}"
 
@@ -663,7 +671,7 @@ Trả lời ngắn gọn, thân thiện bằng tiếng Việt. Không quá 3 câ
 
   private deriveCoachActions(
     message: string,
-    context: { today_calories: number; target_calories: number },
+    context: CoachContext,
   ): AICoachResponse['actions'] {
     const normalized = message
       .normalize('NFD')
@@ -705,7 +713,54 @@ Trả lời ngắn gọn, thân thiện bằng tiếng Việt. Không quá 3 câ
       });
     }
 
+    if (context.health_score?.next_action === 'log_meal') {
+      add({ type: 'open_scan', label: 'Log next meal', description: 'Capture a meal to improve today score.' });
+    }
+
+    if (context.health_score?.next_action === 'complete_plan' || context.health_score?.next_action === 'move') {
+      add({
+        type: 'add_activity',
+        label: 'Add 15 min walk',
+        description: 'Log a light activity toward today plan.',
+        payload: {
+          activity_type: 'walking',
+          activity_name: 'Coach walk',
+          duration_min: 15,
+          calories_burned: 60,
+        },
+      });
+      add({ type: 'open_log', label: 'Review today plan', description: 'Open log to finish today plan.' });
+    }
+
+    if (context.health_score?.next_action === 'recover') {
+      add({ type: 'open_progress', label: 'Check recovery trend', description: 'Review progress before adding more load.' });
+    }
+
     return actions.slice(0, 3);
+  }
+
+  private formatCoachHealthScoreContext(context: CoachContext): string {
+    const score = context.health_score;
+    if (!score) {
+      return '';
+    }
+
+    const signals = Array.isArray(score.signals) && score.signals.length > 0
+      ? score.signals.slice(0, 4).join('; ')
+      : 'none';
+
+    return `
+
+Health Score today:
+- Overall: ${score.overall}/100 (${score.label})
+- Nutrition: ${score.nutrition}/100
+- Activity: ${score.activity}/100
+- Consistency: ${score.consistency}/100
+- Recovery: ${score.recovery}/100
+- Next best action: ${score.next_action}
+- Signals: ${signals}
+
+Use Health Score to choose the most useful next action. If next_action is log_meal, suggest logging/scanning food. If it is move or complete_plan, suggest a light activity or plan completion. If it is recover, avoid pushing intensity.`;
   }
 
   private recordAiScanResponse(response: AIScanResponse, startedAt: number): AIScanResponse {

@@ -140,6 +140,17 @@ export class LogService {
     const burned = activityLogs.reduce((sum, item) => sum + Number(item.calories_burned ?? 0), 0);
     const activeRoadmap = dailyRoadmap.filter((item) => !item.is_removed);
     const roadmapCompleted = activeRoadmap.filter((item) => item.is_completed).length;
+    const plan = {
+      target_calories: target,
+      consumed_calories: consumed,
+      burned_calories: burned,
+      net_calories: Math.max(0, consumed - burned),
+      remaining_calories: target - Math.max(0, consumed - burned),
+      roadmap_total: activeRoadmap.length,
+      roadmap_completed: roadmapCompleted,
+      roadmap_remaining: Math.max(0, activeRoadmap.length - roadmapCompleted),
+      planned_activity_kcal: activeRoadmap.reduce((sum, item) => sum + Number(item.estimated_kcal ?? 0), 0),
+    };
 
     return {
       date,
@@ -149,19 +160,80 @@ export class LogService {
       daily_roadmap: dailyRoadmap,
       activity_preferences: activityPreferences,
       profile,
-      plan: {
-        target_calories: target,
-        consumed_calories: consumed,
-        burned_calories: burned,
-        net_calories: Math.max(0, consumed - burned),
-        remaining_calories: target - Math.max(0, consumed - burned),
-        roadmap_total: activeRoadmap.length,
-        roadmap_completed: roadmapCompleted,
-        roadmap_remaining: Math.max(0, activeRoadmap.length - roadmapCompleted),
-        planned_activity_kcal: activeRoadmap.reduce((sum, item) => sum + Number(item.estimated_kcal ?? 0), 0),
-      },
+      plan,
+      health_score: this.buildHealthScore(dailyLog, activityLogs, activeRoadmap, plan, profile),
       status,
       errors: Object.keys(errors).length > 0 ? errors : undefined,
+    };
+  }
+
+  private buildHealthScore(
+    dailyLog: DailyLog | null,
+    activityLogs: ActivityLog[],
+    roadmap: DailyRoadmapItem[],
+    plan: TodaySummary['plan'],
+    profile: TodaySummary['profile'],
+  ): TodaySummary['health_score'] {
+    const clamp = (value: number, min = 0, max = 100) => Math.max(min, Math.min(max, Math.round(value)));
+    const safeTarget = Math.max(Number(plan.target_calories || profile?.daily_calorie_target || 1800), 1);
+    const logs = dailyLog?.logs ?? [];
+    const mealTypesLogged = new Set(logs.map((log) => log.meal_type)).size;
+    const activityMinutes = activityLogs.reduce((sum, item) => sum + Number(item.duration_min ?? 0), 0);
+    const roadmapTotal = roadmap.length;
+    const roadmapDone = roadmap.filter((item) => item.is_completed).length;
+    const roadmapCompletion = roadmapTotal > 0 ? roadmapDone / roadmapTotal : null;
+    const calorieGapPct = Math.abs(plan.net_calories - safeTarget) / safeTarget;
+    const calorieScore = logs.length === 0 ? 20 : clamp(100 - calorieGapPct * 120);
+    const proteinTarget = Math.max(Number(profile?.weight_kg ?? 65) * 1.2, 60);
+    const proteinScore = logs.length === 0 ? 20 : clamp((Number(dailyLog?.total_protein_g ?? 0) / proteinTarget) * 100);
+    const qualityCoverage = dailyLog?.nutrition_quality_coverage;
+    const coverageScore = qualityCoverage?.total_items
+      ? clamp((
+        Number(qualityCoverage.fiber_items ?? 0)
+        + Number(qualityCoverage.sugar_items ?? 0)
+        + Number(qualityCoverage.sodium_items ?? 0)
+        + Number(qualityCoverage.saturated_fat_items ?? 0)
+      ) / (qualityCoverage.total_items * 4) * 100)
+      : logs.length > 0 ? 45 : 20;
+    const nutrition = clamp(calorieScore * 0.5 + proteinScore * 0.3 + coverageScore * 0.2);
+
+    const activityBase = roadmapCompletion !== null
+      ? roadmapCompletion * 100
+      : Math.min(activityMinutes / 30, 1) * 100;
+    const activity = clamp(activityBase + (plan.burned_calories > 0 ? 10 : 0));
+
+    const mealConsistency = Math.min(mealTypesLogged / 3, 1) * 100;
+    const planConsistency = roadmapCompletion !== null ? roadmapCompletion * 100 : activityMinutes > 0 ? 75 : 45;
+    const consistency = clamp(mealConsistency * 0.65 + planConsistency * 0.35);
+
+    const intenseMinutes = activityMinutes;
+    const recovery = clamp(intenseMinutes > 90 ? 68 : intenseMinutes > 45 ? 78 : logs.length > 0 || activityMinutes > 0 ? 72 : 55);
+
+    const overall = clamp(nutrition * 0.4 + activity * 0.25 + consistency * 0.25 + recovery * 0.1);
+    const signals: string[] = [];
+    if (logs.length === 0) signals.push('No meal logged yet');
+    if (mealTypesLogged > 0 && mealTypesLogged < 3) signals.push(`${mealTypesLogged}/3 core meals logged`);
+    if (nutrition >= 80) signals.push('Nutrition is close to plan');
+    if (activityMinutes > 0) signals.push(`${activityMinutes} activity minutes logged`);
+    if (roadmapTotal > 0) signals.push(`${roadmapDone}/${roadmapTotal} plan tasks complete`);
+    if (coverageScore < 70 && logs.length > 0) signals.push('Nutrition detail coverage is incomplete');
+
+    const nextAction: TodaySummary['health_score']['next_action'] =
+      logs.length === 0 ? 'log_meal'
+        : roadmapTotal > 0 && roadmapDone < roadmapTotal ? 'complete_plan'
+          : activityMinutes === 0 ? 'move'
+            : recovery < 70 ? 'recover'
+              : 'maintain';
+
+    return {
+      overall,
+      label: overall < 45 ? 'needs_data' : overall < 65 ? 'building' : overall < 82 ? 'steady' : 'strong',
+      nutrition,
+      activity,
+      consistency,
+      recovery,
+      signals: signals.slice(0, 4),
+      next_action: nextAction,
     };
   }
 

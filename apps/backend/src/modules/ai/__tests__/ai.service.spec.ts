@@ -348,4 +348,40 @@ describe('AiService.getCoachReply', () => {
     expect(result.message).toBe('Bạn đã ăn đủ!');
     expect(result.suggestions).toEqual([]);
   });
+
+  it('includes Health Score context and derives the next coach action', async () => {
+    let prompt = '';
+    const { GoogleGenerativeAI } = require('@google/generative-ai');
+    (GoogleGenerativeAI as jest.Mock).mockImplementation(() => ({
+      getGenerativeModel: jest.fn().mockReturnValue({
+        generateContent: jest.fn().mockImplementation((input: string) => {
+          prompt = input;
+          return Promise.resolve({ response: { text: () => 'Hay log bua tiep theo de giu nhip hom nay.' } });
+        }),
+      }),
+    }));
+
+    const svc = makeService();
+    const result = await svc.getCoachReply('Toi nen lam gi tiep?', {
+      today_calories: 900,
+      target_calories: 1850,
+      health_score: {
+        overall: 58,
+        label: 'building',
+        nutrition: 52,
+        activity: 40,
+        consistency: 45,
+        recovery: 80,
+        next_action: 'log_meal',
+        signals: ['1/3 meals logged', 'No activity yet'],
+      },
+    });
+
+    expect(prompt).toContain('Health Score today');
+    expect(prompt).toContain('Overall: 58/100 (building)');
+    expect(prompt).toContain('Next best action: log_meal');
+    expect(result.actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: 'open_scan' }),
+    ]));
+  });
 });

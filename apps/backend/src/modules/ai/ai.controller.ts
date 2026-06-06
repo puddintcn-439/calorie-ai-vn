@@ -102,6 +102,7 @@ export class AiController {
     return this.aiService.getCoachReply(dto.message, {
       today_calories: dto.today_calories,
       target_calories: dto.target_calories,
+      health_score: dto.health_score,
     });
   }
 }

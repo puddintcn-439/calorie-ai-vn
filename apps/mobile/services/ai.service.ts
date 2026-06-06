@@ -1,5 +1,6 @@
 import { Platform } from 'react-native';
 import { AIScanResponse, AICoachResponse } from '@calorie-ai/types';
+import type { TodaySummary } from '@calorie-ai/types';
 import { apiClient } from './api';
 import { featureGatingService } from './feature-gating.service';
 
@@ -140,7 +141,11 @@ export async function refineScan(
 
 export async function askCoach(
   message: string,
-  context: { today_calories: number; target_calories: number },
+  context: {
+    today_calories: number;
+    target_calories: number;
+    health_score?: TodaySummary['health_score'];
+  },
 ): Promise<AICoachResponse> {
   // Check subscription access to AI Coach
   await featureGatingService.requireFeature('ai_coach', 'AI Coach');

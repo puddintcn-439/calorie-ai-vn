@@ -188,6 +188,87 @@ describe('LogService.getDailyLog', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 // deleteLog
 // ─────────────────────────────────────────────────────────────────────────────
+describe('LogService.getTodaySummary', () => {
+  it('adds a behavior-oriented health score to the daily summary', async () => {
+    const logs: FoodLog[] = [
+      { id: 'b', user_id: 'u1', quantity: 1, calories: 500, protein_g: 35, carbs_g: 50, fat_g: 14, fiber_g: 8, sugar_g: 6, saturated_fat_g: 3, sodium_mg: 500, name: 'Breakfast', meal_type: 'breakfast', estimated_grams: 300, unit: 'serving', source: 'manual_entry', logged_at: '2026-06-06T07:00:00Z', created_at: '2026-06-06T07:00:00Z' },
+      { id: 'l', user_id: 'u1', quantity: 1, calories: 700, protein_g: 45, carbs_g: 78, fat_g: 20, fiber_g: 10, sugar_g: 8, saturated_fat_g: 4, sodium_mg: 700, name: 'Lunch', meal_type: 'lunch', estimated_grams: 450, unit: 'serving', source: 'manual_entry', logged_at: '2026-06-06T12:00:00Z', created_at: '2026-06-06T12:00:00Z' },
+      { id: 'd', user_id: 'u1', quantity: 1, calories: 600, protein_g: 25, carbs_g: 65, fat_g: 18, fiber_g: 7, sugar_g: 7, saturated_fat_g: 5, sodium_mg: 650, name: 'Dinner', meal_type: 'dinner', estimated_grams: 400, unit: 'serving', source: 'manual_entry', logged_at: '2026-06-06T18:00:00Z', created_at: '2026-06-06T18:00:00Z' },
+    ];
+    let userCalls = 0;
+
+    const supabase = makeSupabase((table: string) => {
+      if (table === 'food_logs') {
+        return {
+          select: jest.fn().mockReturnThis(),
+          eq: jest.fn().mockReturnThis(),
+          is: jest.fn().mockReturnThis(),
+          gte: jest.fn().mockReturnThis(),
+          lte: jest.fn().mockReturnThis(),
+          order: jest.fn().mockResolvedValue({ data: logs, error: null }),
+        };
+      }
+      if (table === 'users') {
+        userCalls += 1;
+        return {
+          select: jest.fn().mockReturnThis(),
+          eq: jest.fn().mockReturnThis(),
+          single: jest.fn().mockResolvedValue({
+            data: userCalls === 1
+              ? { daily_calorie_target: 2000 }
+              : { daily_calorie_target: 2000, weight_kg: 70, goal: 'gain_muscle', activity_level: 'moderate' },
+            error: null,
+          }),
+        };
+      }
+      if (table === 'activity_logs') {
+        return {
+          select: jest.fn().mockReturnThis(),
+          eq: jest.fn().mockReturnThis(),
+          gte: jest.fn().mockReturnThis(),
+          lte: jest.fn().mockReturnThis(),
+          order: jest.fn().mockResolvedValue({
+            data: [{ id: 'a1', user_id: 'u1', activity_type: 'walking', duration_min: 30, calories_burned: 100, logged_at: '2026-06-06T09:00:00Z' }],
+            error: null,
+          }),
+        };
+      }
+      if (table === 'user_daily_roadmap') {
+        return {
+          select: jest.fn().mockReturnThis(),
+          eq: jest.fn().mockReturnThis(),
+          order: jest.fn().mockResolvedValue({
+            data: [
+              { id: 'r1', user_id: 'u1', task_title: 'Walk', duration_min: 30, estimated_kcal: 100, is_completed: true, is_removed: false },
+              { id: 'r2', user_id: 'u1', task_title: 'Stretch', duration_min: 10, estimated_kcal: 20, is_completed: false, is_removed: false },
+            ],
+            error: null,
+          }),
+        };
+      }
+      if (table === 'user_activity_preferences') {
+        return {
+          select: jest.fn().mockReturnThis(),
+          eq: jest.fn().mockReturnThis(),
+          order: jest.fn().mockResolvedValue({ data: [], error: null }),
+        };
+      }
+      return makeChain({ data: null, error: null });
+    });
+
+    const service = new LogService(supabase);
+    const summary = await service.getTodaySummary('u1', '2026-06-06');
+
+    expect(summary.health_score.overall).toBeGreaterThanOrEqual(70);
+    expect(summary.health_score.label).toBe('steady');
+    expect(summary.health_score.nutrition).toBeGreaterThanOrEqual(85);
+    expect(summary.health_score.activity).toBe(60);
+    expect(summary.health_score.next_action).toBe('complete_plan');
+    expect(summary.health_score.signals).toContain('30 activity minutes logged');
+    expect(summary.health_score.signals).toContain('1/2 plan tasks complete');
+  });
+});
+
 describe('LogService.deleteLog', () => {
   it('soft-deletes and returns deleted log for undo', async () => {
     const deleted = { id: 'log1', user_id: 'u1', deleted_at: '2026-05-19T00:00:00.000Z' };

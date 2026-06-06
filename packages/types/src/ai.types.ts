@@ -1,4 +1,5 @@
 import { Food, FoodCategory } from './food.types';
+import type { TodaySummary } from './log.types';
 
 // ---- Request Types ----
 
@@ -64,6 +65,7 @@ export interface AICoachRequest {
     today_calories: number;
     target_calories: number;
     recent_logs?: string[];
+    health_score?: TodaySummary['health_score'];
   };
 }
 
