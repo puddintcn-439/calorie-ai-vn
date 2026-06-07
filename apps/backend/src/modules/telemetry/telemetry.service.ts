@@ -415,6 +415,13 @@ export class TelemetryService {
   }
 
   private buildEngagementAnalytics(rows: any[]): BetaAnalyticsSummary['engagement'] {
+    const isActiveRow = (row: any) => {
+      const foodLogs = Number(row.food_logs) || 0;
+      const activityLogs = Number(row.activity_logs) || 0;
+      const roadmapCompleted = Number(row.roadmap_completed) || 0;
+      const interventionsActed = Number(row.interventions_acted) || 0;
+      return foodLogs > 0 || activityLogs > 0 || roadmapCompleted > 0 || interventionsActed > 0;
+    };
     const byDate = rows.reduce<Record<string, BetaAnalyticsDailyEngagementItem>>((acc, row) => {
       const key = String(row.local_date ?? '');
       if (!key) return acc;
@@ -435,7 +442,7 @@ export class TelemetryService {
       const interventionsShown = Number(row.interventions_shown) || 0;
       const interventionsActed = Number(row.interventions_acted) || 0;
       const forecastSnapshots = Number(row.forecast_snapshots) || 0;
-      const active = foodLogs > 0 || activityLogs > 0 || roadmapCompleted > 0 || interventionsActed > 0;
+      const active = isActiveRow(row);
 
       acc[key].active_users += active ? 1 : 0;
       acc[key].food_logs += foodLogs;
@@ -448,8 +455,15 @@ export class TelemetryService {
     }, {});
     const daily = Object.values(byDate).sort((a, b) => b.local_date.localeCompare(a.local_date));
     const recent7 = daily.slice(0, 7);
-    const activeUsers7d = Math.max(...recent7.map((day) => day.active_users), 0);
-    const activeUsers30d = Math.max(...daily.slice(0, 30).map((day) => day.active_users), 0);
+    const recent7Dates = new Set(recent7.map((day) => day.local_date));
+    const activeUsers7d = new Set(rows
+      .filter((row) => recent7Dates.has(String(row.local_date ?? '')) && isActiveRow(row))
+      .map((row) => String(row.user_id ?? ''))
+      .filter(Boolean)).size;
+    const activeUsers30d = new Set(rows
+      .filter((row) => isActiveRow(row))
+      .map((row) => String(row.user_id ?? ''))
+      .filter(Boolean)).size;
     const activeDays = daily.filter((day) => day.active_users > 0);
 
     return {
