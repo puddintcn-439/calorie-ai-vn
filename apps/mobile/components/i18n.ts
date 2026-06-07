@@ -2408,7 +2408,8 @@ const EN_FRAGMENT_REPLACEMENTS: Array<[RegExp, string]> = [
 
 function interpolate(value: string, params?: Params): string {
   if (!params) return value;
-  return value.replace(/\{\{(\w+)\}\}/g, (_, key: string) => {
+  return value.replace(/\{\{(\w+)\}\}|\{(\w+)\}/g, (_, doubleKey: string, singleKey: string) => {
+    const key = doubleKey ?? singleKey;
     const param = params[key];
     return param === null || param === undefined ? '' : String(param);
   });
