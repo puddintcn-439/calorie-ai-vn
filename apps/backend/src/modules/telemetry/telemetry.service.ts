@@ -342,19 +342,42 @@ export class TelemetryService {
   }
 
   private buildInterventionAnalyticsSummary(rows: any[]): BetaAnalyticsSummary['interventions'] {
-    const items = rows.map((row): BetaAnalyticsInterventionItem => ({
-      intervention_type: String(row.intervention_type ?? 'unknown'),
-      mode: String(row.mode ?? 'unknown'),
-      primary_action: String(row.primary_action ?? 'unknown'),
-      shown: Number(row.shown) || 0,
-      acted: Number(row.acted) || 0,
-      dismissed: Number(row.dismissed) || 0,
-      action_rate: Number(row.action_rate) || 0,
-      dismiss_rate: Number(row.dismiss_rate) || 0,
-      sample_status: ['ready', 'learning', 'insufficient'].includes(String(row.sample_status))
-        ? row.sample_status
-        : 'insufficient',
-    }));
+    const grouped = rows.reduce<Record<string, BetaAnalyticsInterventionItem>>((acc, row) => {
+      const interventionType = String(row.intervention_type ?? 'unknown');
+      const mode = String(row.mode ?? 'unknown');
+      const primaryAction = String(row.primary_action ?? 'unknown');
+      const key = `${interventionType}|${mode}|${primaryAction}`;
+      acc[key] = acc[key] ?? {
+        intervention_type: interventionType,
+        mode,
+        primary_action: primaryAction,
+        shown: 0,
+        acted: 0,
+        dismissed: 0,
+        action_rate: 0,
+        dismiss_rate: 0,
+        sample_status: 'insufficient',
+      };
+      acc[key].shown += Number(row.shown) || 0;
+      acc[key].acted += Number(row.acted) || 0;
+      acc[key].dismissed += Number(row.dismissed) || 0;
+      return acc;
+    }, {});
+    const items = Object.values(grouped).map((item) => {
+      const actionRate = item.shown > 0 ? Math.round((item.acted / item.shown) * 100) : 0;
+      const dismissRate = item.shown > 0 ? Math.round((item.dismissed / item.shown) * 100) : 0;
+      const sampleStatus: BetaAnalyticsInterventionItem['sample_status'] = item.shown >= 20
+        ? 'ready'
+        : item.shown > 0
+          ? 'learning'
+          : 'insufficient';
+      return {
+        ...item,
+        action_rate: actionRate,
+        dismiss_rate: dismissRate,
+        sample_status: sampleStatus,
+      };
+    });
     const totalShown = items.reduce((sum, item) => sum + item.shown, 0);
     const totalActed = items.reduce((sum, item) => sum + item.acted, 0);
     const totalDismissed = items.reduce((sum, item) => sum + item.dismissed, 0);

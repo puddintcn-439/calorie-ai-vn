@@ -128,6 +128,7 @@ describe('TelemetryService.getBetaAnalyticsSummary', () => {
             select: jest.fn().mockResolvedValue({
               data: [
                 { intervention_type: 'protein_nudge', mode: 'coach_action', primary_action: 'log_meal', shown: 25, acted: 18, dismissed: 2, action_rate: 72, dismiss_rate: 8, sample_status: 'ready' },
+                { intervention_type: 'protein_nudge', mode: 'coach_action', primary_action: 'log_meal', shown: 5, acted: 2, dismissed: 1, action_rate: 40, dismiss_rate: 20, sample_status: 'learning' },
                 { intervention_type: 'reminder_tuning', mode: 'light_nudge', primary_action: 'adjust_reminders', shown: 12, acted: 1, dismissed: 6, action_rate: 8, dismiss_rate: 50, sample_status: 'learning' },
               ],
               error: null,
@@ -182,6 +183,8 @@ describe('TelemetryService.getBetaAnalyticsSummary', () => {
     expect(summary.calibration.worst_bucket).toBe('80-100');
     expect(summary.interventions.ready_count).toBe(1);
     expect(summary.interventions.top_effective[0].intervention_type).toBe('protein_nudge');
+    expect(summary.interventions.top_effective[0].shown).toBe(30);
+    expect(summary.interventions.top_effective[0].action_rate).toBe(67);
     expect(summary.reminders.fatigue_level).toBe('medium');
     expect(summary.engagement.active_users_30d).toBe(1);
     expect(summary.recommendations.length).toBeGreaterThan(0);
