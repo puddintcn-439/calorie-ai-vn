@@ -2,6 +2,7 @@ import { Injectable, BadRequestException, ForbiddenException, Optional } from '@
 import { ConfigService } from '@nestjs/config';
 import { SupabaseService } from '../../common/supabase/supabase.service';
 import {
+  BetaAnalyticsCalibrationBucket,
   BetaAnalyticsDailyEngagementItem,
   BetaAnalyticsInterventionItem,
   BetaAnalyticsSummary,
@@ -79,12 +80,15 @@ export class TelemetryService {
     const sinceDate = this.toDateKey(new Date(Date.now() - (windowDays - 1) * 24 * 60 * 60 * 1000));
     const completedForecastCutoff = this.toDateKey(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000));
 
-    const [forecastRes, interventionRes, reminderRes, engagementRes] = await Promise.all([
+    const [forecastRes, calibrationRes, interventionRes, reminderRes, engagementRes] = await Promise.all([
       this.supabase.db
         .from('beta_forecast_accuracy_weekly')
         .select('local_date, forecast_score, actual_adherence_score, absolute_error, predicted_success, actual_success')
         .gte('local_date', sinceDate)
         .lte('local_date', completedForecastCutoff),
+      this.supabase.db
+        .from('beta_forecast_calibration')
+        .select('bucket_order, forecast_bucket, samples, avg_forecast_score, actual_success_rate, calibration_error, calibration_status, confidence_level'),
       this.supabase.db
         .from('beta_intervention_performance_30d')
         .select('intervention_type, mode, primary_action, shown, acted, dismissed, action_rate, dismiss_rate, sample_status'),
@@ -99,16 +103,19 @@ export class TelemetryService {
     ]);
 
     if (forecastRes.error) throw forecastRes.error;
+    if (calibrationRes.error) throw calibrationRes.error;
     if (interventionRes.error) throw interventionRes.error;
     if (reminderRes.error) throw reminderRes.error;
     if (engagementRes.error) throw engagementRes.error;
 
     const forecastRows = Array.isArray(forecastRes.data) ? forecastRes.data : [];
+    const calibrationRows = Array.isArray(calibrationRes.data) ? calibrationRes.data : [];
     const interventionRows = Array.isArray(interventionRes.data) ? interventionRes.data : [];
     const reminderRows = Array.isArray(reminderRes.data) ? reminderRes.data : [];
     const engagementRows = Array.isArray(engagementRes.data) ? engagementRes.data : [];
 
     const forecast = this.buildForecastAnalytics(forecastRows);
+    const calibration = this.buildCalibrationAnalytics(calibrationRows);
     const interventions = this.buildInterventionAnalyticsSummary(interventionRows);
     const reminders = this.buildReminderAnalytics(reminderRows);
     const engagement = this.buildEngagementAnalytics(engagementRows);
@@ -118,10 +125,11 @@ export class TelemetryService {
       window_days: windowDays,
       access: 'admin',
       forecast,
+      calibration,
       interventions,
       reminders,
       engagement,
-      recommendations: this.buildBetaAnalyticsRecommendations(forecast, interventions, reminders, engagement),
+      recommendations: this.buildBetaAnalyticsRecommendations(forecast, calibration, interventions, reminders, engagement),
     };
   }
 
@@ -294,6 +302,45 @@ export class TelemetryService {
     };
   }
 
+  private buildCalibrationAnalytics(rows: any[]): BetaAnalyticsSummary['calibration'] {
+    const buckets = rows
+      .map((row): BetaAnalyticsCalibrationBucket => ({
+        bucket_order: Number(row.bucket_order) || 0,
+        forecast_bucket: String(row.forecast_bucket ?? 'unknown'),
+        samples: Number(row.samples) || 0,
+        avg_forecast_score: Number(row.avg_forecast_score) || 0,
+        actual_success_rate: Number(row.actual_success_rate) || 0,
+        calibration_error: Number(row.calibration_error) || 0,
+        calibration_status: ['insufficient', 'underconfident', 'calibrated', 'overconfident'].includes(String(row.calibration_status))
+          ? row.calibration_status
+          : 'insufficient',
+        confidence_level: ['low', 'medium', 'high'].includes(String(row.confidence_level))
+          ? row.confidence_level
+          : 'low',
+      }))
+      .sort((a, b) => a.bucket_order - b.bucket_order);
+    const totalSamples = buckets.reduce((sum, bucket) => sum + bucket.samples, 0);
+    const weightedError = totalSamples > 0
+      ? Math.round((buckets.reduce((sum, bucket) => sum + bucket.calibration_error * bucket.samples, 0) / totalSamples) * 10) / 10
+      : 0;
+    const worstBucket = buckets
+      .filter((bucket) => bucket.samples > 0)
+      .sort((a, b) => b.calibration_error - a.calibration_error || b.samples - a.samples)[0]?.forecast_bucket ?? null;
+    const status: BetaAnalyticsSummary['calibration']['status'] = totalSamples < 100
+      ? 'insufficient'
+      : weightedError <= 10
+        ? 'calibrated'
+        : 'needs_attention';
+
+    return {
+      buckets,
+      total_samples: totalSamples,
+      avg_calibration_error: weightedError,
+      worst_bucket: worstBucket,
+      status,
+    };
+  }
+
   private buildInterventionAnalyticsSummary(rows: any[]): BetaAnalyticsSummary['interventions'] {
     const items = rows.map((row): BetaAnalyticsInterventionItem => ({
       intervention_type: String(row.intervention_type ?? 'unknown'),
@@ -393,6 +440,7 @@ export class TelemetryService {
 
   private buildBetaAnalyticsRecommendations(
     forecast: BetaAnalyticsSummary['forecast'],
+    calibration: BetaAnalyticsSummary['calibration'],
     interventions: BetaAnalyticsSummary['interventions'],
     reminders: BetaAnalyticsSummary['reminders'],
     engagement: BetaAnalyticsSummary['engagement'],
@@ -400,6 +448,8 @@ export class TelemetryService {
     const notes: string[] = [];
     if (forecast.sample_status !== 'ready') notes.push(`Collect more forecast outcomes before tuning weights (${forecast.snapshots}/100).`);
     if (forecast.snapshots > 0 && forecast.avg_absolute_error > 20) notes.push('Forecast error is high; inspect high-confidence misses before changing intervention logic.');
+    if (calibration.status === 'insufficient') notes.push(`Collect more calibration outcomes before trusting forecast probabilities (${calibration.total_samples}/100).`);
+    if (calibration.status === 'needs_attention' && calibration.worst_bucket) notes.push(`Forecast calibration is off in the ${calibration.worst_bucket} bucket; review over/underconfidence before Adaptive v2.`);
     if (interventions.ready_count === 0) notes.push('Keep Dynamic Intervention rules conservative until at least one intervention has 20 shown events.');
     if (interventions.dismiss_rate >= 30) notes.push('Intervention dismiss rate is high; review copy/timing before increasing frequency.');
     if (reminders.fatigue_level !== 'low') notes.push('Reminder fatigue is visible; reduce frequency or shift timing for ignored reminders.');

@@ -14,6 +14,10 @@ Supabase migration `021_beta_measurement_kit.sql` adds:
 - `beta_reminder_fatigue_weekly`
 - `beta_daily_engagement_30d`
 
+Supabase migration `022_forecast_calibration.sql` adds:
+
+- `beta_forecast_calibration`
+
 Dev/staging sample data is available at `supabase/dev/seed_beta_measurement_sample.sql`. Run it only outside production, after at least one test user exists.
 
 ## Core Questions
@@ -30,6 +34,7 @@ Do not build Adaptive Intervention Engine v2 until these minimums are met:
 
 - `>= 20` shown events for a specific intervention type before trusting its ranking.
 - `>= 100` forecast snapshots with completed outcome weeks before tuning forecast weights.
+- `>= 100` calibration samples and weighted calibration error `<= 10-15` before using forecast probability to automate intervention ranking.
 - `>= 4` active weeks of reminder data before declaring reminder fatigue.
 - `>= 10` dogfood/beta users with at least `7` active days before evaluating retention.
 
@@ -44,6 +49,14 @@ order by sample_status desc, action_rate desc, shown desc;
 ```
 
 Forecast calibration:
+
+```sql
+select *
+from public.beta_forecast_calibration
+order by bucket_order;
+```
+
+Forecast accuracy:
 
 ```sql
 select

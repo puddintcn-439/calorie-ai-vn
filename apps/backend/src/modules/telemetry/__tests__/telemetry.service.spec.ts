@@ -134,6 +134,17 @@ describe('TelemetryService.getBetaAnalyticsSummary', () => {
             }),
           };
         }
+        if (table === 'beta_forecast_calibration') {
+          return {
+            select: jest.fn().mockResolvedValue({
+              data: [
+                { bucket_order: 4, forecast_bucket: '60-80', samples: 30, avg_forecast_score: 70, actual_success_rate: 68, calibration_error: 2, calibration_status: 'calibrated', confidence_level: 'medium' },
+                { bucket_order: 5, forecast_bucket: '80-100', samples: 10, avg_forecast_score: 86, actual_success_rate: 40, calibration_error: 46, calibration_status: 'insufficient', confidence_level: 'low' },
+              ],
+              error: null,
+            }),
+          };
+        }
         if (table === 'beta_reminder_fatigue_weekly') {
           return {
             select: jest.fn().mockReturnThis(),
@@ -167,6 +178,8 @@ describe('TelemetryService.getBetaAnalyticsSummary', () => {
 
     expect(summary.forecast.snapshots).toBe(2);
     expect(summary.forecast.classification_accuracy).toBe(50);
+    expect(summary.calibration.total_samples).toBe(40);
+    expect(summary.calibration.worst_bucket).toBe('80-100');
     expect(summary.interventions.ready_count).toBe(1);
     expect(summary.interventions.top_effective[0].intervention_type).toBe('protein_nudge');
     expect(summary.reminders.fatigue_level).toBe('medium');

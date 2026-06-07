@@ -132,6 +132,17 @@ export interface BetaAnalyticsDailyEngagementItem {
   forecast_snapshots: number;
 }
 
+export interface BetaAnalyticsCalibrationBucket {
+  bucket_order: number;
+  forecast_bucket: string;
+  samples: number;
+  avg_forecast_score: number;
+  actual_success_rate: number;
+  calibration_error: number;
+  calibration_status: 'insufficient' | 'underconfident' | 'calibrated' | 'overconfident';
+  confidence_level: 'low' | 'medium' | 'high';
+}
+
 export interface BetaAnalyticsSummary {
   generated_at: string;
   window_days: number;
@@ -143,6 +154,13 @@ export interface BetaAnalyticsSummary {
     avg_forecast_score: number;
     avg_actual_adherence: number;
     sample_status: 'insufficient' | 'learning' | 'ready';
+  };
+  calibration: {
+    buckets: BetaAnalyticsCalibrationBucket[];
+    total_samples: number;
+    avg_calibration_error: number;
+    worst_bucket: string | null;
+    status: 'insufficient' | 'needs_attention' | 'calibrated';
   };
   interventions: {
     total_shown: number;

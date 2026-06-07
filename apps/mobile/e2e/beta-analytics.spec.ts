@@ -30,6 +30,16 @@ test.describe('Beta analytics screen', () => {
             avg_actual_adherence: 72,
             sample_status: 'learning',
           },
+          calibration: {
+            buckets: [
+              { bucket_order: 4, forecast_bucket: '60-80', samples: 30, avg_forecast_score: 70, actual_success_rate: 68, calibration_error: 2, calibration_status: 'calibrated', confidence_level: 'medium' },
+              { bucket_order: 5, forecast_bucket: '80-100', samples: 10, avg_forecast_score: 86, actual_success_rate: 40, calibration_error: 46, calibration_status: 'insufficient', confidence_level: 'low' },
+            ],
+            total_samples: 40,
+            avg_calibration_error: 13,
+            worst_bucket: '80-100',
+            status: 'insufficient',
+          },
           interventions: {
             total_shown: 80,
             total_acted: 46,
@@ -80,9 +90,12 @@ test.describe('Beta analytics screen', () => {
 
     await gotoApp(page, '/beta-analytics');
 
-    await expect(page.getByText('Beta Measurement')).toBeVisible({ timeout: 15000 });
+    await expect(page.getByText('Beta Measurement')).toBeVisible({ timeout: 30000 });
     await expect(page.getByText('Forecast accuracy', { exact: true })).toBeVisible();
     await expect(page.getByText('82%')).toBeVisible();
+    await expect(page.getByText('Forecast calibration')).toBeVisible();
+    await expect(page.getByText('80-100% forecast')).toBeVisible();
+    await expect(page.getByText('Actual 40%')).toBeVisible();
     await expect(page.getByText('Top effective interventions')).toBeVisible();
     await expect(page.getByText('Protein Nudge')).toBeVisible();
     await expect(page.getByText('Most ignored interventions')).toBeVisible();

@@ -19,7 +19,7 @@ function formatName(value: string) {
 }
 
 function statusTone(status: string) {
-  if (status === 'ready' || status === 'low') return styles.goodPill;
+  if (status === 'ready' || status === 'low' || status === 'calibrated') return styles.goodPill;
   if (status === 'learning' || status === 'medium') return styles.warnPill;
   return styles.badPill;
 }
@@ -93,9 +93,20 @@ export default function BetaAnalyticsScreen() {
           <View style={styles.metricGrid}>
             <MetricCard label="Forecast accuracy" value={formatNumber(summary.forecast.classification_accuracy, '%')} detail={`${summary.forecast.snapshots}/100 outcomes`} status={summary.forecast.sample_status} />
             <MetricCard label="Avg forecast error" value={formatNumber(summary.forecast.avg_absolute_error)} detail="lower is better" status={summary.forecast.avg_absolute_error > 20 ? 'high' : 'low'} />
+            <MetricCard label="Calibration error" value={formatNumber(summary.calibration.avg_calibration_error)} detail={`${summary.calibration.total_samples}/100 calibration samples`} status={summary.calibration.status} />
             <MetricCard label="Intervention action" value={formatNumber(summary.interventions.action_rate, '%')} detail={`${summary.interventions.total_shown} shown`} status={summary.interventions.ready_count > 0 ? 'ready' : 'learning'} />
             <MetricCard label="Reminder fatigue" value={summary.reminders.fatigue_level.toUpperCase()} detail={`${summary.reminders.fatigue_weeks} flagged weeks`} status={summary.reminders.fatigue_level} />
           </View>
+
+          <SurfaceCard style={styles.sectionCard}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>Forecast calibration</Text>
+              <Text style={styles.sectionMeta}>{summary.calibration.status}</Text>
+            </View>
+            {summary.calibration.buckets.length > 0 ? summary.calibration.buckets.map((bucket) => (
+              <CalibrationRow key={bucket.forecast_bucket} bucket={bucket} />
+            )) : <Text style={styles.mutedText}>No completed forecast outcomes yet.</Text>}
+          </SurfaceCard>
 
           <SurfaceCard style={styles.sectionCard}>
             <View style={styles.sectionHeader}>
@@ -161,13 +172,28 @@ function InterventionRow({ item, mode }: { item: BetaAnalyticsSummary['intervent
     <View style={styles.interventionRow}>
       <View style={styles.interventionCopy}>
         <Text style={styles.interventionName}>{formatName(item.intervention_type)}</Text>
-        <Text style={styles.interventionDetail}>{item.mode} · {item.primary_action} · {item.sample_status}</Text>
+        <Text style={styles.interventionDetail}>{item.mode} / {item.primary_action} / {item.sample_status}</Text>
       </View>
       <View style={styles.interventionStats}>
         <Text style={[styles.interventionRate, mode === 'ignored' && styles.interventionRateWarn]}>
           {mode === 'ignored' ? item.dismiss_rate : item.action_rate}%
         </Text>
         <Text style={styles.interventionShown}>{item.shown} shown</Text>
+      </View>
+    </View>
+  );
+}
+
+function CalibrationRow({ bucket }: { bucket: BetaAnalyticsSummary['calibration']['buckets'][number] }) {
+  return (
+    <View style={styles.calibrationRow}>
+      <View style={styles.calibrationCopy}>
+        <Text style={styles.calibrationBucket}>{bucket.forecast_bucket}% forecast</Text>
+        <Text style={styles.interventionDetail}>{bucket.samples} samples / {bucket.confidence_level} confidence</Text>
+      </View>
+      <View style={styles.calibrationStats}>
+        <Text style={styles.calibrationRate}>Actual {bucket.actual_success_rate}%</Text>
+        <Text style={styles.calibrationError}>Error {bucket.calibration_error} / {bucket.calibration_status}</Text>
       </View>
     </View>
   );
@@ -335,6 +361,37 @@ const styles = createThemedStyles((colors, radii) => ({
     color: colors.accentAmber,
   },
   interventionShown: {
+    color: colors.textMuted,
+    fontSize: 11,
+    marginTop: 2,
+  },
+  calibrationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingVertical: 10,
+  },
+  calibrationCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  calibrationBucket: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  calibrationStats: {
+    alignItems: 'flex-end',
+  },
+  calibrationRate: {
+    color: colors.accentCyan,
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  calibrationError: {
     color: colors.textMuted,
     fontSize: 11,
     marginTop: 2,
