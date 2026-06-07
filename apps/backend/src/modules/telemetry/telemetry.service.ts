@@ -389,9 +389,15 @@ export class TelemetryService {
       action_rate: totalShown > 0 ? Math.round((totalActed / totalShown) * 100) : 0,
       dismiss_rate: totalShown > 0 ? Math.round((totalDismissed / totalShown) * 100) : 0,
       ready_count: items.filter((item) => item.sample_status === 'ready').length,
-      top_effective: [...items].sort((a, b) => b.action_rate - a.action_rate || b.shown - a.shown).slice(0, 5),
-      top_ignored: [...items].sort((a, b) => b.dismiss_rate - a.dismiss_rate || b.shown - a.shown).slice(0, 5),
+      top_effective: [...items].sort((a, b) => this.sampleRank(b.sample_status) - this.sampleRank(a.sample_status) || b.action_rate - a.action_rate || b.shown - a.shown).slice(0, 5),
+      top_ignored: [...items].sort((a, b) => this.sampleRank(b.sample_status) - this.sampleRank(a.sample_status) || b.dismiss_rate - a.dismiss_rate || b.shown - a.shown).slice(0, 5),
     };
+  }
+
+  private sampleRank(status: BetaAnalyticsInterventionItem['sample_status']): number {
+    if (status === 'ready') return 2;
+    if (status === 'learning') return 1;
+    return 0;
   }
 
   private buildReminderAnalytics(rows: any[]): BetaAnalyticsSummary['reminders'] {
