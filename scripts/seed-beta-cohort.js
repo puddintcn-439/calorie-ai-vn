@@ -14,7 +14,7 @@ const path = require('path');
 
 const ROOT = path.resolve(__dirname, '..');
 const BACKEND_ENV = path.join(ROOT, 'apps', 'backend', '.env');
-const USER_COUNT = Number(process.env.BETA_SEED_USERS || 24);
+const USER_COUNT = Number(process.env.BETA_SEED_USERS || 30);
 const DAYS = Number(process.env.BETA_SEED_DAYS || 30);
 const EMAIL_DOMAIN = process.env.BETA_SEED_EMAIL_DOMAIN || 'calorie-ai-vn.test';
 const PASSWORD = process.env.BETA_SEED_PASSWORD || 'BetaSeed0123!';
@@ -178,9 +178,8 @@ async function createOrFindAuthUser(email, index) {
 }
 
 function cohortUsers(authUsers) {
-  const goals = ['lose_weight', 'maintain', 'gain_muscle'];
-  const activity = ['light', 'moderate', 'active', 'very_active'];
   return authUsers.map((user, idx) => {
+    const profile = userProfile(idx);
     const target = 1750 + (idx % 6) * 120;
     return {
       id: user.id,
@@ -190,8 +189,8 @@ function cohortUsers(authUsers) {
       height_cm: 158 + (idx % 8) * 5,
       age: 22 + (idx % 22),
       gender: idx % 2 === 0 ? 'female' : 'male',
-      activity_level: activity[idx % activity.length],
-      goal: goals[idx % goals.length],
+      activity_level: profile.activity,
+      goal: profile.goal,
       daily_calorie_target: target,
       target_breakfast_cal: Math.round(target * 0.25),
       target_lunch_cal: Math.round(target * 0.35),
@@ -204,23 +203,157 @@ function cohortUsers(authUsers) {
 
 function userProfile(index) {
   const profiles = [
-    { name: 'consistent_high', base: 88, food: 0.93, activity: 0.75, roadmap: 0.86, open: 0.82, action: 0.62 },
-    { name: 'steady_medium', base: 72, food: 0.78, activity: 0.55, roadmap: 0.72, open: 0.68, action: 0.42 },
-    { name: 'overconfident_risk', base: 84, food: 0.42, activity: 0.28, roadmap: 0.38, open: 0.34, action: 0.18 },
-    { name: 'underconfident_improver', base: 45, food: 0.86, activity: 0.62, roadmap: 0.82, open: 0.78, action: 0.55 },
-    { name: 'low_engagement', base: 32, food: 0.25, activity: 0.16, roadmap: 0.28, open: 0.26, action: 0.1 },
-    { name: 'weekend_drop', base: 66, food: 0.7, activity: 0.5, roadmap: 0.58, open: 0.58, action: 0.3 },
+    {
+      name: 'consistent_logger',
+      goal: 'maintain',
+      activity: 'moderate',
+      food: 0.9,
+      activityHit: 0.62,
+      roadmap: 0.82,
+      open: 0.78,
+      action: 0.55,
+      trend: 0.02,
+      weekendDrop: 0.08,
+      fatigue: 0.1,
+      forecastBias: 2,
+      gymDays: [1, 3, 5],
+    },
+    {
+      name: 'busy_professional',
+      goal: 'lose_weight',
+      activity: 'light',
+      food: 0.58,
+      activityHit: 0.28,
+      roadmap: 0.42,
+      open: 0.5,
+      action: 0.28,
+      trend: -0.02,
+      weekendDrop: 0.22,
+      fatigue: 0.35,
+      forecastBias: 8,
+      stressDays: [9, 10, 17, 18],
+    },
+    {
+      name: 'gym_muscle_gain',
+      goal: 'gain_muscle',
+      activity: 'active',
+      food: 0.76,
+      activityHit: 0.7,
+      roadmap: 0.76,
+      open: 0.64,
+      action: 0.48,
+      trend: 0.01,
+      weekendDrop: 0.05,
+      fatigue: 0.18,
+      forecastBias: 0,
+      gymDays: [1, 3, 5],
+    },
+    {
+      name: 'improving_weight_loss',
+      goal: 'lose_weight',
+      activity: 'moderate',
+      food: 0.5,
+      activityHit: 0.34,
+      roadmap: 0.48,
+      open: 0.62,
+      action: 0.42,
+      trend: 0.32,
+      weekendDrop: 0.12,
+      fatigue: 0.08,
+      forecastBias: -6,
+    },
+    {
+      name: 'low_engagement',
+      goal: 'maintain',
+      activity: 'sedentary',
+      food: 0.24,
+      activityHit: 0.14,
+      roadmap: 0.2,
+      open: 0.22,
+      action: 0.09,
+      trend: -0.03,
+      weekendDrop: 0.18,
+      fatigue: 0.45,
+      forecastBias: 4,
+      stressDays: [6, 7, 8, 21, 22],
+    },
+    {
+      name: 'weekend_social_drop',
+      goal: 'lose_weight',
+      activity: 'moderate',
+      food: 0.74,
+      activityHit: 0.45,
+      roadmap: 0.56,
+      open: 0.56,
+      action: 0.32,
+      trend: 0,
+      weekendDrop: 0.34,
+      fatigue: 0.22,
+      forecastBias: 10,
+    },
+    {
+      name: 'overconfident_risk',
+      goal: 'lose_weight',
+      activity: 'light',
+      food: 0.38,
+      activityHit: 0.24,
+      roadmap: 0.34,
+      open: 0.36,
+      action: 0.16,
+      trend: -0.06,
+      weekendDrop: 0.24,
+      fatigue: 0.28,
+      forecastBias: 24,
+      stressDays: [12, 13, 14],
+    },
+    {
+      name: 'underconfident_rebound',
+      goal: 'gain_muscle',
+      activity: 'active',
+      food: 0.82,
+      activityHit: 0.64,
+      roadmap: 0.78,
+      open: 0.76,
+      action: 0.56,
+      trend: 0.16,
+      weekendDrop: 0.08,
+      fatigue: 0.05,
+      forecastBias: -18,
+      gymDays: [2, 4, 6],
+    },
   ];
   return profiles[index % profiles.length];
 }
 
-function deterministicHit(userIndex, dayOffset, threshold, salt = 0) {
-  const raw = ((userIndex + 3) * 37 + (dayOffset + 11) * 19 + salt * 23) % 100;
-  return raw < Math.round(threshold * 100);
+function random01(userIndex, dayIndex, salt = 0) {
+  const x = Math.sin((userIndex + 1) * 917.23 + (dayIndex + 1) * 131.91 + (salt + 1) * 71.17) * 10000;
+  return x - Math.floor(x);
+}
+
+function deterministicHit(userIndex, dayIndex, threshold, salt = 0) {
+  return random01(userIndex, dayIndex, salt) < clamp(threshold, 0.01, 0.99);
 }
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
+}
+
+function avg(values) {
+  return values.length > 0 ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
+}
+
+function rateFromHistory(history, key, fallback) {
+  const recent = history.slice(-7);
+  if (recent.length === 0) return fallback;
+  return avg(recent.map((day) => Number(Boolean(day[key]))));
+}
+
+function adherenceScoreFromRates(foodRate, activityRate, roadmapRate) {
+  return Math.round(
+    Math.min(foodRate / 0.75, 1) * 45
+    + Math.min(activityRate / 0.45, 1) * 35
+    + Math.min(roadmapRate / 0.75, 1) * 20,
+  );
 }
 
 function buildRows(users) {
@@ -234,17 +367,36 @@ function buildRows(users) {
 
   users.forEach((user, userIndex) => {
     const profile = userProfile(userIndex);
-    for (let dayOffset = 0; dayOffset < DAYS; dayOffset += 1) {
+    const history = [];
+
+    for (let dayOffset = DAYS - 1; dayOffset >= 0; dayOffset -= 1) {
+      const dayIndex = DAYS - 1 - dayOffset;
       const localDate = addDays(baseDate, -dayOffset);
       const day = new Date(`${localDate}T00:00:00.000Z`).getUTCDay();
-      const weekendPenalty = profile.name === 'weekend_drop' && (day === 0 || day === 6) ? -0.28 : 0;
-      const foodHit = deterministicHit(userIndex, dayOffset, clamp(profile.food + weekendPenalty, 0.05, 0.98), 1);
-      const activityHit = deterministicHit(userIndex, dayOffset, clamp(profile.activity + weekendPenalty / 2, 0.05, 0.95), 2);
-      const roadmapHit = deterministicHit(userIndex, dayOffset, clamp(profile.roadmap + weekendPenalty, 0.05, 0.98), 3);
-      const reminderOpen = deterministicHit(userIndex, dayOffset, clamp(profile.open + weekendPenalty, 0.03, 0.95), 4);
-      const reminderAct = reminderOpen && deterministicHit(userIndex, dayOffset, clamp(profile.action + weekendPenalty, 0.02, 0.9), 5);
-      const noise = ((userIndex * 7 + dayOffset * 5) % 13) - 6;
-      const forecastScore = clamp(profile.base + noise + (dayOffset < 7 ? 4 : 0), 8, 96);
+      const isWeekend = day === 0 || day === 6;
+      const isGymDay = Array.isArray(profile.gymDays) ? profile.gymDays.includes(day) : false;
+      const isStressDay = Array.isArray(profile.stressDays) ? profile.stressDays.includes(dayIndex) : false;
+      const progress = dayIndex / Math.max(DAYS - 1, 1);
+      const fatiguePenalty = profile.fatigue * progress;
+      const weekendPenalty = isWeekend ? profile.weekendDrop : 0;
+      const stressPenalty = isStressDay ? 0.28 : 0;
+      const trendBoost = profile.trend * progress;
+      const foodProbability = clamp(profile.food + trendBoost - weekendPenalty - stressPenalty, 0.04, 0.98);
+      const activityProbability = clamp(profile.activityHit + trendBoost * 0.5 + (isGymDay ? 0.22 : -0.04) - weekendPenalty * 0.45 - stressPenalty * 0.5, 0.03, 0.96);
+      const roadmapProbability = clamp(profile.roadmap + trendBoost * 0.7 - weekendPenalty * 0.75 - stressPenalty * 0.7, 0.03, 0.98);
+      const openProbability = clamp(profile.open - fatiguePenalty - weekendPenalty * 0.35 - stressPenalty * 0.35, 0.03, 0.96);
+      const foodHit = deterministicHit(userIndex, dayIndex, foodProbability, 1);
+      const activityHit = deterministicHit(userIndex, dayIndex, activityProbability, 2);
+      const roadmapHit = deterministicHit(userIndex, dayIndex, roadmapProbability, 3);
+      const reminderOpen = deterministicHit(userIndex, dayIndex, openProbability, 4);
+      const reminderAct = reminderOpen && deterministicHit(userIndex, dayIndex, clamp(profile.action + trendBoost - fatiguePenalty * 0.45, 0.02, 0.9), 5);
+      const foodRate = rateFromHistory(history, 'foodHit', profile.food);
+      const activityRate = rateFromHistory(history, 'activityHit', profile.activityHit);
+      const roadmapRate = rateFromHistory(history, 'roadmapHit', profile.roadmap);
+      const historicalAdherence = adherenceScoreFromRates(foodRate, activityRate, roadmapRate);
+      const noise = Math.round((random01(userIndex, dayIndex, 8) - 0.5) * 18);
+      const recencyBoost = history.slice(-2).some((item) => item.foodHit && item.activityHit) ? 4 : 0;
+      const forecastScore = clamp(historicalAdherence + profile.forecastBias + noise + recencyBoost, 8, 96);
       const riskLevel = forecastScore >= 75 ? 'low' : forecastScore >= 55 ? 'medium' : 'high';
       const label = forecastScore >= 75 ? 'likely_on_track' : forecastScore >= 55 ? 'watchlist' : 'recovery_needed';
       const weakest = !foodHit ? 'logging' : !activityHit ? 'activity' : !roadmapHit ? 'consistency' : 'nutrition';
@@ -254,7 +406,7 @@ function buildRows(users) {
           {
             user_id: user.id,
             meal_type: 'breakfast',
-            logged_at: atUtc(localDate, 8, 10),
+            logged_at: atUtc(localDate, 7 + Math.floor(random01(userIndex, dayIndex, 31) * 2), Math.floor(random01(userIndex, dayIndex, 32) * 45)),
             quantity: 1,
             unit: 'serving',
             estimated_grams: 240,
@@ -269,7 +421,7 @@ function buildRows(users) {
           {
             user_id: user.id,
             meal_type: dayOffset % 4 === 0 ? 'lunch' : 'dinner',
-            logged_at: atUtc(localDate, dayOffset % 4 === 0 ? 12 : 19, 5),
+            logged_at: atUtc(localDate, dayOffset % 4 === 0 ? 12 : 19, Math.floor(random01(userIndex, dayIndex, 33) * 45)),
             quantity: 1,
             unit: 'serving',
             estimated_grams: 380,
@@ -287,11 +439,11 @@ function buildRows(users) {
       if (activityHit) {
         activityRows.push({
           user_id: user.id,
-          activity_type: userIndex % 3 === 0 ? 'strength' : 'walking',
-          activity_name: userIndex % 3 === 0 ? 'Beta seed strength session' : 'Beta seed walk',
-          duration_min: userIndex % 3 === 0 ? 45 : 25,
-          calories_burned: userIndex % 3 === 0 ? 210 : 95,
-          logged_at: atUtc(localDate, 18, 15),
+          activity_type: isGymDay || userIndex % 3 === 0 ? 'strength' : 'walking',
+          activity_name: isGymDay || userIndex % 3 === 0 ? 'Beta seed strength session' : 'Beta seed walk',
+          duration_min: isGymDay || userIndex % 3 === 0 ? 45 : 25,
+          calories_burned: isGymDay || userIndex % 3 === 0 ? 210 : 95,
+          logged_at: atUtc(localDate, 17 + Math.floor(random01(userIndex, dayIndex, 34) * 3), Math.floor(random01(userIndex, dayIndex, 35) * 50)),
           notes: 'synthetic beta measurement seed',
         });
       }
@@ -300,10 +452,10 @@ function buildRows(users) {
         user_id: user.id,
         logged_date: localDate,
         task_id: `beta-seed-${localDate}-${userIndex}`,
-        task_title: userIndex % 3 === 0 ? 'Strength session' : 'Walk after work',
-        activity_type: userIndex % 3 === 0 ? 'strength' : 'walking',
-        duration_min: userIndex % 3 === 0 ? 45 : 25,
-        estimated_kcal: userIndex % 3 === 0 ? 210 : 95,
+        task_title: isGymDay || userIndex % 3 === 0 ? 'Strength session' : 'Walk after work',
+        activity_type: isGymDay || userIndex % 3 === 0 ? 'strength' : 'walking',
+        duration_min: isGymDay || userIndex % 3 === 0 ? 45 : 25,
+        estimated_kcal: isGymDay || userIndex % 3 === 0 ? 210 : 95,
         is_custom: false,
         is_removed: false,
         is_completed: roadmapHit,
@@ -327,7 +479,7 @@ function buildRows(users) {
         forecast_score: forecastScore,
         forecast_label: label,
         risk_level: riskLevel,
-        confidence: dayOffset < 14 ? 'medium' : 'high',
+        confidence: history.length >= 14 ? 'high' : 'medium',
         health_score_overall: clamp(forecastScore + (foodHit ? 4 : -8), 0, 100),
         adherence_score: clamp(forecastScore + (roadmapHit ? 2 : -10), 0, 100),
         weakest_area: weakest,
@@ -336,6 +488,8 @@ function buildRows(users) {
           label,
           risk_level: riskLevel,
           seed_profile: profile.name,
+          simulated_from: 'rolling_7_day_history',
+          historical_adherence: historicalAdherence,
         },
         health_score: {
           overall: clamp(forecastScore + (foodHit ? 4 : -8), 0, 100),
@@ -360,7 +514,14 @@ function buildRows(users) {
           : interventionType === 'protein_nudge'
             ? 'log_protein'
             : 'review_plan';
-      const acted = deterministicHit(userIndex, dayOffset, clamp(profile.action + (forecastScore < 45 ? 0.08 : 0), 0.02, 0.9), 6);
+      const interventionLift = interventionType === 'protein_nudge'
+        ? 0.18
+        : interventionType === 'walk_reminder'
+          ? 0.1
+          : interventionType === 'breakfast_prompt'
+            ? -0.02
+            : 0.08;
+      const acted = deterministicHit(userIndex, dayIndex, clamp(profile.action + trendBoost + interventionLift - fatiguePenalty * 0.35, 0.02, 0.92), 6);
 
       interventionRows.push({
         user_id: user.id,
@@ -372,7 +533,7 @@ function buildRows(users) {
         source: 'today',
         forecast_score: forecastScore,
         intervention_generated_at: atUtc(localDate, 9, 0),
-        metadata: { seed_profile: profile.name, local_date: localDate },
+        metadata: { seed_profile: profile.name, local_date: localDate, simulated: true },
         created_at: atUtc(localDate, 9, 2),
       });
       interventionRows.push({
@@ -385,9 +546,11 @@ function buildRows(users) {
         source: 'today',
         forecast_score: forecastScore,
         intervention_generated_at: atUtc(localDate, 9, 0),
-        metadata: { seed_profile: profile.name, local_date: localDate },
+        metadata: { seed_profile: profile.name, local_date: localDate, simulated: true },
         created_at: atUtc(localDate, 9, acted ? 22 : 35),
       });
+
+      history.push({ foodHit, activityHit, roadmapHit, reminderOpen, reminderAct, forecastScore });
     }
   });
 
