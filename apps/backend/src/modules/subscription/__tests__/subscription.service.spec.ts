@@ -56,6 +56,44 @@ describe('SubscriptionService.getUserSubscription', () => {
     expect(result.tier).toBe('free');
   });
 
+  it('refetches subscription when free tier creation races an existing row', async () => {
+    const existing = { id: 's2', user_id: 'u2', tier: 'premium', is_active: true };
+    let selectCalls = 0;
+    const updateUser = jest.fn().mockReturnThis();
+    const db = {
+      from: jest.fn().mockImplementation((table: string) => {
+        if (table === 'user_subscriptions') {
+          return {
+            select: jest.fn().mockReturnThis(),
+            eq: jest.fn().mockReturnThis(),
+            single: jest.fn().mockImplementation(() => {
+              selectCalls++;
+              if (selectCalls === 1) return Promise.resolve({ data: null, error: { code: 'PGRST116' } });
+              return Promise.resolve({ data: existing, error: null });
+            }),
+            insert: jest.fn().mockReturnValue({
+              select: jest.fn().mockReturnThis(),
+              single: jest.fn().mockResolvedValue({
+                data: null,
+                error: { code: '23505', message: 'duplicate key value violates unique constraint' },
+              }),
+            }),
+          };
+        }
+        return {
+          update: updateUser,
+          eq: jest.fn().mockResolvedValue({ data: null, error: null }),
+        };
+      }),
+    };
+
+    const service = new SubscriptionService({ db } as unknown as SupabaseService);
+    const result = await service.getUserSubscription('u2');
+
+    expect(result.tier).toBe('premium');
+    expect(updateUser).not.toHaveBeenCalled();
+  });
+
   it('throws when DB returns non-PGRST116 error', async () => {
     const db = {
       from: jest.fn().mockReturnValue({

@@ -69,6 +69,31 @@ describe('ReminderService.getReminderPreferences', () => {
     expect(result.user_id).toBe('u2');
   });
 
+  it('refetches preferences when default creation races an existing row', async () => {
+    const existing = { user_id: 'u2', lunch_reminder_enabled: false, breakfast_reminder_time: '08:00' };
+    let selectCalls = 0;
+    const service = makeService(() => ({
+      select: jest.fn().mockReturnThis(),
+      eq: jest.fn().mockReturnThis(),
+      single: jest.fn().mockImplementation(() => {
+        selectCalls++;
+        if (selectCalls === 1) return Promise.resolve({ data: null, error: { code: 'PGRST116' } });
+        return Promise.resolve({ data: existing, error: null });
+      }),
+      insert: jest.fn().mockReturnValue({
+        select: jest.fn().mockReturnThis(),
+        single: jest.fn().mockResolvedValue({
+          data: null,
+          error: { code: '23505', message: 'duplicate key value violates unique constraint' },
+        }),
+      }),
+    }));
+
+    const result = await service.getReminderPreferences('u2');
+
+    expect(result).toBe(existing);
+  });
+
   it('throws on non-PGRST116 error', async () => {
     const service = makeService(() => ({
       select: jest.fn().mockReturnThis(),

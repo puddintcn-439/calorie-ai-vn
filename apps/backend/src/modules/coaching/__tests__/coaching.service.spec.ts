@@ -83,7 +83,7 @@ describe('CoachingService.getBehaviorMemory', () => {
     const supabase = makeSupabase((table) => {
       if (table === 'food_logs') return query(foodLogs);
       if (table === 'activity_logs') return query(activityLogs);
-      if (table === 'reminder_events') return query(reminders);
+      if (table === 'reminder_notification_log') return query(reminders);
       if (table === 'users') {
         return {
           select: jest.fn().mockReturnThis(),

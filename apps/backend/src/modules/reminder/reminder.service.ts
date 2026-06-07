@@ -28,6 +28,11 @@ export class ReminderService {
     return message.includes(tableName) && message.includes('schema cache');
   }
 
+  private isDuplicateKeyError(error: any): boolean {
+    const message = String(error?.message ?? error?.details ?? '').toLowerCase();
+    return error?.code === '23505' || message.includes('duplicate key');
+  }
+
   private buildDefaultPreferences(userId: string): ReminderPreferences {
     const now = new Date().toISOString();
     return {
@@ -85,6 +90,16 @@ export class ReminderService {
         .insert(defaults)
         .select()
         .single();
+
+      if (createError && this.isDuplicateKeyError(createError)) {
+        const { data: existing, error: refetchError } = await this.supabase.db
+          .from('reminder_preferences')
+          .select('*')
+          .eq('user_id', userId)
+          .single();
+
+        if (!refetchError && existing) return existing as ReminderPreferences;
+      }
 
       if (createError) throw createError;
       return created as ReminderPreferences;

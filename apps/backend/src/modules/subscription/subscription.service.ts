@@ -15,6 +15,11 @@ export class SubscriptionService {
     return message.includes(`public.${tableName}`) && message.includes('schema cache');
   }
 
+  private isDuplicateKeyError(error: any): boolean {
+    const message = String(error?.message ?? error?.details ?? '').toLowerCase();
+    return error?.code === '23505' || message.includes('duplicate key');
+  }
+
   private buildFallbackFreeSubscription(userId: string): UserSubscription {
     const startedAt = new Date().toISOString();
     return {
@@ -64,6 +69,16 @@ export class SubscriptionService {
         .insert(freeTrial)
         .select()
         .single();
+
+      if (createError && this.isDuplicateKeyError(createError)) {
+        const { data: existing, error: refetchError } = await this.supabase.db
+          .from('user_subscriptions')
+          .select('*')
+          .eq('user_id', userId)
+          .single();
+
+        if (!refetchError && existing) return existing as UserSubscription;
+      }
 
       if (createError) throw createError;
 

@@ -111,7 +111,7 @@ export class CoachingService {
         .gte('logged_at', sinceIso)
         .order('logged_at', { ascending: true }),
       this.supabase.db
-        .from('reminder_events')
+        .from('reminder_notification_log')
         .select('sent_at, opened_at, acted_at')
         .eq('user_id', userId)
         .gte('sent_at', sinceIso)
