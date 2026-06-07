@@ -655,7 +655,7 @@ Trả lời ngắn gọn, thân thiện bằng tiếng Việt. Không quá 3 câ
       this.logger.debug(`[AI-PROVIDER] coach duration_ms=${durationMs}`);
 
       return {
-        message: text.trim(),
+        message: this.normalizeCoachReplyText(text),
         suggestions: [],
         actions: this.deriveCoachActions(message, context),
       };
@@ -677,6 +677,24 @@ Trả lời ngắn gọn, thân thiện bằng tiếng Việt. Không quá 3 câ
 
       throw error;
     }
+  }
+
+  private normalizeCoachReplyText(raw: string): string {
+    const text = String(raw ?? '').trim();
+    if (!text) return AiService.AI_FALLBACK_MESSAGE;
+
+    try {
+      const parsed = JSON.parse(text);
+      if (typeof parsed === 'string' && parsed.trim()) return parsed.trim();
+      if (parsed && typeof parsed === 'object') {
+        const candidate = parsed.response ?? parsed.message ?? parsed.reply ?? parsed.text;
+        if (typeof candidate === 'string' && candidate.trim()) return candidate.trim();
+      }
+    } catch {
+      // Plain text is the expected path.
+    }
+
+    return text.replace(/^"|"$/g, '').trim() || AiService.AI_FALLBACK_MESSAGE;
   }
 
   private deriveCoachActions(

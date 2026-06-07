@@ -349,6 +349,44 @@ describe('AiService.getCoachReply', () => {
     expect(result.suggestions).toEqual([]);
   });
 
+  it('normalizes JSON coach responses', async () => {
+    const { GoogleGenerativeAI } = require('@google/generative-ai');
+    (GoogleGenerativeAI as jest.Mock).mockImplementation(() => ({
+      getGenerativeModel: jest.fn().mockReturnValue({
+        generateContent: jest.fn().mockResolvedValue({
+          response: { text: () => '{"response":"Log dinner first, then add a 10-minute walk."}' },
+        }),
+      }),
+    }));
+
+    const svc = makeService();
+    const result = await svc.getCoachReply('What should I do next?', {
+      today_calories: 900,
+      target_calories: 1800,
+    });
+
+    expect(result.message).toBe('Log dinner first, then add a 10-minute walk.');
+  });
+
+  it('normalizes quoted coach responses', async () => {
+    const { GoogleGenerativeAI } = require('@google/generative-ai');
+    (GoogleGenerativeAI as jest.Mock).mockImplementation(() => ({
+      getGenerativeModel: jest.fn().mockReturnValue({
+        generateContent: jest.fn().mockResolvedValue({
+          response: { text: () => '"Log dinner first, then add a 10-minute walk."' },
+        }),
+      }),
+    }));
+
+    const svc = makeService();
+    const result = await svc.getCoachReply('What should I do next?', {
+      today_calories: 900,
+      target_calories: 1800,
+    });
+
+    expect(result.message).toBe('Log dinner first, then add a 10-minute walk.');
+  });
+
   it('includes Health Score context and derives the next coach action', async () => {
     let prompt = '';
     const { GoogleGenerativeAI } = require('@google/generative-ai');
