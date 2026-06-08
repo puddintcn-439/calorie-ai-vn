@@ -118,7 +118,8 @@ export class AiService {
     }
   }
 
-  async scanImage(imageBase64: string, mimeType = 'image/jpeg'): Promise<AIScanResponse> {
+  async scanImage(imageBase64: string, mimeType = 'image/jpeg', userId?: string): Promise<AIScanResponse> {
+    this.logger.log(`[AI-AUDIT] scanImage user_id=${userId ?? 'unknown'}`);
     const start = Date.now();
     const model = this.createDeterministicModel('vision');
     const cacheKey = this.buildImageCacheKey(imageBase64, mimeType);
@@ -227,7 +228,8 @@ export class AiService {
     }
   }
 
-  async scanText(textInput: string): Promise<AIScanResponse> {
+  async scanText(textInput: string, userId?: string): Promise<AIScanResponse> {
+    this.logger.log(`[AI-AUDIT] scanText user_id=${userId ?? 'unknown'}`);
     const start = Date.now();
     const model = this.createDeterministicModel();
     const cacheKey = createHash('sha256').update(textInput.trim()).digest('hex');
@@ -287,7 +289,9 @@ export class AiService {
       meal_hint?: string;
       context?: { source?: string; device_language?: string };
     },
+    userId?: string,
   ): Promise<AIScanResponse> {
+    this.logger.log(`[AI-AUDIT] scanVoice user_id=${userId ?? 'unknown'}`);
     const start = Date.now();
     const model = this.createDeterministicModel();
     const sanitizedTranscript = transcript.replace(/[\x00-\x1F\x7F]/g, ' ').trim();
@@ -345,7 +349,9 @@ User transcript: "${sanitizedTranscript}"`;
       merchant_hint?: string;
       meal_hint?: string;
     },
+    userId?: string,
   ): Promise<AIScanResponse> {
+    this.logger.log(`[AI-AUDIT] scanReceipt user_id=${userId ?? 'unknown'}`);
     const start = Date.now();
     const model = this.createDeterministicModel('vision');
 
@@ -397,7 +403,8 @@ Context:
     }
   }
 
-  async refineScan(originalItemsSummary: string | undefined, context: string): Promise<AIScanResponse> {
+  async refineScan(originalItemsSummary: string | undefined, context: string, userId?: string): Promise<AIScanResponse> {
+    this.logger.log(`[AI-AUDIT] refineScan user_id=${userId ?? 'unknown'}`);
     const start = Date.now();
     const model = this.createDeterministicModel();
     const summary = originalItemsSummary?.trim() || 'Khong co tom tat mon an ban dau.';
@@ -629,7 +636,9 @@ Yeu cau bo sung:
   async getCoachReply(
     message: string,
     context: CoachContext,
+    userId?: string,
   ): Promise<AICoachResponse> {
+    this.logger.log(`[AI-AUDIT] getCoachReply user_id=${userId ?? 'unknown'}`);
     const model = this.createDeterministicModel();
 
     const prompt = `${COACH_SYSTEM_PROMPT}
