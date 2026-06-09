@@ -78,6 +78,7 @@ export class AiController {
   async scanReceipt(
     @UploadedFile() file: Express.Multer.File,
     @Body() dto: ScanReceiptDto,
+    @Request() req: any,
   ) {
     if (!file?.buffer?.length) {
       throw new UnprocessableEntityException('Receipt image is required');

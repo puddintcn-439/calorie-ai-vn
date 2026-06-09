@@ -3,14 +3,14 @@ import * as SecureStore from 'expo-secure-store';
 
 async function getItemAsync(key: string): Promise<string | null> {
   if (Platform.OS === 'web') {
-    return globalThis.localStorage?.getItem(key) ?? null;
+    return globalThis.sessionStorage?.getItem(key) ?? null;
   }
   return SecureStore.getItemAsync(key);
 }
 
 async function setItemAsync(key: string, value: string): Promise<void> {
   if (Platform.OS === 'web') {
-    globalThis.localStorage?.setItem(key, value);
+    globalThis.sessionStorage?.setItem(key, value);
     return;
   }
   await SecureStore.setItemAsync(key, value);
@@ -18,7 +18,7 @@ async function setItemAsync(key: string, value: string): Promise<void> {
 
 async function deleteItemAsync(key: string): Promise<void> {
   if (Platform.OS === 'web') {
-    globalThis.localStorage?.removeItem(key);
+    globalThis.sessionStorage?.removeItem(key);
     return;
   }
   await SecureStore.deleteItemAsync(key);

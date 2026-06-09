@@ -35,7 +35,7 @@ export class AuthService {
     });
 
     this.metrics.recordAuthSuccess('register');
-    return this.issueToken(data.user!.id, dto.email);
+    return this.issueTokens(data.user!.id, dto.email);
   }
 
   async login(dto: LoginDto) {
@@ -51,15 +51,36 @@ export class AuthService {
     }
 
     this.metrics.recordAuthSuccess('login');
-    return this.issueToken(data.user.id, data.user.email!);
+    return this.issueTokens(data.user.id, data.user.email!);
   }
 
-  private issueToken(userId: string, email: string) {
+  public issueAccessToken(userId: string, email: string) {
     const payload = { sub: userId, email };
+    // Shorter lived access token (override module default)
+    return this.jwt.sign(payload, { expiresIn: '1h' });
+  }
+
+  private issueRefreshToken(userId: string, email: string) {
+    const payload = { sub: userId, email };
+    // Long-lived refresh token (kept in HttpOnly cookie)
+    return this.jwt.sign(payload, { expiresIn: '30d' });
+  }
+
+  private issueTokens(userId: string, email: string) {
     return {
-      access_token: this.jwt.sign(payload),
+      access_token: this.issueAccessToken(userId, email),
+      refresh_token: this.issueRefreshToken(userId, email),
       user_id: userId,
       email,
     };
+  }
+
+  verifyRefreshToken(token: string) {
+    try {
+      // JwtService.verify will throw on invalid/expired token
+      return this.jwt.verify(token) as { sub: string; email?: string };
+    } catch (e) {
+      throw new UnauthorizedException('Invalid refresh token');
+    }
   }
 }

@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
+import Redis from 'ioredis';
+import { RedisThrottlerStorageService } from './common/throttler/redis-throttler-storage.service';
 import { AuthModule } from './modules/auth/auth.module';
 import { AiModule } from './modules/ai/ai.module';
 import { FoodModule } from './modules/food/food.module';
@@ -20,7 +22,21 @@ import { MetricsModule } from './common/metrics/metrics.module';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
-    ThrottlerModule.forRoot([{ ttl: 60000, limit: 60 }]),
+    // Use Redis-backed Throttler storage when REDIS_URL is explicitly provided.
+    // Otherwise fall back to the default in-memory storage to allow local
+    // development without Docker.
+    ...(process.env.REDIS_URL
+      ? [
+          ThrottlerModule.forRootAsync({
+            useFactory: async () => {
+              const redisUrl = process.env.REDIS_URL as string;
+              const redisClient = new Redis(redisUrl);
+              const storage = new RedisThrottlerStorageService(redisClient);
+              return { throttlers: [{ ttl: 60000, limit: 60, storage }] } as any;
+            },
+          }),
+        ]
+      : [ThrottlerModule.forRoot({ throttlers: [{ ttl: 60000, limit: 60 }] } as any)]),
     MetricsModule,
     HealthModule,
     AuthModule,

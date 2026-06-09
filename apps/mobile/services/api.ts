@@ -77,6 +77,7 @@ const BASE_URL = API_URLS[0];
 export const apiClient = axios.create({
   baseURL: BASE_URL,
   timeout: 30000,
+  withCredentials: true,
   headers: { 'Content-Type': 'application/json' },
 });
 
@@ -89,7 +90,44 @@ apiClient.interceptors.request.use(async (config) => {
   return config;
 });
 
+// Refresh token handling: ensure only one refresh happens concurrently
+let refreshPromise: Promise<string | null> | null = null;
+async function attemptRefresh(): Promise<string | null> {
+  if (!refreshPromise) {
+    refreshPromise = (async () => {
+      try {
+        const resp = await axios.post(`${BASE_URL}/auth/refresh`, {}, { withCredentials: true });
+        const newToken = resp?.data?.access_token ?? null;
+        if (newToken) {
+          await authStorage.setItemAsync('auth_token', newToken);
+        } else {
+          await authStorage.deleteItemAsync('auth_token');
+        }
+        return newToken;
+      } catch (e) {
+        await authStorage.deleteItemAsync('auth_token');
+        return null;
+      } finally {
+        refreshPromise = null;
+      }
+    })();
+  }
+  return refreshPromise;
+}
+
 apiClient.interceptors.response.use(undefined, async (error) => {
+  // Attempt refresh on 401 and retry request once
+  const originalConfig = error?.config;
+  if (error?.response?.status === 401 && originalConfig && !originalConfig.__isRetryAfterRefresh) {
+    originalConfig.__isRetryAfterRefresh = true;
+    const newToken = await attemptRefresh();
+    if (newToken) {
+      originalConfig.headers = originalConfig.headers ?? {};
+      originalConfig.headers.Authorization = `Bearer ${newToken}`;
+      return apiClient.request(originalConfig);
+    }
+  }
+
   if (!shouldRetryWithFallback(error)) {
     throw error;
   }

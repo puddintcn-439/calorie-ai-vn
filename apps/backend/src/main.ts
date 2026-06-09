@@ -28,6 +28,7 @@ process.on('uncaughtException', (err) => {
   }
 });
 import { AppModule } from './app.module';
+import * as cookieParser from 'cookie-parser';
 import { RequestLoggingMiddleware } from './common/middleware/request-logging.middleware';
 import { MetricsService } from './common/metrics/metrics.service';
 
@@ -47,6 +48,9 @@ async function bootstrap() {
   const metricsService = app.get(MetricsService);
   const loggingMiddleware = new RequestLoggingMiddleware(metricsService);
   app.use(loggingMiddleware.use.bind(loggingMiddleware));
+
+  // Cookie parser to read HttpOnly refresh tokens
+  app.use(cookieParser());
 
   // CORS
   const configuredOrigins = process.env.ALLOWED_ORIGINS
