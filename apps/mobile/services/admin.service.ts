@@ -1,0 +1,77 @@
+import { apiClient } from './api';
+
+export type AdminOverview = {
+  generated_at: string;
+  active_users_today: number;
+  active_users_7d: number;
+  new_users_today: number;
+  new_users_7d: number;
+  food_logs_today: number;
+  ai_requests_today: number;
+  estimated_ai_cost_today_usd: number;
+  ai_credits_used_today: number;
+  quota_blocked_today: number;
+  failed_ai_requests_today: number;
+};
+
+export type AdminUserRow = {
+  id: string;
+  email: string | null;
+  plan_tier: string;
+  subscription_status: string;
+  created_at: string | null;
+  last_active_at: string | null;
+  total_ai_requests_month: number;
+  credits_used_month: number;
+  food_logs_count: number;
+};
+
+export type AdminUsersResponse = {
+  generated_at: string;
+  page: number;
+  page_size: number;
+  total: number;
+  users: AdminUserRow[];
+};
+
+export type AdminUserDetail = {
+  generated_at: string;
+  profile: Record<string, any>;
+  subscription: Record<string, any>;
+  ai_quota: Record<string, any> | null;
+  recent_food_logs: any[];
+  recent_ai_usage: any[];
+  recent_telemetry: any[];
+};
+
+export const adminService = {
+  async fetchOverview(): Promise<AdminOverview> {
+    const { data } = await apiClient.get('/admin/overview');
+    return data;
+  },
+
+  async fetchUsers(params: { search?: string; plan?: string; page?: number; pageSize?: number } = {}): Promise<AdminUsersResponse> {
+    const { data } = await apiClient.get('/admin/users', { params });
+    return data;
+  },
+
+  async fetchUserDetail(userId: string): Promise<AdminUserDetail> {
+    const { data } = await apiClient.get(`/admin/users/${encodeURIComponent(userId)}`);
+    return data;
+  },
+
+  async fetchAiUsage(days = 30): Promise<any> {
+    const { data } = await apiClient.get('/admin/ai-usage', { params: { days } });
+    return data;
+  },
+
+  async fetchSubscriptions(): Promise<any> {
+    const { data } = await apiClient.get('/admin/subscriptions');
+    return data;
+  },
+
+  async fetchSystemHealth(): Promise<any> {
+    const { data } = await apiClient.get('/admin/system-health');
+    return data;
+  },
+};
