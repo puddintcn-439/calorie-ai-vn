@@ -155,3 +155,24 @@ export interface AiUsageSummary {
   providers: AiUsageSummaryItem[];
   models: AiUsageSummaryItem[];
 }
+
+export interface AiQuotaRemainingItem {
+  feature: AiUsageFeature;
+  feature_label: string;
+  plan_tier: string;
+  daily_limit: number;
+  daily_used: number;
+  daily_remaining: number;
+  monthly_limit: number;
+  monthly_used: number;
+  monthly_remaining: number;
+  reset_at_daily: string;
+  reset_at_monthly: string;
+  estimated_cost_usd: number;
+}
+
+export interface AiQuotaRemainingResponse {
+  generated_at: string;
+  plan_tier: string;
+  quotas: AiQuotaRemainingItem[];
+}
