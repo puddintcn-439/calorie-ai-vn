@@ -4,7 +4,7 @@ import { randomUUID } from 'crypto';
 import { AiQuotaRemainingResponse, AiUsageEvent, AiUsageFeature, AiUsageStatus, AiUsageSummary } from '@calorie-ai/types';
 import { SupabaseService } from '../../common/supabase/supabase.service';
 import { SubscriptionService } from '../subscription/subscription.service';
-import { AI_USAGE_POLICY, getAiPolicy } from './ai-usage.policy';
+import { AI_FEATURE_CREDITS, AI_TIER_CREDIT_BUDGETS, AI_USAGE_POLICY, getAiPolicy } from './ai-usage.policy';
 
 type ReserveResult = AiUsageEvent & {
   reserved: boolean;
@@ -40,19 +40,25 @@ export class AiUsageService {
 
   async reserveUsage(userId: string, feature: AiUsageFeature): Promise<ReserveResult> {
     const subscription = await this.subscriptionService.getUserSubscription(userId);
-    const policy = getAiPolicy(subscription.tier, feature);
+    const tier = AI_USAGE_POLICY[subscription.tier] ? subscription.tier : 'free';
+    const policy = getAiPolicy(tier, feature);
+    const creditBudget = AI_TIER_CREDIT_BUDGETS[tier] ?? AI_TIER_CREDIT_BUDGETS.free;
+    const creditCost = AI_FEATURE_CREDITS[feature] ?? policy.credits;
     const requestId = randomUUID();
 
     const { data, error } = await this.supabase.db.rpc('reserve_ai_usage_event', {
       p_request_id: requestId,
       p_user_id: userId,
       p_feature: feature,
-      p_plan_tier: subscription.tier,
+      p_plan_tier: tier,
       p_provider: policy.provider,
       p_model: policy.model,
       p_daily_limit: policy.quota.daily,
       p_monthly_limit: policy.quota.monthly,
       p_estimated_cost_usd: policy.estimated_cost_usd,
+      p_credit_cost: creditCost,
+      p_daily_credit_limit: creditBudget.daily,
+      p_monthly_credit_limit: creditBudget.monthly,
     });
 
     if (error) {
@@ -112,6 +118,7 @@ export class AiUsageService {
   async getQuotaRemaining(userId: string): Promise<AiQuotaRemainingResponse> {
     const subscription = await this.subscriptionService.getUserSubscription(userId);
     const tier = AI_USAGE_POLICY[subscription.tier] ? subscription.tier : 'free';
+    const creditBudget = AI_TIER_CREDIT_BUDGETS[tier] ?? AI_TIER_CREDIT_BUDGETS.free;
     const features = Object.keys(AI_USAGE_POLICY[tier]) as AiUsageFeature[];
     const now = new Date();
     const todayStart = new Date(now);
@@ -126,7 +133,7 @@ export class AiUsageService {
 
     const { data, error } = await this.supabase.db
       .from('ai_usage_events')
-      .select('feature, status, created_at')
+      .select('feature, status, created_at, credits_consumed')
       .eq('user_id', userId)
       .in('feature', features)
       .in('status', QUOTA_COUNTED_STATUSES)
@@ -138,19 +145,32 @@ export class AiUsageService {
 
     const dailyUsed = new Map<AiUsageFeature, number>();
     const monthlyUsed = new Map<AiUsageFeature, number>();
+    let dailyCreditsUsed = 0;
+    let monthlyCreditsUsed = 0;
 
     for (const row of Array.isArray(data) ? data : []) {
       const feature = row.feature as AiUsageFeature;
       const createdAt = new Date(String(row.created_at));
+      const creditsConsumed = Math.max(0, Number(row.credits_consumed ?? 0) || 0);
       monthlyUsed.set(feature, (monthlyUsed.get(feature) ?? 0) + 1);
+      monthlyCreditsUsed += creditsConsumed;
       if (createdAt >= todayStart) {
         dailyUsed.set(feature, (dailyUsed.get(feature) ?? 0) + 1);
+        dailyCreditsUsed += creditsConsumed;
       }
     }
 
     return {
       generated_at: now.toISOString(),
       plan_tier: tier,
+      daily_credit_limit: creditBudget.daily,
+      daily_credits_used: dailyCreditsUsed,
+      daily_credits_remaining: Math.max(0, creditBudget.daily - dailyCreditsUsed),
+      monthly_credit_limit: creditBudget.monthly,
+      monthly_credits_used: monthlyCreditsUsed,
+      monthly_credits_remaining: Math.max(0, creditBudget.monthly - monthlyCreditsUsed),
+      reset_at_daily: tomorrowStart.toISOString(),
+      reset_at_monthly: nextMonthStart.toISOString(),
       quotas: features.map((feature) => {
         const policy = getAiPolicy(tier, feature);
         const usedToday = dailyUsed.get(feature) ?? 0;
@@ -159,6 +179,7 @@ export class AiUsageService {
           feature,
           feature_label: FEATURE_LABELS[feature] ?? feature,
           plan_tier: tier,
+          credits_per_request: AI_FEATURE_CREDITS[feature] ?? policy.credits,
           daily_limit: policy.quota.daily,
           daily_used: usedToday,
           daily_remaining: Math.max(0, policy.quota.daily - usedToday),

@@ -10,6 +10,20 @@ Use this file to store compact lessons from real failures after they are fixed.
 
 ## 2026-06-10 - New AI usage endpoint controller existed but was not registered in AiModule
 
+## 2026-06-11 - Shared AI types file lost its header and masked backend credit-budget validation
+
+- Scope: shared types + backend build/test
+- Error Signature: `TS2305: Module '"@calorie-ai/types"' has no exported member 'AiUsageFeature'`, then `TS2305: Module '"./ai.types"' has no exported member 'AIDetectedItem'` while running `npm --workspace apps/backend test -- ai-usage.service.spec.ts --runInBand`.
+- Trigger: Implementing AI Credit Budget V2 in `AiUsageService` and validating backend tests after migration `033_ai_usage_credit_budget.sql` had already been applied.
+- Root Cause: `packages/types/src/ai.types.ts` in the workspace had been truncated from the top, so core AI request/response interfaces and the start of the `AiUsageFeature` union were missing even though downstream packages still imported them.
+- Fix: Restored the missing AI request/response type definitions and complete `AiUsageFeature` union in `packages/types/src/ai.types.ts`, then reran targeted and full repo validation.
+- Validation: `npm --workspace apps/backend test -- ai-usage.service.spec.ts --runInBand`, `npm run build`, `npm run test`.
+- Prevention Rule: When a backend/service change suddenly fails on missing exports from a long-lived shared types package, inspect the source file header for accidental truncation before refactoring consumers.
+- Files: `packages/types/src/ai.types.ts`, `apps/backend/src/modules/ai/ai-usage.service.ts`, `apps/backend/src/modules/ai/__tests__/ai-usage.service.spec.ts`
+- Reuse Signal: Recheck this first whenever multiple unrelated imports from the same shared type file disappear together after an otherwise local feature change.
+
+## 2026-06-10 - New AI usage endpoint controller existed but was not registered in AiModule
+
 - Scope: backend
 - Error Signature: Runtime API path for `GET /ai/usage/summary` is missing and can surface as `Controller not found` / route not mapped for expected endpoint.
 - Trigger: After adding `ai-usage.controller.ts` for admin usage summary without wiring it into the AI module controller list.
