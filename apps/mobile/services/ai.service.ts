@@ -1,6 +1,7 @@
 import { Platform } from 'react-native';
 import { AIScanResponse, AICoachResponse } from '@calorie-ai/types';
 import type { BehaviorMemory, DynamicIntervention, InterventionAnalytics, ReminderEffectivenessSummary, SuccessForecast, TodaySummary } from '@calorie-ai/types';
+import type { AiQuotaRemainingResponse } from '@calorie-ai/types';
 import { apiClient } from './api';
 import { featureGatingService } from './feature-gating.service';
 
@@ -159,6 +160,11 @@ export async function askCoach(
     message,
     ...context,
   }));
+  return res.data;
+}
+
+export async function fetchAiUsageQuota(): Promise<AiQuotaRemainingResponse> {
+  const res = await apiClient.get<AiQuotaRemainingResponse>('/ai/usage/quota');
   return res.data;
 }
 

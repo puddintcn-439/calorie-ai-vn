@@ -11,12 +11,14 @@ import {
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { AIScanResponse, AIDetectedItem, Food, FoodLog, MealType, ContextMode, CONTEXT_ADAPTERS } from '@calorie-ai/types';
+import type { AiQuotaRemainingItem, AiQuotaRemainingResponse } from '@calorie-ai/types';
 import {
   scanImageFromUri,
   scanText,
   refineScan,
   scanVoice,
   scanReceipt,
+  fetchAiUsageQuota,
 } from '../../services/ai.service';
 import { useLogStore } from '../../store/log.store';
 import { useContextStore } from '../../store/context.store';
@@ -74,6 +76,12 @@ const MODE_LABEL_KEYS: Record<InputMode, I18nKey> = {
 
 const PRIMARY_INPUT_MODES: InputMode[] = ['camera', 'text', 'search'];
 const SECONDARY_INPUT_MODES: InputMode[] = ['gallery', 'voice', 'receipt', 'barcode'];
+
+const QUOTA_DISPLAY: Array<{ label: string; feature: AiQuotaRemainingItem['feature'] }> = [
+  { label: 'Text', feature: 'scan_text' },
+  { label: 'Image', feature: 'scan_image' },
+  { label: 'Receipt', feature: 'scan_receipt' },
+];
 
 function formatCalorieRange(min: number, max: number): string {
   const roundedMin = safeRound(min);
@@ -144,6 +152,7 @@ export default function ScanScreen() {
   const [isLogging, setIsLogging] = useState(false);
   const [isReceiptScanning, setIsReceiptScanning] = useState(false);
   const [scanNotice, setScanNotice] = useState<string | null>(null);
+  const [quotaSummary, setQuotaSummary] = useState<AiQuotaRemainingResponse | null>(null);
   const [lastFailedScan, setLastFailedScan] = useState<{ mode: InputMode; payload?: any } | null>(null);
   const [isRetrying, setIsRetrying] = useState(false);
   const [scanElapsedSeconds, setScanElapsedSeconds] = useState(0);
@@ -175,6 +184,31 @@ export default function ScanScreen() {
   const totalFat = currentItems.reduce((s, i) => s + safeNumber(i.fat_g), 0);
   const bottomNavPadding = useBottomNavContentPadding(12);
   const showStickyResultActions = Boolean(scanResult && !isScanning && currentItems.length);
+
+  const getQuotaByFeature = useCallback((feature: AiQuotaRemainingItem['feature']) => {
+    return quotaSummary?.quotas.find((item) => item.feature === feature) ?? null;
+  }, [quotaSummary]);
+
+  const isLowQuota = (item: AiQuotaRemainingItem | null): boolean => {
+    if (!item) return false;
+    if (item.daily_limit <= 0) return false;
+    const ratio = item.daily_remaining / item.daily_limit;
+    return item.daily_remaining <= 2 || ratio <= 0.2;
+  };
+
+  const loadQuota = useCallback(async () => {
+    try {
+      const data = await fetchAiUsageQuota();
+      setQuotaSummary(data);
+    } catch {
+      // Silent fallback by design: quota card is optional and should not block scan UX.
+      setQuotaSummary(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadQuota().catch(() => {});
+  }, [loadQuota]);
 
   useEffect(() => {
     if (!isAiScanning) {
@@ -795,6 +829,29 @@ export default function ScanScreen() {
           title="screen.tabs.scan.title.001"
           body="screen.tabs.scan.body.001"
         />
+
+        {quotaSummary ? (
+          <SurfaceCard style={styles.quotaCard}>
+            <View style={styles.quotaHeader}>
+              <Text style={styles.quotaTitle}>AI Quota Today</Text>
+              <Text style={styles.quotaPlan}>{String(quotaSummary.plan_tier ?? 'free').toUpperCase()}</Text>
+            </View>
+            <View style={styles.quotaRows}>
+              {QUOTA_DISPLAY.map((entry) => {
+                const item = getQuotaByFeature(entry.feature);
+                const low = isLowQuota(item);
+                const remaining = item?.daily_remaining ?? 0;
+                const limit = item?.daily_limit ?? 0;
+                return (
+                  <View key={`quota-${entry.feature}`} style={[styles.quotaRow, low && styles.quotaRowWarn]}>
+                    <Text style={styles.quotaLabel}>{entry.label}</Text>
+                    <Text style={[styles.quotaValue, low && styles.quotaValueWarn]}>{remaining}/{limit} remaining</Text>
+                  </View>
+                );
+              })}
+            </View>
+          </SurfaceCard>
+        ) : null}
 
         {/* Mode Tabs */}
         <View style={styles.modeTabs}>
@@ -1580,6 +1637,59 @@ const styles = createThemedStyles((colors, radii) => ({
   },
   heroBody: { maxWidth: 700 },
   modeTabs: { flexDirection: 'row', gap: 9, marginBottom: 10, flexWrap: 'wrap' },
+  quotaCard: {
+    marginBottom: 12,
+    borderColor: colors.borderInfo,
+    backgroundColor: colors.surfaceInfo,
+    gap: 10,
+  },
+  quotaHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 8,
+  },
+  quotaTitle: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  quotaPlan: {
+    color: colors.info,
+    fontSize: 11,
+    fontWeight: '900',
+  },
+  quotaRows: {
+    gap: 8,
+  },
+  quotaRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  quotaRowWarn: {
+    borderColor: colors.borderWarning,
+    backgroundColor: colors.surfaceWarning,
+  },
+  quotaLabel: {
+    color: colors.text,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  quotaValue: {
+    color: colors.textMuted,
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  quotaValueWarn: {
+    color: colors.warning,
+  },
   modeTab: {
     minHeight: 44,
     paddingVertical: 11,
