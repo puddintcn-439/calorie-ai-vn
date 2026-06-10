@@ -1,10 +1,10 @@
 import { ForbiddenException, HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'crypto';
-import { AiUsageEvent, AiUsageFeature, AiUsageStatus, AiUsageSummary } from '@calorie-ai/types';
+import { AiQuotaRemainingResponse, AiUsageEvent, AiUsageFeature, AiUsageStatus, AiUsageSummary } from '@calorie-ai/types';
 import { SupabaseService } from '../../common/supabase/supabase.service';
 import { SubscriptionService } from '../subscription/subscription.service';
-import { getAiPolicy } from './ai-usage.policy';
+import { AI_USAGE_POLICY, getAiPolicy } from './ai-usage.policy';
 
 type ReserveResult = AiUsageEvent & {
   reserved: boolean;
@@ -25,6 +25,8 @@ const FEATURE_LABELS: Record<AiUsageFeature, string> = {
   scan_refine: 'chỉnh kết quả AI',
   coach: 'AI Coach',
 };
+
+const QUOTA_COUNTED_STATUSES: AiUsageStatus[] = ['reserved', 'success', 'failed', 'fallback'];
 
 @Injectable()
 export class AiUsageService {
@@ -105,6 +107,70 @@ export class AiUsageService {
     if (error) {
       this.logger.warn(`Failed to finalize AI usage ${usageEventId}: ${String(error?.message ?? error)}`);
     }
+  }
+
+  async getQuotaRemaining(userId: string): Promise<AiQuotaRemainingResponse> {
+    const subscription = await this.subscriptionService.getUserSubscription(userId);
+    const tier = AI_USAGE_POLICY[subscription.tier] ? subscription.tier : 'free';
+    const features = Object.keys(AI_USAGE_POLICY[tier]) as AiUsageFeature[];
+    const now = new Date();
+    const todayStart = new Date(now);
+    todayStart.setHours(0, 0, 0, 0);
+    const tomorrowStart = new Date(todayStart);
+    tomorrowStart.setDate(tomorrowStart.getDate() + 1);
+    const monthStart = new Date(now);
+    monthStart.setDate(1);
+    monthStart.setHours(0, 0, 0, 0);
+    const nextMonthStart = new Date(monthStart);
+    nextMonthStart.setMonth(nextMonthStart.getMonth() + 1);
+
+    const { data, error } = await this.supabase.db
+      .from('ai_usage_events')
+      .select('feature, status, created_at')
+      .eq('user_id', userId)
+      .in('feature', features)
+      .in('status', QUOTA_COUNTED_STATUSES)
+      .gte('created_at', monthStart.toISOString());
+
+    if (error) {
+      throw error;
+    }
+
+    const dailyUsed = new Map<AiUsageFeature, number>();
+    const monthlyUsed = new Map<AiUsageFeature, number>();
+
+    for (const row of Array.isArray(data) ? data : []) {
+      const feature = row.feature as AiUsageFeature;
+      const createdAt = new Date(String(row.created_at));
+      monthlyUsed.set(feature, (monthlyUsed.get(feature) ?? 0) + 1);
+      if (createdAt >= todayStart) {
+        dailyUsed.set(feature, (dailyUsed.get(feature) ?? 0) + 1);
+      }
+    }
+
+    return {
+      generated_at: now.toISOString(),
+      plan_tier: tier,
+      quotas: features.map((feature) => {
+        const policy = getAiPolicy(tier, feature);
+        const usedToday = dailyUsed.get(feature) ?? 0;
+        const usedMonth = monthlyUsed.get(feature) ?? 0;
+        return {
+          feature,
+          feature_label: FEATURE_LABELS[feature] ?? feature,
+          plan_tier: tier,
+          daily_limit: policy.quota.daily,
+          daily_used: usedToday,
+          daily_remaining: Math.max(0, policy.quota.daily - usedToday),
+          monthly_limit: policy.quota.monthly,
+          monthly_used: usedMonth,
+          monthly_remaining: Math.max(0, policy.quota.monthly - usedMonth),
+          reset_at_daily: tomorrowStart.toISOString(),
+          reset_at_monthly: nextMonthStart.toISOString(),
+          estimated_cost_usd: policy.estimated_cost_usd,
+        };
+      }),
+    };
   }
 
   async getUsageSummary(requesterEmail: string | undefined, days = 30): Promise<AiUsageSummary> {
