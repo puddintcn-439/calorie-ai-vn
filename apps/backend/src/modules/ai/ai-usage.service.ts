@@ -10,6 +10,22 @@ type ReserveResult = AiUsageEvent & {
   reserved: boolean;
 };
 
+type QuotaBlockedEvent = Partial<AiUsageEvent> & {
+  quota_window?: 'daily' | 'monthly';
+  quota_limit?: number;
+  quota_used?: number;
+  reset_at?: string;
+};
+
+const FEATURE_LABELS: Record<AiUsageFeature, string> = {
+  scan_image: 'quét ảnh món ăn',
+  scan_text: 'nhập món ăn bằng chữ',
+  scan_voice: 'nhập món ăn bằng giọng nói',
+  scan_receipt: 'quét hóa đơn',
+  scan_refine: 'chỉnh kết quả AI',
+  coach: 'AI Coach',
+};
+
 @Injectable()
 export class AiUsageService {
   private readonly logger = new Logger(AiUsageService.name);
@@ -48,10 +64,7 @@ export class AiUsageService {
     }
 
     if (event.status === 'blocked') {
-      throw new HttpException(
-        `Bạn đã dùng hết quota AI cho ${feature}. Hãy thử lại sau hoặc nâng cấp gói.`,
-        HttpStatus.TOO_MANY_REQUESTS,
-      );
+      this.throwQuotaExceeded(feature, event as QuotaBlockedEvent);
     }
 
     return { ...event, reserved: true };
@@ -80,7 +93,7 @@ export class AiUsageService {
       input_tokens: payload.inputTokens ?? null,
       output_tokens: payload.outputTokens ?? null,
       error_category: payload.errorCategory ?? null,
-      error_message: payload.errorMessage ?? null,
+      error_message: payload.errorMessage ? String(payload.errorMessage).slice(0, 500) : null,
       completed_at: new Date().toISOString(),
     };
 
@@ -97,7 +110,7 @@ export class AiUsageService {
   async getUsageSummary(requesterEmail: string | undefined, days = 30): Promise<AiUsageSummary> {
     this.assertAdmin(requesterEmail);
 
-    const windowDays = Math.max(1, Math.min(180, Math.round(days)));
+    const windowDays = Math.max(1, Math.min(180, Math.round(Number(days) || 30)));
     const since = new Date(Date.now() - (windowDays - 1) * 24 * 60 * 60 * 1000).toISOString();
 
     const { data, error } = await this.supabase.db
@@ -159,7 +172,7 @@ export class AiUsageService {
 
     const toItems = (entries: Map<string, { count: number; estimated_cost_usd: number }>) =>
       [...entries.entries()]
-        .map(([label, item]) => ({ label, count: item.count, estimated_cost_usd: Math.round(item.estimated_cost_usd * 1000000) / 1000000 }))
+        .map(([label, item]) => ({ label, count: item.count, estimated_cost_usd: this.roundCost(item.estimated_cost_usd) }))
         .sort((a, b) => b.count - a.count || b.estimated_cost_usd - a.estimated_cost_usd)
         .slice(0, 10);
 
@@ -171,12 +184,33 @@ export class AiUsageService {
       total_fallback: summary.status.fallback ?? 0,
       total_failed: summary.status.failed ?? 0,
       total_blocked: summary.status.blocked ?? 0,
-      estimated_cost_usd: Math.round(summary.estimated_cost_usd * 1000000) / 1000000,
+      estimated_cost_usd: this.roundCost(summary.estimated_cost_usd),
       top_features: toItems(summary.features),
       top_users: toItems(summary.users),
       providers: toItems(summary.providers),
       models: toItems(summary.models),
     };
+  }
+
+  private throwQuotaExceeded(feature: AiUsageFeature, event: QuotaBlockedEvent): never {
+    const featureLabel = FEATURE_LABELS[feature] ?? feature;
+    const window = event.quota_window ?? 'daily';
+    const windowLabel = window === 'monthly' ? 'tháng này' : 'hôm nay';
+
+    throw new HttpException(
+      {
+        code: 'AI_QUOTA_EXCEEDED',
+        message: `Bạn đã dùng hết lượt AI ${windowLabel} cho tính năng ${featureLabel}. Hãy thử lại sau hoặc nâng cấp gói.`,
+        feature,
+        feature_label: featureLabel,
+        window,
+        limit: event.quota_limit ?? null,
+        used: event.quota_used ?? null,
+        reset_at: event.reset_at ?? null,
+        upgrade_required: true,
+      },
+      HttpStatus.TOO_MANY_REQUESTS,
+    );
   }
 
   private extractEvent(data: unknown): AiUsageEvent | null {
@@ -200,6 +234,10 @@ export class AiUsageService {
     current.count += 1;
     current.estimated_cost_usd += cost;
     map.set(key, current);
+  }
+
+  private roundCost(value: number): number {
+    return Math.round(value * 1000000) / 1000000;
   }
 
   private assertAdmin(email: string | undefined) {
