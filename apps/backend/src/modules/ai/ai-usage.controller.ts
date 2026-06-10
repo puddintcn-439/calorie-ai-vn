@@ -21,6 +21,13 @@ class AiUsageSummaryQueryDto {
 export class AiUsageController {
   constructor(private readonly aiUsageService: AiUsageService) {}
 
+  @Get('quota')
+  @ApiOperation({ summary: 'Get current user AI quota remaining by feature' })
+  getQuota(@Request() req: any) {
+    const userId = req?.user?.id ?? req?.user?.sub;
+    return this.aiUsageService.getQuotaRemaining(userId);
+  }
+
   @Get('summary')
   @ApiOperation({ summary: 'Get admin-only AI usage and estimated spend summary' })
   @ApiQuery({ name: 'days', required: false, example: 30, description: 'Rolling window in days, from 1 to 180.' })
