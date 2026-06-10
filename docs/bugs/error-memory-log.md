@@ -8,6 +8,18 @@ Use this file to store compact lessons from real failures after they are fixed.
 - Keep root cause and prevention rule concrete.
 - Prefer appending over rewriting history.
 
+## 2026-06-10 - New AI usage endpoint controller existed but was not registered in AiModule
+
+- Scope: backend
+- Error Signature: Runtime API path for `GET /ai/usage/summary` is missing and can surface as `Controller not found` / route not mapped for expected endpoint.
+- Trigger: After adding `ai-usage.controller.ts` for admin usage summary without wiring it into the AI module controller list.
+- Root Cause: New controller file was created but `AiModule` `controllers` array did not include `AiUsageController`.
+- Fix: Imported `AiUsageController` and registered it in `apps/backend/src/modules/ai/ai.module.ts`.
+- Validation: `cd apps/backend ; npm test -- src/modules/ai/__tests__/ai-usage.service.spec.ts`, `cd apps/backend ; npm run build`.
+- Prevention Rule: Every new Nest controller must be added to the owning module's `controllers` list in the same change set, then verified via build/start route mapping.
+- Files: `apps/backend/src/modules/ai/ai.module.ts`, `apps/backend/src/modules/ai/ai-usage.controller.ts`
+- Reuse Signal: Recheck module wiring first whenever a newly added endpoint file compiles but route is not reachable.
+
 ## 2026-06-10 - New analytics filter style used non-existent theme radius token
 
 - Scope: mobile
