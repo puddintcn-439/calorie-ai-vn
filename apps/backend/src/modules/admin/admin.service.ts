@@ -52,8 +52,8 @@ export class AdminService {
     };
   }
 
-  async getAiUsage(days = 30) {
-    return this.aiUsageService.getUsageSummary('*', days);
+  async getAiUsage(requesterEmail: string | undefined, days = 30) {
+    return this.aiUsageService.getUsageSummary(requesterEmail, days);
   }
 
   async getUsers(params: { search?: string; plan?: string; page?: number; pageSize?: number }) {

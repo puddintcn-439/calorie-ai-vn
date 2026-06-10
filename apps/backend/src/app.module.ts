@@ -16,6 +16,7 @@ import { GamificationModule } from './modules/gamification/gamification.module';
 import { CalorieTargetModule } from './modules/calorie-target/calorie-target.module';
 import { CoachingModule } from './modules/coaching/coaching.module';
 import { BodyProgressModule } from './modules/body-progress/body-progress.module';
+import { AdminModule } from './modules/admin/admin.module';
 import { HealthModule } from './health/health.module';
 import { MetricsModule } from './common/metrics/metrics.module';
 
@@ -52,6 +53,7 @@ import { MetricsModule } from './common/metrics/metrics.module';
     CalorieTargetModule,
     CoachingModule,
     BodyProgressModule,
+    AdminModule,
   ],
 })
 export class AppModule {}
