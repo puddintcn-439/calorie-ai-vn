@@ -104,3 +104,54 @@ export interface AICoachAction {
     return_to?: string;
   };
 }
+
+
+export type AiUsageFeature =
+  | 'scan_image'
+  | 'scan_text'
+  | 'scan_voice'
+  | 'scan_receipt'
+  | 'scan_refine'
+  | 'coach';
+
+export type AiUsageStatus = 'reserved' | 'success' | 'failed' | 'fallback' | 'blocked';
+
+export interface AiUsageEvent {
+  id?: string;
+  request_id: string;
+  user_id: string;
+  feature: AiUsageFeature;
+  plan_tier: string;
+  provider?: string;
+  model?: string;
+  status: AiUsageStatus;
+  cache_hit: boolean;
+  estimated_cost_usd: number;
+  input_tokens?: number | null;
+  output_tokens?: number | null;
+  error_category?: string | null;
+  error_message?: string | null;
+  created_at?: string;
+  completed_at?: string | null;
+}
+
+export interface AiUsageSummaryItem {
+  label: string;
+  count: number;
+  estimated_cost_usd: number;
+}
+
+export interface AiUsageSummary {
+  generated_at: string;
+  window_days: number;
+  total_requests: number;
+  total_success: number;
+  total_fallback: number;
+  total_failed: number;
+  total_blocked: number;
+  estimated_cost_usd: number;
+  top_features: AiUsageSummaryItem[];
+  top_users: AiUsageSummaryItem[];
+  providers: AiUsageSummaryItem[];
+  models: AiUsageSummaryItem[];
+}

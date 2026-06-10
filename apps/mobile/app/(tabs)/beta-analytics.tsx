@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, TouchableOpacity, View } from 'react-native';
-import type { BetaAnalyticsSummary } from '@calorie-ai/types';
+import type { AiUsageSummary, BetaAnalyticsSummary } from '@calorie-ai/types';
 import { ScreenShell, SurfaceCard } from '../../components/ui-shell';
 import { Text } from '../../components/i18n-text';
 import { createThemedStyles, theme, useAppTheme } from '../../components/theme';
@@ -9,6 +9,12 @@ import { telemetryService } from '../../services/telemetry.service';
 function formatNumber(value: number | null | undefined, suffix = '') {
   const numeric = Number(value);
   return Number.isFinite(numeric) ? `${numeric}${suffix}` : `--${suffix}`;
+}
+
+function formatCurrencyUsd(value: number | null | undefined) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return '--';
+  return `$${numeric.toFixed(2)}`;
 }
 
 function formatName(value: string) {
@@ -27,14 +33,18 @@ function statusTone(status: string) {
 export default function BetaAnalyticsScreen() {
   useAppTheme();
   const [summary, setSummary] = useState<BetaAnalyticsSummary | null>(null);
+  const [aiUsage, setAiUsage] = useState<AiUsageSummary | null>(null);
+  const [aiUsageWindowDays, setAiUsageWindowDays] = useState<7 | 30 | 90>(30);
   const [loading, setLoading] = useState(true);
+  const [aiUsageLoading, setAiUsageLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [aiUsageError, setAiUsageError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
       setError(null);
-      const data = await telemetryService.fetchBetaAnalytics(30);
-      setSummary(data);
+      const betaData = await telemetryService.fetchBetaAnalytics(30);
+      setSummary(betaData);
     } catch (err: any) {
       const status = Number(err?.response?.status ?? 0);
       setSummary(null);
@@ -46,17 +56,34 @@ export default function BetaAnalyticsScreen() {
     }
   }, []);
 
+  const loadAiUsage = useCallback(async () => {
+    try {
+      setAiUsageLoading(true);
+      setAiUsageError(null);
+      const aiUsageData = await telemetryService.fetchAiUsageSummary(aiUsageWindowDays);
+      setAiUsage(aiUsageData);
+    } catch (err: any) {
+      const status = Number(err?.response?.status ?? 0);
+      setAiUsage(null);
+      setAiUsageError(status === 403
+        ? 'AI usage summary is restricted for your account.'
+        : 'Could not load AI usage summary right now.');
+    } finally {
+      setAiUsageLoading(false);
+    }
+  }, [aiUsageWindowDays]);
+
   useEffect(() => {
     load().catch(() => {});
   }, [load]);
 
+  useEffect(() => {
+    loadAiUsage().catch(() => {});
+  }, [loadAiUsage]);
+
   const refresh = async () => {
     setLoading(true);
-    try {
-      await load();
-    } finally {
-      setLoading(false);
-    }
+    await Promise.all([load(), loadAiUsage()]);
   };
 
   return (
@@ -148,6 +175,64 @@ export default function BetaAnalyticsScreen() {
               <Text key={item} style={styles.recommendation}>- {item}</Text>
             )) : <Text style={styles.mutedText}>No warnings. Keep collecting data.</Text>}
           </SurfaceCard>
+
+          <SurfaceCard style={styles.sectionCard}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>AI Usage Ledger</Text>
+              <View style={styles.sectionHeaderActions}>
+                <Text style={styles.sectionMeta}>
+                  {aiUsage ? `${aiUsage.total_requests} requests / ${aiUsage.window_days}d` : `${aiUsageWindowDays}d window`}
+                </Text>
+                <View style={styles.usageWindowPicker}>
+                  {[7, 30, 90].map((days) => {
+                    const selected = aiUsageWindowDays === days;
+                    return (
+                      <TouchableOpacity
+                        key={`ai-window-${days}`}
+                        style={[styles.usageWindowButton, selected && styles.usageWindowButtonActive]}
+                        onPress={() => setAiUsageWindowDays(days as 7 | 30 | 90)}
+                      >
+                        <Text style={[styles.usageWindowLabel, selected && styles.usageWindowLabelActive]}>{days}d</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+            </View>
+
+            {aiUsageLoading ? (
+              <View style={styles.aiUsageLoader}>
+                <ActivityIndicator color={theme.colors.accentMint} />
+                <Text style={styles.mutedText}>Loading AI usage...</Text>
+              </View>
+            ) : aiUsageError ? (
+              <Text style={styles.mutedText}>{aiUsageError}</Text>
+            ) : aiUsage ? (
+              <>
+                <View style={styles.metricGrid}>
+                  <MetricCard
+                    label="AI Requests"
+                    value={formatNumber(aiUsage.total_requests)}
+                    detail={`Success ${formatNumber(aiUsage.total_success)} / Blocked ${formatNumber(aiUsage.total_blocked)}`}
+                    status={aiUsage.total_blocked > 0 ? 'learning' : 'ready'}
+                  />
+                  <MetricCard
+                    label="Estimated cost"
+                    value={formatCurrencyUsd(aiUsage.estimated_cost_usd)}
+                    detail={`Fallback ${formatNumber(aiUsage.total_fallback)} / Failed ${formatNumber(aiUsage.total_failed)}`}
+                    status={aiUsage.total_failed > aiUsage.total_success ? 'learning' : 'ready'}
+                  />
+                </View>
+
+                <UsageList title="Top AI features" items={aiUsage.top_features} />
+                <UsageList title="Top users" items={aiUsage.top_users} />
+                <UsageList title="Provider mix" items={aiUsage.providers} />
+                <UsageList title="Model mix" items={aiUsage.models} />
+              </>
+            ) : (
+              <Text style={styles.mutedText}>No AI usage data yet.</Text>
+            )}
+          </SurfaceCard>
         </View>
       ) : null}
     </ScreenShell>
@@ -195,6 +280,29 @@ function CalibrationRow({ bucket }: { bucket: BetaAnalyticsSummary['calibration'
         <Text style={styles.calibrationRate}>Actual {bucket.actual_success_rate}%</Text>
         <Text style={styles.calibrationError}>Error {bucket.calibration_error} / {bucket.calibration_status}</Text>
       </View>
+    </View>
+  );
+}
+
+function UsageList({
+  title,
+  items,
+}: {
+  title: string;
+  items: Array<{ label: string; count: number; estimated_cost_usd: number }>;
+}) {
+  return (
+    <View style={styles.usageSection}>
+      <Text style={styles.usageTitle}>{title}</Text>
+      {items.length > 0 ? items.slice(0, 5).map((item) => (
+        <View key={`${title}-${item.label}`} style={styles.usageRow}>
+          <Text style={styles.usageLabel}>{item.label}</Text>
+          <View style={styles.usageValueWrap}>
+            <Text style={styles.usageCount}>{item.count}</Text>
+            <Text style={styles.usageCost}>{formatCurrencyUsd(item.estimated_cost_usd)}</Text>
+          </View>
+        </View>
+      )) : <Text style={styles.mutedText}>No data yet.</Text>}
     </View>
   );
 }
@@ -311,10 +419,14 @@ const styles = createThemedStyles((colors, radii) => ({
   },
   sectionHeader: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
     gap: 10,
     marginBottom: 10,
+  },
+  sectionHeaderActions: {
+    alignItems: 'flex-end',
+    gap: 8,
   },
   sectionTitle: {
     color: colors.text,
@@ -325,6 +437,37 @@ const styles = createThemedStyles((colors, radii) => ({
     color: colors.textMuted,
     fontSize: 12,
     fontWeight: '800',
+  },
+  usageWindowPicker: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  usageWindowButton: {
+    borderRadius: radii.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  usageWindowButtonActive: {
+    borderColor: colors.info,
+    backgroundColor: colors.surfaceInfo,
+  },
+  usageWindowLabel: {
+    color: colors.textMuted,
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  usageWindowLabelActive: {
+    color: colors.info,
+  },
+  aiUsageLoader: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    minHeight: 120,
   },
   interventionRow: {
     flexDirection: 'row',
@@ -427,6 +570,49 @@ const styles = createThemedStyles((colors, radii) => ({
     fontSize: 13,
     lineHeight: 19,
     marginTop: 8,
+  },
+  usageSection: {
+    marginTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingTop: 10,
+    gap: 6,
+  },
+  usageTitle: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  usageRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  usageLabel: {
+    color: colors.text,
+    fontSize: 12,
+    fontWeight: '800',
+    flex: 1,
+  },
+  usageValueWrap: {
+    alignItems: 'flex-end',
+  },
+  usageCount: {
+    color: colors.accentCyan,
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  usageCost: {
+    color: colors.textMuted,
+    fontSize: 11,
+    marginTop: 1,
   },
   mutedText: {
     color: colors.textSoft,

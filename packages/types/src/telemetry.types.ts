@@ -24,7 +24,6 @@ export interface CorrectionEvent {
   corrected_portion?: number;
   original_portion_unit?: string;
   ai_confidence?: number;
-  scan_image_url?: string;
   notes?: string;
   created_at?: string;
 }
@@ -39,7 +38,6 @@ export interface CorrectionEventDto {
   corrected_portion?: number;
   original_portion_unit?: string;
   ai_confidence?: number;
-  scan_image_url?: string;
   notes?: string;
 }
 

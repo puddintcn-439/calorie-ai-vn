@@ -8,6 +8,18 @@ Use this file to store compact lessons from real failures after they are fixed.
 - Keep root cause and prevention rule concrete.
 - Prefer appending over rewriting history.
 
+## 2026-06-10 - New analytics filter style used non-existent theme radius token
+
+- Scope: mobile
+- Error Signature: `TS2339: Property 'md' does not exist on type '{ sm: number; lg: number; xl: number; }'` at `app/(tabs)/beta-analytics.tsx`.
+- Trigger: `cd apps/mobile ; npm run lint`
+- Root Cause: Newly added filter button style referenced `radii.md` even though the mobile theme only exposes `sm`, `lg`, `xl`.
+- Fix: Replaced `radii.md` with `radii.sm` in the usage window filter button style.
+- Validation: `cd apps/mobile ; npm run lint`
+- Prevention Rule: Before adding new style tokens in mobile screens, validate available keys in the shared theme contract used by `createThemedStyles`.
+- Files: `apps/mobile/app/(tabs)/beta-analytics.tsx`
+- Reuse Signal: Recheck this first whenever TypeScript flags missing `radii` keys after UI style changes.
+
 ## 2026-05-09 - Missing required UiChip selected prop in new preview action row
 
 - Scope: mobile
@@ -258,6 +270,18 @@ Use this file to store compact lessons from real failures after they are fixed.
 - Trigger:
 	- After setting `GEMINI_API_KEY` and running end-to-end coach validation (`auth/register -> auth/login -> ai/coach`).
 	- Running `npm run backend` from workspace root under Turbo 2.9.9.
+
+## 2026-06-10 - Telemetry accepted raw PII and image URLs while AI uploads preserved image metadata
+
+- Scope: backend privacy/security
+- Error Signature: Privacy review finding: telemetry accepted `scan_image_url`, free-form `notes`, and arbitrary `metadata`, while `/ai/scan/image` and `/ai/scan/receipt` forwarded original image bytes without stripping EXIF/text metadata.
+- Trigger: Security hardening review for telemetry and image upload flows.
+- Root Cause: Telemetry service inserted raw event payloads directly into Supabase, and AI upload controller converted raw file buffers to base64 without a metadata scrub step.
+- Fix: Added centralized telemetry sanitizers to redact PII-like free text, drop direct image URLs/sensitive metadata keys, and strip image metadata (JPEG EXIF, PNG text/eXIf chunks) before sending uploads to AI providers; also removed `scan_image_url` from the correction-event DTO and added a migration to drop the column.
+- Validation: `cd apps/backend ; npx jest src/modules/telemetry/__tests__/telemetry.service.spec.ts src/common/privacy/__tests__/image-privacy.util.spec.ts --runInBand`, `cd apps/backend ; npm run build`
+- Prevention Rule: Never persist raw telemetry free text or image URLs directly; route telemetry through a server-side sanitizer and strip metadata from user-uploaded media before any storage or provider handoff.
+- Files: `apps/backend/src/common/privacy/telemetry-privacy.util.ts`, `apps/backend/src/common/privacy/image-privacy.util.ts`, `apps/backend/src/modules/telemetry/telemetry.service.ts`, `apps/backend/src/modules/telemetry/telemetry.controller.ts`, `apps/backend/src/modules/ai/ai.controller.ts`, `supabase/migrations/022_remove_scan_image_url_from_corrections.sql`
+- Reuse Signal: Recheck this first whenever adding a telemetry field, free-form notes, media URL, or a new image upload endpoint.
 
 ## 2026-05-10 - Expo image picker deprecation fix broke mobile typecheck because installed typings lag runtime API
 

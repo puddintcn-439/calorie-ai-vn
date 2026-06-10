@@ -1,6 +1,7 @@
 import { Injectable, BadRequestException, ForbiddenException, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SupabaseService } from '../../common/supabase/supabase.service';
+import { sanitizeCorrectionEventPayload, sanitizeLoggingEventPayload } from '../../common/privacy/telemetry-privacy.util';
 import {
   BetaAnalyticsCalibrationBucket,
   BetaAnalyticsDailyEngagementItem,
@@ -31,9 +32,11 @@ export class TelemetryService {
       throw new BadRequestException('input_mode is required');
     }
 
+    const sanitizedEvent = sanitizeLoggingEventPayload(event as unknown as Record<string, unknown>) as unknown as LoggingEventDto;
+
     const { data, error } = await this.supabase.db
       .from('logging_events')
-      .insert({ user_id: userId, ...event })
+      .insert({ user_id: userId, ...sanitizedEvent })
       .select()
       .single();
 
@@ -141,9 +144,11 @@ export class TelemetryService {
       throw new BadRequestException('event_type is required');
     }
 
+    const sanitizedEvent = sanitizeCorrectionEventPayload(event as unknown as Record<string, unknown>) as unknown as CorrectionEventDto;
+
     const { data, error } = await this.supabase.db
       .from('correction_events')
-      .insert({ user_id: userId, ...event })
+      .insert({ user_id: userId, ...sanitizedEvent })
       .select()
       .single();
 

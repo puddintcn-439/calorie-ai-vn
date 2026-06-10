@@ -23,6 +23,7 @@ import { ApiProperty } from '@nestjs/swagger';
 import { TelemetryService } from './telemetry.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CorrectionEventType, ForecastSnapshotDto, ForecastSnapshotSource, LoggingEventType, LoggingInputMode, ContextMode } from '@calorie-ai/types';
+import { AiUsageService } from '../ai/ai-usage.service';
 
 class CreateCorrectionEventDto {
   @ApiProperty({ enum: ['item_mismatch', 'portion_adjusted', 'confidence_low', 'ai_result_corrected'] })
@@ -68,11 +69,6 @@ class CreateCorrectionEventDto {
   @IsNumber()
   @IsOptional()
   ai_confidence?: number;
-
-  @ApiProperty({ required: false })
-  @IsString()
-  @IsOptional()
-  scan_image_url?: string;
 
   @ApiProperty({ required: false })
   @IsString()
@@ -202,7 +198,10 @@ class CreateForecastSnapshotDto implements ForecastSnapshotDto {
 @UseGuards(JwtAuthGuard)
 @Controller('telemetry')
 export class TelemetryController {
-  constructor(private telemetry: TelemetryService) {}
+  constructor(
+    private telemetry: TelemetryService,
+    private aiUsage: AiUsageService,
+  ) {}
 
   @Post('corrections')
   @HttpCode(HttpStatus.CREATED)
@@ -258,5 +257,14 @@ export class TelemetryController {
     @Query('days') days: number = 30,
   ) {
     return this.telemetry.getBetaAnalyticsSummary(req.user.email, Number(days) || 30);
+  }
+
+  @Get('ai-usage-summary')
+  @ApiOperation({ summary: 'Get aggregate AI usage summary for configured admin emails' })
+  async getAiUsageSummary(
+    @Request() req: any,
+    @Query('days') days: number = 30,
+  ) {
+    return this.aiUsage.getUsageSummary(req.user.email, Number(days) || 30);
   }
 }

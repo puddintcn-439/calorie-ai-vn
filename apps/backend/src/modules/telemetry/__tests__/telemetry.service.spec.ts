@@ -19,9 +19,10 @@ describe('TelemetryService.createCorrectionEvent', () => {
   });
 
   it('inserts and returns correction event', async () => {
+    const insert = jest.fn().mockReturnThis();
     const event = { event_type: 'portion_adjusted' as const, original_value: '100', corrected_value: '150' };
     const db = makeDb(() => ({
-      insert: jest.fn().mockReturnThis(),
+      insert,
       select: jest.fn().mockReturnThis(),
       single: jest.fn().mockResolvedValue({ data: { id: 'e1', user_id: 'u1', ...event }, error: null }),
     }));
@@ -29,8 +30,65 @@ describe('TelemetryService.createCorrectionEvent', () => {
     const result = await service.createCorrectionEvent('u1', event);
     expect(result.id).toBe('e1');
     expect(result.event_type).toBe('portion_adjusted');
+    expect(insert).toHaveBeenCalledWith(expect.not.objectContaining({ scan_image_url: expect.anything() }));
   });
 
+  it('redacts notes and drops direct image urls before insert', async () => {
+    const insert = jest.fn().mockReturnThis();
+    const db = makeDb(() => ({
+      insert,
+      select: jest.fn().mockReturnThis(),
+      single: jest.fn().mockResolvedValue({ data: { id: 'e2', user_id: 'u1', event_type: 'item_mismatch' }, error: null }),
+    }));
+    const service = new TelemetryService({ db } as unknown as SupabaseService);
+
+    await service.createCorrectionEvent('u1', {
+      event_type: 'item_mismatch',
+      food_name: 'pho bo',
+      scan_image_url: 'https://cdn.example.com/photo.jpg',
+      notes: 'email me at tester@example.com, photo at https://cdn.example.com/photo.jpg',
+    } as any);
+
+    expect(insert).toHaveBeenCalledWith(expect.objectContaining({
+      user_id: 'u1',
+      notes: expect.stringContaining('[redacted-email]'),
+    }));
+    expect(insert).toHaveBeenCalledWith(expect.not.objectContaining({ scan_image_url: expect.anything() }));
+  });
+
+
+describe('TelemetryService.createLoggingEvent', () => {
+  it('redacts free-form metadata before insert', async () => {
+    const insert = jest.fn().mockReturnThis();
+    const db = makeDb(() => ({
+      insert,
+      select: jest.fn().mockReturnThis(),
+      single: jest.fn().mockResolvedValue({ data: { id: 'l1', user_id: 'u1', event_type: 'log_failed', input_mode: 'image' }, error: null }),
+    }));
+    const service = new TelemetryService({ db } as unknown as SupabaseService);
+
+    await service.createLoggingEvent('u1', {
+      event_type: 'log_failed',
+      input_mode: 'image',
+      reason_code: 'mailto:tester@example.com failed',
+      metadata: {
+        email: 'tester@example.com',
+        image_url: 'https://cdn.example.com/raw.jpg',
+        debug: 'https://internal.example.com should be hidden',
+        nested: { token: 'abc123456789012345678901234567', note: 'call +84 912 345 678' },
+      },
+    });
+
+    expect(insert).toHaveBeenCalledWith(expect.objectContaining({
+      user_id: 'u1',
+      reason_code: expect.stringContaining('[redacted-email]'),
+      metadata: {
+        debug: '[redacted-url] should be hidden',
+        nested: { note: 'call [redacted-phone]' },
+      },
+    }));
+  });
+});
   it('throws when DB insert fails', async () => {
     const db = makeDb(() => ({
       insert: jest.fn().mockReturnThis(),

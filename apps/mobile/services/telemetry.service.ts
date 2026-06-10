@@ -1,5 +1,5 @@
 import { apiClient } from './api';
-import { BetaAnalyticsSummary, CorrectionEventDto, ForecastSnapshotDto, LoggingEventDto, LoggingInputMode, ContextMode } from '@calorie-ai/types';
+import { AiUsageSummary, BetaAnalyticsSummary, CorrectionEventDto, ForecastSnapshotDto, LoggingEventDto, LoggingInputMode, ContextMode } from '@calorie-ai/types';
 import { appLogger } from './logger.service';
 
 class TelemetryService {
@@ -21,6 +21,11 @@ class TelemetryService {
 
   async fetchBetaAnalytics(days = 30): Promise<BetaAnalyticsSummary> {
     const res = await apiClient.get<BetaAnalyticsSummary>(`/telemetry/beta-analytics?days=${days}`);
+    return res.data;
+  }
+
+  async fetchAiUsageSummary(days = 30): Promise<AiUsageSummary> {
+    const res = await apiClient.get<AiUsageSummary>(`/telemetry/ai-usage-summary?days=${days}`);
     return res.data;
   }
 
