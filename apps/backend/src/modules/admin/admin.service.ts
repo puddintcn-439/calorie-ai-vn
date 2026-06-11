@@ -17,14 +17,7 @@ export class AdminService {
     todayStart.setHours(0, 0, 0, 0);
     const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
-    const [
-      activeUsersToday,
-      activeUsers7d,
-      newUsersToday,
-      newUsers7d,
-      foodLogsToday,
-      aiRowsToday,
-    ] = await Promise.all([
+    const [activeUsersToday, activeUsers7d, newUsersToday, newUsers7d, foodLogsToday, aiRowsToday] = await Promise.all([
       this.countDistinct('telemetry_events', 'user_id', todayStart.toISOString()),
       this.countDistinct('telemetry_events', 'user_id', sevenDaysAgo.toISOString()),
       this.countRows('users', todayStart.toISOString()),
@@ -56,6 +49,40 @@ export class AdminService {
     return this.aiUsageService.getUsageSummary(requesterEmail, days);
   }
 
+  async getAuditLog(params: { actorEmail?: string; action?: string; targetType?: string; targetId?: string; page?: number; pageSize?: number }) {
+    const page = Math.max(1, Number(params.page) || 1);
+    const pageSize = Math.max(1, Math.min(100, Number(params.pageSize) || 25));
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+
+    let query: any = this.supabase.db
+      .from('admin_audit_log')
+      .select('id, actor_user_id, actor_email, action, target_type, target_id, reason, metadata, ip_address, user_agent, created_at', { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .range(from, to);
+
+    const actorEmail = String(params.actorEmail ?? '').trim();
+    const action = String(params.action ?? '').trim();
+    const targetType = String(params.targetType ?? '').trim();
+    const targetId = String(params.targetId ?? '').trim();
+
+    if (actorEmail) query = query.ilike('actor_email', `%${actorEmail}%`);
+    if (action) query = query.eq('action', action);
+    if (targetType) query = query.eq('target_type', targetType);
+    if (targetId) query = query.eq('target_id', targetId);
+
+    const { data, count, error } = await query;
+    if (error) throw error;
+
+    return {
+      generated_at: new Date().toISOString(),
+      page,
+      page_size: pageSize,
+      total: count ?? 0,
+      entries: Array.isArray(data) ? data : [],
+    };
+  }
+
   async getUsers(params: { search?: string; plan?: string; page?: number; pageSize?: number }) {
     const page = Math.max(1, Number(params.page) || 1);
     const pageSize = Math.max(1, Math.min(100, Number(params.pageSize) || 25));
@@ -72,14 +99,10 @@ export class AdminService {
       .range(from, to);
 
     const search = String(params.search ?? '').trim();
-    if (search) {
-      query = query.ilike('email', `%${search}%`);
-    }
+    if (search) query = query.ilike('email', `%${search}%`);
 
     const { data, count, error } = await query;
-    if (error) {
-      throw error;
-    }
+    if (error) throw error;
 
     const users = Array.isArray(data) ? data : [];
     const userIds = users.map((user: any) => String(user.id)).filter(Boolean);
@@ -107,17 +130,9 @@ export class AdminService {
     });
 
     const plan = String(params.plan ?? '').trim().toLowerCase();
-    if (plan) {
-      rows = rows.filter((row) => String(row.plan_tier).toLowerCase() === plan);
-    }
+    if (plan) rows = rows.filter((row) => String(row.plan_tier).toLowerCase() === plan);
 
-    return {
-      generated_at: new Date().toISOString(),
-      page,
-      page_size: pageSize,
-      total: count ?? rows.length,
-      users: rows,
-    };
+    return { generated_at: new Date().toISOString(), page, page_size: pageSize, total: count ?? rows.length, users: rows };
   }
 
   async getUserDetail(userId: string) {
@@ -127,29 +142,20 @@ export class AdminService {
       .eq('id', userId)
       .maybeSingle();
 
-    if (error) {
-      throw error;
-    }
-    if (!user) {
-      throw new NotFoundException('User not found');
-    }
+    if (error) throw error;
+    if (!user) throw new NotFoundException('User not found');
 
     const [subscription, quota, recentFoodLogs, recentAiUsage, recentTelemetry] = await Promise.all([
-      this.fetchSubscriptionForUser(userId),
+      this.fetchSubscriptionForUser(userId).catch(() => ({ tier: 'free', status: 'unknown' })),
       this.aiUsageService.getQuotaRemaining(userId).catch(() => null),
-      this.fetchRecentFoodLogs(userId),
-      this.fetchRecentAiUsage(userId),
-      this.fetchRecentTelemetry(userId),
+      this.fetchRecentFoodLogs(userId).catch(() => []),
+      this.fetchRecentAiUsage(userId).catch(() => []),
+      this.fetchRecentTelemetry(userId).catch(() => []),
     ]);
 
     return {
       generated_at: new Date().toISOString(),
-      profile: {
-        id: user.id,
-        email: user.email ?? null,
-        created_at: user.created_at ?? null,
-        updated_at: user.updated_at ?? null,
-      },
+      profile: { id: user.id, email: user.email ?? null, created_at: user.created_at ?? null, updated_at: user.updated_at ?? null },
       subscription,
       ai_quota: quota,
       recent_food_logs: recentFoodLogs,
@@ -164,25 +170,16 @@ export class AdminService {
       .select('user_id, tier, status, created_at, updated_at')
       .order('updated_at', { ascending: false })
       .limit(500);
-
     const rows = Array.isArray(data) ? data : [];
     const byTier: Record<string, number> = {};
     const byStatus: Record<string, number> = {};
-
     for (const row of rows) {
       const tier = String(row.tier ?? 'unknown');
       const status = String(row.status ?? 'unknown');
       byTier[tier] = (byTier[tier] ?? 0) + 1;
       byStatus[status] = (byStatus[status] ?? 0) + 1;
     }
-
-    return {
-      generated_at: new Date().toISOString(),
-      total_loaded: rows.length,
-      by_tier: byTier,
-      by_status: byStatus,
-      recent: rows.slice(0, 25),
-    };
+    return { generated_at: new Date().toISOString(), total_loaded: rows.length, by_tier: byTier, by_status: byStatus, recent: rows.slice(0, 25) };
   }
 
   async getSystemHealth() {
@@ -193,50 +190,27 @@ export class AdminService {
       this.countRowsByStatus('ai_usage_events', 'blocked', since),
       this.countRows('telemetry_events', since),
     ]);
-
-    return {
-      generated_at: now.toISOString(),
-      status: 'ok',
-      window_hours: 24,
-      recent_ai_failures: recentAiFailures,
-      recent_quota_blocks: recentQuotaBlocks,
-      recent_telemetry_events: recentErrors,
-    };
+    return { generated_at: now.toISOString(), status: 'ok', window_hours: 24, recent_ai_failures: recentAiFailures, recent_quota_blocks: recentQuotaBlocks, recent_telemetry_events: recentErrors };
   }
 
   private async fetchAiUsageRows(sinceIso: string): Promise<any[]> {
-    const { data } = await this.supabase.db
-      .from('ai_usage_events')
-      .select('status, estimated_cost_usd, credits_consumed, created_at')
-      .gte('created_at', sinceIso)
-      .limit(5000);
+    const { data } = await this.supabase.db.from('ai_usage_events').select('status, estimated_cost_usd, credits_consumed, created_at').gte('created_at', sinceIso).limit(5000);
     return Array.isArray(data) ? data : [];
   }
 
   private async fetchSubscriptionsForUsers(userIds: string[]): Promise<Map<string, { tier: string; status: string }>> {
     const map = new Map<string, { tier: string; status: string }>();
     if (userIds.length === 0) return map;
-    const { data } = await this.supabase.db
-      .from('user_subscriptions')
-      .select('user_id, tier, status, updated_at')
-      .in('user_id', userIds)
-      .order('updated_at', { ascending: false });
+    const { data } = await this.supabase.db.from('user_subscriptions').select('user_id, tier, status, updated_at').in('user_id', userIds).order('updated_at', { ascending: false });
     for (const row of Array.isArray(data) ? data : []) {
       const userId = String(row.user_id);
-      if (!map.has(userId)) {
-        map.set(userId, { tier: String(row.tier ?? 'free'), status: String(row.status ?? 'unknown') });
-      }
+      if (!map.has(userId)) map.set(userId, { tier: String(row.tier ?? 'free'), status: String(row.status ?? 'unknown') });
     }
     return map;
   }
 
   private async fetchSubscriptionForUser(userId: string) {
-    const { data } = await this.supabase.db
-      .from('user_subscriptions')
-      .select('tier, status, created_at, updated_at')
-      .eq('user_id', userId)
-      .order('updated_at', { ascending: false })
-      .limit(1);
+    const { data } = await this.supabase.db.from('user_subscriptions').select('tier, status, created_at, updated_at').eq('user_id', userId).order('updated_at', { ascending: false }).limit(1);
     const row = Array.isArray(data) ? data[0] : null;
     return row ?? { tier: 'free', status: 'unknown' };
   }
@@ -244,13 +218,7 @@ export class AdminService {
   private async fetchAiUsageForUsers(userIds: string[], sinceIso: string): Promise<Map<string, { requests: number; credits: number }>> {
     const map = new Map<string, { requests: number; credits: number }>();
     if (userIds.length === 0) return map;
-    const { data } = await this.supabase.db
-      .from('ai_usage_events')
-      .select('user_id, credits_consumed')
-      .in('user_id', userIds)
-      .in('status', ['reserved', 'success', 'failed', 'fallback'])
-      .gte('created_at', sinceIso)
-      .limit(10000);
+    const { data } = await this.supabase.db.from('ai_usage_events').select('user_id, credits_consumed').in('user_id', userIds).in('status', ['reserved', 'success', 'failed', 'fallback']).gte('created_at', sinceIso).limit(10000);
     for (const row of Array.isArray(data) ? data : []) {
       const userId = String(row.user_id);
       const current = map.get(userId) ?? { requests: 0, credits: 0 };
@@ -264,94 +232,50 @@ export class AdminService {
   private async fetchFoodLogCountsForUsers(userIds: string[]): Promise<Map<string, number>> {
     const map = new Map<string, number>();
     if (userIds.length === 0) return map;
-    const { data } = await this.supabase.db
-      .from('food_logs')
-      .select('user_id')
-      .in('user_id', userIds)
-      .limit(10000);
-    for (const row of Array.isArray(data) ? data : []) {
-      const userId = String(row.user_id);
-      map.set(userId, (map.get(userId) ?? 0) + 1);
-    }
+    const { data } = await this.supabase.db.from('food_logs').select('user_id').in('user_id', userIds).limit(10000);
+    for (const row of Array.isArray(data) ? data : []) map.set(String(row.user_id), (map.get(String(row.user_id)) ?? 0) + 1);
     return map;
   }
 
   private async fetchLastActiveForUsers(userIds: string[]): Promise<Map<string, string>> {
     const map = new Map<string, string>();
     if (userIds.length === 0) return map;
-    const { data } = await this.supabase.db
-      .from('telemetry_events')
-      .select('user_id, created_at')
-      .in('user_id', userIds)
-      .order('created_at', { ascending: false })
-      .limit(10000);
+    const { data } = await this.supabase.db.from('telemetry_events').select('user_id, created_at').in('user_id', userIds).order('created_at', { ascending: false }).limit(10000);
     for (const row of Array.isArray(data) ? data : []) {
       const userId = String(row.user_id);
-      if (!map.has(userId)) {
-        map.set(userId, String(row.created_at));
-      }
+      if (!map.has(userId)) map.set(userId, String(row.created_at));
     }
     return map;
   }
 
   private async fetchRecentFoodLogs(userId: string): Promise<any[]> {
-    const { data } = await this.supabase.db
-      .from('food_logs')
-      .select('id, food_name, meal_type, calories, created_at')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false })
-      .limit(10);
+    const { data } = await this.supabase.db.from('food_logs').select('id, food_name, meal_type, calories, created_at').eq('user_id', userId).order('created_at', { ascending: false }).limit(10);
     return Array.isArray(data) ? data : [];
   }
 
   private async fetchRecentAiUsage(userId: string): Promise<any[]> {
-    const { data } = await this.supabase.db
-      .from('ai_usage_events')
-      .select('id, feature, status, model, provider, estimated_cost_usd, credits_consumed, created_at, completed_at, error_category')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false })
-      .limit(20);
+    const { data } = await this.supabase.db.from('ai_usage_events').select('id, feature, status, model, provider, estimated_cost_usd, credits_consumed, created_at, completed_at, error_category').eq('user_id', userId).order('created_at', { ascending: false }).limit(20);
     return Array.isArray(data) ? data : [];
   }
 
   private async fetchRecentTelemetry(userId: string): Promise<any[]> {
-    const { data } = await this.supabase.db
-      .from('telemetry_events')
-      .select('id, event_type, event_name, created_at')
-      .eq('user_id', userId)
-      .order('created_at', { ascending: false })
-      .limit(20);
+    const { data } = await this.supabase.db.from('telemetry_events').select('id, event_type, event_name, created_at').eq('user_id', userId).order('created_at', { ascending: false }).limit(20);
     return Array.isArray(data) ? data : [];
   }
 
   private async countRows(table: string, sinceIso: string): Promise<number> {
-    const result = (await this.supabase.db
-      .from(table)
-      .select('id', { count: 'exact', head: true })
-      .gte('created_at', sinceIso)) as SupabaseCountResult;
+    const result = (await this.supabase.db.from(table).select('id', { count: 'exact', head: true }).gte('created_at', sinceIso)) as SupabaseCountResult;
     return result?.count ?? 0;
   }
 
   private async countRowsByStatus(table: string, status: string, sinceIso: string): Promise<number> {
-    const result = (await this.supabase.db
-      .from(table)
-      .select('id', { count: 'exact', head: true })
-      .eq('status', status)
-      .gte('created_at', sinceIso)) as SupabaseCountResult;
+    const result = (await this.supabase.db.from(table).select('id', { count: 'exact', head: true }).eq('status', status).gte('created_at', sinceIso)) as SupabaseCountResult;
     return result?.count ?? 0;
   }
 
   private async countDistinct(table: string, column: string, sinceIso: string): Promise<number> {
-    const { data } = await this.supabase.db
-      .from(table)
-      .select(column)
-      .gte('created_at', sinceIso)
-      .limit(10000);
-
-    if (!Array.isArray(data)) {
-      return 0;
-    }
-
+    const { data } = await this.supabase.db.from(table).select(column).gte('created_at', sinceIso).limit(10000);
+    if (!Array.isArray(data)) return 0;
     return new Set(data.map((row: any) => row?.[column]).filter(Boolean)).size;
   }
 
