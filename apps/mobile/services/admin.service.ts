@@ -44,6 +44,28 @@ export type AdminUserDetail = {
   recent_telemetry: any[];
 };
 
+export type AdminAuditLogEntry = {
+  id: string;
+  actor_user_id: string | null;
+  actor_email: string;
+  action: string;
+  target_type: string;
+  target_id: string | null;
+  reason: string | null;
+  metadata: Record<string, any>;
+  ip_address: string | null;
+  user_agent: string | null;
+  created_at: string;
+};
+
+export type AdminAuditLogResponse = {
+  generated_at: string;
+  page: number;
+  page_size: number;
+  total: number;
+  entries: AdminAuditLogEntry[];
+};
+
 export const adminService = {
   async fetchOverview(): Promise<AdminOverview> {
     const { data } = await apiClient.get('/admin/overview');
@@ -62,6 +84,11 @@ export const adminService = {
 
   async fetchAiUsage(days = 30): Promise<any> {
     const { data } = await apiClient.get('/admin/ai-usage', { params: { days } });
+    return data;
+  },
+
+  async fetchAuditLog(params: { actorEmail?: string; action?: string; targetType?: string; targetId?: string; page?: number; pageSize?: number } = {}): Promise<AdminAuditLogResponse> {
+    const { data } = await apiClient.get('/admin/audit-log', { params });
     return data;
   },
 
