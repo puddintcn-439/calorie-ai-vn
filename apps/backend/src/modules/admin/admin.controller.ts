@@ -1,5 +1,5 @@
-import { BadRequestException, Controller, Get, Param, Query, Request, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiParam, ApiQuery, ApiTags } from '@nestjs/swagger';
+import { BadRequestException, Body, Controller, Get, Param, Post, Query, Request, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth, ApiBody, ApiOperation, ApiParam, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -15,6 +15,12 @@ class AdminAiUsageQueryDto {
   @Min(1)
   @Max(180)
   days?: number;
+}
+
+class AdminActionReasonDto {
+  @IsString()
+  @Min(5)
+  reason!: string;
 }
 
 class AdminAuditLogQueryDto {
@@ -80,6 +86,15 @@ function assertUuid(value: string): string {
   return normalized;
 }
 
+function getAdminActor(req: any) {
+  return {
+    email: req?.admin?.email ?? req?.user?.email,
+    role: req?.admin?.role,
+    source: req?.admin?.source,
+    user_id: req?.user?.id ?? req?.user?.sub ?? null,
+  };
+}
+
 @ApiTags('Admin')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, AdminGuard, AdminRoleGuard)
@@ -137,5 +152,23 @@ export class AdminController {
   @ApiParam({ name: 'id', description: 'User UUID' })
   getUserDetail(@Param('id') userId: string) {
     return this.adminService.getUserDetail(assertUuid(userId));
+  }
+
+  @Post('users/:id/grant-premium')
+  @AdminRoles('admin')
+  @ApiOperation({ summary: 'Grant premium trial to a user and write admin audit log' })
+  @ApiParam({ name: 'id', description: 'User UUID' })
+  @ApiBody({ schema: { type: 'object', required: ['reason'], properties: { reason: { type: 'string', minLength: 5, example: 'Manual support compensation' } } } })
+  grantPremium(@Request() req: any, @Param('id') userId: string, @Body() body: AdminActionReasonDto) {
+    return this.adminService.grantPremium(assertUuid(userId), getAdminActor(req), body.reason);
+  }
+
+  @Post('users/:id/revoke-premium')
+  @AdminRoles('admin')
+  @ApiOperation({ summary: 'Revoke premium access from a user and write admin audit log' })
+  @ApiParam({ name: 'id', description: 'User UUID' })
+  @ApiBody({ schema: { type: 'object', required: ['reason'], properties: { reason: { type: 'string', minLength: 5, example: 'User requested downgrade' } } } })
+  revokePremium(@Request() req: any, @Param('id') userId: string, @Body() body: AdminActionReasonDto) {
+    return this.adminService.revokePremium(assertUuid(userId), getAdminActor(req), body.reason);
   }
 }
