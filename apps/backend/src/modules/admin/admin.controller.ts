@@ -15,6 +15,37 @@ class AdminAiUsageQueryDto {
   days?: number;
 }
 
+class AdminAuditLogQueryDto {
+  @IsOptional()
+  @IsString()
+  actorEmail?: string;
+
+  @IsOptional()
+  @IsString()
+  action?: string;
+
+  @IsOptional()
+  @IsString()
+  targetType?: string;
+
+  @IsOptional()
+  @IsString()
+  targetId?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  pageSize?: number;
+}
+
 class AdminUsersQueryDto {
   @IsOptional()
   @IsString()
@@ -66,6 +97,12 @@ export class AdminController {
   getAiUsage(@Request() req: any, @Query() query: AdminAiUsageQueryDto) {
     const email = req?.user?.email;
     return this.adminService.getAiUsage(email, query.days ?? 30);
+  }
+
+  @Get('audit-log')
+  @ApiOperation({ summary: 'Get admin audit log entries' })
+  getAuditLog(@Query() query: AdminAuditLogQueryDto) {
+    return this.adminService.getAuditLog(query);
   }
 
   @Get('subscriptions')
