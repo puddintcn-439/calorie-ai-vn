@@ -160,15 +160,21 @@ export class AiUsageService {
       }
     }
 
+    const adjustments = await this.getActiveQuotaAdjustments(userId, now.toISOString());
+    const dailyAdjustmentCredits = adjustments.daily;
+    const monthlyAdjustmentCredits = adjustments.monthly;
+    const adjustedDailyLimit = creditBudget.daily + dailyAdjustmentCredits;
+    const adjustedMonthlyLimit = creditBudget.monthly + monthlyAdjustmentCredits;
+
     return {
       generated_at: now.toISOString(),
       plan_tier: tier,
-      daily_credit_limit: creditBudget.daily,
+      daily_credit_limit: adjustedDailyLimit,
       daily_credits_used: dailyCreditsUsed,
-      daily_credits_remaining: Math.max(0, creditBudget.daily - dailyCreditsUsed),
-      monthly_credit_limit: creditBudget.monthly,
+      daily_credits_remaining: Math.max(0, adjustedDailyLimit - dailyCreditsUsed),
+      monthly_credit_limit: adjustedMonthlyLimit,
       monthly_credits_used: monthlyCreditsUsed,
-      monthly_credits_remaining: Math.max(0, creditBudget.monthly - monthlyCreditsUsed),
+      monthly_credits_remaining: Math.max(0, adjustedMonthlyLimit - monthlyCreditsUsed),
       reset_at_daily: tomorrowStart.toISOString(),
       reset_at_monthly: nextMonthStart.toISOString(),
       quotas: features.map((feature) => {
@@ -235,13 +241,8 @@ export class AiUsageService {
         this.bump(acc.models, model, cost);
         this.bump(acc.users, userId, cost);
 
-        if (createdAt >= todayStart) {
-          acc.today += 1;
-        }
-        if (createdAt >= monthStart) {
-          acc.month += 1;
-        }
-
+        if (createdAt >= todayStart) acc.today += 1;
+        if (createdAt >= monthStart) acc.month += 1;
         return acc;
       },
       {
@@ -279,6 +280,28 @@ export class AiUsageService {
     };
   }
 
+  private async getActiveQuotaAdjustments(userId: string, nowIso: string): Promise<{ daily: number; monthly: number }> {
+    const { data, error } = await this.supabase.db
+      .from('admin_quota_adjustments')
+      .select('scope, credits_delta, expires_at')
+      .eq('user_id', userId)
+      .gte('expires_at', nowIso);
+
+    if (error) {
+      this.logger.warn(`Failed to load admin quota adjustments for ${userId}: ${String(error?.message ?? error)}`);
+      return { daily: 0, monthly: 0 };
+    }
+
+    const totals = { daily: 0, monthly: 0 };
+    for (const row of Array.isArray(data) ? data : []) {
+      const scope = String(row.scope);
+      const delta = Number(row.credits_delta ?? 0) || 0;
+      if (scope === 'daily') totals.daily += delta;
+      if (scope === 'monthly') totals.monthly += delta;
+    }
+    return totals;
+  }
+
   private throwQuotaExceeded(feature: AiUsageFeature, event: QuotaBlockedEvent): never {
     const featureLabel = FEATURE_LABELS[feature] ?? feature;
     const window = event.quota_window ?? 'daily';
@@ -301,45 +324,30 @@ export class AiUsageService {
   }
 
   private extractEvent(data: unknown): AiUsageEvent | null {
-    if (Array.isArray(data)) {
-      return (data[0] ?? null) as AiUsageEvent | null;
-    }
-
-    if (data && typeof data === 'object') {
-      return data as AiUsageEvent;
-    }
-
+    if (Array.isArray(data)) return (data[0] ?? null) as AiUsageEvent | null;
+    if (data && typeof data === 'object') return data as AiUsageEvent;
     return null;
   }
 
-  private bump(
-    map: Map<string, { count: number; estimated_cost_usd: number }>,
-    key: string,
-    cost: number,
-  ) {
+  private bump(map: Map<string, { count: number; estimated_cost_usd: number }>, key: string, cost: number) {
     const current = map.get(key) ?? { count: 0, estimated_cost_usd: 0 };
     current.count += 1;
     current.estimated_cost_usd += cost;
     map.set(key, current);
   }
 
-  private roundCost(value: number): number {
-    return Math.round(value * 1000000) / 1000000;
-  }
-
   private assertAdmin(email: string | undefined) {
-    const normalizedEmail = String(email ?? '').trim().toLowerCase();
-    const raw = [
-      this.config.get<string>('BETA_ANALYTICS_ADMIN_EMAILS'),
-      this.config.get<string>('ADMIN_EMAILS'),
-    ].filter(Boolean).join(',');
-    const admins = raw
+    const allowed = String(this.config.get<string>('BETA_ANALYTICS_ADMIN_EMAILS') ?? '')
       .split(',')
       .map((item) => item.trim().toLowerCase())
       .filter(Boolean);
-
-    if (!normalizedEmail || admins.length === 0 || (!admins.includes('*') && !admins.includes(normalizedEmail))) {
-      throw new ForbiddenException('AI usage summary is restricted to configured admin emails');
+    const normalized = String(email ?? '').trim().toLowerCase();
+    if (!normalized || allowed.length === 0 || !allowed.includes(normalized)) {
+      throw new ForbiddenException('Admin analytics access is restricted');
     }
+  }
+
+  private roundCost(value: number): number {
+    return Math.round(value * 1000000) / 1000000;
   }
 }
