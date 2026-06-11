@@ -13,20 +13,31 @@ function makeDb(overrides?: Partial<any>) {
     gte: jest.fn().mockReturnThis(),
     order: jest.fn().mockResolvedValue({ data: [], error: null }),
   };
+  const adjustmentQuery = {
+    eq: jest.fn().mockReturnThis(),
+    gte: jest.fn().mockResolvedValue({ data: [], error: null }),
+  };
   const updateQuery = {
     eq: jest.fn().mockResolvedValue({ error: null }),
   };
   return {
     rpc: jest.fn().mockResolvedValue({ data: [{ id: 'usage-1', status: 'reserved' }], error: null }),
-    from: jest.fn().mockImplementation((table: string) => ({
-      update: jest.fn().mockReturnValue(updateQuery),
-      select: jest.fn().mockImplementation((query: string) => {
-        if (query.includes('credits_consumed')) {
-          return usageQuery;
-        }
-        return summaryQuery;
-      }),
-    })),
+    from: jest.fn().mockImplementation((table: string) => {
+      if (table === 'admin_quota_adjustments') {
+        return {
+          select: jest.fn().mockReturnValue(adjustmentQuery),
+        };
+      }
+      return {
+        update: jest.fn().mockReturnValue(updateQuery),
+        select: jest.fn().mockImplementation((query: string) => {
+          if (query.includes('credits_consumed')) {
+            return usageQuery;
+          }
+          return summaryQuery;
+        }),
+      };
+    }),
     ...overrides,
   };
 }
@@ -74,6 +85,12 @@ describe('AiUsageService', () => {
           eq: jest.fn().mockResolvedValue({ error: null }),
         }),
         select: jest.fn().mockImplementation((query: string) => {
+          if (table === 'admin_quota_adjustments') {
+            return {
+              eq: jest.fn().mockReturnThis(),
+              gte: jest.fn().mockResolvedValue({ data: [], error: null }),
+            };
+          }
           if (query.includes('credits_consumed')) {
             return {
               eq: jest.fn().mockReturnThis(),
