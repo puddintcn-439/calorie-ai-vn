@@ -60,6 +60,8 @@ function Row({ left, sub, right }: { left: string; sub?: string; right?: string 
   );
 }
 
+type AdminAction = 'grant' | 'revoke' | 'resetDaily' | 'resetMonthly';
+
 export default function AdminUserDetailScreen() {
   const params = useLocalSearchParams<{ id?: string | string[] }>();
   const userId = useMemo(() => Array.isArray(params.id) ? params.id[0] : params.id, [params.id]);
@@ -67,7 +69,7 @@ export default function AdminUserDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionReason, setActionReason] = useState('');
-  const [actionLoading, setActionLoading] = useState<'grant' | 'revoke' | null>(null);
+  const [actionLoading, setActionLoading] = useState<AdminAction | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
 
@@ -93,7 +95,7 @@ export default function AdminUserDetailScreen() {
     load().catch(() => {});
   }, [load]);
 
-  const runPremiumAction = useCallback(async (action: 'grant' | 'revoke') => {
+  const runAdminAction = useCallback(async (action: AdminAction) => {
     if (!userId) return;
     const reason = actionReason.trim();
     if (reason.length < 5) {
@@ -107,9 +109,15 @@ export default function AdminUserDetailScreen() {
       if (action === 'grant') {
         await adminService.grantPremium(userId, reason);
         setActionSuccess('Premium granted and audit log written.');
-      } else {
+      } else if (action === 'revoke') {
         await adminService.revokePremium(userId, reason);
         setActionSuccess('Premium revoked and audit log written.');
+      } else if (action === 'resetDaily') {
+        const result = await adminService.resetAiQuota(userId, reason, 'daily');
+        setActionSuccess(`Daily AI quota reset. +${n(result.credits_delta)} credits until ${date(result.expires_at)}.`);
+      } else {
+        const result = await adminService.resetAiQuota(userId, reason, 'monthly');
+        setActionSuccess(`Monthly AI quota reset. +${n(result.credits_delta)} credits until ${date(result.expires_at)}.`);
       }
       setActionReason('');
       await load();
@@ -186,7 +194,7 @@ export default function AdminUserDetailScreen() {
               <TextInput
                 value={actionReason}
                 onChangeText={setActionReason}
-                placeholder="Reason, e.g. Manual support compensation"
+                placeholder="Reason, e.g. Support quota compensation"
                 placeholderTextColor={theme.colors.textMuted}
                 autoCapitalize="sentences"
                 style={styles.reasonInput}
@@ -195,11 +203,17 @@ export default function AdminUserDetailScreen() {
               {actionError ? <Text style={styles.actionError}>{actionError}</Text> : null}
               {actionSuccess ? <Text style={styles.actionSuccess}>{actionSuccess}</Text> : null}
               <View style={styles.actionRow}>
-                <TouchableOpacity disabled={Boolean(actionLoading)} style={[styles.primaryActionButton, actionLoading && styles.disabledButton]} onPress={() => runPremiumAction('grant')}>
+                <TouchableOpacity disabled={Boolean(actionLoading)} style={[styles.primaryActionButton, actionLoading && styles.disabledButton]} onPress={() => runAdminAction('grant')}>
                   <Text style={styles.primaryActionText}>{actionLoading === 'grant' ? 'Granting...' : 'Grant Premium'}</Text>
                 </TouchableOpacity>
-                <TouchableOpacity disabled={Boolean(actionLoading)} style={[styles.dangerActionButton, actionLoading && styles.disabledButton]} onPress={() => runPremiumAction('revoke')}>
+                <TouchableOpacity disabled={Boolean(actionLoading)} style={[styles.dangerActionButton, actionLoading && styles.disabledButton]} onPress={() => runAdminAction('revoke')}>
                   <Text style={styles.dangerActionText}>{actionLoading === 'revoke' ? 'Revoking...' : 'Revoke Premium'}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity disabled={Boolean(actionLoading)} style={[styles.quotaActionButton, actionLoading && styles.disabledButton]} onPress={() => runAdminAction('resetDaily')}>
+                  <Text style={styles.quotaActionText}>{actionLoading === 'resetDaily' ? 'Resetting...' : 'Reset Daily Quota'}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity disabled={Boolean(actionLoading)} style={[styles.quotaActionButton, actionLoading && styles.disabledButton]} onPress={() => runAdminAction('resetMonthly')}>
+                  <Text style={styles.quotaActionText}>{actionLoading === 'resetMonthly' ? 'Resetting...' : 'Reset Monthly Quota'}</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -275,6 +289,8 @@ const styles = StyleSheet.create({
   primaryActionText: { color: theme.colors.textOnAccent, fontWeight: '900' },
   dangerActionButton: { borderRadius: 14, borderWidth: 1, borderColor: theme.colors.danger, paddingHorizontal: 16, paddingVertical: 11 },
   dangerActionText: { color: theme.colors.danger, fontWeight: '900' },
+  quotaActionButton: { borderRadius: 14, borderWidth: 1, borderColor: theme.colors.accentCyan, paddingHorizontal: 16, paddingVertical: 11 },
+  quotaActionText: { color: theme.colors.accentCyan, fontWeight: '900' },
   disabledButton: { opacity: 0.55 },
   actionError: { color: theme.colors.danger, fontSize: 12, fontWeight: '800' },
   actionSuccess: { color: theme.colors.accentMint, fontSize: 12, fontWeight: '800' },
