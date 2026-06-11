@@ -10,9 +10,11 @@ create table if not exists public.admin_roles (
   granted_by_email text null,
   granted_reason text null,
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  unique (lower(email))
+  updated_at timestamptz not null default now()
 );
+
+create unique index if not exists idx_admin_roles_email_unique
+  on public.admin_roles (lower(email));
 
 create index if not exists idx_admin_roles_email
   on public.admin_roles (lower(email));
