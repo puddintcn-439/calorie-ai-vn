@@ -1,5 +1,5 @@
 import React, { ReactNode } from 'react';
-import { Platform, StyleSheet, Text as NativeText, TextProps } from 'react-native';
+import { Text as NativeText, TextProps } from 'react-native';
 import { I18nKey, useI18n } from './i18n';
 
 function translateNode(node: ReactNode, tx: (source: string) => string): ReactNode {
@@ -22,18 +22,5 @@ type I18nTextProps = TextProps & {
 export function Text({ children, i18nKey, values, ...props }: I18nTextProps) {
   const { t, tx } = useI18n();
   const content = i18nKey ? t(i18nKey, values) : translateNode(children, tx);
-  return <NativeText {...props} style={[styles.base, props.style]}>{content}</NativeText>;
+  return <NativeText {...props}>{content}</NativeText>;
 }
-
-const styles = StyleSheet.create({
-  base: {
-    fontFamily: Platform.select({
-      ios: 'Avenir Next',
-      android: 'sans-serif',
-      web: 'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-      default: undefined,
-    }),
-    letterSpacing: 0,
-    fontVariant: ['tabular-nums'],
-  },
-});
