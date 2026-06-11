@@ -66,6 +66,15 @@ export type AdminAuditLogResponse = {
   entries: AdminAuditLogEntry[];
 };
 
+export type AdminPremiumActionResponse = {
+  ok: boolean;
+  action: 'grant_premium' | 'revoke_premium';
+  user_id: string;
+  user_email: string | null;
+  subscription: Record<string, any> | null;
+  audited: boolean;
+};
+
 export const adminService = {
   async fetchOverview(): Promise<AdminOverview> {
     const { data } = await apiClient.get('/admin/overview');
@@ -79,6 +88,16 @@ export const adminService = {
 
   async fetchUserDetail(userId: string): Promise<AdminUserDetail> {
     const { data } = await apiClient.get(`/admin/users/${encodeURIComponent(userId)}`);
+    return data;
+  },
+
+  async grantPremium(userId: string, reason: string): Promise<AdminPremiumActionResponse> {
+    const { data } = await apiClient.post(`/admin/users/${encodeURIComponent(userId)}/grant-premium`, { reason });
+    return data;
+  },
+
+  async revokePremium(userId: string, reason: string): Promise<AdminPremiumActionResponse> {
+    const { data } = await apiClient.post(`/admin/users/${encodeURIComponent(userId)}/revoke-premium`, { reason });
     return data;
   },
 
