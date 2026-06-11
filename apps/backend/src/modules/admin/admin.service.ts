@@ -14,135 +14,57 @@ export class AdminService {
 
   async getOverview() {
     const now = new Date();
-    const todayStart = new Date(now);
-    todayStart.setHours(0, 0, 0, 0);
+    const todayStart = new Date(now); todayStart.setHours(0, 0, 0, 0);
     const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
     const [activeUsersToday, activeUsers7d, newUsersToday, newUsers7d, foodLogsToday, aiRowsToday] = await Promise.all([
-      this.countDistinct('telemetry_events', 'user_id', todayStart.toISOString()),
-      this.countDistinct('telemetry_events', 'user_id', sevenDaysAgo.toISOString()),
-      this.countRows('users', todayStart.toISOString()),
-      this.countRows('users', sevenDaysAgo.toISOString()),
-      this.countRows('food_logs', todayStart.toISOString()),
-      this.fetchAiUsageRows(todayStart.toISOString()),
+      this.countDistinct('telemetry_events', 'user_id', todayStart.toISOString()), this.countDistinct('telemetry_events', 'user_id', sevenDaysAgo.toISOString()), this.countRows('users', todayStart.toISOString()), this.countRows('users', sevenDaysAgo.toISOString()), this.countRows('food_logs', todayStart.toISOString()), this.fetchAiUsageRows(todayStart.toISOString()),
     ]);
     const aiRequestsToday = aiRowsToday.length;
     const aiCostToday = aiRowsToday.reduce((sum, row: any) => sum + Number(row.estimated_cost_usd ?? 0), 0);
     const aiCreditsToday = aiRowsToday.reduce((sum, row: any) => sum + Number(row.credits_consumed ?? 1), 0);
-    return {
-      generated_at: now.toISOString(), active_users_today: activeUsersToday, active_users_7d: activeUsers7d,
-      new_users_today: newUsersToday, new_users_7d: newUsers7d, food_logs_today: foodLogsToday,
-      ai_requests_today: aiRequestsToday, estimated_ai_cost_today_usd: this.roundCost(aiCostToday),
-      ai_credits_used_today: aiCreditsToday, quota_blocked_today: aiRowsToday.filter((row: any) => row.status === 'blocked').length,
-      failed_ai_requests_today: aiRowsToday.filter((row: any) => row.status === 'failed').length,
-    };
+    return { generated_at: now.toISOString(), active_users_today: activeUsersToday, active_users_7d: activeUsers7d, new_users_today: newUsersToday, new_users_7d: newUsers7d, food_logs_today: foodLogsToday, ai_requests_today: aiRequestsToday, estimated_ai_cost_today_usd: this.roundCost(aiCostToday), ai_credits_used_today: aiCreditsToday, quota_blocked_today: aiRowsToday.filter((row: any) => row.status === 'blocked').length, failed_ai_requests_today: aiRowsToday.filter((row: any) => row.status === 'failed').length };
   }
 
   async getAiUsage(requesterEmail: string | undefined, days = 30) { return this.aiUsageService.getUsageSummary(requesterEmail, days); }
 
   async grantPremium(userId: string, actor: AdminActor, reason: string) {
-    const cleanReason = this.requireReason(reason);
-    const user = await this.requireUser(userId);
-    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
-    const { data, error } = await this.supabase.db
-      .from('user_subscriptions')
-      .upsert({ user_id: userId, tier: 'premium', is_active: true, payment_provider: 'trial', started_at: new Date().toISOString(), renews_at: expiresAt, cancelled_at: null, updated_at: new Date().toISOString() }, { onConflict: 'user_id' })
-      .select('user_id, tier, is_active, started_at, renews_at, cancelled_at, updated_at')
-      .maybeSingle();
+    const cleanReason = this.requireReason(reason); const user = await this.requireUser(userId); const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+    const { data, error } = await this.supabase.db.from('user_subscriptions').upsert({ user_id: userId, tier: 'premium', is_active: true, payment_provider: 'trial', started_at: new Date().toISOString(), renews_at: expiresAt, cancelled_at: null, updated_at: new Date().toISOString() }, { onConflict: 'user_id' }).select('user_id, tier, is_active, started_at, renews_at, cancelled_at, updated_at').maybeSingle();
     if (error) throw error;
     await this.writeAuditLog({ actor, action: 'grant_premium', targetType: 'user', targetId: userId, reason: cleanReason, metadata: { user_email: user.email ?? null, subscription: data ?? null, expires_at: expiresAt } });
     return { ok: true, action: 'grant_premium', user_id: userId, user_email: user.email ?? null, subscription: data, audited: true };
   }
 
   async revokePremium(userId: string, actor: AdminActor, reason: string) {
-    const cleanReason = this.requireReason(reason);
-    const user = await this.requireUser(userId);
-    const { data, error } = await this.supabase.db
-      .from('user_subscriptions')
-      .upsert({ user_id: userId, tier: 'free', is_active: false, cancelled_at: new Date().toISOString(), updated_at: new Date().toISOString() }, { onConflict: 'user_id' })
-      .select('user_id, tier, is_active, started_at, renews_at, cancelled_at, updated_at')
-      .maybeSingle();
+    const cleanReason = this.requireReason(reason); const user = await this.requireUser(userId);
+    const { data, error } = await this.supabase.db.from('user_subscriptions').upsert({ user_id: userId, tier: 'free', is_active: false, cancelled_at: new Date().toISOString(), updated_at: new Date().toISOString() }, { onConflict: 'user_id' }).select('user_id, tier, is_active, started_at, renews_at, cancelled_at, updated_at').maybeSingle();
     if (error) throw error;
     await this.writeAuditLog({ actor, action: 'revoke_premium', targetType: 'user', targetId: userId, reason: cleanReason, metadata: { user_email: user.email ?? null, subscription: data ?? null } });
     return { ok: true, action: 'revoke_premium', user_id: userId, user_email: user.email ?? null, subscription: data, audited: true };
   }
 
-  async getAuditLog(params: { actorEmail?: string; action?: string; targetType?: string; targetId?: string; page?: number; pageSize?: number }) {
-    const page = Math.max(1, Number(params.page) || 1);
-    const pageSize = Math.max(1, Math.min(100, Number(params.pageSize) || 25));
-    const from = (page - 1) * pageSize;
-    const to = from + pageSize - 1;
-    let query: any = this.supabase.db.from('admin_audit_log').select('id, actor_user_id, actor_email, action, target_type, target_id, reason, metadata, ip_address, user_agent, created_at', { count: 'exact' }).order('created_at', { ascending: false }).range(from, to);
-    const actorEmail = String(params.actorEmail ?? '').trim();
-    const action = String(params.action ?? '').trim();
-    const targetType = String(params.targetType ?? '').trim();
-    const targetId = String(params.targetId ?? '').trim();
-    if (actorEmail) query = query.ilike('actor_email', `%${actorEmail}%`);
-    if (action) query = query.eq('action', action);
-    if (targetType) query = query.eq('target_type', targetType);
-    if (targetId) query = query.eq('target_id', targetId);
-    const { data, count, error } = await query;
+  async resetAiQuota(userId: string, actor: AdminActor, reason: string, scope: 'daily' | 'monthly' = 'daily') {
+    const cleanReason = this.requireReason(reason); const user = await this.requireUser(userId); const quota = await this.aiUsageService.getQuotaRemaining(userId);
+    const now = new Date(); const todayStart = new Date(now); todayStart.setHours(0, 0, 0, 0); const tomorrowStart = new Date(todayStart); tomorrowStart.setDate(tomorrowStart.getDate() + 1); const monthStart = new Date(now); monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0); const nextMonthStart = new Date(monthStart); nextMonthStart.setMonth(nextMonthStart.getMonth() + 1);
+    const normalizedScope = scope === 'monthly' ? 'monthly' : 'daily';
+    const creditsUsed = normalizedScope === 'monthly' ? Number(quota.monthly_credits_used ?? 0) : Number(quota.daily_credits_used ?? 0);
+    const creditsDelta = Math.max(1, Math.ceil(creditsUsed));
+    const expiresAt = normalizedScope === 'monthly' ? nextMonthStart.toISOString() : tomorrowStart.toISOString();
+    const actorEmail = String(actor?.email ?? '').trim().toLowerCase() || 'unknown';
+    const { data, error } = await this.supabase.db.from('admin_quota_adjustments').insert({ user_id: userId, scope: normalizedScope, credits_delta: creditsDelta, reason: cleanReason, actor_email: actorEmail, expires_at: expiresAt }).select('id, user_id, scope, credits_delta, reason, actor_email, expires_at, created_at').maybeSingle();
     if (error) throw error;
-    return { generated_at: new Date().toISOString(), page, page_size: pageSize, total: count ?? 0, entries: Array.isArray(data) ? data : [] };
+    await this.writeAuditLog({ actor, action: 'reset_ai_quota', targetType: 'user', targetId: userId, reason: cleanReason, metadata: { user_email: user.email ?? null, scope: normalizedScope, credits_delta: creditsDelta, expires_at: expiresAt, adjustment: data ?? null } });
+    return { ok: true, action: 'reset_ai_quota', user_id: userId, user_email: user.email ?? null, scope: normalizedScope, credits_delta: creditsDelta, expires_at: expiresAt, adjustment: data, audited: true };
   }
 
-  async getUsers(params: { search?: string; plan?: string; page?: number; pageSize?: number }) {
-    const page = Math.max(1, Number(params.page) || 1);
-    const pageSize = Math.max(1, Math.min(100, Number(params.pageSize) || 25));
-    const from = (page - 1) * pageSize;
-    const to = from + pageSize - 1;
-    const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0);
-    let query: any = this.supabase.db.from('users').select('id, email, created_at, updated_at', { count: 'exact' }).order('created_at', { ascending: false }).range(from, to);
-    const search = String(params.search ?? '').trim(); if (search) query = query.ilike('email', `%${search}%`);
-    const { data, count, error } = await query; if (error) throw error;
-    const users = Array.isArray(data) ? data : [];
-    const userIds = users.map((user: any) => String(user.id)).filter(Boolean);
-    const [subscriptions, aiUsage, foodCounts, lastActive] = await Promise.all([this.fetchSubscriptionsForUsers(userIds), this.fetchAiUsageForUsers(userIds, monthStart.toISOString()), this.fetchFoodLogCountsForUsers(userIds), this.fetchLastActiveForUsers(userIds)]);
-    let rows = users.map((user: any) => {
-      const userId = String(user.id); const subscription = subscriptions.get(userId) ?? { tier: 'free', status: 'unknown' };
-      return { id: userId, email: user.email ?? null, plan_tier: subscription.tier, subscription_status: subscription.status, created_at: user.created_at ?? null, last_active_at: lastActive.get(userId) ?? user.updated_at ?? null, total_ai_requests_month: aiUsage.get(userId)?.requests ?? 0, credits_used_month: aiUsage.get(userId)?.credits ?? 0, food_logs_count: foodCounts.get(userId) ?? 0 };
-    });
-    const plan = String(params.plan ?? '').trim().toLowerCase(); if (plan) rows = rows.filter((row) => String(row.plan_tier).toLowerCase() === plan);
-    return { generated_at: new Date().toISOString(), page, page_size: pageSize, total: count ?? rows.length, users: rows };
-  }
-
-  async getUserDetail(userId: string) {
-    const { data: user, error } = await this.supabase.db.from('users').select('id, email, created_at, updated_at').eq('id', userId).maybeSingle();
-    if (error) throw error; if (!user) throw new NotFoundException('User not found');
-    const [subscription, quota, recentFoodLogs, recentAiUsage, recentTelemetry] = await Promise.all([this.fetchSubscriptionForUser(userId).catch(() => ({ tier: 'free', status: 'unknown' })), this.aiUsageService.getQuotaRemaining(userId).catch(() => null), this.fetchRecentFoodLogs(userId).catch(() => []), this.fetchRecentAiUsage(userId).catch(() => []), this.fetchRecentTelemetry(userId).catch(() => [])]);
-    return { generated_at: new Date().toISOString(), profile: { id: user.id, email: user.email ?? null, created_at: user.created_at ?? null, updated_at: user.updated_at ?? null }, subscription, ai_quota: quota, recent_food_logs: recentFoodLogs, recent_ai_usage: recentAiUsage, recent_telemetry: recentTelemetry };
-  }
-
-  async getSubscriptions() {
-    const { data } = await this.supabase.db.from('user_subscriptions').select('user_id, tier, is_active, created_at, updated_at').order('updated_at', { ascending: false }).limit(500);
-    const rows = Array.isArray(data) ? data : []; const byTier: Record<string, number> = {}; const byStatus: Record<string, number> = {};
-    for (const row of rows) { const tier = String(row.tier ?? 'unknown'); const status = row.is_active === false ? 'inactive' : 'active'; byTier[tier] = (byTier[tier] ?? 0) + 1; byStatus[status] = (byStatus[status] ?? 0) + 1; }
-    return { generated_at: new Date().toISOString(), total_loaded: rows.length, by_tier: byTier, by_status: byStatus, recent: rows.slice(0, 25) };
-  }
-
-  async getSystemHealth() {
-    const now = new Date(); const since = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
-    const [recentAiFailures, recentQuotaBlocks, recentErrors] = await Promise.all([this.countRowsByStatus('ai_usage_events', 'failed', since), this.countRowsByStatus('ai_usage_events', 'blocked', since), this.countRows('telemetry_events', since)]);
-    return { generated_at: now.toISOString(), status: 'ok', window_hours: 24, recent_ai_failures: recentAiFailures, recent_quota_blocks: recentQuotaBlocks, recent_telemetry_events: recentErrors };
-  }
-
-  private requireReason(reason: string): string {
-    const clean = String(reason ?? '').trim();
-    if (clean.length < 5) throw new BadRequestException('Reason is required and must be at least 5 characters.');
-    return clean;
-  }
-
-  private async requireUser(userId: string): Promise<any> {
-    const { data, error } = await this.supabase.db.from('users').select('id, email').eq('id', userId).maybeSingle();
-    if (error) throw error; if (!data) throw new NotFoundException('User not found');
-    return data;
-  }
-
-  private async writeAuditLog(input: { actor: AdminActor; action: string; targetType: string; targetId: string; reason: string; metadata?: Record<string, any> }) {
-    const actorEmail = String(input.actor?.email ?? '').trim().toLowerCase() || 'unknown';
-    const { error } = await this.supabase.db.from('admin_audit_log').insert({ actor_user_id: input.actor?.user_id ?? null, actor_email: actorEmail, action: input.action, target_type: input.targetType, target_id: input.targetId, reason: input.reason, metadata: input.metadata ?? {} });
-    if (error) throw error;
-  }
-
+  async getAuditLog(params: { actorEmail?: string; action?: string; targetType?: string; targetId?: string; page?: number; pageSize?: number }) { const page = Math.max(1, Number(params.page) || 1); const pageSize = Math.max(1, Math.min(100, Number(params.pageSize) || 25)); const from = (page - 1) * pageSize; const to = from + pageSize - 1; let query: any = this.supabase.db.from('admin_audit_log').select('id, actor_user_id, actor_email, action, target_type, target_id, reason, metadata, ip_address, user_agent, created_at', { count: 'exact' }).order('created_at', { ascending: false }).range(from, to); const actorEmail = String(params.actorEmail ?? '').trim(); const action = String(params.action ?? '').trim(); const targetType = String(params.targetType ?? '').trim(); const targetId = String(params.targetId ?? '').trim(); if (actorEmail) query = query.ilike('actor_email', `%${actorEmail}%`); if (action) query = query.eq('action', action); if (targetType) query = query.eq('target_type', targetType); if (targetId) query = query.eq('target_id', targetId); const { data, count, error } = await query; if (error) throw error; return { generated_at: new Date().toISOString(), page, page_size: pageSize, total: count ?? 0, entries: Array.isArray(data) ? data : [] }; }
+  async getUsers(params: { search?: string; plan?: string; page?: number; pageSize?: number }) { const page = Math.max(1, Number(params.page) || 1); const pageSize = Math.max(1, Math.min(100, Number(params.pageSize) || 25)); const from = (page - 1) * pageSize; const to = from + pageSize - 1; const monthStart = new Date(); monthStart.setDate(1); monthStart.setHours(0, 0, 0, 0); let query: any = this.supabase.db.from('users').select('id, email, created_at, updated_at', { count: 'exact' }).order('created_at', { ascending: false }).range(from, to); const search = String(params.search ?? '').trim(); if (search) query = query.ilike('email', `%${search}%`); const { data, count, error } = await query; if (error) throw error; const users = Array.isArray(data) ? data : []; const userIds = users.map((user: any) => String(user.id)).filter(Boolean); const [subscriptions, aiUsage, foodCounts, lastActive] = await Promise.all([this.fetchSubscriptionsForUsers(userIds), this.fetchAiUsageForUsers(userIds, monthStart.toISOString()), this.fetchFoodLogCountsForUsers(userIds), this.fetchLastActiveForUsers(userIds)]); let rows = users.map((user: any) => { const userId = String(user.id); const subscription = subscriptions.get(userId) ?? { tier: 'free', status: 'unknown' }; return { id: userId, email: user.email ?? null, plan_tier: subscription.tier, subscription_status: subscription.status, created_at: user.created_at ?? null, last_active_at: lastActive.get(userId) ?? user.updated_at ?? null, total_ai_requests_month: aiUsage.get(userId)?.requests ?? 0, credits_used_month: aiUsage.get(userId)?.credits ?? 0, food_logs_count: foodCounts.get(userId) ?? 0 }; }); const plan = String(params.plan ?? '').trim().toLowerCase(); if (plan) rows = rows.filter((row) => String(row.plan_tier).toLowerCase() === plan); return { generated_at: new Date().toISOString(), page, page_size: pageSize, total: count ?? rows.length, users: rows }; }
+  async getUserDetail(userId: string) { const { data: user, error } = await this.supabase.db.from('users').select('id, email, created_at, updated_at').eq('id', userId).maybeSingle(); if (error) throw error; if (!user) throw new NotFoundException('User not found'); const [subscription, quota, recentFoodLogs, recentAiUsage, recentTelemetry] = await Promise.all([this.fetchSubscriptionForUser(userId).catch(() => ({ tier: 'free', status: 'unknown' })), this.aiUsageService.getQuotaRemaining(userId).catch(() => null), this.fetchRecentFoodLogs(userId).catch(() => []), this.fetchRecentAiUsage(userId).catch(() => []), this.fetchRecentTelemetry(userId).catch(() => [])]); return { generated_at: new Date().toISOString(), profile: { id: user.id, email: user.email ?? null, created_at: user.created_at ?? null, updated_at: user.updated_at ?? null }, subscription, ai_quota: quota, recent_food_logs: recentFoodLogs, recent_ai_usage: recentAiUsage, recent_telemetry: recentTelemetry }; }
+  async getSubscriptions() { const { data } = await this.supabase.db.from('user_subscriptions').select('user_id, tier, is_active, created_at, updated_at').order('updated_at', { ascending: false }).limit(500); const rows = Array.isArray(data) ? data : []; const byTier: Record<string, number> = {}; const byStatus: Record<string, number> = {}; for (const row of rows) { const tier = String(row.tier ?? 'unknown'); const status = row.is_active === false ? 'inactive' : 'active'; byTier[tier] = (byTier[tier] ?? 0) + 1; byStatus[status] = (byStatus[status] ?? 0) + 1; } return { generated_at: new Date().toISOString(), total_loaded: rows.length, by_tier: byTier, by_status: byStatus, recent: rows.slice(0, 25) }; }
+  async getSystemHealth() { const now = new Date(); const since = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString(); const [recentAiFailures, recentQuotaBlocks, recentErrors] = await Promise.all([this.countRowsByStatus('ai_usage_events', 'failed', since), this.countRowsByStatus('ai_usage_events', 'blocked', since), this.countRows('telemetry_events', since)]); return { generated_at: now.toISOString(), status: 'ok', window_hours: 24, recent_ai_failures: recentAiFailures, recent_quota_blocks: recentQuotaBlocks, recent_telemetry_events: recentErrors }; }
+  private requireReason(reason: string): string { const clean = String(reason ?? '').trim(); if (clean.length < 5) throw new BadRequestException('Reason is required and must be at least 5 characters.'); return clean; }
+  private async requireUser(userId: string): Promise<any> { const { data, error } = await this.supabase.db.from('users').select('id, email').eq('id', userId).maybeSingle(); if (error) throw error; if (!data) throw new NotFoundException('User not found'); return data; }
+  private async writeAuditLog(input: { actor: AdminActor; action: string; targetType: string; targetId: string; reason: string; metadata?: Record<string, any> }) { const actorEmail = String(input.actor?.email ?? '').trim().toLowerCase() || 'unknown'; const { error } = await this.supabase.db.from('admin_audit_log').insert({ actor_user_id: input.actor?.user_id ?? null, actor_email: actorEmail, action: input.action, target_type: input.targetType, target_id: input.targetId, reason: input.reason, metadata: input.metadata ?? {} }); if (error) throw error; }
   private async fetchAiUsageRows(sinceIso: string): Promise<any[]> { const { data } = await this.supabase.db.from('ai_usage_events').select('status, estimated_cost_usd, credits_consumed, created_at').gte('created_at', sinceIso).limit(5000); return Array.isArray(data) ? data : []; }
   private async fetchSubscriptionsForUsers(userIds: string[]): Promise<Map<string, { tier: string; status: string }>> { const map = new Map<string, { tier: string; status: string }>(); if (userIds.length === 0) return map; const { data } = await this.supabase.db.from('user_subscriptions').select('user_id, tier, is_active, updated_at').in('user_id', userIds).order('updated_at', { ascending: false }); for (const row of Array.isArray(data) ? data : []) { const userId = String(row.user_id); if (!map.has(userId)) map.set(userId, { tier: String(row.tier ?? 'free'), status: row.is_active === false ? 'inactive' : 'active' }); } return map; }
   private async fetchSubscriptionForUser(userId: string) { const { data } = await this.supabase.db.from('user_subscriptions').select('tier, is_active, started_at, renews_at, cancelled_at, created_at, updated_at').eq('user_id', userId).order('updated_at', { ascending: false }).limit(1); const row = Array.isArray(data) ? data[0] : null; return row ? { ...row, status: row.is_active === false ? 'inactive' : 'active' } : { tier: 'free', status: 'unknown' }; }
