@@ -1,7 +1,7 @@
 import { BadRequestException, Body, Controller, Get, Param, Post, Query, Request, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiBody, ApiOperation, ApiParam, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsInt, IsOptional, IsString, Max, Min, MinLength } from 'class-validator';
+import { IsIn, IsInt, IsOptional, IsString, Max, Min, MinLength } from 'class-validator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AdminGuard } from './admin.guard';
 import { AdminRoleGuard } from './admin-role.guard';
@@ -21,6 +21,13 @@ class AdminActionReasonDto {
   @IsString()
   @MinLength(5)
   reason!: string;
+}
+
+class AdminResetAiQuotaDto extends AdminActionReasonDto {
+  @IsOptional()
+  @IsString()
+  @IsIn(['daily', 'monthly'])
+  scope?: 'daily' | 'monthly';
 }
 
 class AdminAuditLogQueryDto {
@@ -170,5 +177,14 @@ export class AdminController {
   @ApiBody({ schema: { type: 'object', required: ['reason'], properties: { reason: { type: 'string', minLength: 5, example: 'User requested downgrade' } } } })
   revokePremium(@Request() req: any, @Param('id') userId: string, @Body() body: AdminActionReasonDto) {
     return this.adminService.revokePremium(assertUuid(userId), getAdminActor(req), body.reason);
+  }
+
+  @Post('users/:id/reset-ai-quota')
+  @AdminRoles('admin')
+  @ApiOperation({ summary: 'Reset AI quota by adding an audited quota adjustment' })
+  @ApiParam({ name: 'id', description: 'User UUID' })
+  @ApiBody({ schema: { type: 'object', required: ['reason'], properties: { reason: { type: 'string', minLength: 5, example: 'Support quota compensation' }, scope: { type: 'string', enum: ['daily', 'monthly'], example: 'daily' } } } })
+  resetAiQuota(@Request() req: any, @Param('id') userId: string, @Body() body: AdminResetAiQuotaDto) {
+    return this.adminService.resetAiQuota(assertUuid(userId), getAdminActor(req), body.reason, body.scope ?? 'daily');
   }
 }
