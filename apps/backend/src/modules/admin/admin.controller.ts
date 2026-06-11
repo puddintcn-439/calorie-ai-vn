@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Query, Request, UseGuards } from '@nestjs/common';
+import { BadRequestException, Controller, Get, Param, Query, Request, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiParam, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
@@ -36,6 +36,15 @@ class AdminUsersQueryDto {
   @Min(1)
   @Max(100)
   pageSize?: number;
+}
+
+function assertUuid(value: string): string {
+  const normalized = String(value ?? '').trim();
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  if (!uuidRegex.test(normalized)) {
+    throw new BadRequestException('Invalid user id. Expected UUID.');
+  }
+  return normalized;
 }
 
 @ApiTags('Admin')
@@ -79,8 +88,8 @@ export class AdminController {
 
   @Get('users/:id')
   @ApiOperation({ summary: 'Get read-only admin detail for one user' })
-  @ApiParam({ name: 'id', description: 'User id' })
+  @ApiParam({ name: 'id', description: 'User UUID' })
   getUserDetail(@Param('id') userId: string) {
-    return this.adminService.getUserDetail(userId);
+    return this.adminService.getUserDetail(assertUuid(userId));
   }
 }
