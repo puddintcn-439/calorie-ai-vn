@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, StyleSheet, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { ScreenShell, SurfaceCard } from '../../../components/ui-shell';
 import { Text } from '../../../components/i18n-text';
@@ -27,7 +27,7 @@ function adminError(error: any) {
   if (status === 403) return 'Admin access required';
   if (status === 401) return 'Please sign in again.';
   if (status === 404) return 'User not found';
-  return 'Could not load user detail.';
+  return error?.response?.data?.message ?? 'Could not load user detail.';
 }
 
 function KeyValue({ label, value }: { label: string; value: any }) {
@@ -66,6 +66,10 @@ export default function AdminUserDetailScreen() {
   const [detail, setDetail] = useState<AdminUserDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [actionReason, setActionReason] = useState('');
+  const [actionLoading, setActionLoading] = useState<'grant' | 'revoke' | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!userId) {
@@ -89,7 +93,37 @@ export default function AdminUserDetailScreen() {
     load().catch(() => {});
   }, [load]);
 
+  const runPremiumAction = useCallback(async (action: 'grant' | 'revoke') => {
+    if (!userId) return;
+    const reason = actionReason.trim();
+    if (reason.length < 5) {
+      setActionError('Reason must be at least 5 characters.');
+      return;
+    }
+    try {
+      setActionLoading(action);
+      setActionError(null);
+      setActionSuccess(null);
+      if (action === 'grant') {
+        await adminService.grantPremium(userId, reason);
+        setActionSuccess('Premium granted and audit log written.');
+      } else {
+        await adminService.revokePremium(userId, reason);
+        setActionSuccess('Premium revoked and audit log written.');
+      }
+      setActionReason('');
+      await load();
+    } catch (err: any) {
+      setActionError(adminError(err));
+    } finally {
+      setActionLoading(null);
+    }
+  }, [actionReason, load, userId]);
+
   const quota: any = detail?.ai_quota ?? null;
+  const subscriptionTier = String(detail?.subscription?.tier ?? 'free');
+  const subscriptionStatus = String(detail?.subscription?.status ?? 'unknown');
+  const isPremium = subscriptionTier === 'premium' && subscriptionStatus !== 'inactive';
 
   return (
     <ScreenShell scroll scrollContentStyle={styles.scrollContent} reserveBottomNav={false}>
@@ -97,7 +131,7 @@ export default function AdminUserDetailScreen() {
         <View>
           <Text style={styles.eyebrow}>ADMIN CONSOLE</Text>
           <Text style={styles.title}>User Detail</Text>
-          <Text style={styles.subtitle}>Read-only support view for subscription, AI quota, food logs, AI usage, and telemetry.</Text>
+          <Text style={styles.subtitle}>Support view for subscription, AI quota, food logs, AI usage, telemetry, and audited safe actions.</Text>
         </View>
         <TouchableOpacity style={styles.refreshButton} onPress={load}>
           <Text style={styles.refreshText}>Refresh</Text>
@@ -108,6 +142,7 @@ export default function AdminUserDetailScreen() {
         <TouchableOpacity style={styles.navButton} onPress={() => router.push('/admin/users' as any)}><Text style={styles.navText}>Users</Text></TouchableOpacity>
         <TouchableOpacity style={styles.navButton} onPress={() => router.push('/admin' as any)}><Text style={styles.navText}>Overview</Text></TouchableOpacity>
         <TouchableOpacity style={styles.navButton} onPress={() => router.push('/admin/ai-usage' as any)}><Text style={styles.navText}>AI Usage</Text></TouchableOpacity>
+        <TouchableOpacity style={styles.navButton} onPress={() => router.push('/admin/audit-log' as any)}><Text style={styles.navText}>Audit Log</Text></TouchableOpacity>
       </View>
 
       {loading ? (
@@ -135,8 +170,38 @@ export default function AdminUserDetailScreen() {
             <View style={styles.grid}>
               <KeyValue label="Tier" value={detail.subscription?.tier ?? 'free'} />
               <KeyValue label="Status" value={detail.subscription?.status ?? 'unknown'} />
-              <KeyValue label="Created" value={date(detail.subscription?.created_at)} />
+              <KeyValue label="Renews At" value={date(detail.subscription?.renews_at)} />
               <KeyValue label="Updated" value={date(detail.subscription?.updated_at)} />
+            </View>
+            <View style={styles.actionBox}>
+              <View style={styles.actionHeader}>
+                <View style={styles.rowCopy}>
+                  <Text style={styles.actionTitle}>Safe Admin Actions</Text>
+                  <Text style={styles.muted}>Admin/Owner only. Every action requires a reason and writes admin_audit_log.</Text>
+                </View>
+                <View style={[styles.statusPill, isPremium ? styles.statusPillPremium : styles.statusPillFree]}>
+                  <Text style={styles.statusPillText}>{isPremium ? 'Premium Active' : 'Free / Inactive'}</Text>
+                </View>
+              </View>
+              <TextInput
+                value={actionReason}
+                onChangeText={setActionReason}
+                placeholder="Reason, e.g. Manual support compensation"
+                placeholderTextColor={theme.colors.textMuted}
+                autoCapitalize="sentences"
+                style={styles.reasonInput}
+                editable={!actionLoading}
+              />
+              {actionError ? <Text style={styles.actionError}>{actionError}</Text> : null}
+              {actionSuccess ? <Text style={styles.actionSuccess}>{actionSuccess}</Text> : null}
+              <View style={styles.actionRow}>
+                <TouchableOpacity disabled={Boolean(actionLoading)} style={[styles.primaryActionButton, actionLoading && styles.disabledButton]} onPress={() => runPremiumAction('grant')}>
+                  <Text style={styles.primaryActionText}>{actionLoading === 'grant' ? 'Granting...' : 'Grant Premium'}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity disabled={Boolean(actionLoading)} style={[styles.dangerActionButton, actionLoading && styles.disabledButton]} onPress={() => runPremiumAction('revoke')}>
+                  <Text style={styles.dangerActionText}>{actionLoading === 'revoke' ? 'Revoking...' : 'Revoke Premium'}</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </Section>
 
@@ -201,6 +266,22 @@ const styles = StyleSheet.create({
   rowCopy: { flex: 1 },
   rowTitle: { color: theme.colors.text, fontWeight: '900' },
   rowRight: { color: theme.colors.text, fontWeight: '900', textAlign: 'right' },
+  actionBox: { gap: 12, borderRadius: 16, borderWidth: 1, borderColor: theme.colors.borderSubtle, backgroundColor: theme.colors.surfaceAlt, padding: 14 },
+  actionHeader: { flexDirection: 'row', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start' },
+  actionTitle: { color: theme.colors.text, fontSize: 16, fontWeight: '900' },
+  reasonInput: { borderRadius: 14, borderWidth: 1, borderColor: theme.colors.borderSubtle, color: theme.colors.text, paddingHorizontal: 14, paddingVertical: 11, backgroundColor: theme.colors.surface },
+  actionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  primaryActionButton: { borderRadius: 14, backgroundColor: theme.colors.accentMint, paddingHorizontal: 16, paddingVertical: 11 },
+  primaryActionText: { color: theme.colors.textOnAccent, fontWeight: '900' },
+  dangerActionButton: { borderRadius: 14, borderWidth: 1, borderColor: theme.colors.danger, paddingHorizontal: 16, paddingVertical: 11 },
+  dangerActionText: { color: theme.colors.danger, fontWeight: '900' },
+  disabledButton: { opacity: 0.55 },
+  actionError: { color: theme.colors.danger, fontSize: 12, fontWeight: '800' },
+  actionSuccess: { color: theme.colors.accentMint, fontSize: 12, fontWeight: '800' },
+  statusPill: { borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6 },
+  statusPillPremium: { backgroundColor: theme.colors.accentMint },
+  statusPillFree: { backgroundColor: theme.colors.surface },
+  statusPillText: { color: theme.colors.textOnAccent, fontSize: 11, fontWeight: '900' },
   centerCard: { alignItems: 'center', gap: 10 },
   errorTitle: { color: theme.colors.danger, fontSize: 20, fontWeight: '900' },
   muted: { color: theme.colors.textMuted, fontSize: 12 },
