@@ -4,6 +4,8 @@ import { Type } from 'class-transformer';
 import { IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AdminGuard } from './admin.guard';
+import { AdminRoleGuard } from './admin-role.guard';
+import { AdminRoles } from './admin-roles.decorator';
 import { AdminService } from './admin.service';
 
 class AdminAiUsageQueryDto {
@@ -80,18 +82,20 @@ function assertUuid(value: string): string {
 
 @ApiTags('Admin')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, AdminGuard)
+@UseGuards(JwtAuthGuard, AdminGuard, AdminRoleGuard)
 @Controller('admin')
 export class AdminController {
   constructor(private readonly adminService: AdminService) {}
 
   @Get('overview')
+  @AdminRoles('viewer')
   @ApiOperation({ summary: 'Get read-only admin overview metrics' })
   getOverview() {
     return this.adminService.getOverview();
   }
 
   @Get('ai-usage')
+  @AdminRoles('viewer')
   @ApiOperation({ summary: 'Get aggregate AI usage summary for admin console' })
   @ApiQuery({ name: 'days', required: false, example: 30, description: 'Rolling window in days, from 1 to 180.' })
   getAiUsage(@Request() req: any, @Query() query: AdminAiUsageQueryDto) {
@@ -100,30 +104,35 @@ export class AdminController {
   }
 
   @Get('audit-log')
+  @AdminRoles('viewer')
   @ApiOperation({ summary: 'Get admin audit log entries' })
   getAuditLog(@Query() query: AdminAuditLogQueryDto) {
     return this.adminService.getAuditLog(query);
   }
 
   @Get('subscriptions')
+  @AdminRoles('admin')
   @ApiOperation({ summary: 'Get subscription aggregates by tier and status for admin console' })
   getSubscriptions() {
     return this.adminService.getSubscriptions();
   }
 
   @Get('system-health')
+  @AdminRoles('admin')
   @ApiOperation({ summary: 'Get read-only system health signals for admin console' })
   getSystemHealth() {
     return this.adminService.getSystemHealth();
   }
 
   @Get('users')
+  @AdminRoles('viewer')
   @ApiOperation({ summary: 'List users with admin filters and read-only activity aggregates' })
   getUsers(@Query() query: AdminUsersQueryDto) {
     return this.adminService.getUsers(query);
   }
 
   @Get('users/:id')
+  @AdminRoles('support')
   @ApiOperation({ summary: 'Get read-only admin detail for one user' })
   @ApiParam({ name: 'id', description: 'User UUID' })
   getUserDetail(@Param('id') userId: string) {
