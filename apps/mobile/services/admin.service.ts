@@ -75,6 +75,18 @@ export type AdminPremiumActionResponse = {
   audited: boolean;
 };
 
+export type AdminResetAiQuotaResponse = {
+  ok: boolean;
+  action: 'reset_ai_quota';
+  user_id: string;
+  user_email: string | null;
+  scope: 'daily' | 'monthly';
+  credits_delta: number;
+  expires_at: string;
+  adjustment: Record<string, any> | null;
+  audited: boolean;
+};
+
 export const adminService = {
   async fetchOverview(): Promise<AdminOverview> {
     const { data } = await apiClient.get('/admin/overview');
@@ -98,6 +110,11 @@ export const adminService = {
 
   async revokePremium(userId: string, reason: string): Promise<AdminPremiumActionResponse> {
     const { data } = await apiClient.post(`/admin/users/${encodeURIComponent(userId)}/revoke-premium`, { reason });
+    return data;
+  },
+
+  async resetAiQuota(userId: string, reason: string, scope: 'daily' | 'monthly' = 'daily'): Promise<AdminResetAiQuotaResponse> {
+    const { data } = await apiClient.post(`/admin/users/${encodeURIComponent(userId)}/reset-ai-quota`, { reason, scope });
     return data;
   },
 
