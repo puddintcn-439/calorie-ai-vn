@@ -1,11 +1,20 @@
 import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { SupabaseService } from '../../common/supabase/supabase.service';
 
-const PRICING_USD: Record<string, number> = {
+const PRICING_VND: Record<string, number> = {
   free: 0,
-  premium: 9.99,
-  pro: 19.99,
+  premium: 59000,
+  pro: 129000,
 };
+
+const ANNUAL_PRICING_VND: Record<string, number> = {
+  free: 0,
+  premium: 499000,
+  pro: 999000,
+};
+
+const DEFAULT_USD_TO_VND = 26000;
 
 type SubscriptionRow = {
   user_id?: string | null;
@@ -21,13 +30,17 @@ type SubscriptionRow = {
 
 @Injectable()
 export class AdminRevenueService {
-  constructor(private readonly supabase: SupabaseService) {}
+  constructor(
+    private readonly supabase: SupabaseService,
+    private readonly config: ConfigService,
+  ) {}
 
   async getRevenue() {
     const now = new Date();
     const monthStart = new Date(now);
     monthStart.setDate(1);
     monthStart.setHours(0, 0, 0, 0);
+    const usdToVnd = this.usdToVndRate();
 
     const [subscriptions, usersCount, aiUsageRows] = await Promise.all([
       this.fetchSubscriptions(),
@@ -41,19 +54,25 @@ export class AdminRevenueService {
     const paidUsers = (activeByTier.premium ?? 0) + (activeByTier.pro ?? 0);
     const activeSubscriptions = active.length;
     const totalUsers = usersCount || Math.max(activeSubscriptions, subscriptions.length);
-    const estimatedMrr = active.reduce((sum, row) => sum + this.priceForTier(row.tier), 0);
-    const estimatedArr = estimatedMrr * 12;
-    const aiCostMtd = aiUsageRows.reduce((sum, row: any) => sum + Number(row.estimated_cost_usd ?? 0), 0);
+    const estimatedMrrVnd = active.reduce((sum, row) => sum + this.priceForTier(row.tier), 0);
+    const estimatedArrVnd = estimatedMrrVnd * 12;
+    const aiCostMtdUsd = aiUsageRows.reduce((sum, row: any) => sum + Number(row.estimated_cost_usd ?? 0), 0);
+    const aiCostMtdVnd = aiCostMtdUsd * usdToVnd;
     const aiCreditsMtd = aiUsageRows.reduce((sum, row: any) => sum + Number(row.credits_consumed ?? 1), 0);
     const requestsMtd = aiUsageRows.length;
     const conversionRate = totalUsers > 0 ? paidUsers / totalUsers : 0;
-    const grossMargin = estimatedMrr - aiCostMtd;
-    const grossMarginRate = estimatedMrr > 0 ? grossMargin / estimatedMrr : 0;
+    const grossMarginVnd = estimatedMrrVnd - aiCostMtdVnd;
+    const grossMarginRate = estimatedMrrVnd > 0 ? grossMarginVnd / estimatedMrrVnd : 0;
 
     return {
       generated_at: now.toISOString(),
-      currency: 'USD',
-      pricing: PRICING_USD,
+      currency: 'VND',
+      ai_cost_source_currency: 'USD',
+      usd_to_vnd_rate: usdToVnd,
+      pricing: {
+        monthly_vnd: PRICING_VND,
+        annual_vnd: ANNUAL_PRICING_VND,
+      },
       subscriptions: {
         total_users: totalUsers,
         total_subscription_rows: subscriptions.length,
@@ -66,19 +85,21 @@ export class AdminRevenueService {
         by_provider: this.countByProvider(active),
       },
       revenue: {
-        estimated_mrr_usd: this.roundMoney(estimatedMrr),
-        estimated_arr_usd: this.roundMoney(estimatedArr),
-        arpu_usd: activeSubscriptions > 0 ? this.roundMoney(estimatedMrr / activeSubscriptions) : 0,
-        arppu_usd: paidUsers > 0 ? this.roundMoney(estimatedMrr / paidUsers) : 0,
+        estimated_mrr_vnd: this.roundVnd(estimatedMrrVnd),
+        estimated_arr_vnd: this.roundVnd(estimatedArrVnd),
+        arpu_vnd: activeSubscriptions > 0 ? this.roundVnd(estimatedMrrVnd / activeSubscriptions) : 0,
+        arppu_vnd: paidUsers > 0 ? this.roundVnd(estimatedMrrVnd / paidUsers) : 0,
       },
       ai_cost: {
-        month_to_date_usd: this.roundMoney(aiCostMtd),
+        month_to_date_usd: this.roundUsd(aiCostMtdUsd),
+        month_to_date_vnd: this.roundVnd(aiCostMtdVnd),
         requests_month_to_date: requestsMtd,
         credits_month_to_date: aiCreditsMtd,
-        cost_per_request_usd: requestsMtd > 0 ? this.roundMoney(aiCostMtd / requestsMtd) : 0,
+        cost_per_request_usd: requestsMtd > 0 ? this.roundUsd(aiCostMtdUsd / requestsMtd) : 0,
+        cost_per_request_vnd: requestsMtd > 0 ? this.roundVnd(aiCostMtdVnd / requestsMtd) : 0,
       },
       margin: {
-        estimated_monthly_gross_margin_usd: this.roundMoney(grossMargin),
+        estimated_monthly_gross_margin_vnd: this.roundVnd(grossMarginVnd),
         estimated_gross_margin_rate: Math.round(grossMarginRate * 10000) / 10000,
       },
       conversion: {
@@ -130,10 +151,19 @@ export class AdminRevenueService {
   }
 
   private priceForTier(tier: string | null | undefined): number {
-    return PRICING_USD[String(tier ?? 'free')] ?? 0;
+    return PRICING_VND[String(tier ?? 'free')] ?? 0;
   }
 
-  private roundMoney(value: number): number {
-    return Math.round(value * 100) / 100;
+  private usdToVndRate(): number {
+    const configured = Number(this.config.get<string>('USD_TO_VND_RATE') ?? DEFAULT_USD_TO_VND);
+    return Number.isFinite(configured) && configured > 0 ? configured : DEFAULT_USD_TO_VND;
+  }
+
+  private roundVnd(value: number): number {
+    return Math.round(value);
+  }
+
+  private roundUsd(value: number): number {
+    return Math.round(value * 10000) / 10000;
   }
 }
