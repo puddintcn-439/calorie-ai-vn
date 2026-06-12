@@ -13,9 +13,22 @@ export type PayosCheckoutResponse = {
   amount_vnd: number;
 };
 
+export type BillingEntitlement = {
+  user_id?: string;
+  tier: 'free' | 'premium' | 'pro';
+  source: 'free' | 'trial' | 'manual' | 'paid';
+  provider?: 'stripe' | 'app_store' | 'google_play' | 'payos' | 'manual' | 'trial' | null;
+  active_until?: string | null;
+};
+
 export const billingService = {
   async createPayosCheckout(tier: BillingCheckoutTier, interval: BillingCheckoutInterval): Promise<PayosCheckoutResponse> {
     const { data } = await apiClient.post<PayosCheckoutResponse>('/billing/checkout/payos', { tier, interval });
+    return data;
+  },
+
+  async getEntitlement(): Promise<BillingEntitlement> {
+    const { data } = await apiClient.get<BillingEntitlement>('/billing/entitlement');
     return data;
   },
 };
