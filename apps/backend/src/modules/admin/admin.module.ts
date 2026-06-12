@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AdminController } from './admin.controller';
 import { AdminService } from './admin.service';
+import { AdminRevenueService } from './admin-revenue.service';
 import { AdminGuard } from './admin.guard';
 import { AdminRoleGuard } from './admin-role.guard';
 import { SupabaseModule } from '../../common/supabase/supabase.module';
@@ -9,6 +10,6 @@ import { AiModule } from '../ai/ai.module';
 @Module({
   imports: [SupabaseModule, AiModule],
   controllers: [AdminController],
-  providers: [AdminService, AdminGuard, AdminRoleGuard],
+  providers: [AdminService, AdminRevenueService, AdminGuard, AdminRoleGuard],
 })
 export class AdminModule {}
