@@ -9,7 +9,9 @@ describe('BillingController', () => {
   let app: INestApplication;
   const billingService = {
     createStripeCheckoutSession: jest.fn(),
+    createPayosCheckout: jest.fn(),
     handleStripeWebhook: jest.fn(),
+    handlePayosWebhook: jest.fn(),
     handleAppStoreWebhook: jest.fn(),
     handleGooglePlayWebhook: jest.fn(),
     getUserEntitlement: jest.fn(),
@@ -77,6 +79,48 @@ describe('BillingController', () => {
       .expect(201);
 
     expect(billingService.createStripeCheckoutSession).toHaveBeenCalledWith({
+      userId: 'user-1',
+      email: 'user@example.com',
+      tier: 'premium',
+      interval: 'monthly',
+    });
+  });
+
+  it('POST /billing/checkout/payos rejects invalid tier', async () => {
+    await request(app.getHttpServer())
+      .post('/billing/checkout/payos')
+      .send({ tier: 'gold', interval: 'monthly' })
+      .expect(400);
+
+    expect(billingService.createPayosCheckout).not.toHaveBeenCalled();
+  });
+
+  it('POST /billing/checkout/payos rejects invalid interval', async () => {
+    await request(app.getHttpServer())
+      .post('/billing/checkout/payos')
+      .send({ tier: 'premium', interval: 'weekly' })
+      .expect(400);
+
+    expect(billingService.createPayosCheckout).not.toHaveBeenCalled();
+  });
+
+  it('POST /billing/checkout/payos passes authenticated user to the service', async () => {
+    billingService.createPayosCheckout.mockResolvedValue({
+      ok: true,
+      provider: 'payos',
+      checkout_url: 'http://localhost:3000/mock-payos-checkout?provider=payos&tier=premium',
+      order_code: 123456,
+      tier: 'premium',
+      interval: 'monthly',
+      amount_vnd: 59000,
+    });
+
+    await request(app.getHttpServer())
+      .post('/billing/checkout/payos')
+      .send({ tier: 'premium', interval: 'monthly' })
+      .expect(201);
+
+    expect(billingService.createPayosCheckout).toHaveBeenCalledWith({
       userId: 'user-1',
       email: 'user@example.com',
       tier: 'premium',

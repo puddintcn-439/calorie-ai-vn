@@ -14,6 +14,16 @@ class StripeCheckoutDto {
   interval: 'monthly' | 'annual';
 }
 
+class PayosCheckoutDto {
+  @ApiProperty({ enum: ['premium', 'pro'] })
+  @IsIn(['premium', 'pro'])
+  tier: 'premium' | 'pro';
+
+  @ApiProperty({ enum: ['monthly', 'annual'] })
+  @IsIn(['monthly', 'annual'])
+  interval: 'monthly' | 'annual';
+}
+
 @ApiTags('Billing')
 @Controller('billing')
 export class BillingController {
@@ -25,6 +35,19 @@ export class BillingController {
   @ApiOperation({ summary: 'Create a Stripe Checkout subscription session' })
   createStripeCheckout(@Request() req: any, @Body() body: StripeCheckoutDto) {
     return this.billingService.createStripeCheckoutSession({
+      userId: req.user.id ?? req.user.sub,
+      email: req.user.email ?? null,
+      tier: body.tier,
+      interval: body.interval,
+    });
+  }
+
+  @Post('checkout/payos')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Create a PayOS prepaid checkout link' })
+  createPayosCheckout(@Request() req: any, @Body() body: PayosCheckoutDto) {
+    return this.billingService.createPayosCheckout({
       userId: req.user.id ?? req.user.sub,
       email: req.user.email ?? null,
       tier: body.tier,
@@ -53,6 +76,32 @@ export class BillingController {
   @ApiOperation({ summary: 'Receive Stripe billing webhook events' })
   handleStripeWebhook(@Body() payload: any, @Headers() headers: Record<string, string | string[] | undefined>, @Request() req: any) {
     return this.billingService.handleStripeWebhook(payload, headers, req.rawBody);
+  }
+
+  @Post('webhooks/payos')
+  @ApiOperation({ summary: 'Receive PayOS prepaid payment webhook events' })
+  handlePayosWebhook(@Body() payload: any) {
+    return this.billingService.handlePayosWebhook(payload);
+  }
+
+  @Get('return/payos')
+  @ApiOperation({ summary: 'PayOS checkout return UX endpoint' })
+  handlePayosReturn() {
+    return {
+      ok: true,
+      provider: 'payos',
+      message: 'Payment status will be confirmed by webhook.',
+    };
+  }
+
+  @Get('cancel/payos')
+  @ApiOperation({ summary: 'PayOS checkout cancel UX endpoint' })
+  handlePayosCancel() {
+    return {
+      ok: true,
+      provider: 'payos',
+      message: 'Payment status will be confirmed by webhook.',
+    };
   }
 
   @Post('webhooks/app-store')

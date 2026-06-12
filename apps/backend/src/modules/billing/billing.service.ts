@@ -1,5 +1,6 @@
 import { BadRequestException, HttpException, HttpStatus, Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { PayOS } from '@payos/node';
 import { createHash } from 'crypto';
 import Stripe from 'stripe';
 import { SupabaseService } from '../../common/supabase/supabase.service';
@@ -34,10 +35,11 @@ type BillingSubscriptionRow = {
   tier?: string | null;
   status?: string | null;
   is_paid?: boolean | null;
+  billing_period_end?: string | null;
   cancelled_at?: string | null;
 };
 
-type BillingProvider = 'stripe' | 'app_store' | 'google_play';
+type BillingProvider = 'stripe' | 'app_store' | 'google_play' | 'payos';
 type BillingEntitlementProvider = BillingProvider | 'manual' | 'trial';
 type BillingEntitlementTier = 'free' | 'premium' | 'pro';
 type BillingEntitlementSource = 'paid' | 'trial' | 'manual' | 'free';
@@ -65,6 +67,8 @@ type StripeMappingResult = {
 
 type StripeCheckoutTier = 'premium' | 'pro';
 type StripeCheckoutInterval = 'monthly' | 'annual';
+type PayosCheckoutTier = 'premium' | 'pro';
+type PayosCheckoutInterval = 'monthly' | 'annual';
 type UserEntitlement = {
   user_id: string;
   tier: BillingEntitlementTier;
@@ -78,6 +82,7 @@ type UserEntitlement = {
 @Injectable()
 export class BillingService {
   private stripeClient: Stripe.Stripe | null | undefined;
+  private payosClient: PayOS | null | undefined;
 
   constructor(
     private readonly supabase: SupabaseService,
@@ -217,6 +222,126 @@ export class BillingService {
       customer_id: customer.provider_customer_id,
       tier: input.tier,
       interval: input.interval,
+    };
+  }
+
+  async getOrCreatePayosCustomerForUser(input: {
+    userId: string;
+    email?: string | null;
+  }): Promise<{
+    user_id: string;
+    provider: 'payos';
+    provider_customer_id: string;
+    created: boolean;
+  }> {
+    const userId = String(input.userId ?? '').trim();
+    if (!userId) {
+      throw new HttpException('User id is required for PayOS customer linking.', HttpStatus.BAD_REQUEST);
+    }
+
+    const providerCustomerId = `payos_user_${userId}`;
+    const { data, error } = await this.supabase.db
+      .from('billing_customers')
+      .upsert({
+        user_id: userId,
+        provider: 'payos',
+        provider_customer_id: providerCustomerId,
+        email: input.email ?? null,
+        metadata: {
+          source: 'payos_checkout',
+          created_by: 'checkout',
+        },
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'provider,provider_customer_id' })
+      .select('user_id, provider, provider_customer_id')
+      .maybeSingle();
+    if (error) throw error;
+
+    return {
+      user_id: String(data?.user_id ?? userId),
+      provider: 'payos',
+      provider_customer_id: String(data?.provider_customer_id ?? providerCustomerId),
+      created: true,
+    };
+  }
+
+  async createPayosCheckout(input: {
+    userId: string;
+    email?: string | null;
+    tier: PayosCheckoutTier;
+    interval: PayosCheckoutInterval;
+  }) {
+    if (!['premium', 'pro'].includes(input.tier)) {
+      throw new HttpException('Invalid PayOS checkout tier.', HttpStatus.BAD_REQUEST);
+    }
+    if (!['monthly', 'annual'].includes(input.interval)) {
+      throw new HttpException('Invalid PayOS checkout interval.', HttpStatus.BAD_REQUEST);
+    }
+
+    const payos = this.getPayosClient();
+    if (!payos && this.isProduction()) {
+      throw new HttpException('PayOS is not configured.', HttpStatus.NOT_IMPLEMENTED);
+    }
+
+    const customer = await this.getOrCreatePayosCustomerForUser({ userId: input.userId, email: input.email });
+    const amount = this.payosAmountVnd(input.tier, input.interval);
+    const orderCode = this.createPayosOrderCode();
+    const usdToVnd = this.usdToVndRate();
+    const now = new Date().toISOString();
+
+    const { error: invoiceError } = await this.supabase.db
+      .from('billing_invoices')
+      .upsert({
+        user_id: input.userId,
+        provider: 'payos',
+        provider_invoice_id: String(orderCode),
+        tier: input.tier,
+        status: 'open',
+        amount_original: amount,
+        currency_original: 'VND',
+        amount_vnd: amount,
+        amount_usd: this.roundUsd(amount / usdToVnd),
+        fx_rate: usdToVnd,
+        metadata: {
+          interval: input.interval,
+          source: 'payos_checkout_created',
+          provider_customer_id: customer.provider_customer_id,
+        },
+        raw_payload: {
+          orderCode,
+          tier: input.tier,
+          interval: input.interval,
+          source: 'payos_checkout_created',
+        },
+        updated_at: now,
+      }, { onConflict: 'provider,provider_invoice_id' });
+    if (invoiceError) throw invoiceError;
+
+    const paymentData = {
+      orderCode,
+      amount,
+      description: input.tier === 'pro' ? 'CAI PRO' : 'CAI PREMIUM',
+      items: [{
+        name: `Calorie AI ${this.titleCase(input.tier)} ${this.titleCase(input.interval)}`,
+        quantity: 1,
+        price: amount,
+      }],
+      cancelUrl: this.payosUrl('PAYOS_CANCEL_URL', Boolean(payos)),
+      returnUrl: this.payosUrl('PAYOS_RETURN_URL', Boolean(payos)),
+    };
+
+    const checkoutUrl = payos
+      ? this.payosCheckoutUrl(await payos.paymentRequests.create(paymentData))
+      : this.createPayosMockCheckoutUrl(input.tier, input.interval, orderCode);
+
+    return {
+      ok: true,
+      provider: 'payos',
+      checkout_url: checkoutUrl,
+      order_code: orderCode,
+      tier: input.tier,
+      interval: input.interval,
+      amount_vnd: amount,
     };
   }
 
@@ -388,6 +513,75 @@ export class BillingService {
       eventType: String(payload?.eventType ?? payload?.notificationType ?? payload?.type ?? 'unknown'),
       rawPayload: this.safePayload(payload),
     });
+  }
+
+  async handlePayosWebhook(payload: any) {
+    const verified = await this.verifyPayosWebhookPayload(payload);
+    const data = verified.data;
+    const orderCode = this.normalizedPayosOrderCode(data?.orderCode);
+    const code = String(verified.code ?? data?.code ?? '').trim();
+    const eventId = this.payosProviderEventId(data, orderCode, code);
+    const eventType = verified.success === true && code === '00'
+      ? 'payos.payment.success'
+      : 'payos.payment.updated';
+
+    const event = await this.recordBillingEvent({
+      provider: 'payos',
+      providerEventId: eventId,
+      eventType,
+      rawPayload: this.safePayload(payload),
+    });
+
+    if (event.duplicate) {
+      return { ok: true, provider: 'payos', event_id: eventId, event_type: eventType, duplicate: true, processed: false, skipped_reason: 'duplicate' };
+    }
+
+    if (!orderCode) {
+      await this.updateBillingEventStatus('payos', eventId, {
+        status: 'ignored',
+        error_message: 'payos webhook is missing orderCode',
+      });
+      return { ok: true, provider: 'payos', event_id: eventId, event_type: eventType, duplicate: false, processed: false, skipped_reason: 'missing_order_code' };
+    }
+
+    const invoice = await this.findPayosInvoice(orderCode);
+    if (!invoice) {
+      await this.updateBillingEventStatus('payos', eventId, {
+        status: 'ignored',
+        error_message: 'payos invoice was not found',
+      });
+      return { ok: true, provider: 'payos', event_id: eventId, event_type: eventType, duplicate: false, processed: false, skipped_reason: 'payos_invoice_not_found' };
+    }
+
+    const validationError = this.payosSuccessValidationError(verified, invoice);
+    if (validationError) {
+      await this.updateBillingEventStatus('payos', eventId, {
+        status: 'ignored',
+        error_message: validationError,
+        billing_invoice_id: invoice.id ?? null,
+      });
+      return { ok: true, provider: 'payos', event_id: eventId, event_type: eventType, duplicate: false, processed: false, skipped_reason: validationError };
+    }
+
+    const result = await this.activatePayosInvoice(invoice, orderCode, verified, payload);
+    await this.updateBillingEventStatus('payos', eventId, {
+      status: result.processed ? 'processed' : 'ignored',
+      processed_at: result.processed ? new Date().toISOString() : null,
+      error_message: result.skipped_reason ?? null,
+      billing_invoice_id: result.billing_invoice_id ?? null,
+      billing_subscription_id: result.billing_subscription_id ?? null,
+    });
+
+    return {
+      ok: true,
+      provider: 'payos',
+      event_id: eventId,
+      event_type: eventType,
+      duplicate: false,
+      processed: result.processed,
+      ...(result.skipped_reason ? { skipped_reason: result.skipped_reason } : {}),
+      ...(result.entitlement_sync ? { entitlement_sync: result.entitlement_sync } : {}),
+    };
   }
 
   async recordBillingEvent(input: BillingEventInput) {
@@ -676,7 +870,7 @@ export class BillingService {
 
   private normalizeEntitlementProvider(value: any): BillingEntitlementProvider | undefined {
     const normalized = String(value ?? '').toLowerCase();
-    if (['stripe', 'app_store', 'google_play', 'manual', 'trial'].includes(normalized)) {
+    if (['stripe', 'app_store', 'google_play', 'payos', 'manual', 'trial'].includes(normalized)) {
       return normalized as BillingEntitlementProvider;
     }
     return undefined;
@@ -816,6 +1010,292 @@ export class BillingService {
     }
     this.stripeClient = new Stripe(secretKey);
     return this.stripeClient;
+  }
+
+  private getPayosClient(): PayOS | null {
+    if (this.payosClient !== undefined) return this.payosClient;
+    const clientId = String(this.config.get<string>('PAYOS_CLIENT_ID') ?? '').trim();
+    const apiKey = String(this.config.get<string>('PAYOS_API_KEY') ?? '').trim();
+    const checksumKey = String(this.config.get<string>('PAYOS_CHECKSUM_KEY') ?? '').trim();
+    if (!clientId || !apiKey || !checksumKey) {
+      this.payosClient = null;
+      return null;
+    }
+    this.payosClient = new PayOS({ clientId, apiKey, checksumKey });
+    return this.payosClient;
+  }
+
+  private async verifyPayosWebhookPayload(payload: any): Promise<{
+    code: string;
+    desc?: string | null;
+    success: boolean;
+    data: Record<string, any>;
+  }> {
+    const payos = this.getPayosClient();
+    if (payos) {
+      const verified = await payos.webhooks.verify(payload);
+      return this.normalizePayosWebhookPayload(payload, verified);
+    }
+
+    if (this.isProduction()) {
+      throw new HttpException('PayOS webhook verification is not configured.', HttpStatus.NOT_IMPLEMENTED);
+    }
+
+    return this.normalizePayosWebhookPayload(payload, payload);
+  }
+
+  private normalizePayosWebhookPayload(originalPayload: any, verifiedPayload: any): {
+    code: string;
+    desc?: string | null;
+    success: boolean;
+    data: Record<string, any>;
+  } {
+    const envelope = verifiedPayload?.data ? verifiedPayload : originalPayload;
+    const data = verifiedPayload?.data
+      ? verifiedPayload.data
+      : originalPayload?.data
+        ? originalPayload.data
+        : verifiedPayload ?? {};
+    const successValue = envelope?.success ?? originalPayload?.success;
+    return {
+      code: String(envelope?.code ?? originalPayload?.code ?? data?.code ?? '').trim(),
+      desc: envelope?.desc ?? originalPayload?.desc ?? data?.desc ?? null,
+      success: successValue === true || String(successValue).toLowerCase() === 'true',
+      data: this.safePayload(data),
+    };
+  }
+
+  private payosProviderEventId(data: Record<string, any>, orderCode: string | null, code: string): string {
+    const paymentLinkId = String(data?.paymentLinkId ?? '').trim();
+    const reference = String(data?.reference ?? '').trim();
+    if (paymentLinkId && reference) return `payos:${paymentLinkId}:${reference}`;
+    return `payos:${orderCode ?? 'unknown'}:${code || 'unknown'}`;
+  }
+
+  private normalizedPayosOrderCode(value: any): string | null {
+    const text = String(value ?? '').trim();
+    if (!text) return null;
+    const numeric = Number(text);
+    if (!Number.isSafeInteger(numeric) || numeric <= 0) return null;
+    return String(numeric);
+  }
+
+  private payosSuccessValidationError(
+    verified: { code: string; success: boolean; data: Record<string, any> },
+    invoice: Record<string, any>,
+  ): string | null {
+    if (verified.success !== true || verified.code !== '00') return 'payos webhook is not a successful payment';
+    const currency = String(verified.data?.currency ?? '').trim().toUpperCase();
+    if (currency && currency !== 'VND') return 'payos webhook currency is not VND';
+    const expected = this.roundVnd(Number(invoice.amount_vnd ?? invoice.amount_original ?? 0));
+    const actual = this.roundVnd(Number(verified.data?.amount ?? 0));
+    if (!expected || actual !== expected) return 'payos webhook amount does not match invoice';
+    return null;
+  }
+
+  private async findPayosInvoice(orderCode: string): Promise<Record<string, any> | null> {
+    const { data, error } = await this.supabase.db
+      .from('billing_invoices')
+      .select('id, user_id, provider, provider_invoice_id, tier, status, amount_original, currency_original, amount_vnd, amount_usd, metadata, raw_payload')
+      .eq('provider', 'payos')
+      .eq('provider_invoice_id', orderCode)
+      .maybeSingle();
+    if (error) throw error;
+    return data ?? null;
+  }
+
+  private async activatePayosInvoice(
+    invoice: Record<string, any>,
+    orderCode: string,
+    verified: { data: Record<string, any> },
+    originalPayload: any,
+  ): Promise<StripeMappingResult> {
+    const userId = String(invoice.user_id ?? '').trim();
+    if (!userId) return { processed: false, skipped_reason: 'payos invoice is not linked to a user' };
+    const tier = this.normalizeTier(invoice.tier);
+    if (!['premium', 'pro'].includes(tier)) return { processed: false, skipped_reason: 'payos invoice has invalid tier' };
+    const interval = this.normalizePayosInterval(invoice.metadata?.interval ?? invoice.raw_payload?.interval);
+    const paidAt = this.payosPaidAt(verified.data?.transactionDateTime);
+    const period = await this.payosBillingPeriod(userId, tier as PayosCheckoutTier, interval, paidAt);
+    const amount = this.convertOriginalAmount(Number(invoice.amount_vnd ?? verified.data?.amount ?? 0), 'VND');
+
+    const { data: paidInvoice, error: invoiceError } = await this.supabase.db
+      .from('billing_invoices')
+      .upsert({
+        user_id: userId,
+        provider: 'payos',
+        provider_invoice_id: orderCode,
+        tier,
+        status: 'paid',
+        amount_original: amount.amount_original,
+        currency_original: amount.currency_original,
+        amount_vnd: amount.amount_vnd,
+        amount_usd: amount.amount_usd,
+        fx_rate: amount.fx_rate,
+        billing_period_start: period.start,
+        billing_period_end: period.end,
+        paid_at: paidAt,
+        metadata: {
+          ...(invoice.metadata ?? {}),
+          interval,
+          payos_reference: verified.data?.reference ?? null,
+          payos_payment_link_id: verified.data?.paymentLinkId ?? null,
+          source: 'payos_webhook_success',
+        },
+        raw_payload: this.safePayload(originalPayload),
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'provider,provider_invoice_id' })
+      .select('id')
+      .maybeSingle();
+    if (invoiceError) throw invoiceError;
+
+    const { data: subscription, error: subscriptionError } = await this.supabase.db
+      .from('billing_subscriptions')
+      .upsert({
+        user_id: userId,
+        provider: 'payos',
+        provider_subscription_id: `payos_${orderCode}`,
+        tier,
+        status: 'active',
+        is_paid: true,
+        billing_period_start: period.start,
+        billing_period_end: period.end,
+        cancelled_at: null,
+        metadata: {
+          orderCode,
+          interval,
+          source: 'payos_webhook_success',
+        },
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'provider,provider_subscription_id' })
+      .select('id')
+      .maybeSingle();
+    if (subscriptionError) throw subscriptionError;
+
+    const result: StripeMappingResult = {
+      processed: true,
+      billing_invoice_id: paidInvoice?.id ?? invoice.id ?? null,
+      billing_subscription_id: subscription?.id ?? null,
+    };
+    try {
+      const sync = await this.syncUserSubscriptionFromBilling(userId);
+      result.entitlement_sync = {
+        attempted: true,
+        synced: sync.synced,
+        ...(sync.skipped_reason ? { skipped_reason: sync.skipped_reason } : {}),
+      };
+    } catch (error: any) {
+      result.entitlement_sync = {
+        attempted: true,
+        synced: false,
+        error: this.safeErrorMessage(error),
+      };
+    }
+    return result;
+  }
+
+  private normalizePayosInterval(value: any): PayosCheckoutInterval {
+    return String(value ?? '').toLowerCase() === 'annual' ? 'annual' : 'monthly';
+  }
+
+  private async payosBillingPeriod(
+    userId: string,
+    tier: PayosCheckoutTier,
+    interval: PayosCheckoutInterval,
+    paidAtIso: string,
+  ): Promise<{ start: string; end: string }> {
+    const paidAt = new Date(paidAtIso);
+    let start = Number.isNaN(paidAt.getTime()) ? new Date() : paidAt;
+    const activeSameTier = await this.fetchActivePayosSubscriptions(userId, tier);
+    const futureEnd = activeSameTier
+      .map((row) => row.billing_period_end ? new Date(String(row.billing_period_end)) : null)
+      .filter((value): value is Date => value instanceof Date && !Number.isNaN(value.getTime()) && value > start)
+      .sort((a, b) => b.getTime() - a.getTime())[0];
+    if (futureEnd) start = futureEnd;
+    const end = this.addPayosInterval(start, interval);
+    return { start: start.toISOString(), end: end.toISOString() };
+  }
+
+  private async fetchActivePayosSubscriptions(userId: string, tier: PayosCheckoutTier): Promise<BillingSubscriptionRow[]> {
+    const { data, error } = await this.supabase.db
+      .from('billing_subscriptions')
+      .select('id, user_id, provider, tier, status, is_paid, billing_period_end, cancelled_at')
+      .eq('provider', 'payos')
+      .eq('user_id', userId)
+      .eq('tier', tier)
+      .eq('is_paid', true)
+      .eq('status', 'active')
+      .is('cancelled_at', null)
+      .limit(100);
+    if (error) return [];
+    return Array.isArray(data) ? data : [];
+  }
+
+  private addPayosInterval(start: Date, interval: PayosCheckoutInterval): Date {
+    const end = new Date(start.getTime());
+    if (interval === 'annual') end.setFullYear(end.getFullYear() + 1);
+    else end.setMonth(end.getMonth() + 1);
+    return end;
+  }
+
+  private payosPaidAt(value: any): string {
+    const text = String(value ?? '').trim();
+    if (text) {
+      const parsed = new Date(text.includes(' ') ? text.replace(' ', 'T') : text);
+      if (!Number.isNaN(parsed.getTime())) return parsed.toISOString();
+    }
+    return new Date().toISOString();
+  }
+
+  private payosAmountVnd(tier: PayosCheckoutTier, interval: PayosCheckoutInterval): number {
+    if (tier === 'premium' && interval === 'monthly') return 59000;
+    if (tier === 'premium' && interval === 'annual') return 499000;
+    if (tier === 'pro' && interval === 'monthly') return 129000;
+    return 999000;
+  }
+
+  private payosCheckoutUrl(response: any): string {
+    const checkoutUrl = response?.checkoutUrl
+      ?? response?.checkout_url
+      ?? response?.paymentLinkUrl
+      ?? response?.payment_link_url
+      ?? response?.data?.checkoutUrl
+      ?? response?.data?.checkout_url
+      ?? response?.data?.paymentLinkUrl
+      ?? response?.data?.payment_link_url;
+    if (!checkoutUrl) {
+      throw new HttpException('PayOS payment link did not return a checkout URL.', HttpStatus.BAD_GATEWAY);
+    }
+    return String(checkoutUrl);
+  }
+
+  private payosUrl(key: 'PAYOS_RETURN_URL' | 'PAYOS_CANCEL_URL', requireConfigured = false): string {
+    const url = String(this.config.get<string>(key) ?? '').trim();
+    if (url) return url;
+    if (this.isProduction() || requireConfigured) {
+      throw new HttpException(`${key} is not configured for PayOS Checkout.`, HttpStatus.NOT_IMPLEMENTED);
+    }
+    return key === 'PAYOS_RETURN_URL'
+      ? 'http://localhost:3000/billing/return/payos'
+      : 'http://localhost:3000/billing/cancel/payos';
+  }
+
+  private createPayosMockCheckoutUrl(tier: PayosCheckoutTier, interval: PayosCheckoutInterval, orderCode: number): string {
+    const params = new URLSearchParams({
+      provider: 'payos',
+      tier,
+      interval,
+      orderCode: String(orderCode),
+    });
+    return `http://localhost:3000/mock-payos-checkout?${params.toString()}`;
+  }
+
+  private createPayosOrderCode(): number {
+    return Date.now() * 1000 + Math.floor(Math.random() * 1000);
+  }
+
+  private titleCase(value: string): string {
+    return value.charAt(0).toUpperCase() + value.slice(1);
   }
 
   private verifyStripeWebhookPayload(payload: any, headers: Record<string, string | string[] | undefined>, rawBody?: Buffer | string): any {

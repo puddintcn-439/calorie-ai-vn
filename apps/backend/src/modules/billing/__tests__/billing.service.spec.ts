@@ -87,6 +87,25 @@ function makeService(db: any, config: Record<string, string> = {}) {
   );
 }
 
+function payosSuccessPayload(orderCode: number, amount = 59000, overrides: Record<string, any> = {}) {
+  return {
+    code: '00',
+    desc: 'success',
+    success: true,
+    data: {
+      orderCode,
+      amount,
+      description: 'CAI PREMIUM',
+      reference: `ref_${orderCode}`,
+      transactionDateTime: '2026-06-12T12:00:00.000Z',
+      currency: 'VND',
+      paymentLinkId: `plink_${orderCode}`,
+      ...overrides,
+    },
+    signature: 'test_signature',
+  };
+}
+
 describe('BillingService', () => {
   const now = new Date('2026-06-12T12:00:00.000Z');
 
@@ -456,6 +475,251 @@ describe('BillingService', () => {
     })).rejects.toBeInstanceOf(HttpException);
   });
 
+  it('returns a mock PayOS checkout URL outside production when PayOS is not configured', async () => {
+    const db = makeDb();
+    const service = makeService(db, { USD_TO_VND_RATE: '26000' });
+
+    const result = await service.createPayosCheckout({
+      userId: 'user-1',
+      email: 'user@example.com',
+      tier: 'premium',
+      interval: 'monthly',
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      provider: 'payos',
+      checkout_url: expect.stringContaining('http://localhost:3000/mock-payos-checkout?'),
+      tier: 'premium',
+      interval: 'monthly',
+      amount_vnd: 59000,
+    });
+    expect(db.state.billing_invoices[0]).toMatchObject({
+      provider: 'payos',
+      provider_invoice_id: String(result.order_code),
+      user_id: 'user-1',
+      tier: 'premium',
+      status: 'open',
+      amount_vnd: 59000,
+      currency_original: 'VND',
+      metadata: expect.objectContaining({ interval: 'monthly', source: 'payos_checkout_created' }),
+    });
+  });
+
+  it('throws a safe error for production PayOS checkout without PayOS config', async () => {
+    const db = makeDb();
+    const service = makeService(db, { NODE_ENV: 'production' });
+
+    await expect(service.createPayosCheckout({
+      userId: 'user-1',
+      tier: 'premium',
+      interval: 'monthly',
+    })).rejects.toMatchObject({ response: 'PayOS is not configured.' });
+
+    expect(db.state.billing_invoices ?? []).toHaveLength(0);
+  });
+
+  it('creates a real PayOS checkout link when PayOS client is configured', async () => {
+    const db = makeDb();
+    const service = makeService(db, {
+      PAYOS_CLIENT_ID: 'client_id',
+      PAYOS_API_KEY: 'api_key',
+      PAYOS_CHECKSUM_KEY: 'checksum_key',
+      PAYOS_RETURN_URL: 'https://example.com/payos-return',
+      PAYOS_CANCEL_URL: 'https://example.com/payos-cancel',
+    });
+    const payosMock = {
+      paymentRequests: {
+        create: jest.fn().mockResolvedValue({ checkoutUrl: 'https://pay.payos.vn/web/payment-link' }),
+      },
+    };
+    jest.spyOn(service as any, 'getPayosClient').mockReturnValue(payosMock);
+
+    const result = await service.createPayosCheckout({
+      userId: 'user-1',
+      email: 'user@example.com',
+      tier: 'pro',
+      interval: 'annual',
+    });
+
+    expect(payosMock.paymentRequests.create).toHaveBeenCalledWith(expect.objectContaining({
+      amount: 999000,
+      description: 'CAI PRO',
+      cancelUrl: 'https://example.com/payos-cancel',
+      returnUrl: 'https://example.com/payos-return',
+      items: [{ name: 'Calorie AI Pro Annual', quantity: 1, price: 999000 }],
+    }));
+    expect(result).toMatchObject({
+      provider: 'payos',
+      checkout_url: 'https://pay.payos.vn/web/payment-link',
+      tier: 'pro',
+      interval: 'annual',
+      amount_vnd: 999000,
+    });
+  });
+
+  it('uses PayOS webhook verification when PayOS client exists', async () => {
+    const orderCode = 900001;
+    const payload = payosSuccessPayload(orderCode);
+    const db = makeDb({
+      billing_invoices: { data: [{ provider: 'payos', provider_invoice_id: String(orderCode), user_id: 'user-1', tier: 'premium', status: 'open', amount_vnd: 59000, metadata: { interval: 'monthly' } }] },
+    });
+    const service = makeService(db);
+    const payosMock = {
+      webhooks: {
+        verify: jest.fn().mockResolvedValue(payload.data),
+      },
+    };
+    jest.spyOn(service as any, 'getPayosClient').mockReturnValue(payosMock);
+
+    const result = await service.handlePayosWebhook(payload);
+
+    expect(payosMock.webhooks.verify).toHaveBeenCalledWith(payload);
+    expect(result).toMatchObject({ provider: 'payos', processed: true });
+  });
+
+  it('successful PayOS webhook updates invoice and creates active subscription', async () => {
+    const orderCode = 900002;
+    const db = makeDb({
+      billing_invoices: { data: [{ provider: 'payos', provider_invoice_id: String(orderCode), user_id: 'user-1', tier: 'premium', status: 'open', amount_vnd: 59000, metadata: { interval: 'monthly' } }] },
+    });
+    const service = makeService(db);
+
+    const result = await service.handlePayosWebhook(payosSuccessPayload(orderCode));
+
+    expect(result).toMatchObject({ processed: true, entitlement_sync: { attempted: true, synced: true } });
+    expect(db.state.billing_invoices[0]).toMatchObject({
+      provider: 'payos',
+      provider_invoice_id: String(orderCode),
+      status: 'paid',
+      paid_at: '2026-06-12T12:00:00.000Z',
+    });
+    expect(db.state.billing_subscriptions[0]).toMatchObject({
+      provider: 'payos',
+      provider_subscription_id: `payos_${orderCode}`,
+      user_id: 'user-1',
+      tier: 'premium',
+      status: 'active',
+      is_paid: true,
+    });
+    expect(db.state.user_subscriptions[0]).toMatchObject({
+      user_id: 'user-1',
+      tier: 'premium',
+      is_active: true,
+      payment_provider: 'payos',
+    });
+  });
+
+  it('sets PayOS monthly period end one month after payment', async () => {
+    const orderCode = 900003;
+    const db = makeDb({
+      billing_invoices: { data: [{ provider: 'payos', provider_invoice_id: String(orderCode), user_id: 'user-1', tier: 'premium', status: 'open', amount_vnd: 59000, metadata: { interval: 'monthly' } }] },
+    });
+    const service = makeService(db);
+
+    await service.handlePayosWebhook(payosSuccessPayload(orderCode, 59000, { transactionDateTime: '2026-06-12T00:00:00.000Z' }));
+
+    expect(db.state.billing_subscriptions[0]).toMatchObject({
+      billing_period_start: '2026-06-12T00:00:00.000Z',
+      billing_period_end: '2026-07-12T00:00:00.000Z',
+    });
+  });
+
+  it('sets PayOS annual period end one year after payment', async () => {
+    const orderCode = 900004;
+    const db = makeDb({
+      billing_invoices: { data: [{ provider: 'payos', provider_invoice_id: String(orderCode), user_id: 'user-1', tier: 'pro', status: 'open', amount_vnd: 999000, metadata: { interval: 'annual' } }] },
+    });
+    const service = makeService(db);
+
+    await service.handlePayosWebhook(payosSuccessPayload(orderCode, 999000, { transactionDateTime: '2026-06-12T00:00:00.000Z' }));
+
+    expect(db.state.billing_subscriptions[0]).toMatchObject({
+      billing_period_start: '2026-06-12T00:00:00.000Z',
+      billing_period_end: '2027-06-12T00:00:00.000Z',
+    });
+  });
+
+  it('successful PayOS webhook calls syncUserSubscriptionFromBilling', async () => {
+    const orderCode = 900005;
+    const service = makeService(makeDb({
+      billing_invoices: { data: [{ provider: 'payos', provider_invoice_id: String(orderCode), user_id: 'user-1', tier: 'premium', status: 'open', amount_vnd: 59000, metadata: { interval: 'monthly' } }] },
+    }));
+    const syncSpy = jest.spyOn(service, 'syncUserSubscriptionFromBilling');
+
+    await service.handlePayosWebhook(payosSuccessPayload(orderCode));
+
+    expect(syncSpy).toHaveBeenCalledWith('user-1');
+  });
+
+  it('duplicate PayOS webhook does not duplicate invoice or subscription', async () => {
+    const orderCode = 900006;
+    const duplicateError = { code: '23505', message: 'duplicate key value violates unique constraint' };
+    const db = makeDb({
+      billing_invoices: { data: [{ provider: 'payos', provider_invoice_id: String(orderCode), user_id: 'user-1', tier: 'premium', status: 'open', amount_vnd: 59000, metadata: { interval: 'monthly' } }] },
+    }, { error: duplicateError });
+    const service = makeService(db);
+
+    const result = await service.handlePayosWebhook(payosSuccessPayload(orderCode));
+
+    expect(result).toMatchObject({ duplicate: true, processed: false, skipped_reason: 'duplicate' });
+    expect(db.state.billing_invoices).toHaveLength(1);
+    expect(db.state.billing_subscriptions ?? []).toHaveLength(0);
+  });
+
+  it('failed PayOS webhook does not grant entitlement', async () => {
+    const orderCode = 900007;
+    const db = makeDb({
+      billing_invoices: { data: [{ provider: 'payos', provider_invoice_id: String(orderCode), user_id: 'user-1', tier: 'premium', status: 'open', amount_vnd: 59000, metadata: { interval: 'monthly' } }] },
+    });
+    const service = makeService(db);
+
+    const result = await service.handlePayosWebhook({
+      ...payosSuccessPayload(orderCode),
+      code: '01',
+      success: false,
+    });
+
+    expect(result).toMatchObject({ processed: false, skipped_reason: 'payos webhook is not a successful payment' });
+    expect(db.state.billing_invoices[0]).toMatchObject({ status: 'open' });
+    expect(db.state.billing_subscriptions ?? []).toHaveLength(0);
+    expect(db.state.user_subscriptions ?? []).toHaveLength(0);
+  });
+
+  it('missing PayOS pending invoice is ignored safely', async () => {
+    const service = makeService(makeDb());
+
+    const result = await service.handlePayosWebhook(payosSuccessPayload(900008));
+
+    expect(result).toMatchObject({ processed: false, skipped_reason: 'payos_invoice_not_found' });
+  });
+
+  it('PayOS amount mismatch is ignored and does not grant entitlement', async () => {
+    const orderCode = 900009;
+    const db = makeDb({
+      billing_invoices: { data: [{ provider: 'payos', provider_invoice_id: String(orderCode), user_id: 'user-1', tier: 'premium', status: 'open', amount_vnd: 59000, metadata: { interval: 'monthly' } }] },
+    });
+    const service = makeService(db);
+
+    const result = await service.handlePayosWebhook(payosSuccessPayload(orderCode, 129000));
+
+    expect(result).toMatchObject({ processed: false, skipped_reason: 'payos webhook amount does not match invoice' });
+    expect(db.state.billing_subscriptions ?? []).toHaveLength(0);
+    expect(db.state.user_subscriptions ?? []).toHaveLength(0);
+  });
+
+  it('includes PayOS provider in confirmed revenue metrics', async () => {
+    const service = makeService(makeDb({
+      billing_subscriptions: { data: [{ id: 'bs_payos', user_id: 'user-1', provider: 'payos', tier: 'premium', status: 'active', is_paid: true, cancelled_at: null }] },
+      billing_invoices: { data: [{ provider: 'payos', status: 'paid', amount_vnd: 59000, paid_at: now.toISOString() }] },
+    }));
+
+    const result = await service.getConfirmedRevenueSummary(now);
+
+    expect(result.active_paid_by_provider.payos).toBe(1);
+    expect(result.month_to_date.gross_revenue_vnd).toBe(59000);
+  });
+
   it('resolves Stripe webhook users from metadata.user_id and links billing_customers', async () => {
     const userId = '4da564f2-6795-4b52-96a1-f0103f11a111';
     const db = makeDb();
@@ -533,6 +797,21 @@ describe('BillingService', () => {
       source: 'paid',
       provider: 'stripe',
       active_until: null,
+    });
+  });
+
+  it('returns paid PayOS entitlement when an active PayOS subscription exists', async () => {
+    const service = makeService(makeDb({
+      billing_subscriptions: { data: [{ id: 'bs_payos', user_id: 'user-1', tier: 'premium', provider: 'payos', status: 'active', is_paid: true, billing_period_end: '2999-01-01T00:00:00.000Z', cancelled_at: null }] },
+    }));
+
+    await expect(service.getUserEntitlement('user-1')).resolves.toMatchObject({
+      user_id: 'user-1',
+      tier: 'premium',
+      source: 'paid',
+      provider: 'payos',
+      active_until: '2999-01-01T00:00:00.000Z',
+      billing_subscription_id: 'bs_payos',
     });
   });
 

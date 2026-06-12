@@ -27,10 +27,15 @@ The migration currently lives in `supabase/migrations.disabled/0062_billing_ledg
 Webhook routes exist for:
 
 - `POST /billing/webhooks/stripe`
+- `POST /billing/webhooks/payos`
 - `POST /billing/webhooks/app-store`
 - `POST /billing/webhooks/google-play`
 
 The current foundation stores raw provider events in `billing_events` with idempotency on `(provider, provider_event_id)`.
+
+## V5 PayOS Provider Support
+
+PayOS prepaid checkout writes open invoices before payment and marks them paid only after a verified successful PayOS webhook. Because confirmed revenue reads paid rows from the billing ledger without hard-coding a provider allowlist, PayOS paid invoices and active paid subscriptions are included in `confirmed_revenue` and `active_paid_by_provider.payos` after migration `supabase/migrations.disabled/0063_billing_provider_payos.sql` is applied.
 
 ## V4.1 Stripe Event Mapping
 
@@ -117,18 +122,25 @@ Production webhooks are verified with `stripe.webhooks.constructEvent(rawBody, s
 - `BILLING_CANCEL_URL`: cancel redirect URL for real Stripe Checkout sessions.
 - `APP_STORE_WEBHOOK_SECRET`: placeholder secret checked against `x-webhook-secret`.
 - `GOOGLE_PLAY_WEBHOOK_SECRET`: placeholder secret checked against `x-webhook-secret`.
+- `PAYOS_CLIENT_ID`: PayOS client id for prepaid checkout and webhook verification.
+- `PAYOS_API_KEY`: PayOS API key.
+- `PAYOS_CHECKSUM_KEY`: PayOS checksum key for webhook verification.
+- `PAYOS_RETURN_URL`: PayOS return URL for UX only.
+- `PAYOS_CANCEL_URL`: PayOS cancel URL for UX only.
 
 If a webhook secret is not configured, webhook calls are accepted only outside production. In production, the endpoint returns `501` until the provider secret or full signature verification is configured.
 
 ## Production Checklist
 
 - Apply `supabase/migrations.disabled/0062_billing_ledger_v4.sql`.
+- Apply `supabase/migrations.disabled/0063_billing_provider_payos.sql` before enabling PayOS.
 - Configure `STRIPE_SECRET_KEY`.
 - Configure `STRIPE_WEBHOOK_SECRET`.
 - Configure all Stripe price ids.
 - Configure `BILLING_SUCCESS_URL` and `BILLING_CANCEL_URL`.
 - Ensure Stripe sends webhooks to `POST /billing/webhooks/stripe` with the `Stripe-Signature` header.
 - Keep App Store and Google Play webhooks disabled for billing automation until provider-specific mapping is implemented.
+- Configure PayOS credentials and webhook delivery before enabling Vietnam prepaid checkout.
 
 ## Validation
 
@@ -147,6 +159,7 @@ npm run test
 - Stripe Checkout uses real Stripe SDK calls when configured, and a non-production mock URL only when Stripe config is absent.
 - Production Stripe Checkout is blocked if Stripe config, price ids, `BILLING_SUCCESS_URL`, or `BILLING_CANCEL_URL` are missing.
 - App Store and Google Play events are stored only; provider-specific mapping is still pending.
+- PayOS is prepaid only; no automatic recurring charge or proration is implemented yet.
 - Non-VND/USD currencies are stored as original amounts but are not converted into VND/USD yet.
 - Billing tables are in `migrations.disabled` until explicitly applied.
 - Estimated MRR/ARR remains backwards-compatible and is separate from confirmed billing revenue.

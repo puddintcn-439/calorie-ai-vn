@@ -53,7 +53,7 @@ Response:
   "user_id": "user_...",
   "tier": "premium",
   "source": "paid",
-  "provider": "stripe",
+  "provider": "payos",
   "active_until": "2026-07-12T00:00:00.000Z"
 }
 ```
@@ -62,7 +62,7 @@ The endpoint does not expose provider customer IDs, invoice data, or raw billing
 
 ## Sync To Legacy Subscriptions
 
-After Stripe `customer.subscription.created`, `customer.subscription.updated`, or `customer.subscription.deleted` webhooks update `billing_subscriptions`, the backend attempts to sync paid entitlement into `user_subscriptions`.
+After Stripe subscription webhooks or verified successful PayOS payment webhooks update `billing_subscriptions`, the backend attempts to sync paid entitlement into `user_subscriptions`.
 
 For paid entitlements, it upserts:
 
@@ -90,9 +90,15 @@ Admin user detail responses include a safe `billing_entitlement` summary:
 }
 ```
 
+## PayOS V5
+
+PayOS prepaid purchases can grant paid entitlement when a verified successful PayOS webhook creates an active paid `billing_subscriptions` row with `provider='payos'`. Return and cancel URLs do not grant access. Monthly purchases set the paid period to one month; annual purchases set it to one year.
+
 ## Limitations
 
 - Stripe env is not required for entitlement resolution.
 - Entitlement logic does not call Stripe or any external network.
 - Stripe payment E2E remains pending until Stripe test-mode env is configured.
+- PayOS env is not required for entitlement resolution; it is required only for real checkout/webhook verification.
+- PayOS is prepaid only and has no recurring auto-charge in V5.
 - App Store and Google Play paid rows can be represented in the billing ledger, but provider-specific checkout/webhook mapping is still pending.
