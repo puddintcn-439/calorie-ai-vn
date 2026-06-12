@@ -56,22 +56,28 @@ export class AdminRevenueService {
     const totalUsers = usersCount || Math.max(activeSubscriptions, subscriptions.length);
     const estimatedMrrVnd = active.reduce((sum, row) => sum + this.priceForTier(row.tier), 0);
     const estimatedArrVnd = estimatedMrrVnd * 12;
+    const estimatedMrrUsd = estimatedMrrVnd / usdToVnd;
+    const estimatedArrUsd = estimatedArrVnd / usdToVnd;
     const aiCostMtdUsd = aiUsageRows.reduce((sum, row: any) => sum + Number(row.estimated_cost_usd ?? 0), 0);
     const aiCostMtdVnd = aiCostMtdUsd * usdToVnd;
     const aiCreditsMtd = aiUsageRows.reduce((sum, row: any) => sum + Number(row.credits_consumed ?? 1), 0);
     const requestsMtd = aiUsageRows.length;
     const conversionRate = totalUsers > 0 ? paidUsers / totalUsers : 0;
     const grossMarginVnd = estimatedMrrVnd - aiCostMtdVnd;
+    const grossMarginUsd = grossMarginVnd / usdToVnd;
     const grossMarginRate = estimatedMrrVnd > 0 ? grossMarginVnd / estimatedMrrVnd : 0;
 
     return {
       generated_at: now.toISOString(),
-      currency: 'VND',
+      default_currency: 'VND',
+      display_currencies: ['VND', 'USD'],
       ai_cost_source_currency: 'USD',
       usd_to_vnd_rate: usdToVnd,
       pricing: {
         monthly_vnd: PRICING_VND,
         annual_vnd: ANNUAL_PRICING_VND,
+        monthly_usd: this.convertPriceMapToUsd(PRICING_VND, usdToVnd),
+        annual_usd: this.convertPriceMapToUsd(ANNUAL_PRICING_VND, usdToVnd),
       },
       subscriptions: {
         total_users: totalUsers,
@@ -86,9 +92,13 @@ export class AdminRevenueService {
       },
       revenue: {
         estimated_mrr_vnd: this.roundVnd(estimatedMrrVnd),
+        estimated_mrr_usd: this.roundUsd(estimatedMrrUsd),
         estimated_arr_vnd: this.roundVnd(estimatedArrVnd),
+        estimated_arr_usd: this.roundUsd(estimatedArrUsd),
         arpu_vnd: activeSubscriptions > 0 ? this.roundVnd(estimatedMrrVnd / activeSubscriptions) : 0,
+        arpu_usd: activeSubscriptions > 0 ? this.roundUsd(estimatedMrrUsd / activeSubscriptions) : 0,
         arppu_vnd: paidUsers > 0 ? this.roundVnd(estimatedMrrVnd / paidUsers) : 0,
+        arppu_usd: paidUsers > 0 ? this.roundUsd(estimatedMrrUsd / paidUsers) : 0,
       },
       ai_cost: {
         month_to_date_usd: this.roundUsd(aiCostMtdUsd),
@@ -100,6 +110,7 @@ export class AdminRevenueService {
       },
       margin: {
         estimated_monthly_gross_margin_vnd: this.roundVnd(grossMarginVnd),
+        estimated_monthly_gross_margin_usd: this.roundUsd(grossMarginUsd),
         estimated_gross_margin_rate: Math.round(grossMarginRate * 10000) / 10000,
       },
       conversion: {
@@ -157,6 +168,10 @@ export class AdminRevenueService {
   private usdToVndRate(): number {
     const configured = Number(this.config.get<string>('USD_TO_VND_RATE') ?? DEFAULT_USD_TO_VND);
     return Number.isFinite(configured) && configured > 0 ? configured : DEFAULT_USD_TO_VND;
+  }
+
+  private convertPriceMapToUsd(pricingVnd: Record<string, number>, usdToVnd: number): Record<string, number> {
+    return Object.fromEntries(Object.entries(pricingVnd).map(([tier, value]) => [tier, this.roundUsd(value / usdToVnd)]));
   }
 
   private roundVnd(value: number): number {
