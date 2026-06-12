@@ -68,12 +68,9 @@ export default function AdminOverviewScreen() {
       </View>
 
       <View style={styles.navRow}>
-        <TouchableOpacity style={styles.navButton} onPress={() => router.push('/admin/users' as any)}>
-          <Text style={styles.navText}>Users</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navButton} onPress={() => router.push('/admin/ai-usage' as any)}>
-          <Text style={styles.navText}>AI Usage</Text>
-        </TouchableOpacity>
+        <TouchableOpacity style={styles.navButton} onPress={() => router.push('/admin/users' as any)}><Text style={styles.navText}>Users</Text></TouchableOpacity>
+        <TouchableOpacity style={styles.navButton} onPress={() => router.push('/admin/ai-usage' as any)}><Text style={styles.navText}>AI Usage</Text></TouchableOpacity>
+        <TouchableOpacity style={styles.navButton} onPress={() => router.push('/admin/revenue' as any)}><Text style={styles.navText}>Revenue</Text></TouchableOpacity>
       </View>
 
       {loading ? (
@@ -105,92 +102,21 @@ export default function AdminOverviewScreen() {
 }
 
 const styles = StyleSheet.create({
-  scrollContent: {
-    gap: 18,
-  },
-  header: {
-    gap: 12,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-  },
-  eyebrow: {
-    color: theme.colors.accentCyan,
-    fontSize: 12,
-    fontWeight: '900',
-    letterSpacing: 1,
-  },
-  title: {
-    color: theme.colors.text,
-    fontSize: 30,
-    fontWeight: '900',
-  },
-  subtitle: {
-    color: theme.colors.textMuted,
-    fontSize: 14,
-    lineHeight: 20,
-    maxWidth: 720,
-  },
-  refreshButton: {
-    borderRadius: 14,
-    backgroundColor: theme.colors.accentMint,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-  },
-  refreshText: {
-    color: theme.colors.textOnAccent,
-    fontWeight: '900',
-  },
-  navRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-  },
-  navButton: {
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: theme.colors.borderSubtle,
-    backgroundColor: theme.colors.surface,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-  },
-  navText: {
-    color: theme.colors.text,
-    fontWeight: '800',
-  },
-  metricGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  metricCard: {
-    minWidth: 170,
-    flexGrow: 1,
-    flexBasis: 170,
-  },
-  metricLabel: {
-    color: theme.colors.textMuted,
-    fontSize: 12,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-  },
-  metricValue: {
-    color: theme.colors.text,
-    fontSize: 26,
-    fontWeight: '900',
-    marginTop: 8,
-  },
-  centerCard: {
-    alignItems: 'center',
-    gap: 10,
-  },
-  errorTitle: {
-    color: theme.colors.danger,
-    fontSize: 20,
-    fontWeight: '900',
-  },
-  mutedText: {
-    color: theme.colors.textMuted,
-    textAlign: 'center',
-  },
+  scrollContent: { gap: 18 },
+  header: { gap: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
+  eyebrow: { color: theme.colors.accentCyan, fontSize: 12, fontWeight: '900', letterSpacing: 1 },
+  title: { color: theme.colors.text, fontSize: 30, fontWeight: '900' },
+  subtitle: { color: theme.colors.textMuted, fontSize: 14, lineHeight: 20, maxWidth: 720 },
+  refreshButton: { borderRadius: 14, backgroundColor: theme.colors.accentMint, paddingHorizontal: 16, paddingVertical: 10 },
+  refreshText: { color: theme.colors.textOnAccent, fontWeight: '900' },
+  navRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  navButton: { borderRadius: 14, borderWidth: 1, borderColor: theme.colors.borderSubtle, backgroundColor: theme.colors.surface, paddingHorizontal: 16, paddingVertical: 10 },
+  navText: { color: theme.colors.text, fontWeight: '800' },
+  metricGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  metricCard: { minWidth: 170, flexGrow: 1, flexBasis: 170 },
+  metricLabel: { color: theme.colors.textMuted, fontSize: 12, fontWeight: '800', textTransform: 'uppercase' },
+  metricValue: { color: theme.colors.text, fontSize: 26, fontWeight: '900', marginTop: 8 },
+  centerCard: { alignItems: 'center', gap: 10 },
+  errorTitle: { color: theme.colors.danger, fontSize: 20, fontWeight: '900' },
+  mutedText: { color: theme.colors.textMuted, textAlign: 'center' },
 });
