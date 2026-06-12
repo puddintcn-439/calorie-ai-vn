@@ -6,9 +6,10 @@ import { AdminGuard } from './admin.guard';
 import { AdminRoleGuard } from './admin-role.guard';
 import { SupabaseModule } from '../../common/supabase/supabase.module';
 import { AiModule } from '../ai/ai.module';
+import { BillingModule } from '../billing/billing.module';
 
 @Module({
-  imports: [SupabaseModule, AiModule],
+  imports: [SupabaseModule, AiModule, BillingModule],
   controllers: [AdminController],
   providers: [AdminService, AdminRevenueService, AdminGuard, AdminRoleGuard],
 })

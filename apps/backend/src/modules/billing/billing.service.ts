@@ -1,5 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, HttpException, HttpStatus, Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { createHash } from 'crypto';
+import Stripe from 'stripe';
 import { SupabaseService } from '../../common/supabase/supabase.service';
 
 const DEFAULT_USD_TO_VND = 26000;
@@ -35,8 +37,48 @@ type BillingSubscriptionRow = {
   cancelled_at?: string | null;
 };
 
+type BillingProvider = 'stripe' | 'app_store' | 'google_play';
+type BillingEntitlementProvider = BillingProvider | 'manual' | 'trial';
+type BillingEntitlementTier = 'free' | 'premium' | 'pro';
+type BillingEntitlementSource = 'paid' | 'trial' | 'manual' | 'free';
+
+type BillingEventInput = {
+  provider: BillingProvider;
+  providerEventId: string;
+  eventType: string;
+  rawPayload: Record<string, any>;
+};
+
+type StripeMappingResult = {
+  processed: boolean;
+  skipped_reason?: string;
+  billing_invoice_id?: string | null;
+  billing_subscription_id?: string | null;
+  billing_refund_id?: string | null;
+  entitlement_sync?: {
+    attempted: boolean;
+    synced?: boolean;
+    skipped_reason?: string;
+    error?: string;
+  };
+};
+
+type StripeCheckoutTier = 'premium' | 'pro';
+type StripeCheckoutInterval = 'monthly' | 'annual';
+type UserEntitlement = {
+  user_id: string;
+  tier: BillingEntitlementTier;
+  source: BillingEntitlementSource;
+  provider?: BillingEntitlementProvider;
+  active_until?: string | null;
+  billing_subscription_id?: string | null;
+  legacy_subscription_id?: string | null;
+};
+
 @Injectable()
 export class BillingService {
+  private stripeClient: Stripe.Stripe | null | undefined;
+
   constructor(
     private readonly supabase: SupabaseService,
     private readonly config: ConfigService,
@@ -84,6 +126,573 @@ export class BillingService {
     };
   }
 
+  async getOrCreateStripeCustomerForUser(input: {
+    userId: string;
+    email?: string | null;
+  }): Promise<{
+    user_id: string;
+    provider: 'stripe';
+    provider_customer_id: string;
+    created: boolean;
+  }> {
+    const userId = String(input.userId ?? '').trim();
+    if (!userId) {
+      throw new HttpException('User id is required for Stripe customer linking.', HttpStatus.BAD_REQUEST);
+    }
+
+    const { data: existing, error: lookupError } = await this.supabase.db
+      .from('billing_customers')
+      .select('user_id, provider, provider_customer_id')
+      .eq('provider', 'stripe')
+      .eq('user_id', userId)
+      .maybeSingle();
+    if (lookupError) throw lookupError;
+
+    if (existing?.provider_customer_id) {
+      return {
+        user_id: String(existing.user_id ?? userId),
+        provider: 'stripe',
+        provider_customer_id: String(existing.provider_customer_id),
+        created: false,
+      };
+    }
+
+    const customer = await this.createStripeCustomerPlaceholderOrFail(userId, input.email ?? null);
+    const email = input.email ?? null;
+    const { data, error } = await this.supabase.db
+      .from('billing_customers')
+      .upsert({
+        user_id: userId,
+        provider: 'stripe',
+        provider_customer_id: customer.providerCustomerId,
+        email,
+        metadata: {
+          source: customer.source,
+          created_by: 'checkout',
+          ...(customer.metadata ?? {}),
+        },
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'provider,provider_customer_id' })
+      .select('user_id, provider, provider_customer_id')
+      .maybeSingle();
+    if (error) throw error;
+
+    return {
+      user_id: String(data?.user_id ?? userId),
+      provider: 'stripe',
+      provider_customer_id: String(data?.provider_customer_id ?? customer.providerCustomerId),
+      created: true,
+    };
+  }
+
+  async createStripeCheckoutSession(input: {
+    userId: string;
+    email?: string | null;
+    tier: StripeCheckoutTier;
+    interval: StripeCheckoutInterval;
+  }) {
+    if (!['premium', 'pro'].includes(input.tier)) {
+      throw new HttpException('Invalid Stripe checkout tier.', HttpStatus.BAD_REQUEST);
+    }
+    if (!['monthly', 'annual'].includes(input.interval)) {
+      throw new HttpException('Invalid Stripe checkout interval.', HttpStatus.BAD_REQUEST);
+    }
+
+    const stripe = this.getStripeClient();
+    const customer = await this.getOrCreateStripeCustomerForUser({ userId: input.userId, email: input.email });
+    const priceId = this.stripePriceId(input.tier, input.interval, Boolean(stripe));
+    const checkoutUrl = await this.createStripeCheckoutUrlOrMock({
+      stripe,
+      customerId: customer.provider_customer_id,
+      priceId,
+      userId: input.userId,
+      tier: input.tier,
+      interval: input.interval,
+    });
+
+    return {
+      ok: true,
+      provider: 'stripe',
+      checkout_url: checkoutUrl,
+      customer_id: customer.provider_customer_id,
+      tier: input.tier,
+      interval: input.interval,
+    };
+  }
+
+  async getUserEntitlement(userId: string): Promise<UserEntitlement> {
+    const normalizedUserId = String(userId ?? '').trim();
+    if (!normalizedUserId) {
+      throw new HttpException('User id is required for billing entitlement.', HttpStatus.BAD_REQUEST);
+    }
+
+    const now = new Date();
+    const [billingRows, legacyRows] = await Promise.all([
+      this.fetchBillingSubscriptionsForEntitlement(normalizedUserId),
+      this.fetchLegacySubscriptionsForEntitlement(normalizedUserId),
+    ]);
+
+    const activePaidRows = billingRows
+      .filter((row) => this.isActivePaidBillingSubscription(row, now))
+      .sort((a, b) => this.tierPriority(b.tier) - this.tierPriority(a.tier));
+
+    const paid = activePaidRows[0];
+    if (paid) {
+      return {
+        user_id: normalizedUserId,
+        tier: this.normalizeTier(paid.tier),
+        source: 'paid',
+        provider: this.normalizeEntitlementProvider(paid.provider),
+        active_until: paid.billing_period_end ?? null,
+        billing_subscription_id: paid.id ?? null,
+      };
+    }
+
+    const legacy = legacyRows
+      .filter((row) => this.isActiveLegacySubscription(row, now))
+      .sort((a, b) => this.tierPriority(b.tier) - this.tierPriority(a.tier))[0];
+
+    if (legacy) {
+      const source = this.legacyEntitlementSource(legacy.payment_provider);
+      if (source) {
+        return {
+          user_id: normalizedUserId,
+          tier: this.normalizeTier(legacy.tier),
+          source,
+          provider: source,
+          active_until: legacy.renews_at ?? null,
+          legacy_subscription_id: legacy.id ?? null,
+        };
+      }
+    }
+
+    return {
+      user_id: normalizedUserId,
+      tier: 'free',
+      source: 'free',
+      active_until: null,
+    };
+  }
+
+  async syncUserSubscriptionFromBilling(userId: string): Promise<{
+    ok: boolean;
+    user_id: string;
+    entitlement: Awaited<ReturnType<BillingService['getUserEntitlement']>>;
+    synced: boolean;
+    skipped_reason?: string;
+  }> {
+    const entitlement = await this.getUserEntitlement(userId);
+    if (entitlement.source !== 'paid') {
+      return {
+        ok: true,
+        user_id: entitlement.user_id,
+        entitlement,
+        synced: false,
+        skipped_reason: `entitlement source is ${entitlement.source}; legacy subscription was not overwritten`,
+      };
+    }
+
+    const { error } = await this.supabase.db
+      .from('user_subscriptions')
+      .upsert({
+        user_id: entitlement.user_id,
+        tier: entitlement.tier,
+        is_active: true,
+        payment_provider: entitlement.provider ?? 'stripe',
+        renews_at: entitlement.active_until ?? null,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'user_id' });
+
+    if (error) {
+      return {
+        ok: false,
+        user_id: entitlement.user_id,
+        entitlement,
+        synced: false,
+        skipped_reason: this.safeErrorMessage(error),
+      };
+    }
+
+    return {
+      ok: true,
+      user_id: entitlement.user_id,
+      entitlement,
+      synced: true,
+    };
+  }
+
+  async handleStripeWebhook(payload: any, headers: Record<string, string | string[] | undefined> = {}, rawBody?: Buffer | string) {
+    const verifiedPayload = this.verifyStripeWebhookPayload(payload, headers, rawBody);
+    const eventId = this.providerEventId(verifiedPayload, ['id']);
+    const eventType = String(verifiedPayload?.type ?? verifiedPayload?.eventType ?? 'unknown');
+    const event = await this.recordBillingEvent({
+      provider: 'stripe',
+      providerEventId: eventId,
+      eventType,
+      rawPayload: this.safePayload(verifiedPayload),
+    });
+
+    if (event.duplicate) {
+      return { ok: true, provider: 'stripe', event_id: eventId, event_type: eventType, duplicate: true, processed: false, skipped_reason: 'duplicate' };
+    }
+
+    let result: StripeMappingResult;
+    if (['invoice.paid', 'invoice.payment_succeeded'].includes(eventType)) {
+      result = await this.upsertBillingInvoiceFromStripe(verifiedPayload);
+    } else if (eventType === 'invoice.payment_failed') {
+      result = { processed: false, skipped_reason: 'stripe invoice payment failed; no paid invoice recorded' };
+    } else if (['customer.subscription.created', 'customer.subscription.updated', 'customer.subscription.deleted'].includes(eventType)) {
+      result = await this.upsertBillingSubscriptionFromStripe(verifiedPayload);
+    } else if (['charge.refunded', 'refund.created'].includes(eventType)) {
+      result = await this.insertBillingRefundFromStripe(verifiedPayload);
+    } else {
+      return { ok: true, provider: 'stripe', event_id: eventId, event_type: eventType, duplicate: false, processed: false, skipped_reason: 'unknown_event_type' };
+    }
+
+    await this.updateBillingEventStatus('stripe', eventId, {
+      status: result.processed ? 'processed' : 'ignored',
+      processed_at: result.processed ? new Date().toISOString() : null,
+      error_message: result.skipped_reason ?? null,
+      billing_invoice_id: result.billing_invoice_id ?? null,
+      billing_subscription_id: result.billing_subscription_id ?? null,
+      billing_refund_id: result.billing_refund_id ?? null,
+    });
+
+    return {
+      ok: true,
+      provider: 'stripe',
+      event_id: eventId,
+      event_type: eventType,
+      duplicate: false,
+      processed: result.processed,
+      ...(result.skipped_reason ? { skipped_reason: result.skipped_reason } : {}),
+      ...(result.entitlement_sync ? { entitlement_sync: result.entitlement_sync } : {}),
+    };
+  }
+
+  async handleAppStoreWebhook(payload: any, headers: Record<string, string | string[] | undefined> = {}) {
+    this.assertWebhookAllowed('APP_STORE_WEBHOOK_SECRET', headers);
+    return this.recordBillingEvent({
+      provider: 'app_store',
+      providerEventId: this.providerEventId(payload, ['notificationUUID', 'id']),
+      eventType: String(payload?.notificationType ?? payload?.type ?? payload?.eventType ?? 'unknown'),
+      rawPayload: this.safePayload(payload),
+    });
+  }
+
+  async handleGooglePlayWebhook(payload: any, headers: Record<string, string | string[] | undefined> = {}) {
+    this.assertWebhookAllowed('GOOGLE_PLAY_WEBHOOK_SECRET', headers);
+    return this.recordBillingEvent({
+      provider: 'google_play',
+      providerEventId: this.providerEventId(payload, ['messageId', 'eventId', 'id']),
+      eventType: String(payload?.eventType ?? payload?.notificationType ?? payload?.type ?? 'unknown'),
+      rawPayload: this.safePayload(payload),
+    });
+  }
+
+  async recordBillingEvent(input: BillingEventInput) {
+    const { error } = await this.supabase.db.from('billing_events').insert({
+      provider: input.provider,
+      provider_event_id: input.providerEventId,
+      event_type: input.eventType,
+      status: 'received',
+      raw_payload: input.rawPayload,
+    });
+
+    if (error) {
+      if (this.isDuplicateError(error)) {
+        return { ok: true, duplicate: true, ignored: true };
+      }
+      throw error;
+    }
+
+    return { ok: true, duplicate: false };
+  }
+
+  async upsertBillingCustomerFromStripe(payload: any): Promise<{ user_id: string; billing_customer_id: string | null } | null> {
+    const object = this.stripeObject(payload);
+    const customer = this.stripeCustomerValue(object?.customer ?? object);
+    if (!customer.id) return null;
+    const userId = this.extractValidMetadataUserId(customer.metadata, object?.metadata);
+    if (!userId) return null;
+
+    const { data, error } = await this.supabase.db
+      .from('billing_customers')
+      .upsert({
+        user_id: userId,
+        provider: 'stripe',
+        provider_customer_id: customer.id,
+        email: customer.email ?? object?.customer_email ?? object?.email ?? null,
+        metadata: {
+          source: 'stripe_metadata',
+          created_by: 'webhook',
+          ...(customer.metadata ?? {}),
+          ...(object?.metadata ?? {}),
+        },
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'provider,provider_customer_id' })
+      .select('id, user_id')
+      .maybeSingle();
+
+    if (error) throw error;
+    return { user_id: String(data?.user_id ?? userId), billing_customer_id: data?.id ?? null };
+  }
+
+  async upsertBillingSubscriptionFromStripe(payload: any): Promise<StripeMappingResult> {
+    const subscription = this.stripeObject(payload);
+    const providerSubscriptionId = String(subscription?.id ?? '').trim();
+    const customerId = this.stripeCustomerValue(subscription?.customer).id;
+    if (!providerSubscriptionId || !customerId) return { processed: false, skipped_reason: 'stripe subscription is missing id or customer' };
+
+    await this.upsertBillingCustomerFromStripe(payload);
+    const userId = await this.resolveUserIdFromStripeCustomer(customerId, subscription);
+    if (!userId) return { processed: false, skipped_reason: 'stripe customer is not linked to a user' };
+
+    const tier = this.resolveTier(subscription?.metadata);
+    const status = this.mapStripeSubscriptionStatus(String(subscription?.status ?? ''));
+    const cancelledAt = subscription?.canceled_at
+      ? this.stripeTimestamp(subscription.canceled_at)
+      : payload?.type === 'customer.subscription.deleted'
+        ? new Date().toISOString()
+        : null;
+
+    const { data, error } = await this.supabase.db
+      .from('billing_subscriptions')
+      .upsert({
+        user_id: userId,
+        provider: 'stripe',
+        provider_subscription_id: providerSubscriptionId,
+        tier: tier.tier,
+        status,
+        is_paid: status === 'active',
+        billing_period_start: this.stripeTimestamp(subscription?.current_period_start),
+        billing_period_end: this.stripeTimestamp(subscription?.current_period_end),
+        cancelled_at: cancelledAt,
+        metadata: { ...(subscription?.metadata ?? {}), ...tier.metadata },
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'provider,provider_subscription_id' })
+      .select('id')
+      .maybeSingle();
+
+    if (error) throw error;
+    const result: StripeMappingResult = { processed: true, billing_subscription_id: data?.id ?? null };
+    try {
+      const sync = await this.syncUserSubscriptionFromBilling(userId);
+      result.entitlement_sync = {
+        attempted: true,
+        synced: sync.synced,
+        ...(sync.skipped_reason ? { skipped_reason: sync.skipped_reason } : {}),
+      };
+    } catch (error: any) {
+      result.entitlement_sync = {
+        attempted: true,
+        synced: false,
+        error: this.safeErrorMessage(error),
+      };
+    }
+    return result;
+  }
+
+  async upsertBillingInvoiceFromStripe(payload: any): Promise<StripeMappingResult> {
+    const invoice = this.stripeObject(payload);
+    const providerInvoiceId = String(invoice?.id ?? '').trim();
+    const customerId = this.stripeCustomerValue(invoice?.customer).id;
+    if (!providerInvoiceId || !customerId) return { processed: false, skipped_reason: 'stripe invoice is missing id or customer' };
+
+    await this.upsertBillingCustomerFromStripe(payload);
+    const userId = await this.resolveUserIdFromStripeCustomer(customerId, invoice);
+    if (!userId) return { processed: false, skipped_reason: 'stripe customer is not linked to a user' };
+
+    const providerSubscriptionId = this.stripeSubscriptionId(invoice?.subscription);
+    const billingSubscriptionId = providerSubscriptionId ? await this.resolveBillingSubscriptionIdFromStripeSubscription(providerSubscriptionId) : null;
+    const tier = this.resolveTier(invoice?.metadata, this.stripeSubscriptionMetadata(invoice?.subscription));
+    const amount = this.convertOriginalAmount(Number(invoice?.amount_paid ?? 0) / 100, String(invoice?.currency ?? 'VND'));
+    const period = invoice?.lines?.data?.[0]?.period ?? {};
+    const paidAt = this.stripeTimestamp(invoice?.status_transitions?.paid_at) ?? new Date().toISOString();
+
+    const { data, error } = await this.supabase.db
+      .from('billing_invoices')
+      .upsert({
+        user_id: userId,
+        billing_subscription_id: billingSubscriptionId,
+        provider: 'stripe',
+        provider_invoice_id: providerInvoiceId,
+        tier: tier.tier,
+        status: 'paid',
+        amount_original: amount.amount_original,
+        currency_original: amount.currency_original,
+        amount_vnd: amount.amount_vnd,
+        amount_usd: amount.amount_usd,
+        fx_rate: amount.fx_rate,
+        billing_period_start: this.stripeTimestamp(period.start),
+        billing_period_end: this.stripeTimestamp(period.end),
+        paid_at: paidAt,
+        metadata: { ...(invoice?.metadata ?? {}), ...tier.metadata, ...amount.metadata },
+        raw_payload: invoice,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'provider,provider_invoice_id' })
+      .select('id')
+      .maybeSingle();
+
+    if (error) throw error;
+    return { processed: true, billing_invoice_id: data?.id ?? null };
+  }
+
+  async insertBillingRefundFromStripe(payload: any): Promise<StripeMappingResult> {
+    const object = this.stripeObject(payload);
+    const isRefund = payload?.type === 'refund.created';
+    const refund = isRefund ? object : object?.refunds?.data?.[0] ?? null;
+    const providerRefundId = String(isRefund ? object?.id ?? '' : refund?.id ?? object?.id ?? '').trim();
+    const customerId = this.stripeCustomerValue(object?.customer).id;
+    if (!providerRefundId) return { processed: false, skipped_reason: 'stripe refund is missing id' };
+
+    await this.upsertBillingCustomerFromStripe(payload);
+    const userId = customerId ? await this.resolveUserIdFromStripeCustomer(customerId, object) : null;
+    if (!userId) return { processed: false, skipped_reason: 'stripe customer is not linked to a user' };
+
+    const providerInvoiceId = String(object?.invoice ?? refund?.invoice ?? '').trim();
+    const billingInvoiceId = providerInvoiceId ? await this.resolveBillingInvoiceIdFromStripeInvoice(providerInvoiceId) : null;
+    const originalAmount = Number((isRefund ? object?.amount : object?.amount_refunded) ?? 0) / 100;
+    const amount = this.convertOriginalAmount(originalAmount, String(object?.currency ?? refund?.currency ?? 'VND'));
+
+    const { data, error } = await this.supabase.db
+      .from('billing_refunds')
+      .upsert({
+        user_id: userId,
+        billing_invoice_id: billingInvoiceId,
+        provider: 'stripe',
+        provider_refund_id: providerRefundId,
+        amount_original: amount.amount_original,
+        currency_original: amount.currency_original,
+        amount_vnd: amount.amount_vnd,
+        amount_usd: amount.amount_usd,
+        fx_rate: amount.fx_rate,
+        refunded_at: this.stripeTimestamp(object?.created ?? refund?.created) ?? new Date().toISOString(),
+        reason: object?.reason ?? refund?.reason ?? null,
+        metadata: amount.metadata,
+        raw_payload: object,
+      }, { onConflict: 'provider,provider_refund_id' })
+      .select('id')
+      .maybeSingle();
+
+    if (error) throw error;
+    return { processed: true, billing_refund_id: data?.id ?? null, billing_invoice_id: billingInvoiceId };
+  }
+
+  async resolveUserIdFromStripeCustomer(customerId: string | null | undefined, metadataSource?: any): Promise<string | null> {
+    const normalized = String(customerId ?? '').trim();
+    if (!normalized) return null;
+    const { data, error } = await this.supabase.db
+      .from('billing_customers')
+      .select('user_id')
+      .eq('provider', 'stripe')
+      .eq('provider_customer_id', normalized)
+      .maybeSingle();
+    if (error) return null;
+    if (data?.user_id) return String(data.user_id);
+
+    const customer = this.stripeCustomerValue(metadataSource?.customer);
+    const userId = this.extractValidMetadataUserId(
+      metadataSource?.metadata,
+      customer.metadata,
+      metadataSource?.subscription?.metadata,
+    );
+    if (!userId) return null;
+
+    const { error: linkError } = await this.supabase.db
+      .from('billing_customers')
+      .upsert({
+        user_id: userId,
+        provider: 'stripe',
+        provider_customer_id: normalized,
+        email: customer.email ?? metadataSource?.customer_email ?? metadataSource?.email ?? null,
+        metadata: {
+          source: 'stripe_metadata',
+          created_by: 'webhook',
+          ...(metadataSource?.metadata ?? {}),
+          ...(customer.metadata ?? {}),
+        },
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'provider,provider_customer_id' })
+      .select('id')
+      .maybeSingle();
+    if (linkError) throw linkError;
+    return userId;
+  }
+
+  private async fetchBillingSubscriptionsForEntitlement(userId: string): Promise<Array<Record<string, any>>> {
+    const { data, error } = await this.supabase.db
+      .from('billing_subscriptions')
+      .select('id, user_id, provider, tier, status, is_paid, billing_period_end, cancelled_at, updated_at, created_at')
+      .eq('user_id', userId)
+      .limit(100);
+    if (error) return [];
+    return Array.isArray(data) ? data : [];
+  }
+
+  private async fetchLegacySubscriptionsForEntitlement(userId: string): Promise<Array<Record<string, any>>> {
+    const { data, error } = await this.supabase.db
+      .from('user_subscriptions')
+      .select('id, user_id, tier, is_active, payment_provider, renews_at, cancelled_at, updated_at, created_at')
+      .eq('user_id', userId)
+      .order('updated_at', { ascending: false })
+      .limit(50);
+    if (error) return [];
+    return Array.isArray(data) ? data : [];
+  }
+
+  private isActivePaidBillingSubscription(row: Record<string, any>, now: Date): boolean {
+    if (row.is_paid !== true) return false;
+    if (String(row.status ?? '').toLowerCase() !== 'active') return false;
+    if (row.cancelled_at) return false;
+    const periodEnd = row.billing_period_end ? new Date(String(row.billing_period_end)) : null;
+    return !periodEnd || Number.isNaN(periodEnd.getTime()) || periodEnd > now;
+  }
+
+  private isActiveLegacySubscription(row: Record<string, any>, now: Date): boolean {
+    if (row.is_active === false) return false;
+    if (row.cancelled_at) return false;
+    const tier = this.normalizeTier(row.tier);
+    if (!['premium', 'pro'].includes(tier)) return false;
+    const source = this.legacyEntitlementSource(row.payment_provider);
+    if (!source) return false;
+    const renewsAt = row.renews_at ? new Date(String(row.renews_at)) : null;
+    return !renewsAt || Number.isNaN(renewsAt.getTime()) || renewsAt > now;
+  }
+
+  private legacyEntitlementSource(provider: any): Extract<BillingEntitlementSource, 'trial' | 'manual'> | null {
+    const normalized = String(provider ?? '').toLowerCase();
+    if (normalized === 'trial') return 'trial';
+    if (normalized === 'manual') return 'manual';
+    return null;
+  }
+
+  private normalizeTier(value: any): BillingEntitlementTier {
+    const normalized = String(value ?? '').toLowerCase();
+    if (normalized === 'pro') return 'pro';
+    if (normalized === 'premium') return 'premium';
+    return 'free';
+  }
+
+  private normalizeEntitlementProvider(value: any): BillingEntitlementProvider | undefined {
+    const normalized = String(value ?? '').toLowerCase();
+    if (['stripe', 'app_store', 'google_play', 'manual', 'trial'].includes(normalized)) {
+      return normalized as BillingEntitlementProvider;
+    }
+    return undefined;
+  }
+
+  private tierPriority(value: any): number {
+    const tier = this.normalizeTier(value);
+    if (tier === 'pro') return 3;
+    if (tier === 'premium') return 2;
+    return 1;
+  }
+
+  private safeErrorMessage(error: any): string {
+    return String(error?.message ?? error?.error_description ?? 'billing entitlement sync failed').slice(0, 200);
+  }
+
   private async fetchActivePaidSubscriptions(): Promise<BillingSubscriptionRow[]> {
     const { data, error } = await this.supabase.db
       .from('billing_subscriptions')
@@ -94,6 +703,200 @@ export class BillingService {
       .limit(50000);
     if (error) return [];
     return Array.isArray(data) ? data : [];
+  }
+
+  private async createStripeCustomerPlaceholderOrFail(userId: string, email?: string | null): Promise<{
+    providerCustomerId: string;
+    source: string;
+    metadata?: Record<string, any>;
+  }> {
+    const stripe = this.getStripeClient();
+    if (stripe) {
+      const customer = await stripe.customers.create({
+        ...(email ? { email } : {}),
+        metadata: { user_id: userId },
+      });
+      if (!customer.id) {
+        throw new HttpException('Stripe customer creation did not return a customer id.', HttpStatus.BAD_GATEWAY);
+      }
+      return {
+        providerCustomerId: customer.id,
+        source: 'stripe',
+        metadata: { stripe_customer_created: true },
+      };
+    }
+
+    if (this.isProduction()) {
+      throw new HttpException('Stripe checkout is not configured for production.', HttpStatus.NOT_IMPLEMENTED);
+    }
+
+    return {
+      providerCustomerId: `test_cus_${userId}`,
+      source: 'local_placeholder',
+      metadata: { stripe_sdk_available: false },
+    };
+  }
+
+  private createStripeCheckoutUrlOrMock(input: {
+    stripe: Stripe.Stripe | null;
+    customerId: string;
+    priceId: string;
+    userId: string;
+    tier: StripeCheckoutTier;
+    interval: StripeCheckoutInterval;
+  }): Promise<string> | string {
+    if (input.stripe) {
+      const successUrl = this.billingUrl('BILLING_SUCCESS_URL', true);
+      const cancelUrl = this.billingUrl('BILLING_CANCEL_URL', true);
+      return input.stripe.checkout.sessions.create({
+        mode: 'subscription',
+        customer: input.customerId,
+        line_items: [{ price: input.priceId, quantity: 1 }],
+        success_url: successUrl,
+        cancel_url: cancelUrl,
+        metadata: {
+          user_id: input.userId,
+          tier: input.tier,
+          interval: input.interval,
+        },
+        subscription_data: {
+          metadata: {
+            user_id: input.userId,
+            tier: input.tier,
+            interval: input.interval,
+          },
+        },
+      }).then((session: { url?: string | null }) => {
+        if (!session.url) {
+          throw new HttpException('Stripe Checkout Session did not return a URL.', HttpStatus.BAD_GATEWAY);
+        }
+        return session.url;
+      });
+    }
+
+    if (this.isProduction()) {
+      throw new HttpException('Stripe Checkout is not fully configured for production.', HttpStatus.NOT_IMPLEMENTED);
+    }
+
+    const params = new URLSearchParams({
+      provider: 'stripe',
+      tier: input.tier,
+      interval: input.interval,
+      customer_id: input.customerId,
+      price_id: input.priceId || 'missing_price',
+    });
+    return `http://localhost:3000/mock-checkout?${params.toString()}`;
+  }
+
+  private stripePriceId(tier: StripeCheckoutTier, interval: StripeCheckoutInterval, requireConfigured = false): string {
+    const key = `STRIPE_PRICE_${tier.toUpperCase()}_${interval.toUpperCase()}`;
+    const priceId = String(this.config.get<string>(key) ?? '').trim();
+    if (priceId) return priceId;
+    if (this.isProduction() || requireConfigured) {
+      throw new HttpException(`Stripe price id is not configured for ${tier}/${interval}.`, HttpStatus.NOT_IMPLEMENTED);
+    }
+    return `mock_price_${tier}_${interval}`;
+  }
+
+  private billingUrl(key: 'BILLING_SUCCESS_URL' | 'BILLING_CANCEL_URL', requireConfigured = false): string {
+    const url = String(this.config.get<string>(key) ?? '').trim();
+    if (url) return url;
+    if (this.isProduction() || requireConfigured) {
+      throw new HttpException(`${key} is not configured for Stripe Checkout.`, HttpStatus.NOT_IMPLEMENTED);
+    }
+    return 'http://localhost:3000/mock-checkout-return';
+  }
+
+  private getStripeClient(): Stripe.Stripe | null {
+    if (this.stripeClient !== undefined) return this.stripeClient;
+    const secretKey = String(this.config.get<string>('STRIPE_SECRET_KEY') ?? '').trim();
+    if (!secretKey) {
+      this.stripeClient = null;
+      return null;
+    }
+    this.stripeClient = new Stripe(secretKey);
+    return this.stripeClient;
+  }
+
+  private verifyStripeWebhookPayload(payload: any, headers: Record<string, string | string[] | undefined>, rawBody?: Buffer | string): any {
+    const webhookSecret = String(this.config.get<string>('STRIPE_WEBHOOK_SECRET') ?? '').trim();
+    const signature = this.headerValue(headers, 'stripe-signature');
+    const stripe = this.getStripeClient();
+
+    if (this.isProduction()) {
+      if (!webhookSecret) {
+        throw new HttpException('Stripe webhook secret is not configured.', HttpStatus.NOT_IMPLEMENTED);
+      }
+      if (!stripe) {
+        throw new HttpException('Stripe SDK is not configured for webhook verification.', HttpStatus.NOT_IMPLEMENTED);
+      }
+      if (!signature) {
+        throw new BadRequestException('Missing Stripe-Signature header.');
+      }
+      if (!rawBody) {
+        throw new BadRequestException('Missing raw request body for Stripe webhook verification.');
+      }
+      try {
+        return stripe.webhooks.constructEvent(rawBody, signature, webhookSecret);
+      } catch {
+        throw new BadRequestException('Invalid Stripe webhook signature.');
+      }
+    }
+
+    if (webhookSecret && signature && rawBody && stripe) {
+      try {
+        return stripe.webhooks.constructEvent(rawBody, signature, webhookSecret);
+      } catch {
+        throw new BadRequestException('Invalid Stripe webhook signature.');
+      }
+    }
+
+    this.assertWebhookAllowed('STRIPE_WEBHOOK_SECRET', headers);
+    return payload;
+  }
+
+  private assertWebhookAllowed(secretKey: string, headers: Record<string, string | string[] | undefined>) {
+    const configuredSecret = String(this.config.get<string>(secretKey) ?? '').trim();
+    if (configuredSecret) {
+      const providedSecret = this.headerValue(headers, 'x-webhook-secret') ?? this.headerValue(headers, secretKey.toLowerCase().replace(/_/g, '-'));
+      if (providedSecret !== configuredSecret) {
+        throw new UnauthorizedException('Invalid webhook secret');
+      }
+      return;
+    }
+
+    if (this.isProduction()) {
+      throw new HttpException(`Webhook secret is not configured for ${secretKey}.`, HttpStatus.NOT_IMPLEMENTED);
+    }
+  }
+
+  private headerValue(headers: Record<string, string | string[] | undefined>, key: string): string | null {
+    const target = key.toLowerCase();
+    const entry = Object.entries(headers ?? {}).find(([name]) => name.toLowerCase() === target)?.[1];
+    const value = Array.isArray(entry) ? entry[0] : entry;
+    return typeof value === 'string' ? value : null;
+  }
+
+  private providerEventId(payload: any, keys: string[]): string {
+    for (const key of keys) {
+      const value = payload?.[key];
+      if (value) return String(value);
+    }
+    return createHash('sha256').update(JSON.stringify(this.safePayload(payload))).digest('hex');
+  }
+
+  private safePayload(payload: any): Record<string, any> {
+    return payload && typeof payload === 'object' && !Array.isArray(payload) ? payload : { value: payload ?? null };
+  }
+
+  private isDuplicateError(error: any): boolean {
+    const code = String(error?.code ?? '').toLowerCase();
+    const message = String(error?.message ?? '').toLowerCase();
+    return code === '23505' || message.includes('duplicate') || message.includes('unique');
+  }
+
+  private isProduction(): boolean {
+    return process.env.NODE_ENV === 'production' || String(this.config.get<string>('NODE_ENV') ?? '').toLowerCase() === 'production';
   }
 
   private async fetchPaidInvoices(sinceIso: string): Promise<BillingInvoiceRow[]> {
@@ -115,6 +918,133 @@ export class BillingService {
       .limit(50000);
     if (error) return [];
     return Array.isArray(data) ? data : [];
+  }
+
+  private async updateBillingEventStatus(provider: BillingProvider, providerEventId: string, patch: Record<string, any>) {
+    const { error } = await this.supabase.db
+      .from('billing_events')
+      .update(patch)
+      .eq('provider', provider)
+      .eq('provider_event_id', providerEventId);
+    if (error) throw error;
+  }
+
+  private async resolveBillingSubscriptionIdFromStripeSubscription(providerSubscriptionId: string): Promise<string | null> {
+    const { data, error } = await this.supabase.db
+      .from('billing_subscriptions')
+      .select('id')
+      .eq('provider', 'stripe')
+      .eq('provider_subscription_id', providerSubscriptionId)
+      .maybeSingle();
+    if (error) return null;
+    return data?.id ?? null;
+  }
+
+  private async resolveBillingInvoiceIdFromStripeInvoice(providerInvoiceId: string): Promise<string | null> {
+    const { data, error } = await this.supabase.db
+      .from('billing_invoices')
+      .select('id')
+      .eq('provider', 'stripe')
+      .eq('provider_invoice_id', providerInvoiceId)
+      .maybeSingle();
+    if (error) return null;
+    return data?.id ?? null;
+  }
+
+  private stripeObject(payload: any): any {
+    return payload?.data?.object ?? payload ?? {};
+  }
+
+  private stripeCustomerValue(value: any): { id: string | null; email?: string | null; metadata?: Record<string, any> } {
+    if (!value) return { id: null };
+    if (typeof value === 'string') return { id: value };
+    return {
+      id: value.id ? String(value.id) : null,
+      email: value.email ?? null,
+      metadata: value.metadata ?? {},
+    };
+  }
+
+  private stripeSubscriptionId(value: any): string | null {
+    if (!value) return null;
+    if (typeof value === 'string') return value;
+    return value.id ? String(value.id) : null;
+  }
+
+  private stripeSubscriptionMetadata(value: any): Record<string, any> {
+    return value && typeof value === 'object' ? value.metadata ?? {} : {};
+  }
+
+  private extractValidMetadataUserId(...sources: Array<Record<string, any> | null | undefined>): string | null {
+    for (const source of sources) {
+      const candidate = String(source?.user_id ?? '').trim();
+      if (this.isUuid(candidate)) return candidate;
+    }
+    return null;
+  }
+
+  private isUuid(value: string): boolean {
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+  }
+
+  private stripeTimestamp(value: any): string | null {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric) || numeric <= 0) return null;
+    return new Date(numeric * 1000).toISOString();
+  }
+
+  private resolveTier(...metadataSources: Array<Record<string, any> | null | undefined>): { tier: 'free' | 'premium' | 'pro'; metadata: Record<string, any> } {
+    for (const metadata of metadataSources) {
+      const candidate = String(metadata?.tier ?? '').toLowerCase();
+      if (['free', 'premium', 'pro'].includes(candidate)) {
+        return { tier: candidate as 'free' | 'premium' | 'pro', metadata: {} };
+      }
+    }
+    return { tier: 'premium', metadata: { tier_defaulted: true } };
+  }
+
+  private mapStripeSubscriptionStatus(status: string): 'trialing' | 'active' | 'past_due' | 'cancelled' | 'expired' {
+    const normalized = status.toLowerCase();
+    if (normalized === 'active') return 'active';
+    if (normalized === 'trialing') return 'trialing';
+    if (normalized === 'past_due') return 'past_due';
+    if (normalized === 'canceled' || normalized === 'cancelled') return 'cancelled';
+    if (normalized === 'incomplete_expired') return 'expired';
+    return 'past_due';
+  }
+
+  private convertOriginalAmount(amountOriginal: number, currency: string) {
+    const amount = Number.isFinite(amountOriginal) && amountOriginal > 0 ? amountOriginal : 0;
+    const currencyOriginal = String(currency || 'VND').toUpperCase();
+    const fxRate = this.usdToVndRate();
+    if (currencyOriginal === 'VND') {
+      return {
+        amount_original: amount,
+        currency_original: currencyOriginal,
+        amount_vnd: this.roundVnd(amount),
+        amount_usd: this.roundUsd(amount / fxRate),
+        fx_rate: fxRate,
+        metadata: {},
+      };
+    }
+    if (currencyOriginal === 'USD') {
+      return {
+        amount_original: amount,
+        currency_original: currencyOriginal,
+        amount_vnd: this.roundVnd(amount * fxRate),
+        amount_usd: this.roundUsd(amount),
+        fx_rate: fxRate,
+        metadata: {},
+      };
+    }
+    return {
+      amount_original: amount,
+      currency_original: currencyOriginal,
+      amount_vnd: 0,
+      amount_usd: 0,
+      fx_rate: fxRate,
+      metadata: { unsupported_currency: currencyOriginal },
+    };
   }
 
   private amountVnd(row: { amount_vnd?: number | string | null; amount_usd?: number | string | null }, usdToVnd: number): number {

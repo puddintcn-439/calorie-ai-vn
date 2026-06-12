@@ -150,6 +150,7 @@ export default function AdminUserDetailScreen() {
         <TouchableOpacity style={styles.navButton} onPress={() => router.push('/admin/users' as any)}><Text style={styles.navText}>Users</Text></TouchableOpacity>
         <TouchableOpacity style={styles.navButton} onPress={() => router.push('/admin' as any)}><Text style={styles.navText}>Overview</Text></TouchableOpacity>
         <TouchableOpacity style={styles.navButton} onPress={() => router.push('/admin/ai-usage' as any)}><Text style={styles.navText}>AI Usage</Text></TouchableOpacity>
+        <TouchableOpacity style={styles.navButton} onPress={() => router.push('/admin/revenue' as any)}><Text style={styles.navText}>Revenue</Text></TouchableOpacity>
         <TouchableOpacity style={styles.navButton} onPress={() => router.push('/admin/audit-log' as any)}><Text style={styles.navText}>Audit Log</Text></TouchableOpacity>
       </View>
 

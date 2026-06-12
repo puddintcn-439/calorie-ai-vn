@@ -33,7 +33,7 @@ import { RequestLoggingMiddleware } from './common/middleware/request-logging.mi
 import { MetricsService } from './common/metrics/metrics.service';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { rawBody: true });
 
   // Global validation pipe
   app.useGlobalPipes(

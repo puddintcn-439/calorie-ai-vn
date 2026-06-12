@@ -101,13 +101,15 @@ export default function AdminRevenueScreen() {
   const margin = data?.margin ?? {};
   const subscriptions = data?.subscriptions ?? {};
   const conversion = data?.conversion ?? {};
+  const confirmedRevenue = data?.confirmed_revenue ?? null;
+  const confirmedMtd = confirmedRevenue?.month_to_date ?? null;
   const pricing = data?.pricing ?? {};
   const monthlyPricing = currency === 'vnd' ? pricing.monthly_vnd ?? {} : pricing.monthly_usd ?? {};
   const annualPricing = currency === 'vnd' ? pricing.annual_vnd ?? {} : pricing.annual_usd ?? {};
 
   const cards = useMemo(() => [
-    { label: 'MRR', value: money(revenue[`estimated_mrr_${suffix}`], currency), sub: 'Estimated monthly recurring revenue' },
-    { label: 'ARR', value: money(revenue[`estimated_arr_${suffix}`], currency), sub: 'Estimated annual run rate' },
+    { label: 'Estimated MRR', value: money(revenue[`estimated_mrr_${suffix}`], currency), sub: 'Estimated monthly recurring revenue' },
+    { label: 'Estimated ARR', value: money(revenue[`estimated_arr_${suffix}`], currency), sub: 'Estimated annual run rate' },
     { label: 'AI Cost MTD', value: money(aiCost[`month_to_date_${suffix}`], currency), sub: `${n(aiCost.requests_month_to_date)} requests · ${n(aiCost.credits_month_to_date)} credits` },
     { label: 'Gross Margin', value: money(margin[`estimated_monthly_gross_margin_${suffix}`], currency), sub: pct(margin.estimated_gross_margin_rate) },
     { label: 'Paid Conversion', value: pct(conversion.paid_conversion_rate), sub: `${n(conversion.paid_users)} paid / ${n(conversion.total_users)} users` },
@@ -151,6 +153,25 @@ export default function AdminRevenueScreen() {
         </SurfaceCard>
       ) : data ? (
         <View style={styles.content}>
+          <Section title="Confirmed billing revenue">
+            {confirmedRevenue ? (
+              <View style={styles.metricGrid}>
+                <MetricCard label="Confirmed Net Revenue MTD" value={money(confirmedMtd?.[`net_revenue_${suffix}`], currency)} sub="Ledger net revenue after refunds" />
+                <MetricCard label="Confirmed Gross Revenue MTD" value={money(confirmedMtd?.[`gross_revenue_${suffix}`], currency)} sub="Paid invoices from billing ledger" />
+                <MetricCard label="Refunds MTD" value={money(confirmedMtd?.[`refunds_${suffix}`], currency)} sub="Refunds recorded in billing ledger" />
+                <MetricCard label="Active Paid Users" value={n(confirmedRevenue.active_paid_users)} sub={`${n(confirmedRevenue.active_paid_subscriptions)} active paid subscriptions`} />
+                <MetricCard label="Paid Invoice Count" value={n(confirmedMtd?.paid_invoice_count)} sub="Month to date" />
+                <MetricCard label="Refund Count" value={n(confirmedMtd?.refund_count)} sub="Month to date" />
+              </View>
+            ) : (
+              <Text style={styles.muted}>Billing ledger has no confirmed revenue yet.</Text>
+            )}
+          </Section>
+
+          <Section title="Estimated revenue">
+            <Text style={styles.muted}>{revenue.estimated_revenue_note ?? 'Estimated from active subscription tier pricing.'}</Text>
+          </Section>
+
           <View style={styles.metricGrid}>
             {cards.map((card) => <MetricCard key={card.label} {...card} />)}
           </View>

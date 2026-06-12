@@ -1,0 +1,111 @@
+import { ExecutionContext, INestApplication, ValidationPipe } from '@nestjs/common';
+import { Test } from '@nestjs/testing';
+import * as request from 'supertest';
+import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
+import { BillingController } from '../billing.controller';
+import { BillingService } from '../billing.service';
+
+describe('BillingController', () => {
+  let app: INestApplication;
+  const billingService = {
+    createStripeCheckoutSession: jest.fn(),
+    handleStripeWebhook: jest.fn(),
+    handleAppStoreWebhook: jest.fn(),
+    handleGooglePlayWebhook: jest.fn(),
+    getUserEntitlement: jest.fn(),
+  };
+
+  beforeAll(async () => {
+    const moduleRef = await Test.createTestingModule({
+      controllers: [BillingController],
+      providers: [{ provide: BillingService, useValue: billingService }],
+    })
+      .overrideGuard(JwtAuthGuard)
+      .useValue({
+        canActivate: (ctx: ExecutionContext) => {
+          const req = ctx.switchToHttp().getRequest();
+          req.user = { id: 'user-1', sub: 'user-1', email: 'user@example.com' };
+          return true;
+        },
+      })
+      .compile();
+
+    app = moduleRef.createNestApplication();
+    app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+    await app.init();
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  afterAll(async () => {
+    await app.close();
+  });
+
+  it('POST /billing/checkout/stripe rejects invalid tier', async () => {
+    await request(app.getHttpServer())
+      .post('/billing/checkout/stripe')
+      .send({ tier: 'gold', interval: 'monthly' })
+      .expect(400);
+
+    expect(billingService.createStripeCheckoutSession).not.toHaveBeenCalled();
+  });
+
+  it('POST /billing/checkout/stripe rejects invalid interval', async () => {
+    await request(app.getHttpServer())
+      .post('/billing/checkout/stripe')
+      .send({ tier: 'premium', interval: 'weekly' })
+      .expect(400);
+
+    expect(billingService.createStripeCheckoutSession).not.toHaveBeenCalled();
+  });
+
+  it('POST /billing/checkout/stripe passes authenticated user to the service', async () => {
+    billingService.createStripeCheckoutSession.mockResolvedValue({
+      ok: true,
+      provider: 'stripe',
+      checkout_url: 'http://localhost:3000/mock-checkout?provider=stripe&tier=premium',
+      customer_id: 'test_cus_user-1',
+      tier: 'premium',
+      interval: 'monthly',
+    });
+
+    await request(app.getHttpServer())
+      .post('/billing/checkout/stripe')
+      .send({ tier: 'premium', interval: 'monthly' })
+      .expect(201);
+
+    expect(billingService.createStripeCheckoutSession).toHaveBeenCalledWith({
+      userId: 'user-1',
+      email: 'user@example.com',
+      tier: 'premium',
+      interval: 'monthly',
+    });
+  });
+
+  it('GET /billing/entitlement returns a safe response shape', async () => {
+    billingService.getUserEntitlement.mockResolvedValue({
+      user_id: 'user-1',
+      tier: 'pro',
+      source: 'paid',
+      provider: 'stripe',
+      active_until: '2999-01-01T00:00:00.000Z',
+      billing_subscription_id: 'internal-subscription-id',
+    });
+
+    const res = await request(app.getHttpServer())
+      .get('/billing/entitlement')
+      .expect(200);
+
+    expect(res.body).toEqual({
+      user_id: 'user-1',
+      tier: 'pro',
+      source: 'paid',
+      provider: 'stripe',
+      active_until: '2999-01-01T00:00:00.000Z',
+    });
+    expect(res.body.billing_subscription_id).toBeUndefined();
+    expect(billingService.getUserEntitlement).toHaveBeenCalledWith('user-1');
+  });
+});

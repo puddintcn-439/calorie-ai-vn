@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SupabaseService } from '../../common/supabase/supabase.service';
+import { BillingService } from '../billing/billing.service';
 
 const PRICING_VND: Record<string, number> = {
   free: 0,
@@ -33,6 +34,7 @@ export class AdminRevenueService {
   constructor(
     private readonly supabase: SupabaseService,
     private readonly config: ConfigService,
+    private readonly billingService: BillingService,
   ) {}
 
   async getRevenue() {
@@ -42,22 +44,30 @@ export class AdminRevenueService {
     monthStart.setHours(0, 0, 0, 0);
     const usdToVnd = this.usdToVndRate();
 
-    const [subscriptions, usersCount, aiUsageRows] = await Promise.all([
+    const [subscriptions, usersCount, aiUsageRows, confirmedRevenue] = await Promise.all([
       this.fetchSubscriptions(),
       this.countUsers(),
       this.fetchAiUsageRows(monthStart.toISOString()),
+      this.billingService.getConfirmedRevenueSummary(now),
     ]);
 
     const active = subscriptions.filter((row) => row.is_active !== false && !row.cancelled_at);
     const cancelled = subscriptions.filter((row) => row.is_active === false || Boolean(row.cancelled_at));
     const activeByTier = this.countByTier(active);
+    const activeTrial = active.filter((row) => String(row.payment_provider ?? '').toLowerCase() === 'trial').length;
+    const activeManualGrant = active.filter((row) => String(row.payment_provider ?? '').toLowerCase() === 'manual').length;
+    const activePaidEstimatedRows = active.filter((row) => this.isEstimatedPaidSubscription(row));
     const paidUsers = (activeByTier.premium ?? 0) + (activeByTier.pro ?? 0);
     const activeSubscriptions = active.length;
     const totalUsers = usersCount || Math.max(activeSubscriptions, subscriptions.length);
     const estimatedMrrVnd = active.reduce((sum, row) => sum + this.priceForTier(row.tier), 0);
+    const estimatedPaidMrrVnd = activePaidEstimatedRows.reduce((sum, row) => sum + this.priceForTier(row.tier), 0);
     const estimatedArrVnd = estimatedMrrVnd * 12;
+    const estimatedPaidArrVnd = estimatedPaidMrrVnd * 12;
     const estimatedMrrUsd = estimatedMrrVnd / usdToVnd;
+    const estimatedPaidMrrUsd = estimatedPaidMrrVnd / usdToVnd;
     const estimatedArrUsd = estimatedArrVnd / usdToVnd;
+    const estimatedPaidArrUsd = estimatedPaidArrVnd / usdToVnd;
     const aiCostMtdUsd = aiUsageRows.reduce((sum, row: any) => sum + Number(row.estimated_cost_usd ?? 0), 0);
     const aiCostMtdVnd = aiCostMtdUsd * usdToVnd;
     const aiCreditsMtd = aiUsageRows.reduce((sum, row: any) => sum + Number(row.credits_consumed ?? 1), 0);
@@ -86,15 +96,23 @@ export class AdminRevenueService {
         active_free: activeByTier.free ?? 0,
         active_premium: activeByTier.premium ?? 0,
         active_pro: activeByTier.pro ?? 0,
+        active_trial: activeTrial,
+        active_manual_grant: activeManualGrant,
+        active_paid_estimated: activePaidEstimatedRows.length,
         paid_users: paidUsers,
         cancelled: cancelled.length,
         by_provider: this.countByProvider(active),
       },
       revenue: {
+        estimated_revenue_note: 'Estimated from user_subscriptions tier pricing. Confirmed paid revenue is available in confirmed_revenue.',
         estimated_mrr_vnd: this.roundVnd(estimatedMrrVnd),
         estimated_mrr_usd: this.roundUsd(estimatedMrrUsd),
         estimated_arr_vnd: this.roundVnd(estimatedArrVnd),
         estimated_arr_usd: this.roundUsd(estimatedArrUsd),
+        estimated_paid_mrr_vnd: this.roundVnd(estimatedPaidMrrVnd),
+        estimated_paid_mrr_usd: this.roundUsd(estimatedPaidMrrUsd),
+        estimated_paid_arr_vnd: this.roundVnd(estimatedPaidArrVnd),
+        estimated_paid_arr_usd: this.roundUsd(estimatedPaidArrUsd),
         arpu_vnd: activeSubscriptions > 0 ? this.roundVnd(estimatedMrrVnd / activeSubscriptions) : 0,
         arpu_usd: activeSubscriptions > 0 ? this.roundUsd(estimatedMrrUsd / activeSubscriptions) : 0,
         arppu_vnd: paidUsers > 0 ? this.roundVnd(estimatedMrrVnd / paidUsers) : 0,
@@ -118,6 +136,7 @@ export class AdminRevenueService {
         total_users: totalUsers,
         paid_conversion_rate: Math.round(conversionRate * 10000) / 10000,
       },
+      confirmed_revenue: confirmedRevenue,
     };
   }
 
@@ -163,6 +182,12 @@ export class AdminRevenueService {
 
   private priceForTier(tier: string | null | undefined): number {
     return PRICING_VND[String(tier ?? 'free')] ?? 0;
+  }
+
+  private isEstimatedPaidSubscription(row: SubscriptionRow): boolean {
+    const tier = String(row.tier ?? 'free').toLowerCase();
+    const provider = String(row.payment_provider ?? '').toLowerCase();
+    return ['premium', 'pro'].includes(tier) && ['stripe', 'app_store', 'google_play'].includes(provider);
   }
 
   private usdToVndRate(): number {

@@ -95,6 +95,9 @@ export default function AdminAiUsageScreen() {
         <TouchableOpacity style={styles.navButton} onPress={() => router.push('/admin/users' as any)}>
           <Text style={styles.navText}>Users</Text>
         </TouchableOpacity>
+        <TouchableOpacity style={styles.navButton} onPress={() => router.push('/admin/revenue' as any)}>
+          <Text style={styles.navText}>Revenue</Text>
+        </TouchableOpacity>
         {[7, 30, 90].map((days) => (
           <TouchableOpacity key={days} style={[styles.navButton, windowDays === days && styles.navButtonActive]} onPress={() => setWindowDays(days as 7 | 30 | 90)}>
             <Text style={styles.navText}>{days}d</Text>

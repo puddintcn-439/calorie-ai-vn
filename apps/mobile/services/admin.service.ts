@@ -99,6 +99,7 @@ export type AdminRevenueResponse = {
   ai_cost: Record<string, any>;
   margin: Record<string, any>;
   conversion: Record<string, any>;
+  confirmed_revenue?: Record<string, any>;
 };
 
 export const adminService = {
