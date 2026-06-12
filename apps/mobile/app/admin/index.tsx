@@ -5,6 +5,7 @@ import { ScreenShell, SurfaceCard } from '../../components/ui-shell';
 import { Text } from '../../components/i18n-text';
 import { theme } from '../../components/theme';
 import { adminService, type AdminOverview } from '../../services/admin.service';
+import { useAuthStore } from '../../store/auth.store';
 
 function formatNumber(value: number | null | undefined) {
   const numeric = Number(value);
@@ -18,9 +19,9 @@ function formatUsd(value: number | null | undefined) {
 
 function getAdminError(error: any) {
   const status = Number(error?.response?.status ?? 0);
-  if (status === 403) return 'Admin access required';
-  if (status === 401) return 'Please sign in again to view admin tools.';
-  return 'Could not load admin overview right now.';
+  if (status === 403) return 'Tài khoản này không có quyền admin.';
+  if (status === 401) return 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập admin lại.';
+  return 'Không thể tải Admin Console lúc này. Vui lòng thử lại.';
 }
 
 function MetricCard({ label, value }: { label: string; value: string }) {
@@ -33,6 +34,7 @@ function MetricCard({ label, value }: { label: string; value: string }) {
 }
 
 export default function AdminOverviewScreen() {
+  const logout = useAuthStore((state) => state.logout);
   const [overview, setOverview] = useState<AdminOverview | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -54,6 +56,15 @@ export default function AdminOverviewScreen() {
     load().catch(() => {});
   }, [load]);
 
+  const handleLogout = async () => {
+    await logout().catch(() => {});
+    router.replace('/admin/login' as any);
+  };
+
+  const goToAdminLogin = () => {
+    router.replace('/admin/login' as any);
+  };
+
   return (
     <ScreenShell scroll scrollContentStyle={styles.scrollContent} reserveBottomNav={false}>
       <View style={styles.header}>
@@ -62,9 +73,14 @@ export default function AdminOverviewScreen() {
           <Text style={styles.title}>Production Overview</Text>
           <Text style={styles.subtitle}>Read-only monitoring for users, AI cost, quota, credits, and product health.</Text>
         </View>
-        <TouchableOpacity style={styles.refreshButton} onPress={load}>
-          <Text style={styles.refreshText}>Refresh</Text>
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          <TouchableOpacity style={styles.refreshButton} onPress={load}>
+            <Text style={styles.refreshText}>Refresh</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+            <Text style={styles.logoutText}>Logout</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <View style={styles.navRow}>
@@ -81,7 +97,10 @@ export default function AdminOverviewScreen() {
       ) : error ? (
         <SurfaceCard style={styles.centerCard}>
           <Text style={styles.errorTitle}>{error}</Text>
-          <Text style={styles.mutedText}>Your account must be included in ADMIN_EMAILS or BETA_ANALYTICS_ADMIN_EMAILS.</Text>
+          <Text style={styles.mutedText}>Backend vẫn là nguồn xác thực quyền admin. Vui lòng đăng nhập bằng tài khoản admin hợp lệ.</Text>
+          <TouchableOpacity style={styles.loginButton} onPress={goToAdminLogin}>
+            <Text style={styles.loginButtonText}>Quay lại đăng nhập admin</Text>
+          </TouchableOpacity>
         </SurfaceCard>
       ) : overview ? (
         <View style={styles.metricGrid}>
@@ -104,11 +123,14 @@ export default function AdminOverviewScreen() {
 const styles = StyleSheet.create({
   scrollContent: { gap: 18 },
   header: { gap: 12, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
+  headerActions: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 10 },
   eyebrow: { color: theme.colors.accentCyan, fontSize: 12, fontWeight: '900', letterSpacing: 1 },
   title: { color: theme.colors.text, fontSize: 30, fontWeight: '900' },
   subtitle: { color: theme.colors.textMuted, fontSize: 14, lineHeight: 20, maxWidth: 720 },
   refreshButton: { borderRadius: 14, backgroundColor: theme.colors.accentMint, paddingHorizontal: 16, paddingVertical: 10 },
   refreshText: { color: theme.colors.textOnAccent, fontWeight: '900' },
+  logoutButton: { borderRadius: 14, borderWidth: 1, borderColor: theme.colors.borderStrong, backgroundColor: theme.colors.surface, paddingHorizontal: 16, paddingVertical: 10 },
+  logoutText: { color: theme.colors.text, fontWeight: '900' },
   navRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   navButton: { borderRadius: 14, borderWidth: 1, borderColor: theme.colors.borderSubtle, backgroundColor: theme.colors.surface, paddingHorizontal: 16, paddingVertical: 10 },
   navText: { color: theme.colors.text, fontWeight: '800' },
@@ -119,4 +141,6 @@ const styles = StyleSheet.create({
   centerCard: { alignItems: 'center', gap: 10 },
   errorTitle: { color: theme.colors.danger, fontSize: 20, fontWeight: '900' },
   mutedText: { color: theme.colors.textMuted, textAlign: 'center' },
+  loginButton: { marginTop: 4, borderRadius: 14, backgroundColor: theme.colors.accentMint, paddingHorizontal: 16, paddingVertical: 10 },
+  loginButtonText: { color: theme.colors.textOnAccent, fontWeight: '900' },
 });
