@@ -1,8 +1,8 @@
 # Billing PayOS V5 E2E Test Report
 
-Status: Not run yet / Pending PayOS credentials.
+Status: PASSED.
 
-Billing V5 PayOS backend has passed build, lint, and unit tests. This document is the runtime setup checklist and E2E test script for enabling PayOS prepaid checkout without committing secrets.
+Billing V5 PayOS backend has passed build, lint, unit tests, and a real prepaid PayOS payment E2E. This document keeps the runtime setup checklist and records the completed E2E result without exposing secrets.
 
 ## Required Env Checklist
 
@@ -209,32 +209,80 @@ Return/cancel URL safety:
 
 ## Final Result
 
-E2E runtime test result: Not run yet.
+E2E runtime test result: PASSED.
 
-Reason: Pending PayOS credentials and public webhook callback setup.
+Date: 2026-06-13 Asia/Saigon.
 
-Validation already completed for committed Billing V5 foundation:
+Environment:
+
+- Backend local runtime on `http://localhost:3001`.
+- Public tunnel was used successfully for PayOS webhook delivery.
+- Backend and tunnel processes were stopped after the test.
+
+Checkout:
+
+- Provider: `payos`
+- Tier: `premium`
+- Interval: `monthly`
+- Amount: `59000` VND
+- Order code: `1781283708818137`
+- Checkout URL: real PayOS checkout URL, not a mock URL.
+
+Return URL:
+
+```json
+{
+  "ok": true,
+  "provider": "payos",
+  "message": "Payment status will be confirmed by webhook."
+}
+```
+
+Return URL remained UX-only. No invoice was marked paid from the return URL.
+
+Webhook:
+
+- Backend received `POST /billing/webhooks/payos` with HTTP `201`.
+- `billing_events.event_type = 'payos.payment.success'`
+- `billing_events.status = 'processed'`
+- `billing_events.provider_event_id = 'payos:637c6d5c1dba4adbb2bd048daf290e02:FT26164HMQ86'`
+- `billing_events.error_message is null`
+
+Invoice:
+
+- `provider = 'payos'`
+- `provider_invoice_id = '1781283708818137'`
+- `status = 'paid'`
+- `amount_vnd = 59000`
+- `paid_at = '2026-06-12T17:11:30+00:00'`
+
+Subscription:
+
+- `provider = 'payos'`
+- `tier = 'premium'`
+- `status = 'active'`
+- `is_paid = true`
+- `billing_period_end = '2026-07-12T17:11:30+00:00'`
+
+Entitlement:
+
+- `tier = 'premium'`
+- `source = 'paid'`
+- `provider = 'payos'`
+- `active_until = '2026-07-12T17:11:30+00:00'`
+
+Admin revenue:
+
+- API verification skipped because no admin JWT was available.
+- The ledger contains the required paid PayOS invoice and active PayOS subscription for `confirmed_revenue` to include PayOS.
+
+Validation completed after the real PayOS E2E:
 
 - Backend build: PASS
 - Mobile lint: PASS
-- Full tests: PASS
-- npm audit: 8 moderate, no high/critical; remaining fixes require breaking `npm audit fix --force`
+- Full tests: PASS, `365 passed`, `12 skipped`
 
-Fill this section after credentials and webhook tunnel are available:
+Post-test secret hygiene:
 
-```text
-Date:
-Environment:
-Backend URL:
-Webhook public URL:
-Test tier/interval:
-Order code:
-Checkout created:
-Webhook received:
-Invoice paid:
-Subscription active:
-Entitlement paid/payos:
-Admin revenue includes payos:
-Negative tests:
-Notes:
-```
+- Rotate `PAYOS_CHECKSUM_KEY` after local E2E exposure and update hosted/local environment values.
+- Keep PayOS credentials only in environment configuration. Do not commit `.env` files.
