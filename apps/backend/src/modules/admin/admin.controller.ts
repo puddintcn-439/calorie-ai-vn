@@ -7,6 +7,7 @@ import { AdminGuard } from './admin.guard';
 import { AdminRoleGuard } from './admin-role.guard';
 import { AdminRoles } from './admin-roles.decorator';
 import { AdminService } from './admin.service';
+import { AdminRevenueService } from './admin-revenue.service';
 
 class AdminAiUsageQueryDto {
   @IsOptional()
@@ -107,7 +108,10 @@ function getAdminActor(req: any) {
 @UseGuards(JwtAuthGuard, AdminGuard, AdminRoleGuard)
 @Controller('admin')
 export class AdminController {
-  constructor(private readonly adminService: AdminService) {}
+  constructor(
+    private readonly adminService: AdminService,
+    private readonly adminRevenueService: AdminRevenueService,
+  ) {}
 
   @Get('overview')
   @AdminRoles('viewer')
@@ -123,6 +127,13 @@ export class AdminController {
   getAiUsage(@Request() req: any, @Query() query: AdminAiUsageQueryDto) {
     const email = req?.user?.email;
     return this.adminService.getAiUsage(email, query.days ?? 30);
+  }
+
+  @Get('revenue')
+  @AdminRoles('admin')
+  @ApiOperation({ summary: 'Get subscription revenue, AI cost, margin, and conversion metrics' })
+  getRevenue() {
+    return this.adminRevenueService.getRevenue();
   }
 
   @Get('audit-log')
