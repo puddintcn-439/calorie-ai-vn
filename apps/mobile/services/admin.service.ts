@@ -87,6 +87,20 @@ export type AdminResetAiQuotaResponse = {
   audited: boolean;
 };
 
+export type AdminRevenueResponse = {
+  generated_at: string;
+  default_currency: 'VND' | 'USD';
+  display_currencies: Array<'VND' | 'USD'>;
+  ai_cost_source_currency: 'USD';
+  usd_to_vnd_rate: number;
+  pricing: Record<string, any>;
+  subscriptions: Record<string, any>;
+  revenue: Record<string, any>;
+  ai_cost: Record<string, any>;
+  margin: Record<string, any>;
+  conversion: Record<string, any>;
+};
+
 export const adminService = {
   async fetchOverview(): Promise<AdminOverview> {
     const { data } = await apiClient.get('/admin/overview');
@@ -115,6 +129,11 @@ export const adminService = {
 
   async resetAiQuota(userId: string, reason: string, scope: 'daily' | 'monthly' = 'daily'): Promise<AdminResetAiQuotaResponse> {
     const { data } = await apiClient.post(`/admin/users/${encodeURIComponent(userId)}/reset-ai-quota`, { reason, scope });
+    return data;
+  },
+
+  async fetchRevenue(): Promise<AdminRevenueResponse> {
+    const { data } = await apiClient.get('/admin/revenue');
     return data;
   },
 
