@@ -39,6 +39,15 @@ function KeyValue({ label, value }: { label: string; value: any }) {
   );
 }
 
+function hasBillingData(detail: AdminUserDetail) {
+  return Boolean(
+    detail.billing_entitlement
+    || detail.latest_billing_invoice
+    || detail.latest_billing_subscription
+    || detail.latest_renewal_reminder?.has_reminder,
+  );
+}
+
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <SurfaceCard style={styles.section}>
@@ -220,6 +229,57 @@ export default function AdminUserDetailScreen() {
             </View>
           </Section>
 
+          <Section title="Billing & PayOS">
+            {hasBillingData(detail) ? (
+              <View style={styles.sectionBody}>
+                <Text style={styles.groupTitle}>Entitlement</Text>
+                <View style={styles.grid}>
+                  <KeyValue label="Tier" value={detail.billing_entitlement?.tier} />
+                  <KeyValue label="Source" value={detail.billing_entitlement?.source} />
+                  <KeyValue label="Provider" value={detail.billing_entitlement?.provider} />
+                  <KeyValue label="Active Until" value={date(detail.billing_entitlement?.active_until)} />
+                </View>
+
+                <Text style={styles.groupTitle}>Latest Invoice</Text>
+                {detail.latest_billing_invoice ? (
+                  <View style={styles.grid}>
+                    <KeyValue label="Provider" value={detail.latest_billing_invoice.provider} />
+                    <KeyValue label="Status" value={detail.latest_billing_invoice.status} />
+                    <KeyValue label="Amount VND" value={n(detail.latest_billing_invoice.amount_vnd)} />
+                    <KeyValue label="Order Code" value={detail.latest_billing_invoice.order_code ?? detail.latest_billing_invoice.provider_invoice_id} />
+                    <KeyValue label="Tier" value={detail.latest_billing_invoice.tier} />
+                    <KeyValue label="Interval" value={detail.latest_billing_invoice.interval} />
+                    <KeyValue label="Paid At" value={date(detail.latest_billing_invoice.paid_at)} />
+                    <KeyValue label="Created" value={date(detail.latest_billing_invoice.created_at)} />
+                  </View>
+                ) : <Text style={styles.muted}>No billing invoice found.</Text>}
+
+                <Text style={styles.groupTitle}>Latest Subscription</Text>
+                {detail.latest_billing_subscription ? (
+                  <View style={styles.grid}>
+                    <KeyValue label="Provider" value={detail.latest_billing_subscription.provider} />
+                    <KeyValue label="Tier" value={detail.latest_billing_subscription.tier} />
+                    <KeyValue label="Status" value={detail.latest_billing_subscription.status} />
+                    <KeyValue label="Paid" value={detail.latest_billing_subscription.is_paid ? 'Yes' : 'No'} />
+                    <KeyValue label="Period End" value={date(detail.latest_billing_subscription.billing_period_end)} />
+                    <KeyValue label="Period Start" value={date(detail.latest_billing_subscription.billing_period_start)} />
+                    <KeyValue label="Cancelled" value={date(detail.latest_billing_subscription.cancelled_at)} />
+                  </View>
+                ) : <Text style={styles.muted}>No billing subscription found.</Text>}
+
+                <Text style={styles.groupTitle}>Renewal Reminder</Text>
+                {detail.latest_renewal_reminder?.has_reminder ? (
+                  <View style={styles.reminderBox}>
+                    <Text style={styles.rowTitle}>{detail.latest_renewal_reminder.message}</Text>
+                    <Text style={styles.muted}>
+                      {detail.latest_renewal_reminder.reminder_window ?? '--'} · {n(detail.latest_renewal_reminder.days_remaining)} days remaining
+                    </Text>
+                  </View>
+                ) : <Text style={styles.muted}>No renewal reminder.</Text>}
+              </View>
+            ) : <Text style={styles.muted}>Chưa có dữ liệu thanh toán.</Text>}
+          </Section>
+
           <Section title="AI Quota & Credits">
             {quota ? (
               <View style={styles.sectionBody}>
@@ -273,6 +333,7 @@ const styles = StyleSheet.create({
   section: { gap: 12 },
   sectionTitle: { color: theme.colors.text, fontSize: 18, fontWeight: '900' },
   sectionBody: { gap: 10 },
+  groupTitle: { color: theme.colors.textSoft, fontSize: 13, fontWeight: '900', textTransform: 'uppercase' },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   keyBox: { minWidth: 180, flexGrow: 1, borderRadius: 14, backgroundColor: theme.colors.surfaceAlt, padding: 12 },
   keyLabel: { color: theme.colors.textMuted, fontSize: 11, fontWeight: '800', textTransform: 'uppercase' },
@@ -281,6 +342,7 @@ const styles = StyleSheet.create({
   rowCopy: { flex: 1 },
   rowTitle: { color: theme.colors.text, fontWeight: '900' },
   rowRight: { color: theme.colors.text, fontWeight: '900', textAlign: 'right' },
+  reminderBox: { gap: 4, borderRadius: 14, borderWidth: 1, borderColor: theme.colors.borderWarning, backgroundColor: theme.colors.surfaceWarning, padding: 12 },
   actionBox: { gap: 12, borderRadius: 16, borderWidth: 1, borderColor: theme.colors.borderSubtle, backgroundColor: theme.colors.surfaceAlt, padding: 14 },
   actionHeader: { flexDirection: 'row', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start' },
   actionTitle: { color: theme.colors.text, fontSize: 16, fontWeight: '900' },

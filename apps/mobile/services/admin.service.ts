@@ -38,6 +38,10 @@ export type AdminUserDetail = {
   generated_at: string;
   profile: Record<string, any>;
   subscription: Record<string, any>;
+  billing_entitlement?: Record<string, any> | null;
+  latest_billing_subscription?: Record<string, any> | null;
+  latest_billing_invoice?: Record<string, any> | null;
+  latest_renewal_reminder?: Record<string, any> | null;
   ai_quota: Record<string, any> | null;
   recent_food_logs: any[];
   recent_ai_usage: any[];
