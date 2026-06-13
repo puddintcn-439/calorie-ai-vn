@@ -517,6 +517,11 @@ describe('BillingService', () => {
       currency_original: 'VND',
       metadata: expect.objectContaining({ interval: 'monthly', source: 'payos_checkout_created' }),
     });
+    expect(db.state.billing_subscriptions ?? []).toHaveLength(0);
+    expect(db.state.user_subscriptions ?? []).toHaveLength(0);
+    expect(JSON.stringify(result)).not.toContain('api_key');
+    expect(JSON.stringify(result)).not.toContain('checksum');
+    expect(JSON.stringify(result)).not.toContain('client_id');
   });
 
   it('throws a safe error for production PayOS checkout without PayOS config', async () => {
@@ -589,6 +594,22 @@ describe('BillingService', () => {
 
     expect(payosMock.webhooks.verify).toHaveBeenCalledWith(payload);
     expect(result).toMatchObject({ provider: 'payos', processed: true });
+  });
+
+  it('rejects invalid PayOS webhook verification safely', async () => {
+    const service = makeService(makeDb());
+    jest.spyOn(service as any, 'getPayosClient').mockReturnValue({
+      webhooks: { verify: jest.fn(() => { throw new Error('invalid signature with checksum_key'); }) },
+    });
+
+    try {
+      await service.handlePayosWebhook(payosSuccessPayload(900001));
+      fail('Expected invalid PayOS webhook verification to fail');
+    } catch (error: any) {
+      expect(error).toBeInstanceOf(BadRequestException);
+      expect(error.message).toBe('Invalid PayOS webhook signature.');
+      expect(JSON.stringify(error?.getResponse?.())).not.toContain('checksum_key');
+    }
   });
 
   it('successful PayOS webhook updates invoice and creates active subscription', async () => {

@@ -10,11 +10,21 @@ function makeDb(tables: Record<string, any[]> = {}) {
     filters.every(([key, value]) => row?.[key] === value)
     && inFilters.every(([key, values]) => values.includes(row?.[key]));
   const makeChain = (table: string) => {
-    const chain: any = { filters: [] as Array<[string, any]>, inFilters: [] as Array<[string, any[]]>, insertPayload: null as any, updatePayload: null as any };
-    const rows = () => (state[table] ?? []).filter((row) => matches(row, chain.filters, chain.inFilters));
+    const chain: any = { filters: [] as Array<[string, any]>, inFilters: [] as Array<[string, any[]]>, orders: [] as Array<[string, boolean]>, insertPayload: null as any, updatePayload: null as any };
+    const rows = () => {
+      const filtered = (state[table] ?? []).filter((row) => matches(row, chain.filters, chain.inFilters));
+      return chain.orders.reduce((items: any[], pair: [string, boolean]) => {
+        const [key, ascending] = pair;
+        return [...items].sort((a: any, b: any) => {
+          const left = String(a?.[key] ?? '');
+          const right = String(b?.[key] ?? '');
+          return ascending ? left.localeCompare(right) : right.localeCompare(left);
+        });
+      }, filtered as any[]);
+    };
     chain.select = jest.fn().mockReturnValue(chain);
     chain.eq = jest.fn((key: string, value: any) => { chain.filters.push([key, value]); return chain; });
-    chain.order = jest.fn().mockReturnValue(chain);
+    chain.order = jest.fn((key: string, options?: { ascending?: boolean }) => { chain.orders.push([key, options?.ascending !== false]); return chain; });
     chain.gte = jest.fn().mockReturnValue(chain);
     chain.in = jest.fn((key: string, value: any[]) => { chain.inFilters.push([key, value]); return chain; });
     chain.insert = jest.fn((payload: any) => { chain.insertPayload = payload; return chain; });
@@ -174,6 +184,41 @@ describe('AdminService user billing detail', () => {
     expect(result.latest_billing_invoice).toBeNull();
     expect(result.latest_billing_subscription).toBeNull();
     expect(result.latest_renewal_reminder).toEqual({ has_reminder: false });
+  });
+
+  it('selects latest billing invoice/subscription for the requested user only', async () => {
+    const db = makeDb({
+      users: [{ id: USER_ID, email: 'user@example.com', created_at: null, updated_at: null }],
+      billing_subscriptions: [
+        { user_id: USER_ID, provider: 'payos', tier: 'premium', status: 'expired', is_paid: true, billing_period_end: '2026-05-12T00:00:00.000Z', updated_at: '2026-05-12T00:00:00.000Z' },
+        { user_id: USER_ID, provider: 'payos', tier: 'pro', status: 'active', is_paid: true, billing_period_end: '2026-07-12T00:00:00.000Z', updated_at: '2026-06-12T00:00:00.000Z' },
+        { user_id: 'other-user', provider: 'payos', tier: 'premium', status: 'active', is_paid: true, billing_period_end: '2099-01-01T00:00:00.000Z', updated_at: '2099-01-01T00:00:00.000Z' },
+      ],
+      billing_invoices: [
+        { user_id: USER_ID, provider: 'payos', provider_invoice_id: 'old-order', tier: 'premium', status: 'paid', amount_vnd: 59000, created_at: '2026-05-12T00:00:00.000Z', metadata: { interval: 'monthly' } },
+        { user_id: USER_ID, provider: 'payos', provider_invoice_id: 'new-order', tier: 'pro', status: 'paid', amount_vnd: 999000, created_at: '2026-06-12T00:00:00.000Z', metadata: { interval: 'annual' } },
+        { user_id: 'other-user', provider: 'payos', provider_invoice_id: 'other-order', tier: 'premium', status: 'paid', amount_vnd: 59000, created_at: '2099-01-01T00:00:00.000Z', metadata: { interval: 'monthly' } },
+      ],
+    });
+    const service = makeService(db);
+
+    const result = await service.getUserDetail(USER_ID);
+
+    expect(result.latest_billing_subscription).toMatchObject({
+      provider: 'payos',
+      tier: 'pro',
+      status: 'active',
+      billing_period_end: '2026-07-12T00:00:00.000Z',
+    });
+    expect(result.latest_billing_invoice).toMatchObject({
+      provider_invoice_id: 'new-order',
+      order_code: 'new-order',
+      tier: 'pro',
+      interval: 'annual',
+      amount_vnd: 999000,
+    });
+    expect(JSON.stringify(result)).not.toContain('other-order');
+    expect(JSON.stringify(result)).not.toContain('2099-01-01');
   });
 
   it('throws not found for missing users', async () => {

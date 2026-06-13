@@ -247,4 +247,32 @@ describe('BillingController', () => {
 
     expect(billingService.listPaymentIssuesForUser).toHaveBeenCalledWith('user-1');
   });
+
+  it('GET /billing/return/payos is UX-only and does not mark invoices paid', async () => {
+    const res = await request(app.getHttpServer())
+      .get('/billing/return/payos')
+      .expect(200);
+
+    expect(res.body).toEqual({
+      ok: true,
+      provider: 'payos',
+      message: 'Payment status will be confirmed by webhook.',
+    });
+    expect(billingService.handlePayosWebhook).not.toHaveBeenCalled();
+    expect(billingService.getUserEntitlement).not.toHaveBeenCalled();
+  });
+
+  it('GET /billing/cancel/payos is UX-only and does not mark invoices paid', async () => {
+    const res = await request(app.getHttpServer())
+      .get('/billing/cancel/payos')
+      .expect(200);
+
+    expect(res.body).toEqual({
+      ok: true,
+      provider: 'payos',
+      message: 'Payment status will be confirmed by webhook.',
+    });
+    expect(billingService.handlePayosWebhook).not.toHaveBeenCalled();
+    expect(billingService.getUserEntitlement).not.toHaveBeenCalled();
+  });
 });

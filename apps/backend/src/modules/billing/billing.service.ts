@@ -1256,8 +1256,14 @@ export class BillingService {
   }> {
     const payos = this.getPayosClient();
     if (payos) {
-      const verified = await payos.webhooks.verify(payload);
-      return this.normalizePayosWebhookPayload(payload, verified);
+      try {
+        const verified = await payos.webhooks.verify(payload);
+        return this.normalizePayosWebhookPayload(payload, verified);
+      } catch (err: any) {
+        // Normalize and hide any sensitive details from provider errors
+        const _ = this.safeErrorMessage(err);
+        throw new BadRequestException('Invalid PayOS webhook signature.');
+      }
     }
 
     if (this.isProduction()) {
