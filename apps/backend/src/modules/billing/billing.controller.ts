@@ -72,6 +72,16 @@ export class BillingController {
     };
   }
 
+  @Get('renewal-reminder')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get current user PayOS prepaid renewal reminder' })
+  async getRenewalReminder(@Request() req: any) {
+    const userId = req.user?.id ?? req.user?.sub;
+    if (!userId) throw new UnauthorizedException('Authenticated user id is required.');
+    return this.billingService.getPayosRenewalReminder(userId);
+  }
+
   @Post('webhooks/stripe')
   @ApiOperation({ summary: 'Receive Stripe billing webhook events' })
   handleStripeWebhook(@Body() payload: any, @Headers() headers: Record<string, string | string[] | undefined>, @Request() req: any) {

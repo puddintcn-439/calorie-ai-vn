@@ -79,6 +79,21 @@ type UserEntitlement = {
   legacy_subscription_id?: string | null;
 };
 
+type PayosRenewalReminderWindow = '7_day' | '3_day' | '1_day' | 'expired';
+
+type PayosRenewalReminder =
+  | { has_reminder: false }
+  | {
+    has_reminder: true;
+    tier: Extract<BillingEntitlementTier, 'premium' | 'pro'>;
+    provider: 'payos';
+    active_until: string;
+    billing_period_end: string;
+    days_remaining: number;
+    reminder_window: PayosRenewalReminderWindow;
+    message: string;
+  };
+
 @Injectable()
 export class BillingService {
   private stripeClient: Stripe.Stripe | null | undefined;
@@ -396,6 +411,46 @@ export class BillingService {
       tier: 'free',
       source: 'free',
       active_until: null,
+    };
+  }
+
+  async getPayosRenewalReminder(userId: string, now = new Date()): Promise<PayosRenewalReminder> {
+    const normalizedUserId = String(userId ?? '').trim();
+    if (!normalizedUserId) {
+      throw new HttpException('User id is required for PayOS renewal reminders.', HttpStatus.BAD_REQUEST);
+    }
+
+    const rows = await this.fetchPayosSubscriptionsForRenewalReminder(normalizedUserId);
+    const subscription = rows
+      .map((row) => {
+        const tier = this.normalizeTier(row.tier);
+        const periodEnd = row.billing_period_end ? new Date(String(row.billing_period_end)) : null;
+        if (!['premium', 'pro'].includes(tier) || !periodEnd || Number.isNaN(periodEnd.getTime())) return null;
+        return { row, tier: tier as Extract<BillingEntitlementTier, 'premium' | 'pro'>, periodEnd };
+      })
+      .filter((entry): entry is { row: Record<string, any>; tier: Extract<BillingEntitlementTier, 'premium' | 'pro'>; periodEnd: Date } => entry !== null)
+      .sort((a, b) => {
+        const tierDelta = this.tierPriority(b.tier) - this.tierPriority(a.tier);
+        if (tierDelta !== 0) return tierDelta;
+        return b.periodEnd.getTime() - a.periodEnd.getTime();
+      })[0];
+
+    if (!subscription) return { has_reminder: false };
+
+    const daysRemaining = this.daysUntil(subscription.periodEnd, now);
+    const reminderWindow = this.payosRenewalReminderWindow(daysRemaining);
+    if (!reminderWindow) return { has_reminder: false };
+
+    const activeUntil = subscription.periodEnd.toISOString();
+    return {
+      has_reminder: true,
+      tier: subscription.tier,
+      provider: 'payos',
+      active_until: activeUntil,
+      billing_period_end: activeUntil,
+      days_remaining: daysRemaining,
+      reminder_window: reminderWindow,
+      message: this.payosRenewalReminderMessage(subscription.tier, reminderWindow),
     };
   }
 
@@ -833,6 +888,51 @@ export class BillingService {
       .limit(50);
     if (error) return [];
     return Array.isArray(data) ? data : [];
+  }
+
+  private async fetchPayosSubscriptionsForRenewalReminder(userId: string): Promise<Array<Record<string, any>>> {
+    const { data, error } = await this.supabase.db
+      .from('billing_subscriptions')
+      .select('id, user_id, provider, tier, status, is_paid, billing_period_end, cancelled_at, updated_at, created_at')
+      .eq('user_id', userId)
+      .eq('provider', 'payos')
+      .eq('status', 'active')
+      .eq('is_paid', true)
+      .is('cancelled_at', null)
+      .limit(100);
+    if (error) return [];
+    return Array.isArray(data)
+      ? data.filter((row) => (
+        row?.user_id === userId
+        && String(row?.provider ?? '').toLowerCase() === 'payos'
+        && String(row?.status ?? '').toLowerCase() === 'active'
+        && row?.is_paid === true
+        && !row?.cancelled_at
+      ))
+      : [];
+  }
+
+  private daysUntil(end: Date, now: Date): number {
+    const dayMs = 24 * 60 * 60 * 1000;
+    const diff = end.getTime() - now.getTime();
+    if (diff <= 0) return 0;
+    return Math.ceil(diff / dayMs);
+  }
+
+  private payosRenewalReminderWindow(daysRemaining: number): PayosRenewalReminderWindow | null {
+    if (daysRemaining <= 0) return 'expired';
+    if (daysRemaining <= 1) return '1_day';
+    if (daysRemaining <= 3) return '3_day';
+    if (daysRemaining <= 7) return '7_day';
+    return null;
+  }
+
+  private payosRenewalReminderMessage(tier: Extract<BillingEntitlementTier, 'premium' | 'pro'>, window: PayosRenewalReminderWindow): string {
+    const name = this.titleCase(tier);
+    if (window === '7_day') return `Gói ${name} của bạn còn 7 ngày. Gia hạn để tiếp tục sử dụng.`;
+    if (window === '3_day') return `Gói ${name} của bạn còn 3 ngày. Gia hạn để không bị gián đoạn.`;
+    if (window === '1_day') return `Gói ${name} của bạn còn 1 ngày. Hãy gia hạn hôm nay.`;
+    return `Gói ${name} của bạn đã hết hạn. Gia hạn để tiếp tục dùng tính năng ${name}.`;
   }
 
   private isActivePaidBillingSubscription(row: Record<string, any>, now: Date): boolean {

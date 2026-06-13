@@ -881,6 +881,74 @@ describe('BillingService', () => {
     });
   });
 
+  it('returns no renewal reminder when no active paid PayOS subscription exists', async () => {
+    const service = makeService(makeDb({
+      billing_subscriptions: { data: [
+        { id: 'bs_stripe', user_id: 'user-1', tier: 'premium', provider: 'stripe', status: 'active', is_paid: true, billing_period_end: '2026-06-19T12:00:00.000Z', cancelled_at: null },
+        { id: 'bs_manual', user_id: 'user-1', tier: 'premium', provider: 'manual', status: 'active', is_paid: true, billing_period_end: '2026-06-19T12:00:00.000Z', cancelled_at: null },
+        { id: 'bs_free', user_id: 'user-1', tier: 'free', provider: 'payos', status: 'active', is_paid: false, billing_period_end: '2026-06-19T12:00:00.000Z', cancelled_at: null },
+      ] },
+    }));
+
+    await expect(service.getPayosRenewalReminder('user-1', now)).resolves.toEqual({ has_reminder: false });
+  });
+
+  it('returns a 7_day renewal reminder for active PayOS subscriptions expiring in 7 days', async () => {
+    const service = makeService(makeDb({
+      billing_subscriptions: { data: [{ id: 'bs_payos', user_id: 'user-1', tier: 'premium', provider: 'payos', status: 'active', is_paid: true, billing_period_end: '2026-06-19T12:00:00.000Z', cancelled_at: null }] },
+    }));
+
+    await expect(service.getPayosRenewalReminder('user-1', now)).resolves.toMatchObject({
+      has_reminder: true,
+      tier: 'premium',
+      provider: 'payos',
+      active_until: '2026-06-19T12:00:00.000Z',
+      billing_period_end: '2026-06-19T12:00:00.000Z',
+      days_remaining: 7,
+      reminder_window: '7_day',
+      message: 'Gói Premium của bạn còn 7 ngày. Gia hạn để tiếp tục sử dụng.',
+    });
+  });
+
+  it('returns a 3_day renewal reminder for active PayOS subscriptions expiring in 3 days', async () => {
+    const service = makeService(makeDb({
+      billing_subscriptions: { data: [{ id: 'bs_payos', user_id: 'user-1', tier: 'premium', provider: 'payos', status: 'active', is_paid: true, billing_period_end: '2026-06-15T12:00:00.000Z', cancelled_at: null }] },
+    }));
+
+    await expect(service.getPayosRenewalReminder('user-1', now)).resolves.toMatchObject({
+      has_reminder: true,
+      days_remaining: 3,
+      reminder_window: '3_day',
+      message: 'Gói Premium của bạn còn 3 ngày. Gia hạn để không bị gián đoạn.',
+    });
+  });
+
+  it('returns a 1_day renewal reminder for active PayOS subscriptions expiring in 1 day', async () => {
+    const service = makeService(makeDb({
+      billing_subscriptions: { data: [{ id: 'bs_payos', user_id: 'user-1', tier: 'premium', provider: 'payos', status: 'active', is_paid: true, billing_period_end: '2026-06-12T18:00:00.000Z', cancelled_at: null }] },
+    }));
+
+    await expect(service.getPayosRenewalReminder('user-1', now)).resolves.toMatchObject({
+      has_reminder: true,
+      days_remaining: 1,
+      reminder_window: '1_day',
+      message: 'Gói Premium của bạn còn 1 ngày. Hãy gia hạn hôm nay.',
+    });
+  });
+
+  it('returns an expired renewal reminder for elapsed active PayOS subscriptions', async () => {
+    const service = makeService(makeDb({
+      billing_subscriptions: { data: [{ id: 'bs_payos', user_id: 'user-1', tier: 'premium', provider: 'payos', status: 'active', is_paid: true, billing_period_end: '2026-06-11T12:00:00.000Z', cancelled_at: null }] },
+    }));
+
+    await expect(service.getPayosRenewalReminder('user-1', now)).resolves.toMatchObject({
+      has_reminder: true,
+      days_remaining: 0,
+      reminder_window: 'expired',
+      message: 'Gói Premium của bạn đã hết hạn. Gia hạn để tiếp tục dùng tính năng Premium.',
+    });
+  });
+
   it('syncs paid billing entitlement into legacy user_subscriptions', async () => {
     const db = makeDb({
       billing_subscriptions: { data: [{ id: 'bs_1', user_id: 'user-1', tier: 'pro', provider: 'stripe', status: 'active', is_paid: true, billing_period_end: '2999-01-01T00:00:00.000Z', cancelled_at: null }] },

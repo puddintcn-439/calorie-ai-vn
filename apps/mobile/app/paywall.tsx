@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Linking,
@@ -16,6 +16,7 @@ import {
   BillingCheckoutInterval,
   BillingCheckoutTier,
   BillingEntitlement,
+  BillingRenewalReminder,
   billingService,
 } from '../services/billing.service';
 
@@ -126,6 +127,7 @@ export default function PaywallScreen() {
   const [checkoutLoadingKey, setCheckoutLoadingKey] = useState<string | null>(null);
   const [statusLoading, setStatusLoading] = useState(false);
   const [entitlement, setEntitlement] = useState<BillingEntitlement | null>(null);
+  const [renewalReminder, setRenewalReminder] = useState<BillingRenewalReminder | null>(null);
   const [lastOrderCode, setLastOrderCode] = useState<number | null>(null);
   const [message, setMessage] = useState<StatusMessage | null>(null);
 
@@ -134,6 +136,19 @@ export default function PaywallScreen() {
     [entitlement?.active_until, locale],
   );
   const hasActivePayosPlan = entitlement?.source === 'paid' && entitlement.provider === 'payos';
+
+  const loadRenewalReminder = useCallback(async () => {
+    try {
+      const reminder = await billingService.getRenewalReminder();
+      setRenewalReminder(reminder);
+    } catch {
+      setRenewalReminder(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadRenewalReminder();
+  }, [loadRenewalReminder]);
 
   const handleCreateCheckout = async (plan: PaywallPlan) => {
     const loadingKey = `${plan.tier}-${plan.interval}`;
@@ -163,6 +178,12 @@ export default function PaywallScreen() {
     }
   };
 
+  const handleRenewNow = () => {
+    if (!renewalReminder?.has_reminder) return;
+    const plan = PAYOS_PLANS.find((candidate) => candidate.tier === renewalReminder.tier && candidate.interval === 'monthly');
+    if (plan) void handleCreateCheckout(plan);
+  };
+
   const handleRefreshEntitlement = async () => {
     setStatusLoading(true);
     setMessage(null);
@@ -170,6 +191,7 @@ export default function PaywallScreen() {
     try {
       const latest = await billingService.getEntitlement();
       setEntitlement(latest);
+      void loadRenewalReminder();
 
       if (latest.source === 'paid' && latest.provider === 'payos') {
         setMessage({
@@ -330,6 +352,30 @@ export default function PaywallScreen() {
               )}
             </TouchableOpacity>
           </View>
+
+          {renewalReminder?.has_reminder ? (
+            <View style={styles.renewalReminder}>
+              <MaterialIcons
+                name={renewalReminder.reminder_window === 'expired' ? 'error' : 'schedule'}
+                size={22}
+                color={renewalReminder.reminder_window === 'expired' ? theme.colors.danger : theme.colors.warning}
+              />
+              <View style={styles.renewalTextGroup}>
+                <Text style={styles.renewalTitle} i18nKey="screen.paywall.renewal.title" />
+                <Text style={styles.renewalBody}>{renewalReminder.message}</Text>
+                <TouchableOpacity
+                  style={[styles.renewalButton, checkoutLoadingKey !== null && styles.buttonDisabled]}
+                  onPress={handleRenewNow}
+                  disabled={checkoutLoadingKey !== null}
+                  accessibilityRole="button"
+                  accessibilityState={{ disabled: checkoutLoadingKey !== null }}
+                  testID="paywall-renew-now-button"
+                >
+                  <Text style={styles.renewalButtonText} i18nKey="screen.paywall.renewal.cta" />
+                </TouchableOpacity>
+              </View>
+            </View>
+          ) : null}
 
           {hasActivePayosPlan ? (
             <View style={styles.activePlan}>
@@ -598,6 +644,43 @@ const styles = createThemedStyles((colors, radii) => ({
     color: colors.textOnDanger,
     fontSize: 14,
     fontWeight: '800',
+  },
+  renewalReminder: {
+    flexDirection: 'row',
+    gap: 10,
+    alignItems: 'flex-start',
+    backgroundColor: colors.surfaceWarning,
+    borderColor: colors.borderWarning,
+    borderWidth: 1,
+    borderRadius: radii.lg,
+    padding: 12,
+  },
+  renewalTextGroup: {
+    flex: 1,
+    gap: 8,
+  },
+  renewalTitle: {
+    color: colors.warning,
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  renewalBody: {
+    color: colors.textSoft,
+    fontSize: 13,
+    lineHeight: 19,
+    fontWeight: '700',
+  },
+  renewalButton: {
+    alignSelf: 'flex-start',
+    borderRadius: radii.lg,
+    backgroundColor: colors.accentMint,
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+  },
+  renewalButtonText: {
+    color: colors.textOnAccent,
+    fontSize: 13,
+    fontWeight: '900',
   },
   activePlan: {
     flexDirection: 'row',

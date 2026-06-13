@@ -15,6 +15,7 @@ describe('BillingController', () => {
     handleAppStoreWebhook: jest.fn(),
     handleGooglePlayWebhook: jest.fn(),
     getUserEntitlement: jest.fn(),
+    getPayosRenewalReminder: jest.fn(),
   };
 
   beforeAll(async () => {
@@ -151,5 +152,53 @@ describe('BillingController', () => {
     });
     expect(res.body.billing_subscription_id).toBeUndefined();
     expect(billingService.getUserEntitlement).toHaveBeenCalledWith('user-1');
+  });
+
+  it('GET /billing/renewal-reminder returns the current user PayOS reminder', async () => {
+    billingService.getPayosRenewalReminder.mockResolvedValue({
+      has_reminder: true,
+      tier: 'premium',
+      provider: 'payos',
+      active_until: '2026-06-19T12:00:00.000Z',
+      billing_period_end: '2026-06-19T12:00:00.000Z',
+      days_remaining: 7,
+      reminder_window: '7_day',
+      message: 'Gói Premium của bạn còn 7 ngày. Gia hạn để tiếp tục sử dụng.',
+    });
+
+    const res = await request(app.getHttpServer())
+      .get('/billing/renewal-reminder')
+      .expect(200);
+
+    expect(res.body).toEqual({
+      has_reminder: true,
+      tier: 'premium',
+      provider: 'payos',
+      active_until: '2026-06-19T12:00:00.000Z',
+      billing_period_end: '2026-06-19T12:00:00.000Z',
+      days_remaining: 7,
+      reminder_window: '7_day',
+      message: 'Gói Premium của bạn còn 7 ngày. Gia hạn để tiếp tục sử dụng.',
+    });
+    expect(billingService.getPayosRenewalReminder).toHaveBeenCalledWith('user-1');
+  });
+
+  it('GET /billing/renewal-reminder requires auth', async () => {
+    const moduleRef = await Test.createTestingModule({
+      controllers: [BillingController],
+      providers: [{ provide: BillingService, useValue: billingService }],
+    })
+      .overrideGuard(JwtAuthGuard)
+      .useValue({ canActivate: () => false })
+      .compile();
+
+    const unauthenticatedApp = moduleRef.createNestApplication();
+    await unauthenticatedApp.init();
+
+    await request(unauthenticatedApp.getHttpServer())
+      .get('/billing/renewal-reminder')
+      .expect(403);
+
+    await unauthenticatedApp.close();
   });
 });
