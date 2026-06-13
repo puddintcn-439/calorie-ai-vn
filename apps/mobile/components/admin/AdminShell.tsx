@@ -33,11 +33,13 @@ export function AdminHeader({
   subtitle,
   onRefresh,
   actions,
+  showLogout = true,
 }: {
   title: string;
   subtitle?: string;
   onRefresh?: () => void;
   actions?: ReactNode;
+  showLogout?: boolean;
 }) {
   const logout = useAuthStore((state) => state.logout);
 
@@ -60,19 +62,22 @@ export function AdminHeader({
             <Text style={styles.refreshText}>Refresh</Text>
           </TouchableOpacity>
         ) : null}
-        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-          <Text style={styles.logoutText}>Logout</Text>
-        </TouchableOpacity>
+        {showLogout ? (
+          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+            <Text style={styles.logoutText}>Logout</Text>
+          </TouchableOpacity>
+        ) : null}
       </View>
     </View>
   );
 }
 
-export function AdminNav() {
+export function AdminNav({ mode = 'compact' }: { mode?: 'compact' | 'sidebar' }) {
   const pathname = usePathname();
+  const isSidebar = mode === 'sidebar';
 
   return (
-    <View style={styles.navPanel}>
+    <View style={[styles.navPanel, isSidebar && styles.navPanelSidebar]}>
       {ADMIN_ROUTES.map((item) => {
         const active = isActiveRoute(pathname, item.href);
         const disabled = item.disabled || !item.href;
@@ -81,14 +86,45 @@ export function AdminNav() {
           <TouchableOpacity
             key={`${item.group}-${item.label}`}
             disabled={disabled}
-            style={[styles.navItem, active && styles.navItemActive, disabled && styles.navItemDisabled]}
+            style={[
+              styles.navItem,
+              isSidebar && styles.navItemSidebar,
+              active && styles.navItemActive,
+              active && isSidebar && styles.navItemSidebarActive,
+              disabled && styles.navItemDisabled,
+            ]}
             onPress={() => item.href && router.push(item.href as any)}
           >
-            <Text style={[styles.navGroup, active && styles.navGroupActive]}>{item.group}</Text>
-            <Text style={[styles.navLabel, active && styles.navLabelActive]}>{item.label}</Text>
+            {!isSidebar ? <Text style={[styles.navGroup, active && styles.navGroupActive]}>{item.group}</Text> : null}
+            <Text style={[styles.navLabel, isSidebar && styles.navLabelSidebar, active && styles.navLabelActive]}>{item.label}</Text>
           </TouchableOpacity>
         );
       })}
+    </View>
+  );
+}
+
+function AdminSidebar() {
+  const logout = useAuthStore((state) => state.logout);
+
+  const handleLogout = async () => {
+    await logout().catch(() => {});
+    router.replace('/admin/login' as any);
+  };
+
+  return (
+    <View style={styles.sidebar}>
+      <View style={styles.sidebarTop}>
+        <View style={styles.sidebarBrand}>
+          <Text style={styles.sidebarEyebrow}>ADMIN</Text>
+          <Text style={styles.sidebarTitle}>Calorie AI</Text>
+        </View>
+        <AdminNav mode="sidebar" />
+      </View>
+
+      <TouchableOpacity style={styles.sidebarLogoutButton} onPress={handleLogout}>
+        <Text style={styles.sidebarLogoutText}>Logout</Text>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -109,18 +145,31 @@ export function AdminShell({
   contentStyle?: StyleProp<ViewStyle>;
 }) {
   const { width } = useWindowDimensions();
-  const isDesktop = width >= 980;
+  const isDesktop = width >= 840;
 
   return (
-    <ScreenShell scroll scrollContentStyle={styles.scrollContent} reserveBottomNav={false}>
-      <View style={[styles.shell, isDesktop && styles.shellDesktop]}>
-        <AdminHeader title={title} subtitle={subtitle} onRefresh={onRefresh} actions={actions} />
-        <View style={[styles.body, isDesktop && styles.bodyDesktop]}>
-          <View style={styles.navColumn}>
-            <AdminNav />
+    <ScreenShell
+      scroll
+      contentStyle={styles.screenContent}
+      scrollContentStyle={[styles.scrollContent, isDesktop && styles.scrollContentDesktop]}
+      reserveBottomNav={false}
+    >
+      <View style={[styles.shell, isDesktop ? styles.shellDesktop : styles.shellMobile]}>
+        {isDesktop ? (
+          <>
+            <AdminSidebar />
+            <View style={[styles.mainPanel, contentStyle]}>
+              <AdminHeader title={title} subtitle={subtitle} onRefresh={onRefresh} actions={actions} showLogout={false} />
+              {children}
+            </View>
+          </>
+        ) : (
+          <View style={[styles.mobilePanel, contentStyle]}>
+            <AdminHeader title={title} subtitle={subtitle} onRefresh={onRefresh} actions={actions} />
+            <AdminNav mode="compact" />
+            {children}
           </View>
-          <View style={[styles.mainColumn, contentStyle]}>{children}</View>
-        </View>
+        )}
       </View>
     </ScreenShell>
   );
@@ -210,8 +259,8 @@ export function AdminStateCard({
 }
 
 export const adminStyles = StyleSheet.create({
-  metricGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
-  metricCard: { minWidth: 170, flexGrow: 1, flexBasis: 170, gap: 6 },
+  metricGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, alignItems: 'stretch' },
+  metricCard: { minWidth: 210, flexGrow: 1, flexBasis: 220, gap: 6 },
   metricLabel: { color: theme.colors.textMuted, fontSize: 11, fontWeight: '900', textTransform: 'uppercase' },
   metricValue: { color: theme.colors.text, fontSize: 26, fontWeight: '900' },
   muted: { color: theme.colors.textMuted, fontSize: 12, lineHeight: 18 },
@@ -232,9 +281,12 @@ export const adminStyles = StyleSheet.create({
 });
 
 const styles = StyleSheet.create({
-  scrollContent: { gap: 18 },
-  shell: { gap: 16 },
-  shellDesktop: { gap: 18 },
+  screenContent: { width: '100%', maxWidth: 1320 },
+  scrollContent: { gap: 0 },
+  scrollContentDesktop: { paddingHorizontal: 24, paddingTop: 24 },
+  shell: { width: '100%' },
+  shellMobile: { gap: 14 },
+  shellDesktop: { flexDirection: 'row', alignItems: 'stretch', gap: 20 },
   header: { gap: 14, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap' },
   headerCopy: { flex: 1, minWidth: 260 },
   headerActions: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 10 },
@@ -245,17 +297,36 @@ const styles = StyleSheet.create({
   refreshText: { color: theme.colors.textOnAccent, fontWeight: '900' },
   logoutButton: { borderRadius: 8, borderWidth: 1, borderColor: theme.colors.borderStrong, backgroundColor: theme.colors.surface, paddingHorizontal: 16, paddingVertical: 10 },
   logoutText: { color: theme.colors.text, fontWeight: '900' },
-  body: { gap: 14 },
-  bodyDesktop: { flexDirection: 'row', alignItems: 'flex-start', gap: 18 },
-  navColumn: { flexShrink: 0 },
-  mainColumn: { flex: 1, gap: 14, minWidth: 0 },
+  mobilePanel: { gap: 14 },
+  mainPanel: { flex: 1, minWidth: 0, gap: 14 },
+  sidebar: {
+    width: 244,
+    flexShrink: 0,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: theme.colors.borderSubtle,
+    backgroundColor: theme.colors.surface,
+    padding: 12,
+    minHeight: 620,
+    justifyContent: 'space-between',
+  },
+  sidebarTop: { gap: 14 },
+  sidebarBrand: { paddingHorizontal: 10, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: theme.colors.borderSubtle },
+  sidebarEyebrow: { color: theme.colors.accentCyan, fontSize: 10, fontWeight: '900', letterSpacing: 0.8 },
+  sidebarTitle: { color: theme.colors.text, fontSize: 17, fontWeight: '900', marginTop: 2 },
+  sidebarLogoutButton: { borderRadius: 8, borderWidth: 1, borderColor: theme.colors.borderSubtle, backgroundColor: theme.colors.surfaceAlt, paddingHorizontal: 12, paddingVertical: 11 },
+  sidebarLogoutText: { color: theme.colors.text, fontWeight: '900', textAlign: 'center' },
   navPanel: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  navItem: { borderRadius: 8, borderWidth: 1, borderColor: theme.colors.borderSubtle, backgroundColor: theme.colors.surface, paddingHorizontal: 12, paddingVertical: 10, minWidth: 132 },
+  navPanelSidebar: { flexDirection: 'column', gap: 4 },
+  navItem: { borderRadius: 8, borderWidth: 1, borderColor: theme.colors.borderSubtle, backgroundColor: theme.colors.surface, paddingHorizontal: 12, paddingVertical: 9, minWidth: 118 },
+  navItemSidebar: { minWidth: 0, width: '100%', borderColor: 'transparent', backgroundColor: 'transparent', borderLeftWidth: 3, paddingVertical: 10 },
   navItemActive: { backgroundColor: theme.colors.surfaceLifted, borderColor: theme.colors.accentMint },
+  navItemSidebarActive: { backgroundColor: theme.colors.surfaceAlt, borderLeftColor: theme.colors.accentMint },
   navItemDisabled: { opacity: 0.45 },
   navGroup: { color: theme.colors.textMuted, fontSize: 10, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 0.6 },
   navGroupActive: { color: theme.colors.accentMint },
   navLabel: { color: theme.colors.text, fontSize: 14, fontWeight: '900', marginTop: 3 },
+  navLabelSidebar: { marginTop: 0, fontSize: 14 },
   navLabelActive: { color: theme.colors.text },
   sectionCard: { gap: 12 },
   sectionHeader: { gap: 3 },
