@@ -52,7 +52,7 @@ function makeDb(tables: Record<string, any[]> = {}) {
   return { from: jest.fn().mockImplementation(makeChain), state };
 }
 
-function makeService(db: any, billingService: Partial<BillingServiceMock> = {}) {
+function makeService(db: any, billingService: Partial<BillingServiceMock> = {}, notificationsService?: any) {
   const aiUsageService = { getQuotaRemaining: jest.fn().mockResolvedValue(null) };
   const billing = {
     getUserEntitlement: jest.fn().mockResolvedValue({ tier: 'free', source: 'free', active_until: null }),
@@ -63,6 +63,7 @@ function makeService(db: any, billingService: Partial<BillingServiceMock> = {}) 
     { db } as unknown as SupabaseService,
     aiUsageService as any,
     billing as any,
+    notificationsService,
   );
 }
 
@@ -164,7 +165,8 @@ describe('AdminService user billing detail', () => {
     const db = makeDb({
       users: [{ id: USER_ID, email: 'user@example.com', created_at: null, updated_at: null }],
     });
-    const service = makeService(db);
+    const notificationsService = { notifyPaymentIssueStatusChanged: jest.fn().mockResolvedValue(null) };
+    const service = makeService(db, {}, notificationsService);
 
     const result = await service.getUserDetail(USER_ID);
 
@@ -205,7 +207,8 @@ describe('AdminService user billing detail', () => {
         created_at: '2026-06-12T00:00:00.000Z',
       }],
     });
-    const service = makeService(db);
+    const notificationsService = { notifyPaymentIssueStatusChanged: jest.fn().mockResolvedValue(null) };
+    const service = makeService(db, {}, notificationsService);
 
     const result = await service.getPaymentIssues({ status: 'open', provider: 'payos' });
 
@@ -248,7 +251,8 @@ describe('AdminService user billing detail', () => {
         is_paid: true,
       }],
     });
-    const service = makeService(db);
+    const notificationsService = { notifyPaymentIssueStatusChanged: jest.fn().mockResolvedValue(null) };
+    const service = makeService(db, {}, notificationsService);
 
     const result = await service.updatePaymentIssue(issueId, {
       email: 'admin@example.com',
@@ -281,5 +285,33 @@ describe('AdminService user billing detail', () => {
       target_type: 'billing_payment_issue',
       target_id: issueId,
     });
+    expect(notificationsService.notifyPaymentIssueStatusChanged).toHaveBeenCalledWith(expect.objectContaining({
+      id: issueId,
+      status: 'resolved',
+      resolution: 'Entitlement confirmed active.',
+    }));
+  });
+
+  it('notifies on in_review and rejected status changes but not unchanged status', async () => {
+    const db = makeDb({
+      billing_payment_issues: [{
+        id: '33333333-3333-4333-8333-333333333333',
+        user_id: USER_ID,
+        provider: 'payos',
+        issue_type: 'refund_request',
+        status: 'open',
+      }],
+    });
+    const notificationsService = { notifyPaymentIssueStatusChanged: jest.fn().mockResolvedValue(null) };
+    const service = makeService(db, {}, notificationsService);
+    const actor = { email: 'admin@example.com', role: 'support', user_id: USER_ID };
+
+    await service.updatePaymentIssue('33333333-3333-4333-8333-333333333333', actor, { status: 'in_review' });
+    await service.updatePaymentIssue('33333333-3333-4333-8333-333333333333', actor, { status: 'in_review', admin_note: 'No user notification.' });
+    await service.updatePaymentIssue('33333333-3333-4333-8333-333333333333', actor, { status: 'rejected', resolution: 'Không đủ điều kiện xử lý.' });
+
+    expect(notificationsService.notifyPaymentIssueStatusChanged).toHaveBeenCalledTimes(2);
+    expect(notificationsService.notifyPaymentIssueStatusChanged).toHaveBeenNthCalledWith(1, expect.objectContaining({ status: 'in_review' }));
+    expect(notificationsService.notifyPaymentIssueStatusChanged).toHaveBeenNthCalledWith(2, expect.objectContaining({ status: 'rejected', resolution: 'Không đủ điều kiện xử lý.' }));
   });
 });

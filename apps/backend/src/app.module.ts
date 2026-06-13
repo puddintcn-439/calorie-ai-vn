@@ -17,6 +17,7 @@ import { CalorieTargetModule } from './modules/calorie-target/calorie-target.mod
 import { CoachingModule } from './modules/coaching/coaching.module';
 import { BodyProgressModule } from './modules/body-progress/body-progress.module';
 import { AdminModule } from './modules/admin/admin.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
 import { HealthModule } from './health/health.module';
 import { MetricsModule } from './common/metrics/metrics.module';
 
@@ -53,6 +54,7 @@ import { MetricsModule } from './common/metrics/metrics.module';
     CalorieTargetModule,
     CoachingModule,
     BodyProgressModule,
+    NotificationsModule,
     AdminModule,
   ],
 })

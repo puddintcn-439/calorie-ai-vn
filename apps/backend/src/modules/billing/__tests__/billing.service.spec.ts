@@ -92,10 +92,11 @@ function makeDb(tables: Record<string, { data?: any[]; error?: any }> = {}, inse
   return db;
 }
 
-function makeService(db: any, config: Record<string, string> = {}) {
+function makeService(db: any, config: Record<string, string> = {}, notificationsService?: any) {
   return new BillingService(
     { db } as unknown as SupabaseService,
     { get: jest.fn((key: string) => config[key]) } as any,
+    notificationsService,
   );
 }
 
@@ -972,7 +973,8 @@ describe('BillingService', () => {
         raw_payload: { checksum: 'should-not-leak' },
       }] },
     });
-    const service = makeService(db);
+    const notificationsService = { notifyPaymentIssueCreated: jest.fn().mockResolvedValue(null) };
+    const service = makeService(db, {}, notificationsService);
 
     const result = await service.createPaymentIssue({
       userId: 'user-1',
@@ -996,6 +998,11 @@ describe('BillingService', () => {
       invoice_id: invoiceId,
       created_by_user_id: 'user-1',
     });
+    expect(notificationsService.notifyPaymentIssueCreated).toHaveBeenCalledWith(expect.objectContaining({
+      id: expect.any(String),
+      user_id: 'user-1',
+      issue_type: 'payment_succeeded_but_not_activated',
+    }));
   });
 
   it('rejects payment issues for another user invoice', async () => {

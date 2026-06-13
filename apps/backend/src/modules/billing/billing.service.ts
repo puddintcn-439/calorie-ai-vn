@@ -1,9 +1,10 @@
-import { BadRequestException, HttpException, HttpStatus, Injectable, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, HttpException, HttpStatus, Injectable, Optional, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PayOS } from '@payos/node';
 import { createHash } from 'crypto';
 import Stripe from 'stripe';
 import { SupabaseService } from '../../common/supabase/supabase.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 const DEFAULT_USD_TO_VND = 26000;
 
@@ -117,6 +118,7 @@ export class BillingService {
   constructor(
     private readonly supabase: SupabaseService,
     private readonly config: ConfigService,
+    @Optional() private readonly notificationsService?: NotificationsService,
   ) {}
 
   async getConfirmedRevenueSummary(now = new Date()) {
@@ -500,6 +502,10 @@ export class BillingService {
       .select('id, user_id, invoice_id, subscription_id, provider, issue_type, status, user_message, resolution, created_at, updated_at, resolved_at')
       .maybeSingle();
     if (error) throw error;
+
+    if (data && this.notificationsService) {
+      await this.notificationsService.notifyPaymentIssueCreated(data);
+    }
 
     return this.safeUserPaymentIssue(data);
   }

@@ -471,6 +471,15 @@ export default function PaywallScreen() {
             </View>
             <TouchableOpacity
               style={styles.supportToggle}
+              onPress={() => router.push('/notifications' as any)}
+              accessibilityRole="button"
+              accessibilityLabel="Xem thông báo hỗ trợ"
+              testID="paywall-notifications-button"
+            >
+              <MaterialIcons name="notifications" size={20} color={theme.colors.text} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.supportToggle}
               onPress={() => setSupportExpanded((current) => !current)}
               accessibilityRole="button"
               testID="paywall-payment-issue-toggle"

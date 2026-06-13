@@ -45,6 +45,7 @@ export default function RootLayout() {
       <Stack.Screen name="(auth)" />
       <Stack.Screen name="(tabs)" />
       <Stack.Screen name="admin" />
+      <Stack.Screen name="notifications" />
       <Stack.Screen name="paywall" />
       <Stack.Screen name="achievements" />
       <Stack.Screen name="health-sync" />
