@@ -43,6 +43,13 @@ type BillingProvider = 'stripe' | 'app_store' | 'google_play' | 'payos';
 type BillingEntitlementProvider = BillingProvider | 'manual' | 'trial';
 type BillingEntitlementTier = 'free' | 'premium' | 'pro';
 type BillingEntitlementSource = 'paid' | 'trial' | 'manual' | 'free';
+type BillingPaymentIssueType =
+  | 'refund_request'
+  | 'duplicate_payment'
+  | 'payment_succeeded_but_not_activated'
+  | 'wrong_plan'
+  | 'other';
+type BillingPaymentIssueStatus = 'open' | 'in_review' | 'resolved' | 'rejected';
 
 type BillingEventInput = {
   provider: BillingProvider;
@@ -93,6 +100,14 @@ type PayosRenewalReminder =
     reminder_window: PayosRenewalReminderWindow;
     message: string;
   };
+
+const BILLING_PAYMENT_ISSUE_TYPES: BillingPaymentIssueType[] = [
+  'refund_request',
+  'duplicate_payment',
+  'payment_succeeded_but_not_activated',
+  'wrong_plan',
+  'other',
+];
 
 @Injectable()
 export class BillingService {
@@ -451,6 +466,60 @@ export class BillingService {
       days_remaining: daysRemaining,
       reminder_window: reminderWindow,
       message: this.payosRenewalReminderMessage(subscription.tier, reminderWindow),
+    };
+  }
+
+  async createPaymentIssue(input: {
+    userId: string;
+    issueType: BillingPaymentIssueType;
+    invoiceId?: string | null;
+    userMessage?: string | null;
+  }) {
+    const userId = String(input.userId ?? '').trim();
+    if (!userId) {
+      throw new HttpException('User id is required for payment issues.', HttpStatus.BAD_REQUEST);
+    }
+    const issueType = this.requirePaymentIssueType(input.issueType);
+    const invoiceId = String(input.invoiceId ?? '').trim() || null;
+    const invoice = invoiceId ? await this.requireUserInvoice(userId, invoiceId) : null;
+    const now = new Date().toISOString();
+
+    const { data, error } = await this.supabase.db
+      .from('billing_payment_issues')
+      .insert({
+        user_id: userId,
+        invoice_id: invoice?.id ?? null,
+        subscription_id: null,
+        provider: invoice?.provider ?? 'payos',
+        issue_type: issueType,
+        status: 'open',
+        user_message: this.cleanNullableText(input.userMessage, 1000),
+        created_by_user_id: userId,
+        updated_at: now,
+      })
+      .select('id, user_id, invoice_id, subscription_id, provider, issue_type, status, user_message, resolution, created_at, updated_at, resolved_at')
+      .maybeSingle();
+    if (error) throw error;
+
+    return this.safeUserPaymentIssue(data);
+  }
+
+  async listPaymentIssuesForUser(userId: string) {
+    const normalizedUserId = String(userId ?? '').trim();
+    if (!normalizedUserId) {
+      throw new HttpException('User id is required for payment issues.', HttpStatus.BAD_REQUEST);
+    }
+
+    const { data, error } = await this.supabase.db
+      .from('billing_payment_issues')
+      .select('id, user_id, invoice_id, subscription_id, provider, issue_type, status, user_message, resolution, created_at, updated_at, resolved_at')
+      .eq('user_id', normalizedUserId)
+      .order('created_at', { ascending: false })
+      .limit(25);
+    if (error) throw error;
+
+    return {
+      cases: (Array.isArray(data) ? data : []).map((row) => this.safeUserPaymentIssue(row)),
     };
   }
 
@@ -867,6 +936,54 @@ export class BillingService {
       .maybeSingle();
     if (linkError) throw linkError;
     return userId;
+  }
+
+  private requirePaymentIssueType(value: any): BillingPaymentIssueType {
+    const issueType = String(value ?? '').trim() as BillingPaymentIssueType;
+    if (!BILLING_PAYMENT_ISSUE_TYPES.includes(issueType)) {
+      throw new BadRequestException('Invalid payment issue type.');
+    }
+    return issueType;
+  }
+
+  private async requireUserInvoice(userId: string, invoiceId: string): Promise<Record<string, any>> {
+    if (!this.isUuid(invoiceId)) {
+      throw new BadRequestException('Invalid invoice id. Expected UUID.');
+    }
+
+    const { data, error } = await this.supabase.db
+      .from('billing_invoices')
+      .select('id, user_id, provider, provider_invoice_id, tier, status, amount_vnd, paid_at, created_at')
+      .eq('id', invoiceId)
+      .maybeSingle();
+    if (error) throw error;
+    if (!data || String(data.user_id ?? '') !== userId) {
+      throw new BadRequestException('Invoice does not belong to the authenticated user.');
+    }
+    return data;
+  }
+
+  private cleanNullableText(value: any, maxLength: number): string | null {
+    const text = String(value ?? '').trim();
+    if (!text) return null;
+    return text.length > maxLength ? text.slice(0, maxLength) : text;
+  }
+
+  private safeUserPaymentIssue(row: any) {
+    return {
+      id: row?.id ?? null,
+      user_id: row?.user_id ?? null,
+      invoice_id: row?.invoice_id ?? null,
+      subscription_id: row?.subscription_id ?? null,
+      provider: row?.provider ?? 'payos',
+      issue_type: row?.issue_type ?? null,
+      status: (row?.status ?? 'open') as BillingPaymentIssueStatus,
+      user_message: row?.user_message ?? null,
+      resolution: row?.resolution ?? null,
+      created_at: row?.created_at ?? null,
+      updated_at: row?.updated_at ?? null,
+      resolved_at: row?.resolved_at ?? null,
+    };
   }
 
   private async fetchBillingSubscriptionsForEntitlement(userId: string): Promise<Array<Record<string, any>>> {

@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, Param, Post, Query, Request, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Param, Patch, Post, Query, Request, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiBody, ApiOperation, ApiParam, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsIn, IsInt, IsOptional, IsString, Max, Min, MinLength } from 'class-validator';
@@ -85,6 +85,36 @@ class AdminUsersQueryDto {
   pageSize?: number;
 }
 
+class AdminPaymentIssuesQueryDto {
+  @IsOptional()
+  @IsString()
+  @IsIn(['open', 'in_review', 'resolved', 'rejected'])
+  status?: 'open' | 'in_review' | 'resolved' | 'rejected';
+
+  @IsOptional()
+  @IsString()
+  provider?: string;
+
+  @IsOptional()
+  @IsString()
+  userId?: string;
+}
+
+class AdminUpdatePaymentIssueDto {
+  @IsOptional()
+  @IsString()
+  @IsIn(['open', 'in_review', 'resolved', 'rejected'])
+  status?: 'open' | 'in_review' | 'resolved' | 'rejected';
+
+  @IsOptional()
+  @IsString()
+  admin_note?: string;
+
+  @IsOptional()
+  @IsString()
+  resolution?: string;
+}
+
 function assertUuid(value: string): string {
   const normalized = String(value ?? '').trim();
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -162,6 +192,25 @@ export class AdminController {
   @ApiOperation({ summary: 'List users with admin filters and read-only activity aggregates' })
   getUsers(@Query() query: AdminUsersQueryDto) {
     return this.adminService.getUsers(query);
+  }
+
+  @Get('payment-issues')
+  @AdminRoles('support')
+  @ApiOperation({ summary: 'List billing payment issue support cases' })
+  @ApiQuery({ name: 'status', required: false, enum: ['open', 'in_review', 'resolved', 'rejected'] })
+  @ApiQuery({ name: 'provider', required: false, example: 'payos' })
+  @ApiQuery({ name: 'userId', required: false, description: 'Filter by user UUID' })
+  getPaymentIssues(@Query() query: AdminPaymentIssuesQueryDto) {
+    return this.adminService.getPaymentIssues(query);
+  }
+
+  @Patch('payment-issues/:id')
+  @AdminRoles('support')
+  @ApiOperation({ summary: 'Update billing payment issue support status and notes' })
+  @ApiParam({ name: 'id', description: 'Payment issue UUID' })
+  @ApiBody({ schema: { type: 'object', properties: { status: { type: 'string', enum: ['open', 'in_review', 'resolved', 'rejected'] }, admin_note: { type: 'string' }, resolution: { type: 'string' } } } })
+  updatePaymentIssue(@Request() req: any, @Param('id') issueId: string, @Body() body: AdminUpdatePaymentIssueDto) {
+    return this.adminService.updatePaymentIssue(assertUuid(issueId), getAdminActor(req), body);
   }
 
   @Get('users/:id')

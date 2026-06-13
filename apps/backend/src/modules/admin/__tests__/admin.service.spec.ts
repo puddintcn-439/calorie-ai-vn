@@ -6,18 +6,47 @@ const USER_ID = '4da564f2-6795-4b52-96a1-f0103f11a111';
 
 function makeDb(tables: Record<string, any[]> = {}) {
   const state = Object.fromEntries(Object.entries(tables).map(([table, rows]) => [table, [...rows]])) as Record<string, any[]>;
-  const matches = (row: any, filters: Array<[string, any]>) => filters.every(([key, value]) => row?.[key] === value);
+  const matches = (row: any, filters: Array<[string, any]>, inFilters: Array<[string, any[]]>) =>
+    filters.every(([key, value]) => row?.[key] === value)
+    && inFilters.every(([key, values]) => values.includes(row?.[key]));
   const makeChain = (table: string) => {
-    const chain: any = { filters: [] as Array<[string, any]> };
-    const rows = () => (state[table] ?? []).filter((row) => matches(row, chain.filters));
+    const chain: any = { filters: [] as Array<[string, any]>, inFilters: [] as Array<[string, any[]]>, insertPayload: null as any, updatePayload: null as any };
+    const rows = () => (state[table] ?? []).filter((row) => matches(row, chain.filters, chain.inFilters));
     chain.select = jest.fn().mockReturnValue(chain);
     chain.eq = jest.fn((key: string, value: any) => { chain.filters.push([key, value]); return chain; });
     chain.order = jest.fn().mockReturnValue(chain);
     chain.gte = jest.fn().mockReturnValue(chain);
-    chain.in = jest.fn().mockReturnValue(chain);
+    chain.in = jest.fn((key: string, value: any[]) => { chain.inFilters.push([key, value]); return chain; });
+    chain.insert = jest.fn((payload: any) => { chain.insertPayload = payload; return chain; });
+    chain.update = jest.fn((payload: any) => { chain.updatePayload = payload; return chain; });
     chain.limit = jest.fn(async (count: number) => ({ data: rows().slice(0, count), error: null }));
-    chain.maybeSingle = jest.fn(async () => ({ data: rows()[0] ?? null, error: null }));
-    chain.then = (resolve: any, reject: any) => Promise.resolve({ data: rows(), count: rows().length, error: null }).then(resolve, reject);
+    chain.maybeSingle = jest.fn(async () => {
+      if (chain.insertPayload) {
+        state[table] = state[table] ?? [];
+        const row = { id: `${table}-${state[table].length + 1}`, ...chain.insertPayload };
+        state[table].push(row);
+        return { data: row, error: null };
+      }
+      if (chain.updatePayload) {
+        const index = (state[table] ?? []).findIndex((row) => matches(row, chain.filters, chain.inFilters));
+        if (index >= 0) {
+          state[table][index] = { ...state[table][index], ...chain.updatePayload };
+          return { data: state[table][index], error: null };
+        }
+        return { data: null, error: null };
+      }
+      return { data: rows()[0] ?? null, error: null };
+    });
+    chain.then = (resolve: any, reject: any) => {
+      if (chain.insertPayload) {
+        state[table] = state[table] ?? [];
+        state[table].push({ id: `${table}-${state[table].length + 1}`, ...chain.insertPayload });
+      }
+      if (chain.updatePayload) {
+        state[table] = (state[table] ?? []).map((row) => matches(row, chain.filters, chain.inFilters) ? { ...row, ...chain.updatePayload } : row);
+      }
+      return Promise.resolve({ data: rows(), count: rows().length, error: null }).then(resolve, reject);
+    };
     return chain;
   };
   return { from: jest.fn().mockImplementation(makeChain), state };
@@ -149,5 +178,108 @@ describe('AdminService user billing detail', () => {
     const service = makeService(makeDb());
 
     await expect(service.getUserDetail(USER_ID)).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('lists payment issues with safe user and invoice summaries', async () => {
+    const invoiceId = '11111111-1111-4111-8111-111111111111';
+    const db = makeDb({
+      users: [{ id: USER_ID, email: 'user@example.com' }],
+      billing_invoices: [{
+        id: invoiceId,
+        provider: 'payos',
+        provider_invoice_id: '1781283708818137',
+        tier: 'premium',
+        status: 'paid',
+        amount_vnd: 59000,
+        raw_payload: { checksum: 'should-not-leak' },
+      }],
+      billing_payment_issues: [{
+        id: '33333333-3333-4333-8333-333333333333',
+        user_id: USER_ID,
+        invoice_id: invoiceId,
+        provider: 'payos',
+        issue_type: 'refund_request',
+        status: 'open',
+        user_message: 'Please review.',
+        admin_note: 'Internal triage note.',
+        created_at: '2026-06-12T00:00:00.000Z',
+      }],
+    });
+    const service = makeService(db);
+
+    const result = await service.getPaymentIssues({ status: 'open', provider: 'payos' });
+
+    expect(result.issues).toHaveLength(1);
+    expect(result.issues[0]).toMatchObject({
+      user_id: USER_ID,
+      user_email: 'user@example.com',
+      provider: 'payos',
+      issue_type: 'refund_request',
+      status: 'open',
+      admin_note: 'Internal triage note.',
+      invoice: {
+        provider: 'payos',
+        provider_invoice_id: '1781283708818137',
+        order_code: '1781283708818137',
+        amount_vnd: 59000,
+      },
+    });
+    expect(JSON.stringify(result)).not.toContain('raw_payload');
+    expect(JSON.stringify(result)).not.toContain('should-not-leak');
+  });
+
+  it('lets admin update payment issue status and writes an audit log without mutating subscriptions', async () => {
+    const issueId = '33333333-3333-4333-8333-333333333333';
+    const db = makeDb({
+      billing_payment_issues: [{
+        id: issueId,
+        user_id: USER_ID,
+        provider: 'payos',
+        issue_type: 'payment_succeeded_but_not_activated',
+        status: 'open',
+        user_message: 'Paid but not active.',
+        created_at: '2026-06-12T00:00:00.000Z',
+      }],
+      billing_subscriptions: [{
+        id: 'sub-1',
+        user_id: USER_ID,
+        provider: 'payos',
+        status: 'active',
+        is_paid: true,
+      }],
+    });
+    const service = makeService(db);
+
+    const result = await service.updatePaymentIssue(issueId, {
+      email: 'admin@example.com',
+      role: 'support',
+      user_id: '99999999-9999-4999-8999-999999999999',
+    }, {
+      status: 'resolved',
+      admin_note: 'Webhook already processed.',
+      resolution: 'Entitlement confirmed active.',
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      audited: true,
+      issue: {
+        id: issueId,
+        status: 'resolved',
+        admin_note: 'Webhook already processed.',
+        resolution: 'Entitlement confirmed active.',
+      },
+    });
+    expect(db.state.billing_payment_issues[0]).toMatchObject({
+      status: 'resolved',
+      resolved_by_admin_id: '99999999-9999-4999-8999-999999999999',
+    });
+    expect(db.state.billing_subscriptions[0]).toMatchObject({ status: 'active', is_paid: true });
+    expect(db.state.admin_audit_log[0]).toMatchObject({
+      actor_email: 'admin@example.com',
+      action: 'billing.payment_issue.update',
+      target_type: 'billing_payment_issue',
+      target_id: issueId,
+    });
   });
 });

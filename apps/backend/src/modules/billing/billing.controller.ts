@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Headers, Post, Request, UnauthorizedException, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiProperty, ApiTags } from '@nestjs/swagger';
-import { IsIn } from 'class-validator';
+import { IsIn, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { BillingService } from './billing.service';
 
@@ -22,6 +22,25 @@ class PayosCheckoutDto {
   @ApiProperty({ enum: ['monthly', 'annual'] })
   @IsIn(['monthly', 'annual'])
   interval: 'monthly' | 'annual';
+}
+
+class CreatePaymentIssueDto {
+  @ApiProperty({
+    enum: ['refund_request', 'duplicate_payment', 'payment_succeeded_but_not_activated', 'wrong_plan', 'other'],
+  })
+  @IsIn(['refund_request', 'duplicate_payment', 'payment_succeeded_but_not_activated', 'wrong_plan', 'other'])
+  issue_type: 'refund_request' | 'duplicate_payment' | 'payment_succeeded_but_not_activated' | 'wrong_plan' | 'other';
+
+  @ApiProperty({ required: false, format: 'uuid' })
+  @IsOptional()
+  @IsUUID()
+  invoice_id?: string;
+
+  @ApiProperty({ required: false, maxLength: 1000 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  user_message?: string;
 }
 
 @ApiTags('Billing')
@@ -80,6 +99,31 @@ export class BillingController {
     const userId = req.user?.id ?? req.user?.sub;
     if (!userId) throw new UnauthorizedException('Authenticated user id is required.');
     return this.billingService.getPayosRenewalReminder(userId);
+  }
+
+  @Post('payment-issues')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Create a current-user billing payment issue support case' })
+  async createPaymentIssue(@Request() req: any, @Body() body: CreatePaymentIssueDto) {
+    const userId = req.user?.id ?? req.user?.sub;
+    if (!userId) throw new UnauthorizedException('Authenticated user id is required.');
+    return this.billingService.createPaymentIssue({
+      userId,
+      issueType: body.issue_type,
+      invoiceId: body.invoice_id ?? null,
+      userMessage: body.user_message ?? null,
+    });
+  }
+
+  @Get('payment-issues')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'List current-user billing payment issue support cases' })
+  async getPaymentIssues(@Request() req: any) {
+    const userId = req.user?.id ?? req.user?.sub;
+    if (!userId) throw new UnauthorizedException('Authenticated user id is required.');
+    return this.billingService.listPaymentIssuesForUser(userId);
   }
 
   @Post('webhooks/stripe')

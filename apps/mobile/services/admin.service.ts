@@ -106,6 +106,31 @@ export type AdminRevenueResponse = {
   confirmed_revenue?: Record<string, any>;
 };
 
+export type AdminPaymentIssue = {
+  id: string;
+  user_id: string | null;
+  user_email: string | null;
+  invoice_id: string | null;
+  subscription_id: string | null;
+  provider: string | null;
+  issue_type: string | null;
+  status: 'open' | 'in_review' | 'resolved' | 'rejected' | string;
+  user_message: string | null;
+  admin_note: string | null;
+  resolution: string | null;
+  invoice: Record<string, any> | null;
+  created_at: string | null;
+  updated_at: string | null;
+  resolved_at: string | null;
+  resolved_by_admin_id: string | null;
+};
+
+export type AdminPaymentIssuesResponse = {
+  generated_at: string;
+  total: number;
+  issues: AdminPaymentIssue[];
+};
+
 export const adminService = {
   async fetchOverview(): Promise<AdminOverview> {
     const { data } = await apiClient.get('/admin/overview');
@@ -149,6 +174,16 @@ export const adminService = {
 
   async fetchAuditLog(params: { actorEmail?: string; action?: string; targetType?: string; targetId?: string; page?: number; pageSize?: number } = {}): Promise<AdminAuditLogResponse> {
     const { data } = await apiClient.get('/admin/audit-log', { params });
+    return data;
+  },
+
+  async fetchPaymentIssues(params: { status?: string; provider?: string; userId?: string } = {}): Promise<AdminPaymentIssuesResponse> {
+    const { data } = await apiClient.get('/admin/payment-issues', { params });
+    return data;
+  },
+
+  async updatePaymentIssue(issueId: string, patch: { status?: 'open' | 'in_review' | 'resolved' | 'rejected'; admin_note?: string; resolution?: string }): Promise<{ ok: boolean; issue: AdminPaymentIssue; audited: boolean }> {
+    const { data } = await apiClient.patch(`/admin/payment-issues/${encodeURIComponent(issueId)}`, patch);
     return data;
   },
 

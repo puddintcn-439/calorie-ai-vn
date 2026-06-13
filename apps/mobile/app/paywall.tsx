@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Linking,
   ScrollView,
+  TextInput,
   TouchableOpacity,
   useWindowDimensions,
   View,
@@ -16,6 +17,7 @@ import {
   BillingCheckoutInterval,
   BillingCheckoutTier,
   BillingEntitlement,
+  BillingPaymentIssueType,
   BillingRenewalReminder,
   billingService,
 } from '../services/billing.service';
@@ -34,6 +36,14 @@ type StatusMessage = {
   tone: 'info' | 'success' | 'error';
   text: string;
 };
+
+const PAYMENT_ISSUE_OPTIONS: Array<{ type: BillingPaymentIssueType; label: string }> = [
+  { type: 'refund_request', label: 'Yêu cầu hoàn tiền' },
+  { type: 'duplicate_payment', label: 'Thanh toán trùng' },
+  { type: 'payment_succeeded_but_not_activated', label: 'Đã trả tiền nhưng chưa kích hoạt' },
+  { type: 'wrong_plan', label: 'Sai gói' },
+  { type: 'other', label: 'Khác' },
+];
 
 const PAYOS_PLANS: PaywallPlan[] = [
   {
@@ -130,6 +140,11 @@ export default function PaywallScreen() {
   const [renewalReminder, setRenewalReminder] = useState<BillingRenewalReminder | null>(null);
   const [lastOrderCode, setLastOrderCode] = useState<number | null>(null);
   const [message, setMessage] = useState<StatusMessage | null>(null);
+  const [supportExpanded, setSupportExpanded] = useState(false);
+  const [paymentIssueType, setPaymentIssueType] = useState<BillingPaymentIssueType>('payment_succeeded_but_not_activated');
+  const [paymentIssueMessage, setPaymentIssueMessage] = useState('');
+  const [paymentIssueLoading, setPaymentIssueLoading] = useState(false);
+  const [paymentIssueResult, setPaymentIssueResult] = useState<StatusMessage | null>(null);
 
   const activeUntilText = useMemo(
     () => formatActiveUntil(entitlement?.active_until, locale),
@@ -217,6 +232,30 @@ export default function PaywallScreen() {
       });
     } finally {
       setStatusLoading(false);
+    }
+  };
+
+  const handleSubmitPaymentIssue = async () => {
+    setPaymentIssueLoading(true);
+    setPaymentIssueResult(null);
+
+    try {
+      await billingService.createPaymentIssue({
+        issue_type: paymentIssueType,
+        user_message: paymentIssueMessage,
+      });
+      setPaymentIssueMessage('');
+      setPaymentIssueResult({
+        tone: 'success',
+        text: 'Yêu cầu đã được ghi nhận. Admin sẽ kiểm tra và phản hồi.',
+      });
+    } catch (error) {
+      setPaymentIssueResult({
+        tone: 'error',
+        text: getErrorMessage(error, t('screen.paywall.error.network')),
+      });
+    } finally {
+      setPaymentIssueLoading(false);
     }
   };
 
@@ -423,6 +462,70 @@ export default function PaywallScreen() {
             </Text>
           </View>
         ) : null}
+
+        <View style={styles.supportCard}>
+          <View style={styles.supportHeader}>
+            <View style={styles.supportHeaderText}>
+              <Text style={styles.supportTitle}>Báo lỗi thanh toán / yêu cầu hỗ trợ</Text>
+              <Text style={styles.supportBody}>Gửi yêu cầu để admin kiểm tra. Hoàn tiền không được xử lý tự động.</Text>
+            </View>
+            <TouchableOpacity
+              style={styles.supportToggle}
+              onPress={() => setSupportExpanded((current) => !current)}
+              accessibilityRole="button"
+              testID="paywall-payment-issue-toggle"
+            >
+              <MaterialIcons name={supportExpanded ? 'expand-less' : 'expand-more'} size={22} color={theme.colors.text} />
+            </TouchableOpacity>
+          </View>
+
+          {supportExpanded ? (
+            <View style={styles.supportForm}>
+              <View style={styles.issueTypeGrid}>
+                {PAYMENT_ISSUE_OPTIONS.map((option) => (
+                  <TouchableOpacity
+                    key={option.type}
+                    style={[styles.issueTypeButton, paymentIssueType === option.type && styles.issueTypeButtonActive]}
+                    onPress={() => setPaymentIssueType(option.type)}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: paymentIssueType === option.type }}
+                  >
+                    <Text style={[styles.issueTypeText, paymentIssueType === option.type && styles.issueTypeTextActive]}>{option.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <TextInput
+                value={paymentIssueMessage}
+                onChangeText={setPaymentIssueMessage}
+                placeholder="Mô tả ngắn vấn đề thanh toán"
+                placeholderTextColor={theme.colors.textMuted}
+                multiline
+                maxLength={1000}
+                style={styles.supportInput}
+                textAlignVertical="top"
+              />
+              <TouchableOpacity
+                style={[styles.supportSubmitButton, paymentIssueLoading && styles.buttonDisabled]}
+                onPress={() => void handleSubmitPaymentIssue()}
+                disabled={paymentIssueLoading}
+                accessibilityRole="button"
+                accessibilityState={{ disabled: paymentIssueLoading }}
+                testID="paywall-payment-issue-submit"
+              >
+                {paymentIssueLoading ? (
+                  <ActivityIndicator size="small" color={theme.colors.textOnAccent} />
+                ) : (
+                  <Text style={styles.supportSubmitText}>Gửi yêu cầu hỗ trợ</Text>
+                )}
+              </TouchableOpacity>
+              {paymentIssueResult ? (
+                <Text style={[styles.supportResult, paymentIssueResult.tone === 'error' && styles.supportResultError]}>
+                  {paymentIssueResult.text}
+                </Text>
+              ) : null}
+            </View>
+          ) : null}
+        </View>
       </View>
     </ScrollView>
   );
@@ -752,6 +855,104 @@ const styles = createThemedStyles((colors, radii) => ({
     color: colors.success,
   },
   messageErrorText: {
+    color: colors.danger,
+  },
+  supportCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.xl,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 16,
+    gap: 14,
+  },
+  supportHeader: {
+    flexDirection: 'row',
+    gap: 12,
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+  },
+  supportHeaderText: {
+    flex: 1,
+    gap: 4,
+  },
+  supportTitle: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: '900',
+  },
+  supportBody: {
+    color: colors.textSoft,
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  supportToggle: {
+    width: 38,
+    height: 38,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  supportForm: {
+    gap: 12,
+  },
+  issueTypeGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  issueTypeButton: {
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  issueTypeButtonActive: {
+    backgroundColor: colors.accentMint,
+    borderColor: colors.accentMint,
+  },
+  issueTypeText: {
+    color: colors.text,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  issueTypeTextActive: {
+    color: colors.textOnAccent,
+  },
+  supportInput: {
+    minHeight: 90,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.borderSubtle,
+    color: colors.text,
+    backgroundColor: colors.surfaceAlt,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  supportSubmitButton: {
+    minHeight: 44,
+    borderRadius: radii.lg,
+    backgroundColor: colors.accentMint,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 14,
+  },
+  supportSubmitText: {
+    color: colors.textOnAccent,
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  supportResult: {
+    color: colors.success,
+    fontSize: 13,
+    lineHeight: 19,
+    fontWeight: '800',
+  },
+  supportResultError: {
     color: colors.danger,
   },
 }));

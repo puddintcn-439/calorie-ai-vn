@@ -16,6 +16,8 @@ describe('BillingController', () => {
     handleGooglePlayWebhook: jest.fn(),
     getUserEntitlement: jest.fn(),
     getPayosRenewalReminder: jest.fn(),
+    createPaymentIssue: jest.fn(),
+    listPaymentIssuesForUser: jest.fn(),
   };
 
   beforeAll(async () => {
@@ -200,5 +202,49 @@ describe('BillingController', () => {
       .expect(403);
 
     await unauthenticatedApp.close();
+  });
+
+  it('POST /billing/payment-issues validates issue type', async () => {
+    await request(app.getHttpServer())
+      .post('/billing/payment-issues')
+      .send({ issue_type: 'not_supported' })
+      .expect(400);
+
+    expect(billingService.createPaymentIssue).not.toHaveBeenCalled();
+  });
+
+  it('POST /billing/payment-issues creates a current-user support case', async () => {
+    billingService.createPaymentIssue.mockResolvedValue({
+      id: 'case-1',
+      user_id: 'user-1',
+      provider: 'payos',
+      issue_type: 'refund_request',
+      status: 'open',
+      user_message: 'Please review this payment.',
+    });
+
+    await request(app.getHttpServer())
+      .post('/billing/payment-issues')
+      .send({ issue_type: 'refund_request', user_message: 'Please review this payment.' })
+      .expect(201);
+
+    expect(billingService.createPaymentIssue).toHaveBeenCalledWith({
+      userId: 'user-1',
+      issueType: 'refund_request',
+      invoiceId: null,
+      userMessage: 'Please review this payment.',
+    });
+  });
+
+  it('GET /billing/payment-issues lists only current-user cases', async () => {
+    billingService.listPaymentIssuesForUser.mockResolvedValue({
+      cases: [{ id: 'case-1', user_id: 'user-1', provider: 'payos', issue_type: 'wrong_plan', status: 'open' }],
+    });
+
+    await request(app.getHttpServer())
+      .get('/billing/payment-issues')
+      .expect(200);
+
+    expect(billingService.listPaymentIssuesForUser).toHaveBeenCalledWith('user-1');
   });
 });

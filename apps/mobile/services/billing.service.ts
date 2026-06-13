@@ -34,6 +34,28 @@ export type BillingRenewalReminder =
     message: string;
   };
 
+export type BillingPaymentIssueType =
+  | 'refund_request'
+  | 'duplicate_payment'
+  | 'payment_succeeded_but_not_activated'
+  | 'wrong_plan'
+  | 'other';
+
+export type BillingPaymentIssue = {
+  id: string;
+  user_id?: string | null;
+  invoice_id?: string | null;
+  subscription_id?: string | null;
+  provider: string;
+  issue_type: BillingPaymentIssueType;
+  status: 'open' | 'in_review' | 'resolved' | 'rejected';
+  user_message?: string | null;
+  resolution?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  resolved_at?: string | null;
+};
+
 export const billingService = {
   async createPayosCheckout(tier: BillingCheckoutTier, interval: BillingCheckoutInterval): Promise<PayosCheckoutResponse> {
     const { data } = await apiClient.post<PayosCheckoutResponse>('/billing/checkout/payos', { tier, interval });
@@ -47,6 +69,20 @@ export const billingService = {
 
   async getRenewalReminder(): Promise<BillingRenewalReminder> {
     const { data } = await apiClient.get<BillingRenewalReminder>('/billing/renewal-reminder');
+    return data;
+  },
+
+  async createPaymentIssue(input: {
+    issue_type: BillingPaymentIssueType;
+    invoice_id?: string | null;
+    user_message?: string | null;
+  }): Promise<BillingPaymentIssue> {
+    const { data } = await apiClient.post<BillingPaymentIssue>('/billing/payment-issues', input);
+    return data;
+  },
+
+  async fetchPaymentIssues(): Promise<{ cases: BillingPaymentIssue[] }> {
+    const { data } = await apiClient.get<{ cases: BillingPaymentIssue[] }>('/billing/payment-issues');
     return data;
   },
 };

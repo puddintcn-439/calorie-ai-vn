@@ -1,4 +1,4 @@
-import { HttpException, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, HttpException, UnauthorizedException } from '@nestjs/common';
 import { BillingService } from '../billing.service';
 import { SupabaseService } from '../../../common/supabase/supabase.service';
 
@@ -23,7 +23,13 @@ function makeDb(tables: Record<string, { data?: any[]; error?: any }> = {}, inse
     && inFilters.every(([key, values]) => values.includes(row?.[key]))
     && isFilters.every(([key, value]) => row?.[key] === value);
   const makeChain = (table: string) => {
-    const chain: any = { filters: [] as Array<[string, any]>, inFilters: [] as Array<[string, any[]]>, isFilters: [] as Array<[string, any]>, upsertPayload: null as any, updatePayload: null as any };
+    const chain: any = { filters: [] as Array<[string, any]>, inFilters: [] as Array<[string, any[]]>, isFilters: [] as Array<[string, any]>, insertPayload: null as any, upsertPayload: null as any, updatePayload: null as any };
+    const applyInsert = () => {
+      state[table] = state[table] ?? [];
+      const row = { id: `${table}-${state[table].length + 1}`, ...chain.insertPayload };
+      state[table].push(row);
+      return row;
+    };
     const applyUpsert = () => {
       state[table] = state[table] ?? [];
       const key = uniqueKey[table];
@@ -43,18 +49,21 @@ function makeDb(tables: Record<string, { data?: any[]; error?: any }> = {}, inse
     chain.is = jest.fn((key: string, value: any) => { chain.isFilters.push([key, value]); return chain; });
     chain.gte = jest.fn().mockReturnValue(chain);
     chain.order = jest.fn().mockReturnValue(chain);
-    chain.limit = jest.fn().mockResolvedValue({ data: (state[table] ?? []).filter((row) => matches(row, chain.filters, chain.inFilters, chain.isFilters)), error: tableError(table) });
+    chain.limit = jest.fn().mockImplementation(async () => ({ data: (state[table] ?? []).filter((row) => matches(row, chain.filters, chain.inFilters, chain.isFilters)), error: tableError(table) }));
     chain.insert = jest.fn((payload: any) => {
       if (table === 'billing_events') return insert(payload);
-      state[table] = state[table] ?? [];
-      state[table].push({ id: `${table}-${state[table].length + 1}`, ...payload });
-      return Promise.resolve({ data: null, error: tableError(table) });
+      chain.insertPayload = payload;
+      return chain;
     });
     chain.upsert = jest.fn((payload: any) => { chain.upsertPayload = payload; return chain; });
     chain.update = jest.fn((payload: any) => { chain.updatePayload = payload; return chain; });
     chain.maybeSingle = jest.fn().mockImplementation(async () => {
       if (tableError(table)) return { data: null, error: tableError(table) };
       state[table] = state[table] ?? [];
+      if (chain.insertPayload) {
+        const row = applyInsert();
+        return { data: row, error: null };
+      }
       if (chain.upsertPayload) {
         const row = applyUpsert();
         return { data: row, error: null };
@@ -62,6 +71,9 @@ function makeDb(tables: Record<string, { data?: any[]; error?: any }> = {}, inse
       return { data: state[table].find((row) => matches(row, chain.filters, chain.inFilters, chain.isFilters)) ?? null, error: null };
     });
     chain.then = (resolve: any, reject: any) => {
+      if (chain.insertPayload) {
+        applyInsert();
+      }
       if (chain.upsertPayload) {
         applyUpsert();
       }
@@ -123,7 +135,7 @@ describe('BillingService', () => {
 
   it('subtracts refunds from net revenue', async () => {
     const service = makeService(makeDb({
-      billing_invoices: { data: [{ amount_vnd: 129000, paid_at: now.toISOString() }] },
+      billing_invoices: { data: [{ status: 'paid', amount_vnd: 129000, paid_at: now.toISOString() }] },
       billing_refunds: { data: [{ amount_vnd: 29000, refunded_at: now.toISOString() }] },
     }));
 
@@ -137,7 +149,7 @@ describe('BillingService', () => {
 
   it('converts VND invoice amounts to USD', async () => {
     const service = makeService(makeDb({
-      billing_invoices: { data: [{ amount_vnd: 260000, paid_at: now.toISOString() }] },
+      billing_invoices: { data: [{ status: 'paid', amount_vnd: 260000, paid_at: now.toISOString() }] },
     }), { USD_TO_VND_RATE: '26000' });
 
     const result = await service.getConfirmedRevenueSummary(now);
@@ -148,7 +160,7 @@ describe('BillingService', () => {
 
   it('converts USD invoice amounts to VND', async () => {
     const service = makeService(makeDb({
-      billing_invoices: { data: [{ amount_usd: 5, paid_at: now.toISOString() }] },
+      billing_invoices: { data: [{ status: 'paid', amount_usd: 5, paid_at: now.toISOString() }] },
     }), { USD_TO_VND_RATE: '26000' });
 
     const result = await service.getConfirmedRevenueSummary(now);
@@ -947,6 +959,80 @@ describe('BillingService', () => {
       reminder_window: 'expired',
       message: 'Gói Premium của bạn đã hết hạn. Gia hạn để tiếp tục dùng tính năng Premium.',
     });
+  });
+
+  it('lets a user create a payment issue for their own invoice only', async () => {
+    const invoiceId = '11111111-1111-4111-8111-111111111111';
+    const db = makeDb({
+      billing_invoices: { data: [{
+        id: invoiceId,
+        user_id: 'user-1',
+        provider: 'payos',
+        provider_invoice_id: '1781283708818137',
+        raw_payload: { checksum: 'should-not-leak' },
+      }] },
+    });
+    const service = makeService(db);
+
+    const result = await service.createPaymentIssue({
+      userId: 'user-1',
+      issueType: 'payment_succeeded_but_not_activated',
+      invoiceId,
+      userMessage: 'I paid but my plan is still pending.',
+    });
+
+    expect(result).toMatchObject({
+      user_id: 'user-1',
+      invoice_id: invoiceId,
+      provider: 'payos',
+      issue_type: 'payment_succeeded_but_not_activated',
+      status: 'open',
+      user_message: 'I paid but my plan is still pending.',
+    });
+    expect(JSON.stringify(result)).not.toContain('admin_note');
+    expect(JSON.stringify(result)).not.toContain('should-not-leak');
+    expect(db.state.billing_payment_issues[0]).toMatchObject({
+      user_id: 'user-1',
+      invoice_id: invoiceId,
+      created_by_user_id: 'user-1',
+    });
+  });
+
+  it('rejects payment issues for another user invoice', async () => {
+    const invoiceId = '22222222-2222-4222-8222-222222222222';
+    const service = makeService(makeDb({
+      billing_invoices: { data: [{ id: invoiceId, user_id: 'user-2', provider: 'payos' }] },
+    }));
+
+    await expect(service.createPaymentIssue({
+      userId: 'user-1',
+      issueType: 'refund_request',
+      invoiceId,
+    })).rejects.toMatchObject({ response: expect.objectContaining({ message: expect.stringContaining('Invoice does not belong') }) });
+  });
+
+  it('lists only current user payment issues without admin notes', async () => {
+    const service = makeService(makeDb({
+      billing_payment_issues: { data: [
+        { id: 'case-1', user_id: 'user-1', provider: 'payos', issue_type: 'refund_request', status: 'open', admin_note: 'internal note', created_at: '2026-06-12T00:00:00.000Z' },
+        { id: 'case-2', user_id: 'user-2', provider: 'payos', issue_type: 'wrong_plan', status: 'open', admin_note: 'other internal note', created_at: '2026-06-12T00:00:00.000Z' },
+      ] },
+    }));
+
+    const result = await service.listPaymentIssuesForUser('user-1');
+
+    expect(result.cases).toHaveLength(1);
+    expect(result.cases[0]).toMatchObject({ id: 'case-1', user_id: 'user-1', issue_type: 'refund_request' });
+    expect(JSON.stringify(result)).not.toContain('internal note');
+  });
+
+  it('rejects invalid payment issue type', async () => {
+    const service = makeService(makeDb());
+
+    await expect(service.createPaymentIssue({
+      userId: 'user-1',
+      issueType: 'invalid' as any,
+    })).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('syncs paid billing entitlement into legacy user_subscriptions', async () => {
