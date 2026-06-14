@@ -9,6 +9,7 @@ export default function RootLayout() {
   const { token, isLoading, loadToken } = useAuthStore();
   const segments = useSegments();
   const inAuthGroup = segments[0] === '(auth)';
+  const inAdminGroup = segments[0] === 'admin';
 
   useEffect(() => {
     loadToken();
@@ -20,10 +21,10 @@ export default function RootLayout() {
       router.replace('/');
       return;
     }
-    if (!token && !inAuthGroup) {
+    if (!token && !inAuthGroup && !inAdminGroup) {
       router.replace('/(auth)/login');
     }
-  }, [token, isLoading, inAuthGroup]);
+  }, [token, isLoading, inAuthGroup, inAdminGroup]);
 
   useEffect(() => {
     if (!token) return undefined;
