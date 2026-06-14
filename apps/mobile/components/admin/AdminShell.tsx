@@ -1,5 +1,5 @@
 import React, { ReactNode } from 'react';
-import { ActivityIndicator, StyleProp, StyleSheet, TouchableOpacity, useWindowDimensions, View, ViewStyle } from 'react-native';
+import { ActivityIndicator, Platform, StyleProp, StyleSheet, TouchableOpacity, useWindowDimensions, View, ViewStyle } from 'react-native';
 import { router, usePathname } from 'expo-router';
 import { ScreenShell, SurfaceCard } from '../ui-shell';
 import { Text } from '../i18n-text';
@@ -21,6 +21,30 @@ const ADMIN_ROUTES: AdminRoute[] = [
   { group: 'AI Ops', label: 'AI Usage', href: '/admin/ai-usage' },
   { group: 'System', label: 'Audit Log', href: '/admin/audit-log' },
 ];
+
+export const adminChrome = {
+  pageBg: '#f3f6fb',
+  sidebarBg: '#ffffff',
+  cardBg: '#ffffff',
+  cardMuted: '#f7f9fc',
+  border: '#e5e7eb',
+  borderStrong: '#d7dce3',
+  text: '#0f172a',
+  textMuted: '#64748b',
+  textSoft: '#334155',
+  accent: '#635bff',
+  accentSoft: '#f0efff',
+  cyan: '#06b6d4',
+  mint: '#10b981',
+  amber: '#f59e0b',
+  rose: '#f43f5e',
+  blue: '#3b82f6',
+  purple: '#8b5cf6',
+  successSoft: '#ecfdf3',
+  warningSoft: '#fff7ed',
+  dangerSoft: '#fff1f2',
+  infoSoft: '#eef6ff',
+};
 
 function isActiveRoute(pathname: string, href?: string) {
   if (!href) return false;
@@ -116,15 +140,23 @@ function AdminSidebar() {
     <View style={styles.sidebar}>
       <View style={styles.sidebarTop}>
         <View style={styles.sidebarBrand}>
-          <Text style={styles.sidebarEyebrow}>ADMIN</Text>
-          <Text style={styles.sidebarTitle}>Calorie AI</Text>
+          <View style={styles.brandMark}>
+            <Text style={styles.brandMarkText}>C</Text>
+          </View>
+          <View style={styles.brandCopy}>
+            <Text style={styles.sidebarTitle}>Calorie AI</Text>
+            <Text style={styles.sidebarEyebrow}>Admin Console</Text>
+          </View>
         </View>
         <AdminNav mode="sidebar" />
       </View>
 
-      <TouchableOpacity style={styles.sidebarLogoutButton} onPress={handleLogout}>
-        <Text style={styles.sidebarLogoutText}>Logout</Text>
-      </TouchableOpacity>
+      <View style={styles.sidebarFooter}>
+        <Text style={styles.sidebarFooterText}>Production tools</Text>
+        <TouchableOpacity style={styles.sidebarLogoutButton} onPress={handleLogout}>
+          <Text style={styles.sidebarLogoutText}>Logout</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
@@ -260,99 +292,102 @@ export function AdminStateCard({
 
 export const adminStyles = StyleSheet.create({
   metricGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, alignItems: 'stretch' },
-  metricCard: { minWidth: 210, flexGrow: 1, flexBasis: 220, gap: 6 },
-  metricLabel: { color: theme.colors.textMuted, fontSize: 11, fontWeight: '900', textTransform: 'uppercase' },
-  metricValue: { color: theme.colors.text, fontSize: 26, fontWeight: '900' },
-  muted: { color: theme.colors.textMuted, fontSize: 12, lineHeight: 18 },
-  row: { flexDirection: 'row', justifyContent: 'space-between', gap: 12, paddingVertical: 11, borderTopWidth: 1, borderTopColor: theme.colors.borderSubtle },
+  metricCard: { minWidth: 260, flexGrow: 1, flexShrink: 1, flexBasis: '31%', gap: 6, minHeight: 116, justifyContent: 'space-between' },
+  metricLabel: { color: adminChrome.textMuted, fontSize: 11, fontWeight: '700' },
+  metricValue: { color: adminChrome.text, fontSize: 25, lineHeight: 31, fontWeight: '800' },
+  muted: { color: adminChrome.textMuted, fontSize: 12, lineHeight: 18 },
+  row: { flexDirection: 'row', justifyContent: 'space-between', gap: 12, paddingVertical: 10, borderTopWidth: 1, borderTopColor: adminChrome.border },
   rowCopy: { flex: 1 },
-  rowTitle: { color: theme.colors.text, fontWeight: '900' },
-  rowRight: { color: theme.colors.text, fontWeight: '900', textAlign: 'right' },
+  rowTitle: { color: adminChrome.text, fontWeight: '700' },
+  rowRight: { color: adminChrome.text, fontWeight: '800', textAlign: 'right' },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  keyBox: { minWidth: 170, flexGrow: 1, borderRadius: 8, backgroundColor: theme.colors.surfaceAlt, padding: 12 },
-  keyLabel: { color: theme.colors.textMuted, fontSize: 11, fontWeight: '800', textTransform: 'uppercase' },
-  keyValue: { color: theme.colors.text, fontSize: 14, fontWeight: '800', marginTop: 4 },
-  primaryButton: { borderRadius: 8, backgroundColor: theme.colors.accentMint, paddingHorizontal: 16, paddingVertical: 11, alignItems: 'center', justifyContent: 'center' },
-  primaryButtonText: { color: theme.colors.textOnAccent, fontWeight: '900' },
-  secondaryButton: { borderRadius: 8, borderWidth: 1, borderColor: theme.colors.borderSubtle, backgroundColor: theme.colors.surface, paddingHorizontal: 16, paddingVertical: 11, alignItems: 'center', justifyContent: 'center' },
-  secondaryButtonText: { color: theme.colors.text, fontWeight: '900' },
+  keyBox: { minWidth: 160, flexGrow: 1, borderRadius: 8, backgroundColor: adminChrome.cardMuted, padding: 11, borderWidth: 1, borderColor: adminChrome.border },
+  keyLabel: { color: adminChrome.textMuted, fontSize: 11, fontWeight: '700' },
+  keyValue: { color: adminChrome.text, fontSize: 14, fontWeight: '800', marginTop: 4 },
+  primaryButton: { borderRadius: 7, backgroundColor: adminChrome.text, paddingHorizontal: 14, paddingVertical: 10, alignItems: 'center', justifyContent: 'center' },
+  primaryButtonText: { color: '#ffffff', fontWeight: '800' },
+  secondaryButton: { borderRadius: 7, borderWidth: 1, borderColor: adminChrome.borderStrong, backgroundColor: adminChrome.cardBg, paddingHorizontal: 14, paddingVertical: 10, alignItems: 'center', justifyContent: 'center' },
+  secondaryButtonText: { color: adminChrome.text, fontWeight: '800' },
   dangerText: { color: theme.colors.danger, fontWeight: '900' },
-  input: { borderRadius: 8, borderWidth: 1, borderColor: theme.colors.borderSubtle, color: theme.colors.text, paddingHorizontal: 14, paddingVertical: 11, backgroundColor: theme.colors.surfaceAlt, fontSize: 14 },
+  input: { borderRadius: 7, borderWidth: 1, borderColor: adminChrome.borderStrong, color: adminChrome.text, paddingHorizontal: 12, paddingVertical: 10, backgroundColor: adminChrome.cardBg, fontSize: 14 },
 });
 
 const styles = StyleSheet.create({
-  screenContent: { width: '100%', maxWidth: 1320 },
+  screenContent: { width: '100%', maxWidth: 1440 },
   scrollContent: { gap: 0 },
-  scrollContentDesktop: { paddingHorizontal: 24, paddingTop: 24 },
+  scrollContentDesktop: { paddingHorizontal: 0, paddingTop: 0 },
   shell: { width: '100%' },
-  shellMobile: { gap: 14 },
-  shellDesktop: { flexDirection: 'row', alignItems: 'stretch', gap: 20 },
-  header: { gap: 14, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap' },
+  shellMobile: { gap: 14, backgroundColor: adminChrome.pageBg },
+  shellDesktop: { flexDirection: 'row', alignItems: 'stretch', gap: 0, minHeight: 760, backgroundColor: adminChrome.pageBg, borderRadius: 10, overflow: 'visible', borderWidth: 1, borderColor: adminChrome.border },
+  header: { gap: 14, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', paddingBottom: 18, borderBottomWidth: 1, borderBottomColor: adminChrome.border },
   headerCopy: { flex: 1, minWidth: 260 },
   headerActions: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 10 },
-  eyebrow: { color: theme.colors.accentCyan, fontSize: 12, fontWeight: '900', letterSpacing: 0.8 },
-  title: { color: theme.colors.text, fontSize: 31, lineHeight: 36, fontWeight: '900' },
-  subtitle: { color: theme.colors.textMuted, fontSize: 14, lineHeight: 20, maxWidth: 760, marginTop: 4 },
-  refreshButton: { borderRadius: 8, backgroundColor: theme.colors.accentMint, paddingHorizontal: 16, paddingVertical: 10 },
-  refreshText: { color: theme.colors.textOnAccent, fontWeight: '900' },
-  logoutButton: { borderRadius: 8, borderWidth: 1, borderColor: theme.colors.borderStrong, backgroundColor: theme.colors.surface, paddingHorizontal: 16, paddingVertical: 10 },
-  logoutText: { color: theme.colors.text, fontWeight: '900' },
+  eyebrow: { color: adminChrome.textMuted, fontSize: 12, fontWeight: '700', letterSpacing: 0.2 },
+  title: { color: adminChrome.text, fontSize: 28, lineHeight: 34, fontWeight: '800' },
+  subtitle: { color: adminChrome.textMuted, fontSize: 14, lineHeight: 20, maxWidth: 760, marginTop: 3 },
+  refreshButton: { borderRadius: 7, backgroundColor: adminChrome.text, paddingHorizontal: 14, paddingVertical: 9 },
+  refreshText: { color: '#ffffff', fontWeight: '800' },
+  logoutButton: { borderRadius: 7, borderWidth: 1, borderColor: adminChrome.borderStrong, backgroundColor: adminChrome.cardBg, paddingHorizontal: 14, paddingVertical: 9 },
+  logoutText: { color: adminChrome.text, fontWeight: '800' },
   mobilePanel: { gap: 14 },
-  mainPanel: { flex: 1, minWidth: 0, gap: 14 },
+  mainPanel: { flex: 1, minWidth: 0, gap: 18, paddingHorizontal: 28, paddingVertical: 26, backgroundColor: adminChrome.pageBg },
   sidebar: {
-    width: 244,
+    width: 270,
     flexShrink: 0,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: theme.colors.borderSubtle,
-    backgroundColor: theme.colors.surface,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    minHeight: 620,
+    borderRightWidth: 1,
+    borderRightColor: adminChrome.border,
+    backgroundColor: adminChrome.sidebarBg,
+    paddingHorizontal: 12,
+    paddingVertical: 16,
+    minHeight: 760,
     justifyContent: 'space-between',
   },
-  sidebarTop: { gap: 16 },
-  sidebarBrand: { paddingHorizontal: 10, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: theme.colors.borderSubtle },
-  sidebarEyebrow: { color: theme.colors.accentCyan, fontSize: 10, fontWeight: '900', letterSpacing: 0.8 },
-  sidebarTitle: { color: theme.colors.text, fontSize: 17, fontWeight: '900', marginTop: 2 },
-  sidebarLogoutButton: { borderRadius: 8, borderWidth: 1, borderColor: theme.colors.borderSubtle, backgroundColor: theme.colors.surfaceAlt, paddingHorizontal: 12, paddingVertical: 11 },
-  sidebarLogoutText: { color: theme.colors.text, fontWeight: '900', textAlign: 'center' },
+  sidebarTop: { gap: 18 },
+  sidebarBrand: { paddingHorizontal: 8, paddingVertical: 6, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  brandMark: { width: 30, height: 30, borderRadius: 7, backgroundColor: adminChrome.text, alignItems: 'center', justifyContent: 'center' },
+  brandMarkText: { color: '#ffffff', fontSize: 14, fontWeight: '900' },
+  brandCopy: { gap: 1 },
+  sidebarEyebrow: { color: adminChrome.textMuted, fontSize: 12, fontWeight: '600' },
+  sidebarTitle: { color: adminChrome.text, fontSize: 15, fontWeight: '800' },
+  sidebarFooter: { gap: 9, paddingTop: 12, borderTopWidth: 1, borderTopColor: adminChrome.border },
+  sidebarFooterText: { color: adminChrome.textMuted, fontSize: 11, fontWeight: '700', paddingHorizontal: 8 },
+  sidebarLogoutButton: { borderRadius: 7, borderWidth: 1, borderColor: adminChrome.borderStrong, backgroundColor: adminChrome.cardBg, paddingHorizontal: 12, paddingVertical: 10 },
+  sidebarLogoutText: { color: adminChrome.text, fontWeight: '800', textAlign: 'center' },
   navPanel: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  navPanelSidebar: { flexDirection: 'column', gap: 6, paddingHorizontal: 0 },
-  navItem: { borderRadius: 8, borderWidth: 1, borderColor: theme.colors.borderSubtle, backgroundColor: theme.colors.surface, paddingHorizontal: 12, paddingVertical: 9, minWidth: 118 },
-  navItemSidebar: {
-    minWidth: 0,
-    width: '100%',
-    borderColor: 'transparent',
-    backgroundColor: 'transparent',
-    borderLeftWidth: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-  },
-  navItemActive: { backgroundColor: theme.colors.surfaceLifted, borderColor: theme.colors.accentMint },
-  navItemSidebarActive: { backgroundColor: theme.colors.surfaceAlt, borderColor: theme.colors.accentMint },
+  navPanelSidebar: { flexDirection: 'column', gap: 4, width: '100%', paddingRight: 2 },
+  navItem: { borderRadius: 7, borderWidth: 1, borderColor: adminChrome.border, backgroundColor: adminChrome.cardBg, paddingHorizontal: 12, paddingVertical: 9, minWidth: 118 },
+  navItemSidebar: { minWidth: 0, width: '100%', borderColor: 'transparent', backgroundColor: 'transparent', borderLeftWidth: 0, paddingVertical: 9, paddingHorizontal: 12 },
+  navItemActive: { backgroundColor: adminChrome.accentSoft, borderColor: adminChrome.accent },
+  navItemSidebarActive: { backgroundColor: adminChrome.accentSoft, borderColor: adminChrome.accent },
   navItemDisabled: { opacity: 0.45 },
-  navGroup: { color: theme.colors.textMuted, fontSize: 10, fontWeight: '900', textTransform: 'uppercase', letterSpacing: 0.6 },
-  navGroupActive: { color: theme.colors.accentMint },
-  navLabel: { color: theme.colors.text, fontSize: 14, fontWeight: '900', marginTop: 3 },
+  navGroup: { color: adminChrome.textMuted, fontSize: 10, fontWeight: '700', letterSpacing: 0.4 },
+  navGroupActive: { color: adminChrome.accent },
+  navLabel: { color: adminChrome.textSoft, fontSize: 14, fontWeight: '700', marginTop: 3 },
   navLabelSidebar: { marginTop: 0, fontSize: 14 },
-  navLabelActive: { color: theme.colors.accentMint },
-  sectionCard: { gap: 12 },
-  sectionHeader: { gap: 3 },
-  sectionTitle: { color: theme.colors.text, fontSize: 18, fontWeight: '900' },
-  sectionSubtitle: { color: theme.colors.textMuted, fontSize: 12, lineHeight: 18 },
-  badge: { borderRadius: 8, borderWidth: 1, paddingHorizontal: 10, paddingVertical: 5, alignSelf: 'flex-start' },
-  badge_neutral: { backgroundColor: theme.colors.surfaceAlt, borderColor: theme.colors.borderSubtle },
-  badge_success: { backgroundColor: theme.colors.surfaceSuccess, borderColor: theme.colors.borderSuccess },
-  badge_warning: { backgroundColor: theme.colors.surfaceWarning, borderColor: theme.colors.borderWarning },
-  badge_danger: { backgroundColor: theme.colors.surfaceDanger, borderColor: theme.colors.borderDanger },
-  badge_info: { backgroundColor: theme.colors.surfaceInfo, borderColor: theme.colors.borderInfo },
-  badgeText: { fontSize: 11, fontWeight: '900', textTransform: 'uppercase' },
-  badgeText_neutral: { color: theme.colors.textMuted },
-  badgeText_success: { color: theme.colors.success },
-  badgeText_warning: { color: theme.colors.warning },
-  badgeText_danger: { color: theme.colors.danger },
-  badgeText_info: { color: theme.colors.info },
+  navLabelActive: { color: adminChrome.accent },
+  sectionCard: {
+    gap: 12,
+    backgroundColor: adminChrome.cardBg,
+    borderColor: adminChrome.border,
+    padding: 16,
+    elevation: 0,
+    ...(Platform.OS === 'web' ? { boxShadow: '0px 1px 2px rgba(15, 23, 42, 0.04)' } as any : { shadowOpacity: 0.04, shadowRadius: 6, shadowOffset: { width: 0, height: 2 } }),
+  },
+  sectionHeader: { gap: 2, paddingBottom: 2 },
+  sectionTitle: { color: adminChrome.text, fontSize: 16, fontWeight: '800' },
+  sectionSubtitle: { color: adminChrome.textMuted, fontSize: 12, lineHeight: 18 },
+  badge: { borderRadius: 6, borderWidth: 1, paddingHorizontal: 8, paddingVertical: 4, alignSelf: 'flex-start' },
+  badge_neutral: { backgroundColor: adminChrome.cardMuted, borderColor: adminChrome.border },
+  badge_success: { backgroundColor: adminChrome.successSoft, borderColor: '#bbf7d0' },
+  badge_warning: { backgroundColor: adminChrome.warningSoft, borderColor: '#fed7aa' },
+  badge_danger: { backgroundColor: adminChrome.dangerSoft, borderColor: '#fecdd3' },
+  badge_info: { backgroundColor: adminChrome.infoSoft, borderColor: '#bfdbfe' },
+  badgeText: { fontSize: 11, fontWeight: '800' },
+  badgeText_neutral: { color: adminChrome.textMuted },
+  badgeText_success: { color: '#15803d' },
+  badgeText_warning: { color: '#c2410c' },
+  badgeText_danger: { color: '#be123c' },
+  badgeText_info: { color: '#2563eb' },
   stateCard: { alignItems: 'center', gap: 8 },
   stateTitle: { color: theme.colors.text, fontSize: 18, fontWeight: '900', textAlign: 'center' },
   stateTitleError: { color: theme.colors.danger },

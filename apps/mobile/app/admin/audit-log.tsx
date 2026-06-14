@@ -7,6 +7,7 @@ import {
   AdminShell,
   AdminStateCard,
   AdminStatusBadge,
+  adminChrome,
   adminStyles,
 } from '../../components/admin/AdminShell';
 import { adminService, type AdminAuditLogEntry, type AdminAuditLogResponse } from '../../services/admin.service';
@@ -173,13 +174,13 @@ const styles = StyleSheet.create({
   filterActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   content: { gap: 12 },
   resultHeader: { flexDirection: 'row', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' },
-  sectionTitle: { color: theme.colors.text, fontSize: 18, fontWeight: '900' },
+  sectionTitle: { color: adminChrome.text, fontSize: 18, fontWeight: '900' },
   entryCard: { gap: 12 },
   entryHeader: { flexDirection: 'row', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start' },
   entryCopy: { flex: 1, gap: 4 },
-  actionText: { color: theme.colors.text, fontSize: 17, fontWeight: '900' },
-  metadataBox: { borderRadius: 8, backgroundColor: theme.colors.surfaceAlt, padding: 12 },
-  metadataText: { color: theme.colors.text, fontSize: 12, marginTop: 6 },
+  actionText: { color: adminChrome.text, fontSize: 17, fontWeight: '900' },
+  metadataBox: { borderRadius: 10, backgroundColor: adminChrome.cardMuted, borderWidth: 1, borderColor: adminChrome.border, padding: 12 },
+  metadataText: { color: adminChrome.textSoft, fontSize: 12, lineHeight: 18, marginTop: 6 },
   paginationRow: { flexDirection: 'row', justifyContent: 'center', gap: 10, marginTop: 8 },
   pageButtonDisabled: { opacity: 0.4 },
 });

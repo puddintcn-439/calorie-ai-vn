@@ -6,6 +6,7 @@ import {
   AdminSectionCard,
   AdminShell,
   AdminStateCard,
+  adminChrome,
   adminStyles,
 } from '../../components/admin/AdminShell';
 import { adminService, type AdminRevenueResponse } from '../../services/admin.service';
@@ -63,6 +64,24 @@ function Row({ left, right, sub }: { left: string; right: string; sub?: string }
         {sub ? <Text style={adminStyles.muted}>{sub}</Text> : null}
       </View>
       <Text style={adminStyles.rowRight}>{right}</Text>
+    </View>
+  );
+}
+
+function num(value: any) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : 0;
+}
+
+function ChartBar({ label, value, max, color }: { label: string; value: number; max: number; color: string }) {
+  const width = max > 0 ? Math.max(4, Math.min(100, (value / max) * 100)) : 0;
+  return (
+    <View style={styles.chartRow}>
+      <View style={styles.chartHeader}>
+        <Text style={styles.chartLabel}>{label}</Text>
+        <Text style={styles.chartValue}>{n(value)}</Text>
+      </View>
+      <View style={styles.track}>{max > 0 ? <View style={[styles.bar, { width: `${width}%`, backgroundColor: color }]} /> : null}</View>
     </View>
   );
 }
@@ -147,6 +166,23 @@ export default function AdminRevenueScreen() {
             {cards.map((card) => <MetricCard key={card.label} {...card} />)}
           </View>
 
+          <View style={styles.chartGrid}>
+            <AdminSectionCard title="Subscription distribution" subtitle="Current account mix across free and paid tiers." style={styles.chartCard}>
+              <ChartBar label="Free" value={num(subscriptions.active_free)} max={Math.max(num(subscriptions.active_free), num(subscriptions.active_premium), num(subscriptions.active_pro), num(subscriptions.cancelled))} color={adminChrome.textMuted} />
+              <ChartBar label="Premium" value={num(subscriptions.active_premium)} max={Math.max(num(subscriptions.active_free), num(subscriptions.active_premium), num(subscriptions.active_pro), num(subscriptions.cancelled))} color={adminChrome.purple} />
+              <ChartBar label="Pro" value={num(subscriptions.active_pro)} max={Math.max(num(subscriptions.active_free), num(subscriptions.active_premium), num(subscriptions.active_pro), num(subscriptions.cancelled))} color={adminChrome.mint} />
+              <ChartBar label="Cancelled" value={num(subscriptions.cancelled)} max={Math.max(num(subscriptions.active_free), num(subscriptions.active_premium), num(subscriptions.active_pro), num(subscriptions.cancelled))} color={adminChrome.rose} />
+            </AdminSectionCard>
+
+            <AdminSectionCard title="Revenue guardrails" subtitle="Margin, conversion, and AI cost signals for production checks." style={styles.chartCard}>
+              <View style={styles.signalGrid}>
+                <View style={styles.signalBox}><Text style={styles.signalValue}>{pct(margin.estimated_gross_margin_rate)}</Text><Text style={styles.signalLabel}>gross margin</Text></View>
+                <View style={styles.signalBox}><Text style={styles.signalValue}>{pct(conversion.paid_conversion_rate)}</Text><Text style={styles.signalLabel}>paid conversion</Text></View>
+                <View style={styles.signalBox}><Text style={styles.signalValue}>{money(aiCost[`month_to_date_${suffix}`], currency)}</Text><Text style={styles.signalLabel}>AI cost MTD</Text></View>
+              </View>
+            </AdminSectionCard>
+          </View>
+
           <AdminSectionCard title="Subscription mix" subtitle="Current active subscription distribution.">
             <Row left="Total users" right={n(subscriptions.total_users)} />
             <Row left="Active subscriptions" right={n(subscriptions.active_subscriptions)} />
@@ -189,6 +225,18 @@ export default function AdminRevenueScreen() {
 
 const styles = StyleSheet.create({
   content: { gap: 14 },
-  toggleButton: { borderRadius: 8, borderWidth: 1, borderColor: theme.colors.accentCyan, paddingHorizontal: 16, paddingVertical: 10 },
-  toggleText: { color: theme.colors.accentCyan, fontWeight: '900' },
+  toggleButton: { borderRadius: 8, borderWidth: 1, borderColor: adminChrome.accent, backgroundColor: adminChrome.accentSoft, paddingHorizontal: 16, paddingVertical: 10 },
+  toggleText: { color: adminChrome.accent, fontWeight: '900' },
+  chartGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+  chartCard: { flexGrow: 1, flexBasis: 420, minWidth: 320, gap: 14 },
+  chartRow: { gap: 7 },
+  chartHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12 },
+  chartLabel: { color: adminChrome.textSoft, fontSize: 13, fontWeight: '800', flexShrink: 1 },
+  chartValue: { color: adminChrome.text, fontSize: 13, fontWeight: '900', textAlign: 'right', minWidth: 44 },
+  track: { height: 11, borderRadius: 999, backgroundColor: '#eef2f7', overflow: 'hidden', borderWidth: 1, borderColor: adminChrome.border },
+  bar: { height: '100%', borderRadius: 999 },
+  signalGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  signalBox: { flexGrow: 1, flexBasis: 150, minWidth: 140, borderRadius: 10, borderWidth: 1, borderColor: adminChrome.border, backgroundColor: adminChrome.cardMuted, padding: 12, gap: 4 },
+  signalValue: { color: adminChrome.text, fontSize: 20, lineHeight: 26, fontWeight: '900' },
+  signalLabel: { color: adminChrome.textMuted, fontSize: 12, fontWeight: '700' },
 });

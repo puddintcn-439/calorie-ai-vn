@@ -9,9 +9,9 @@ import { useAuthStore } from '../../store/auth.store';
 
 function getLoginError(error: any) {
   const status = Number(error?.response?.status ?? 0);
-  if (status === 401) return 'Email hoặc mật khẩu không đúng.';
-  if (status === 403) return 'Tài khoản này không có quyền admin.';
-  return 'Không thể đăng nhập admin lúc này. Vui lòng thử lại.';
+  if (status === 401) return 'Email or password is incorrect.';
+  if (status === 403) return 'This account does not have admin access.';
+  return 'Could not sign in to Admin Console right now. Please try again.';
 }
 
 export default function AdminLoginScreen() {
@@ -42,31 +42,39 @@ export default function AdminLoginScreen() {
 
   return (
     <ScreenShell scroll scrollContentStyle={styles.scrollContent} reserveBottomNav={false}>
-      <View style={styles.header}>
-        <Text style={styles.eyebrow}>ADMIN CONSOLE</Text>
-        <Text style={styles.title}>Đăng nhập Admin</Text>
-        <Text style={styles.subtitle}>Chỉ dành cho quản trị viên. Backend sẽ kiểm tra quyền admin trước khi mở console.</Text>
-      </View>
-
       <SurfaceCard style={styles.card}>
-        <Text style={styles.label}>Email admin</Text>
+        <View style={styles.header}>
+          <View style={styles.brandRow}>
+            <View style={styles.brandMark}>
+              <Text style={styles.brandMarkText}>C</Text>
+            </View>
+            <View>
+              <Text style={styles.eyebrow}>Calorie AI</Text>
+              <Text style={styles.brandMeta}>Internal admin tools</Text>
+            </View>
+          </View>
+          <Text style={styles.title}>Sign in to Admin Console</Text>
+          <Text style={styles.subtitle}>Use an admin account. Access is verified again by the backend before opening operational screens.</Text>
+        </View>
+
+        <Text style={styles.label}>Admin email</Text>
         <TextInput
           value={email}
           onChangeText={setEmail}
           placeholder="admin@example.com"
-          placeholderTextColor={theme.colors.textDisabled}
+          placeholderTextColor="#94a3b8"
           autoCapitalize="none"
           autoCorrect={false}
           keyboardType="email-address"
           style={styles.input}
         />
 
-        <Text style={styles.label}>Mật khẩu</Text>
+        <Text style={styles.label}>Password</Text>
         <TextInput
           value={password}
           onChangeText={setPassword}
-          placeholder="••••••••"
-          placeholderTextColor={theme.colors.textDisabled}
+          placeholder="********"
+          placeholderTextColor="#94a3b8"
           secureTextEntry
           style={styles.input}
         />
@@ -74,36 +82,40 @@ export default function AdminLoginScreen() {
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
         <TouchableOpacity style={[styles.button, !canSubmit && styles.buttonDisabled]} disabled={!canSubmit} onPress={submit}>
-          {loading ? <ActivityIndicator color={theme.colors.textOnAccent} /> : <Text style={styles.buttonText}>Đăng nhập Admin</Text>}
+          {loading ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.buttonText}>Sign in</Text>}
         </TouchableOpacity>
 
-        <Text style={styles.note}>Nếu tài khoản không nằm trong danh sách admin, phiên đăng nhập sẽ bị hủy và không thể truy cập khu vực quản trị.</Text>
+        <Text style={styles.note}>Non-admin sessions are rejected and cleared automatically.</Text>
       </SurfaceCard>
     </ScreenShell>
   );
 }
 
 const styles = StyleSheet.create({
-  scrollContent: { flexGrow: 1, justifyContent: 'center', gap: 18, maxWidth: 520, alignSelf: 'center', width: '100%' },
-  header: { gap: 10 },
-  eyebrow: { color: theme.colors.accentCyan, fontSize: 12, fontWeight: '900', letterSpacing: 1 },
-  title: { color: theme.colors.text, fontSize: 32, fontWeight: '900' },
-  subtitle: { color: theme.colors.textMuted, fontSize: 14, lineHeight: 20 },
-  card: { gap: 12 },
-  label: { color: theme.colors.textSoft, fontSize: 13, fontWeight: '800' },
+  scrollContent: { flexGrow: 1, justifyContent: 'center', gap: 18, maxWidth: 460, alignSelf: 'center', width: '100%' },
+  card: { gap: 12, borderRadius: 10, borderColor: '#e5e7eb', backgroundColor: '#ffffff' },
+  header: { gap: 11, paddingBottom: 8 },
+  brandRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  brandMark: { width: 34, height: 34, borderRadius: 8, backgroundColor: '#0f172a', alignItems: 'center', justifyContent: 'center' },
+  brandMarkText: { color: '#ffffff', fontSize: 15, fontWeight: '900' },
+  eyebrow: { color: '#0f172a', fontSize: 14, fontWeight: '800' },
+  brandMeta: { color: '#64748b', fontSize: 12, fontWeight: '600', marginTop: 1 },
+  title: { color: '#0f172a', fontSize: 26, lineHeight: 32, fontWeight: '800' },
+  subtitle: { color: '#64748b', fontSize: 14, lineHeight: 20 },
+  label: { color: '#334155', fontSize: 13, fontWeight: '700' },
   input: {
     borderWidth: 1,
-    borderColor: theme.colors.borderSubtle,
-    backgroundColor: theme.colors.surfaceLifted,
-    color: theme.colors.text,
-    borderRadius: 14,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    borderColor: '#d7dce3',
+    backgroundColor: '#ffffff',
+    color: '#0f172a',
+    borderRadius: 7,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
     fontSize: 15,
   },
-  button: { marginTop: 8, borderRadius: 14, backgroundColor: theme.colors.accentMint, paddingVertical: 14, alignItems: 'center' },
+  button: { marginTop: 8, borderRadius: 7, backgroundColor: '#0f172a', paddingVertical: 12, alignItems: 'center' },
   buttonDisabled: { opacity: 0.55 },
-  buttonText: { color: theme.colors.textOnAccent, fontWeight: '900' },
+  buttonText: { color: '#ffffff', fontWeight: '800' },
   error: { color: theme.colors.danger, fontWeight: '800' },
-  note: { color: theme.colors.textMuted, fontSize: 12, lineHeight: 18, textAlign: 'center' },
+  note: { color: '#64748b', fontSize: 12, lineHeight: 18, textAlign: 'center' },
 });

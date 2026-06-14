@@ -7,6 +7,7 @@ import {
   AdminShell,
   AdminStateCard,
   AdminStatusBadge,
+  adminChrome,
   adminStyles,
 } from '../../components/admin/AdminShell';
 import { adminService, type AdminPaymentIssue, type AdminPaymentIssuesResponse } from '../../services/admin.service';
@@ -141,6 +142,22 @@ function IssueCard({ issue, onUpdated }: { issue: AdminPaymentIssue; onUpdated: 
   );
 }
 
+function StatusSummary({ issues }: { issues: AdminPaymentIssue[] }) {
+  return (
+    <View style={styles.summaryGrid}>
+      {STATUS_OPTIONS.map((status) => {
+        const count = issues.filter((issue) => issue.status === status).length;
+        return (
+          <View key={status} style={[styles.summaryBox, styles[`summary_${status}`]]}>
+            <Text style={styles.summaryValue}>{count}</Text>
+            <Text style={styles.summaryLabel}>{status}</Text>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
 export default function AdminPaymentIssuesScreen() {
   const [response, setResponse] = useState<AdminPaymentIssuesResponse | null>(null);
   const [status, setStatus] = useState('');
@@ -169,6 +186,7 @@ export default function AdminPaymentIssuesScreen() {
       onRefresh={load}
     >
       <AdminSectionCard title="Support queue" subtitle="Resolution là nội dung user thấy. Admin note chỉ dùng nội bộ và không nên chứa dữ liệu nhạy cảm.">
+        {response ? <StatusSummary issues={response.issues} /> : null}
         <View style={styles.statusRow}>
           {['', ...STATUS_OPTIONS].map((option) => (
             <TouchableOpacity
@@ -203,17 +221,25 @@ const styles = StyleSheet.create({
   issueCard: { gap: 12 },
   issueHeader: { flexDirection: 'row', gap: 12, justifyContent: 'space-between', alignItems: 'flex-start' },
   issueIdentity: { flex: 1, gap: 4 },
-  issueTitle: { color: theme.colors.text, fontSize: 17, fontWeight: '900' },
-  userMessageBox: { borderRadius: 8, backgroundColor: theme.colors.surfaceAlt, padding: 12, gap: 4 },
-  userMessageLabel: { color: theme.colors.textMuted, fontSize: 11, fontWeight: '900', textTransform: 'uppercase' },
-  userMessage: { color: theme.colors.text, fontSize: 14, lineHeight: 20, fontWeight: '700' },
+  issueTitle: { color: adminChrome.text, fontSize: 17, fontWeight: '900' },
+  userMessageBox: { borderRadius: 10, backgroundColor: adminChrome.cardMuted, borderWidth: 1, borderColor: adminChrome.border, padding: 12, gap: 4 },
+  userMessageLabel: { color: adminChrome.textMuted, fontSize: 11, fontWeight: '900' },
+  userMessage: { color: adminChrome.text, fontSize: 14, lineHeight: 20, fontWeight: '700' },
   statusRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  statusButton: { borderRadius: 8, borderWidth: 1, borderColor: theme.colors.borderSubtle, paddingHorizontal: 12, paddingVertical: 8 },
-  statusButtonActive: { backgroundColor: theme.colors.accentMint, borderColor: theme.colors.accentMint },
-  statusButtonText: { color: theme.colors.text, fontSize: 12, fontWeight: '800' },
-  statusButtonTextActive: { color: theme.colors.textOnAccent },
+  statusButton: { borderRadius: 999, borderWidth: 1, borderColor: adminChrome.borderStrong, backgroundColor: adminChrome.cardBg, paddingHorizontal: 12, paddingVertical: 8 },
+  statusButtonActive: { backgroundColor: adminChrome.accentSoft, borderColor: adminChrome.accent },
+  statusButtonText: { color: adminChrome.textSoft, fontSize: 12, fontWeight: '800' },
+  statusButtonTextActive: { color: adminChrome.accent },
   inputGroup: { gap: 6 },
-  inputLabel: { color: theme.colors.textSoft, fontSize: 12, fontWeight: '900' },
-  input: { minHeight: 74, borderRadius: 8, borderWidth: 1, borderColor: theme.colors.borderSubtle, color: theme.colors.text, backgroundColor: theme.colors.surfaceAlt, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, lineHeight: 20 },
+  inputLabel: { color: adminChrome.textSoft, fontSize: 12, fontWeight: '900' },
+  input: { minHeight: 74, borderRadius: 8, borderWidth: 1, borderColor: adminChrome.borderStrong, color: adminChrome.text, backgroundColor: adminChrome.cardBg, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, lineHeight: 20 },
   buttonDisabled: { opacity: 0.65 },
+  summaryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  summaryBox: { flexGrow: 1, flexBasis: 150, minWidth: 130, borderRadius: 10, borderWidth: 1, padding: 12, gap: 3 },
+  summary_open: { backgroundColor: adminChrome.warningSoft, borderColor: '#fed7aa' },
+  summary_in_review: { backgroundColor: adminChrome.infoSoft, borderColor: '#bfdbfe' },
+  summary_resolved: { backgroundColor: adminChrome.successSoft, borderColor: '#bbf7d0' },
+  summary_rejected: { backgroundColor: adminChrome.dangerSoft, borderColor: '#fecdd3' },
+  summaryValue: { color: adminChrome.text, fontSize: 22, lineHeight: 28, fontWeight: '900' },
+  summaryLabel: { color: adminChrome.textMuted, fontSize: 12, fontWeight: '800' },
 });

@@ -8,6 +8,7 @@ import {
   AdminShell,
   AdminStateCard,
   AdminStatusBadge,
+  adminChrome,
   adminStyles,
 } from '../../components/admin/AdminShell';
 import { adminService, type AdminUserRow, type AdminUsersResponse } from '../../services/admin.service';
@@ -33,7 +34,7 @@ function getAdminError(error: any) {
 function UserCard({ user }: { user: AdminUserRow }) {
   return (
     <TouchableOpacity style={styles.userCardPressable} onPress={() => router.push(`/admin/users/${encodeURIComponent(user.id)}` as any)}>
-      <AdminSectionCard style={styles.userCard}>
+      <AdminSectionCard style={[styles.userCard, user.plan_tier === 'free' ? styles.userCardFree : styles.userCardPaid]}>
         <View style={styles.userHeader}>
           <View style={styles.userIdentity}>
             <Text style={styles.userEmail}>{user.email ?? 'No email'}</Text>
@@ -163,19 +164,21 @@ const styles = StyleSheet.create({
   searchRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   searchInput: { flexGrow: 1, minWidth: 220 },
   planRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  planFilter: { borderRadius: 8, borderWidth: 1, borderColor: theme.colors.borderSubtle, paddingHorizontal: 14, paddingVertical: 8 },
-  planFilterActive: { backgroundColor: theme.colors.accentMint, borderColor: theme.colors.accentMint },
-  planFilterText: { color: theme.colors.text, fontWeight: '800' },
-  planFilterTextActive: { color: theme.colors.textOnAccent },
+  planFilter: { borderRadius: 999, borderWidth: 1, borderColor: adminChrome.borderStrong, backgroundColor: adminChrome.cardBg, paddingHorizontal: 14, paddingVertical: 8 },
+  planFilterActive: { backgroundColor: adminChrome.accentSoft, borderColor: adminChrome.accent },
+  planFilterText: { color: adminChrome.textSoft, fontWeight: '800' },
+  planFilterTextActive: { color: adminChrome.accent },
   content: { gap: 12 },
   resultHeader: { flexDirection: 'row', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' },
-  sectionTitle: { color: theme.colors.text, fontSize: 18, fontWeight: '900' },
+  sectionTitle: { color: adminChrome.text, fontSize: 18, fontWeight: '900' },
   userCardPressable: { borderRadius: 8 },
-  userCard: { gap: 12 },
+  userCard: { gap: 12, borderLeftWidth: 4 },
+  userCardFree: { borderLeftColor: adminChrome.textMuted },
+  userCardPaid: { borderLeftColor: adminChrome.mint },
   userHeader: { flexDirection: 'row', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start' },
   userIdentity: { flex: 1, gap: 4 },
-  userEmail: { color: theme.colors.text, fontSize: 16, fontWeight: '900' },
-  userId: { color: theme.colors.textMuted, fontSize: 11 },
+  userEmail: { color: adminChrome.text, fontSize: 16, fontWeight: '900' },
+  userId: { color: adminChrome.textMuted, fontSize: 11 },
   userDates: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   paginationRow: { flexDirection: 'row', gap: 10, justifyContent: 'flex-end' },
   pageButtonDisabled: { opacity: 0.45 },

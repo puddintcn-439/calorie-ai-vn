@@ -13,6 +13,40 @@ UX V1 introduced shared admin components, but the desktop layout still felt visu
 
 V1.1 moves navigation into a fixed-width left sidebar on tablet/desktop and gives the main content area the full remaining width.
 
+## Stripe/Supabase-style polish pass
+
+The follow-up polish pass tightens the console visual system without changing product behavior:
+
+- Use a flatter desktop console frame instead of floating card navigation.
+- Keep the sidebar white, compact, and operational, with a small brand mark and subtle active route highlight.
+- Use neutral admin chrome: light gray page background, white content cards, thin borders, and restrained shadows.
+- Make KPI cards denser with smaller labels, stronger tabular-feeling numbers, and less decorative spacing.
+- Turn overview quick actions into compact operational rows with small glyph blocks instead of feature-card styling.
+- Make `/admin/login` feel like an internal tool login rather than the consumer app login.
+
+## Production dashboard polish
+
+The overview adds production-friendly visual summaries without inventing data:
+
+- KPI cards use a stable 3-column desktop grid so one card is not stranded on a separate row.
+- Each KPI has a distinct accent stripe and dot for fast scanning.
+- Engagement and AI operations charts visualize existing overview values only.
+- Chart labels and values sit outside the bar track to prevent clipping or hidden text.
+- Empty/zero data still renders a visible track so the dashboard does not collapse visually.
+
+## Cross-screen polish
+
+The same admin chrome is applied across the related admin surfaces:
+
+- `/admin/login` uses an internal-tool login card.
+- `/admin` uses balanced KPI cards, engagement charts, AI operations charts, quick actions, and needs-attention rows.
+- `/admin/users` uses clearer filters and status-accented user cards.
+- `/admin/users/:id` keeps the existing support actions but aligns cards, quota, billing, and activity sections with the admin visual system.
+- `/admin/revenue` adds subscription distribution and revenue guardrail summaries.
+- `/admin/payment-issues` adds support queue status summaries and safer segmented status controls.
+- `/admin/ai-usage` adds an AI status mix chart for success/fallback/failed/blocked signals.
+- `/admin/audit-log` tightens filters, entries, and metadata display to avoid horizontal overflow.
+
 ## Sidebar navigation structure
 
 Desktop/tablet admin screens now use a two-column layout:

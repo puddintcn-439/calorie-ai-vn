@@ -6,6 +6,7 @@ import {
   AdminSectionCard,
   AdminShell,
   AdminStateCard,
+  adminChrome,
   adminStyles,
 } from '../../components/admin/AdminShell';
 import { adminService } from '../../services/admin.service';
@@ -51,6 +52,24 @@ function UsageList({ title, subtitle, rows }: { title: string; subtitle: string;
         </View>
       ))}
     </AdminSectionCard>
+  );
+}
+
+function toNumber(value: any) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : 0;
+}
+
+function StatusBar({ label, value, max, color }: { label: string; value: number; max: number; color: string }) {
+  const width = max > 0 ? Math.max(4, Math.min(100, (value / max) * 100)) : 0;
+  return (
+    <View style={styles.statusRow}>
+      <View style={styles.statusHeader}>
+        <Text style={styles.statusLabel}>{label}</Text>
+        <Text style={styles.statusValue}>{formatNumber(value)}</Text>
+      </View>
+      <View style={styles.track}>{max > 0 ? <View style={[styles.bar, { width: `${width}%`, backgroundColor: color }]} /> : null}</View>
+    </View>
   );
 }
 
@@ -107,6 +126,15 @@ export default function AdminAiUsageScreen() {
             <MetricCard label="Blocked" value={formatNumber(summary.total_blocked)} />
           </View>
 
+          <AdminSectionCard title="Status mix" subtitle="Production signal for success, fallback, failed, and blocked requests.">
+            <View style={styles.statusGrid}>
+              <StatusBar label="Success" value={toNumber(summary.total_success)} max={Math.max(toNumber(summary.total_success), toNumber(summary.total_fallback), toNumber(summary.total_failed), toNumber(summary.total_blocked))} color={adminChrome.mint} />
+              <StatusBar label="Fallback" value={toNumber(summary.total_fallback)} max={Math.max(toNumber(summary.total_success), toNumber(summary.total_fallback), toNumber(summary.total_failed), toNumber(summary.total_blocked))} color={adminChrome.amber} />
+              <StatusBar label="Failed" value={toNumber(summary.total_failed)} max={Math.max(toNumber(summary.total_success), toNumber(summary.total_fallback), toNumber(summary.total_failed), toNumber(summary.total_blocked))} color={adminChrome.rose} />
+              <StatusBar label="Blocked" value={toNumber(summary.total_blocked)} max={Math.max(toNumber(summary.total_success), toNumber(summary.total_fallback), toNumber(summary.total_failed), toNumber(summary.total_blocked))} color={adminChrome.purple} />
+            </View>
+          </AdminSectionCard>
+
           <View style={styles.columns}>
             <UsageList title="Top features" subtitle="Feature nào đang tạo nhiều request/cost nhất." rows={summary.top_features} />
             <UsageList title="Top users" subtitle="User cần kiểm tra nếu usage tăng bất thường." rows={summary.top_users} />
@@ -123,10 +151,17 @@ export default function AdminAiUsageScreen() {
 
 const styles = StyleSheet.create({
   windowRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  windowButton: { borderRadius: 8, borderWidth: 1, borderColor: theme.colors.borderSubtle, backgroundColor: theme.colors.surface, paddingHorizontal: 12, paddingVertical: 10 },
-  windowButtonActive: { backgroundColor: theme.colors.accentMint, borderColor: theme.colors.accentMint },
-  windowText: { color: theme.colors.text, fontWeight: '900' },
-  windowTextActive: { color: theme.colors.textOnAccent },
+  windowButton: { borderRadius: 999, borderWidth: 1, borderColor: adminChrome.borderStrong, backgroundColor: adminChrome.cardBg, paddingHorizontal: 12, paddingVertical: 10 },
+  windowButtonActive: { backgroundColor: adminChrome.accentSoft, borderColor: adminChrome.accent },
+  windowText: { color: adminChrome.textSoft, fontWeight: '900' },
+  windowTextActive: { color: adminChrome.accent },
   columns: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
-  sectionCard: { flexGrow: 1, flexBasis: 280, minWidth: 260 },
+  sectionCard: { flexGrow: 1, flexBasis: 420, minWidth: 320 },
+  statusGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 14 },
+  statusRow: { flexGrow: 1, flexBasis: 250, minWidth: 220, gap: 7 },
+  statusHeader: { flexDirection: 'row', justifyContent: 'space-between', gap: 12, alignItems: 'center' },
+  statusLabel: { color: adminChrome.textSoft, fontSize: 13, fontWeight: '800' },
+  statusValue: { color: adminChrome.text, fontSize: 13, fontWeight: '900', textAlign: 'right', minWidth: 44 },
+  track: { height: 11, borderRadius: 999, backgroundColor: '#eef2f7', overflow: 'hidden', borderWidth: 1, borderColor: adminChrome.border },
+  bar: { height: '100%', borderRadius: 999 },
 });
