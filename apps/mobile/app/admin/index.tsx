@@ -3,9 +3,12 @@ import { StyleSheet, TouchableOpacity, View } from 'react-native';
 import { router } from 'expo-router';
 import { Text } from '../../components/i18n-text';
 import {
+  AdminMetricCard,
+  AdminQuickActionCard,
   AdminSectionCard,
   AdminShell,
   AdminStateCard,
+  AdminToneCard,
   adminStyles,
 } from '../../components/admin/AdminShell';
 import { adminService, type AdminOverview } from '../../services/admin.service';
@@ -27,35 +30,9 @@ function getAdminError(error: any) {
   return 'Không thể tải Admin Console lúc này. Vui lòng thử lại.';
 }
 
-type MetricTone = 'purple' | 'cyan' | 'mint' | 'amber' | 'rose' | 'blue';
-
-const toneStyles: Record<MetricTone, any> = {
-  purple: { borderTopColor: '#635bff' },
-  cyan: { borderTopColor: '#06b6d4' },
-  mint: { borderTopColor: '#10b981' },
-  amber: { borderTopColor: '#f59e0b' },
-  rose: { borderTopColor: '#f43f5e' },
-  blue: { borderTopColor: '#3b82f6' },
-};
-
 function toNumber(value: number | null | undefined) {
   const numeric = Number(value);
   return Number.isFinite(numeric) ? numeric : 0;
-}
-
-function MetricCard({ label, value, helper, tone }: { label: string; value: string; helper?: string; tone: MetricTone }) {
-  return (
-    <AdminSectionCard style={[adminStyles.metricCard, styles.metricCard, toneStyles[tone]]}>
-      <View style={styles.metricHeader}>
-        <Text style={adminStyles.metricLabel}>{label}</Text>
-        <View style={[styles.metricDot, styles[`dot_${tone}`]]} />
-      </View>
-      <View>
-        <Text style={adminStyles.metricValue}>{value}</Text>
-        {helper ? <Text style={adminStyles.muted}>{helper}</Text> : null}
-      </View>
-    </AdminSectionCard>
-  );
 }
 
 function ChartBar({ label, value, max, color }: { label: string; value: number; max: number; color: string }) {
@@ -106,21 +83,6 @@ function OverviewCharts({ overview }: { overview: AdminOverview }) {
   );
 }
 
-function QuickAction({ title, body, href }: { title: string; body: string; href: string }) {
-  return (
-    <TouchableOpacity style={styles.quickAction} onPress={() => router.push(href as any)}>
-      <View style={styles.quickIcon}>
-        <Text style={styles.quickIconText}>{title.slice(0, 1)}</Text>
-      </View>
-      <View style={styles.quickCopy}>
-        <Text style={styles.quickTitle}>{title}</Text>
-        <Text style={adminStyles.muted}>{body}</Text>
-      </View>
-      <Text style={styles.quickLink}>Open</Text>
-    </TouchableOpacity>
-  );
-}
-
 export default function AdminOverviewScreen() {
   const [overview, setOverview] = useState<AdminOverview | null>(null);
   const [loading, setLoading] = useState(true);
@@ -156,12 +118,12 @@ export default function AdminOverviewScreen() {
       ) : overview ? (
         <>
           <View style={adminStyles.metricGrid}>
-            <MetricCard label="Active users today" value={formatNumber(overview.active_users_today)} helper="Daily active signal" tone="purple" />
-            <MetricCard label="Active users 7d" value={formatNumber(overview.active_users_7d)} helper="Rolling weekly reach" tone="cyan" />
-            <MetricCard label="New users 7d" value={formatNumber(overview.new_users_7d)} helper="New accounts this week" tone="mint" />
-            <MetricCard label="AI requests today" value={formatNumber(overview.ai_requests_today)} helper="Provider calls today" tone="blue" />
-            <MetricCard label="AI cost today" value={formatUsd(overview.estimated_ai_cost_today_usd)} helper="Estimated infra spend" tone="amber" />
-            <MetricCard label="Quota blocked today" value={formatNumber(overview.quota_blocked_today)} helper="Guardrail events" tone="rose" />
+            <AdminMetricCard label="Active users today" value={formatNumber(overview.active_users_today)} helper="Daily active signal" tone="info" />
+            <AdminMetricCard label="Active users 7d" value={formatNumber(overview.active_users_7d)} helper="Rolling weekly reach" tone="support" />
+            <AdminMetricCard label="New users 7d" value={formatNumber(overview.new_users_7d)} helper="New accounts this week" tone="success" />
+            <AdminMetricCard label="AI requests today" value={formatNumber(overview.ai_requests_today)} helper="Provider calls today" tone="ai" />
+            <AdminMetricCard label="AI cost today" value={formatUsd(overview.estimated_ai_cost_today_usd)} helper="Estimated infra spend" tone="warning" />
+            <AdminMetricCard label="Quota blocked today" value={formatNumber(overview.quota_blocked_today)} helper="Guardrail events" tone="danger" />
           </View>
 
           <OverviewCharts overview={overview} />
@@ -171,16 +133,17 @@ export default function AdminOverviewScreen() {
             subtitle="Các lối tắt cho công việc admin thường dùng."
           >
             <View style={styles.quickGrid}>
-              <QuickAction title="Users" body="Tìm user, xem gói, quota và hoạt động gần đây." href="/admin/users" />
-              <QuickAction title="Revenue" body="Kiểm tra doanh thu, subscription mix, AI cost và margin." href="/admin/revenue" />
-              <QuickAction title="Payment Issues" body="Xử lý hoàn tiền, thanh toán trùng hoặc chưa kích hoạt gói." href="/admin/payment-issues" />
-              <QuickAction title="AI Usage" body="Theo dõi request, chi phí, blocked quota và provider mix." href="/admin/ai-usage" />
+              <AdminQuickActionCard title="Users" body="Tìm user, xem gói, quota và hoạt động gần đây." href="/admin/users" tone="info" />
+              <AdminQuickActionCard title="Revenue" body="Kiểm tra doanh thu, subscription mix, AI cost và margin." href="/admin/revenue" tone="billing" />
+              <AdminQuickActionCard title="Payment Issues" body="Xử lý hoàn tiền, thanh toán trùng hoặc chưa kích hoạt gói." href="/admin/payment-issues" tone="support" />
+              <AdminQuickActionCard title="AI Usage" body="Theo dõi request, chi phí, blocked quota và provider mix." href="/admin/ai-usage" tone="ai" />
             </View>
           </AdminSectionCard>
 
-          <AdminSectionCard
+          <AdminToneCard
             title="Needs attention"
             subtitle="Không invent số liệu nếu API chưa trả count. Dùng các link dưới đây để kiểm tra thủ công trong staging."
+            tone="support"
           >
             <View style={styles.attentionList}>
               <TouchableOpacity style={styles.attentionRow} onPress={() => router.push('/admin/payment-issues' as any)}>
@@ -205,7 +168,7 @@ export default function AdminOverviewScreen() {
                 <Text style={adminStyles.rowRight}>Inspect</Text>
               </TouchableOpacity>
             </View>
-          </AdminSectionCard>
+          </AdminToneCard>
         </>
       ) : (
         <AdminStateCard state="empty" />
@@ -215,18 +178,6 @@ export default function AdminOverviewScreen() {
 }
 
 const styles = StyleSheet.create({
-  metricCard: {
-    borderTopWidth: 4,
-    overflow: 'hidden',
-  },
-  metricHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 10 },
-  metricDot: { width: 10, height: 10, borderRadius: 5 },
-  dot_purple: { backgroundColor: '#635bff' },
-  dot_cyan: { backgroundColor: '#06b6d4' },
-  dot_mint: { backgroundColor: '#10b981' },
-  dot_amber: { backgroundColor: '#f59e0b' },
-  dot_rose: { backgroundColor: '#f43f5e' },
-  dot_blue: { backgroundColor: '#3b82f6' },
   chartGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   chartCard: { flexGrow: 1, flexBasis: 420, minWidth: 320, gap: 14 },
   chartRow: { gap: 7 },
@@ -251,24 +202,6 @@ const styles = StyleSheet.create({
   guardrailValue: { color: '#c2410c', fontSize: 22, lineHeight: 28, fontWeight: '900' },
   guardrailLabel: { color: '#9a3412', fontSize: 12, lineHeight: 17, fontWeight: '700', flex: 1, textAlign: 'right' },
   quickGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
-  quickAction: {
-    flexGrow: 1,
-    flexBasis: 250,
-    minWidth: 230,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
-    backgroundColor: '#ffffff',
-    padding: 13,
-    gap: 10,
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-  },
-  quickIcon: { width: 30, height: 30, borderRadius: 7, backgroundColor: '#f0efff', alignItems: 'center', justifyContent: 'center' },
-  quickIconText: { color: '#635bff', fontSize: 13, fontWeight: '900' },
-  quickCopy: { flex: 1, gap: 3 },
-  quickTitle: { color: '#0f172a', fontSize: 15, fontWeight: '800' },
-  quickLink: { color: '#635bff', fontSize: 12, fontWeight: '800', marginTop: 2 },
   attentionList: { gap: 0 },
   attentionRow: {
     flexDirection: 'row',

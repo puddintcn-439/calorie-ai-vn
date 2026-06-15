@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { StyleSheet, TouchableOpacity, View } from 'react-native';
 import { Text } from '../../components/i18n-text';
-import { theme } from '../../components/theme';
 import {
+  AdminMetricCard,
   AdminSectionCard,
   AdminShell,
   AdminStateCard,
+  AdminToneCard,
   adminChrome,
   adminStyles,
 } from '../../components/admin/AdminShell';
@@ -26,15 +27,6 @@ function getAdminError(error: any) {
   if (status === 403) return 'Admin access required';
   if (status === 401) return 'Please sign in again to view admin tools.';
   return 'Could not load AI usage right now.';
-}
-
-function MetricCard({ label, value }: { label: string; value: string }) {
-  return (
-    <AdminSectionCard style={adminStyles.metricCard}>
-      <Text style={adminStyles.metricLabel}>{label}</Text>
-      <Text style={adminStyles.metricValue}>{value}</Text>
-    </AdminSectionCard>
-  );
 }
 
 function UsageList({ title, subtitle, rows }: { title: string; subtitle: string; rows?: Array<{ label: string; count: number; estimated_cost_usd: number }> }) {
@@ -118,22 +110,22 @@ export default function AdminAiUsageScreen() {
       ) : summary ? (
         <>
           <View style={adminStyles.metricGrid}>
-            <MetricCard label="Total requests" value={formatNumber(summary.total_requests)} />
-            <MetricCard label="Estimated cost" value={formatUsd(summary.estimated_cost_usd)} />
-            <MetricCard label="Success" value={formatNumber(summary.total_success)} />
-            <MetricCard label="Fallback" value={formatNumber(summary.total_fallback)} />
-            <MetricCard label="Failed" value={formatNumber(summary.total_failed)} />
-            <MetricCard label="Blocked" value={formatNumber(summary.total_blocked)} />
+            <AdminMetricCard label="Total requests" value={formatNumber(summary.total_requests)} helper={`${windowDays}d window`} tone="ai" />
+            <AdminMetricCard label="Estimated cost" value={formatUsd(summary.estimated_cost_usd)} helper="Provider spend estimate" tone="warning" />
+            <AdminMetricCard label="Success" value={formatNumber(summary.total_success)} helper="Completed calls" tone="success" />
+            <AdminMetricCard label="Fallback" value={formatNumber(summary.total_fallback)} helper="Fallback path used" tone="warning" />
+            <AdminMetricCard label="Failed" value={formatNumber(summary.total_failed)} helper="Provider/app failures" tone={toNumber(summary.total_failed) > 0 ? 'danger' : 'neutral'} />
+            <AdminMetricCard label="Blocked" value={formatNumber(summary.total_blocked)} helper="Quota guardrail blocks" tone={toNumber(summary.total_blocked) > 0 ? 'danger' : 'neutral'} />
           </View>
 
-          <AdminSectionCard title="Status mix" subtitle="Production signal for success, fallback, failed, and blocked requests.">
+          <AdminToneCard title="Status mix" subtitle="Production signal for success, fallback, failed, and blocked requests." tone="ai">
             <View style={styles.statusGrid}>
               <StatusBar label="Success" value={toNumber(summary.total_success)} max={Math.max(toNumber(summary.total_success), toNumber(summary.total_fallback), toNumber(summary.total_failed), toNumber(summary.total_blocked))} color={adminChrome.mint} />
               <StatusBar label="Fallback" value={toNumber(summary.total_fallback)} max={Math.max(toNumber(summary.total_success), toNumber(summary.total_fallback), toNumber(summary.total_failed), toNumber(summary.total_blocked))} color={adminChrome.amber} />
               <StatusBar label="Failed" value={toNumber(summary.total_failed)} max={Math.max(toNumber(summary.total_success), toNumber(summary.total_fallback), toNumber(summary.total_failed), toNumber(summary.total_blocked))} color={adminChrome.rose} />
               <StatusBar label="Blocked" value={toNumber(summary.total_blocked)} max={Math.max(toNumber(summary.total_success), toNumber(summary.total_fallback), toNumber(summary.total_failed), toNumber(summary.total_blocked))} color={adminChrome.purple} />
             </View>
-          </AdminSectionCard>
+          </AdminToneCard>
 
           <View style={styles.columns}>
             <UsageList title="Top features" subtitle="Feature nào đang tạo nhiều request/cost nhất." rows={summary.top_features} />

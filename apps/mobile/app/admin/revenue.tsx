@@ -1,11 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { StyleSheet, TouchableOpacity, View } from 'react-native';
 import { Text } from '../../components/i18n-text';
-import { theme } from '../../components/theme';
 import {
+  AdminMetricCard,
   AdminSectionCard,
   AdminShell,
   AdminStateCard,
+  AdminToneCard,
+  type AdminTone,
   adminChrome,
   adminStyles,
 } from '../../components/admin/AdminShell';
@@ -44,16 +46,6 @@ function adminError(error: any) {
   if (status === 403) return 'Admin access required';
   if (status === 401) return 'Please sign in again.';
   return error?.response?.data?.message ?? 'Could not load revenue dashboard.';
-}
-
-function MetricCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
-  return (
-    <AdminSectionCard style={adminStyles.metricCard}>
-      <Text style={adminStyles.metricLabel}>{label}</Text>
-      <Text style={adminStyles.metricValue}>{value}</Text>
-      {sub ? <Text style={adminStyles.muted}>{sub}</Text> : null}
-    </AdminSectionCard>
-  );
 }
 
 function Row({ left, right, sub }: { left: string; right: string; sub?: string }) {
@@ -120,15 +112,17 @@ export default function AdminRevenueScreen() {
   const pricing = data?.pricing ?? {};
   const monthlyPricing = currency === 'vnd' ? pricing.monthly_vnd ?? {} : pricing.monthly_usd ?? {};
   const annualPricing = currency === 'vnd' ? pricing.annual_vnd ?? {} : pricing.annual_usd ?? {};
+  const marginRate = num(margin.estimated_gross_margin_rate);
+  const marginTone: AdminTone = marginRate < 0 ? 'danger' : marginRate < 0.25 ? 'warning' : 'success';
 
   const cards = useMemo(() => [
-    { label: 'Estimated MRR', value: money(revenue[`estimated_mrr_${suffix}`], currency), sub: 'Estimated monthly recurring revenue' },
-    { label: 'Estimated ARR', value: money(revenue[`estimated_arr_${suffix}`], currency), sub: 'Estimated annual run rate' },
-    { label: 'AI Cost MTD', value: money(aiCost[`month_to_date_${suffix}`], currency), sub: `${n(aiCost.requests_month_to_date)} requests · ${n(aiCost.credits_month_to_date)} credits` },
-    { label: 'Gross Margin', value: money(margin[`estimated_monthly_gross_margin_${suffix}`], currency), sub: pct(margin.estimated_gross_margin_rate) },
-    { label: 'Paid Conversion', value: pct(conversion.paid_conversion_rate), sub: `${n(conversion.paid_users)} paid / ${n(conversion.total_users)} users` },
-    { label: 'ARPPU', value: money(revenue[`arppu_${suffix}`], currency), sub: 'Average revenue per paid user' },
-  ], [aiCost, conversion, currency, margin, revenue, suffix]);
+    { label: 'Estimated MRR', value: money(revenue[`estimated_mrr_${suffix}`], currency), helper: 'Estimated monthly recurring revenue', tone: 'billing' as AdminTone },
+    { label: 'Estimated ARR', value: money(revenue[`estimated_arr_${suffix}`], currency), helper: 'Estimated annual run rate', tone: 'premium' as AdminTone },
+    { label: 'AI Cost MTD', value: money(aiCost[`month_to_date_${suffix}`], currency), helper: `${n(aiCost.requests_month_to_date)} requests · ${n(aiCost.credits_month_to_date)} credits`, tone: 'warning' as AdminTone },
+    { label: 'Gross Margin', value: money(margin[`estimated_monthly_gross_margin_${suffix}`], currency), helper: pct(margin.estimated_gross_margin_rate), tone: marginTone },
+    { label: 'Paid Conversion', value: pct(conversion.paid_conversion_rate), helper: `${n(conversion.paid_users)} paid / ${n(conversion.total_users)} users`, tone: 'success' as AdminTone },
+    { label: 'ARPPU', value: money(revenue[`arppu_${suffix}`], currency), helper: 'Average revenue per paid user', tone: 'info' as AdminTone },
+  ], [aiCost, conversion, currency, margin, marginTone, revenue, suffix]);
 
   return (
     <AdminShell
@@ -147,23 +141,23 @@ export default function AdminRevenueScreen() {
         <AdminStateCard state="denied" title={error} onRetry={load} showLogin />
       ) : data ? (
         <View style={styles.content}>
-          <AdminSectionCard title="Confirmed revenue" subtitle="Ledger-based paid invoices and refunds. Prefer this section for PayOS reconciliation.">
+          <AdminToneCard title="Confirmed revenue" subtitle="Ledger-based paid invoices and refunds. Prefer this section for PayOS reconciliation." tone="billing">
             {confirmedRevenue ? (
               <View style={adminStyles.metricGrid}>
-                <MetricCard label="Net Revenue MTD" value={money(confirmedMtd?.[`net_revenue_${suffix}`], currency)} sub="After refunds" />
-                <MetricCard label="Gross Revenue MTD" value={money(confirmedMtd?.[`gross_revenue_${suffix}`], currency)} sub="Paid invoices" />
-                <MetricCard label="Refunds MTD" value={money(confirmedMtd?.[`refunds_${suffix}`], currency)} sub="Recorded refunds" />
-                <MetricCard label="Active Paid Users" value={n(confirmedRevenue.active_paid_users)} sub={`${n(confirmedRevenue.active_paid_subscriptions)} active paid subscriptions`} />
-                <MetricCard label="Paid Invoice Count" value={n(confirmedMtd?.paid_invoice_count)} sub="Month to date" />
-                <MetricCard label="Refund Count" value={n(confirmedMtd?.refund_count)} sub="Month to date" />
+                <AdminMetricCard label="Net Revenue MTD" value={money(confirmedMtd?.[`net_revenue_${suffix}`], currency)} helper="After refunds" tone="billing" />
+                <AdminMetricCard label="Gross Revenue MTD" value={money(confirmedMtd?.[`gross_revenue_${suffix}`], currency)} helper="Paid invoices" tone="success" />
+                <AdminMetricCard label="Refunds MTD" value={money(confirmedMtd?.[`refunds_${suffix}`], currency)} helper="Recorded refunds" tone={num(confirmedMtd?.[`refunds_${suffix}`]) > 0 ? 'warning' : 'neutral'} />
+                <AdminMetricCard label="Active Paid Users" value={n(confirmedRevenue.active_paid_users)} helper={`${n(confirmedRevenue.active_paid_subscriptions)} active paid subscriptions`} tone="premium" />
+                <AdminMetricCard label="Paid Invoice Count" value={n(confirmedMtd?.paid_invoice_count)} helper="Month to date" tone="info" />
+                <AdminMetricCard label="Refund Count" value={n(confirmedMtd?.refund_count)} helper="Month to date" tone={num(confirmedMtd?.refund_count) > 0 ? 'warning' : 'neutral'} />
               </View>
             ) : (
               <Text style={adminStyles.muted}>No confirmed revenue in billing ledger yet.</Text>
             )}
-          </AdminSectionCard>
+          </AdminToneCard>
 
           <View style={adminStyles.metricGrid}>
-            {cards.map((card) => <MetricCard key={card.label} {...card} />)}
+            {cards.map((card) => <AdminMetricCard key={card.label} {...card} />)}
           </View>
 
           <View style={styles.chartGrid}>
@@ -192,21 +186,21 @@ export default function AdminRevenueScreen() {
             <Row left="Cancelled" right={n(subscriptions.cancelled)} />
           </AdminSectionCard>
 
-          <AdminSectionCard title="AI cost" subtitle="Cost attribution used by margin calculations.">
+          <AdminToneCard title="AI cost" subtitle="Cost attribution used by margin calculations." tone="warning">
             <Row left="AI cost source" right={data.ai_cost_source_currency} />
             <Row left="Cost/request" right={money(aiCost[`cost_per_request_${suffix}`], currency)} />
             <Row left="Requests MTD" right={n(aiCost.requests_month_to_date)} />
             <Row left="Credits MTD" right={n(aiCost.credits_month_to_date)} />
-          </AdminSectionCard>
+          </AdminToneCard>
 
-          <AdminSectionCard title="Margin" subtitle="Estimated subscription margin after AI cost.">
+          <AdminToneCard title="Margin" subtitle="Estimated subscription margin after AI cost." tone={marginTone}>
             <Row left="Estimated monthly gross margin" right={money(margin[`estimated_monthly_gross_margin_${suffix}`], currency)} />
             <Row left="Estimated gross margin rate" right={pct(margin.estimated_gross_margin_rate)} />
             <Row left="Paid conversion" right={pct(conversion.paid_conversion_rate)} />
             <Row left="ARPPU" right={money(revenue[`arppu_${suffix}`], currency)} />
-          </AdminSectionCard>
+          </AdminToneCard>
 
-          <AdminSectionCard title="PayOS notes" subtitle="Operational notes for payment reconciliation.">
+          <AdminToneCard title="PayOS notes" subtitle="Operational notes for payment reconciliation." tone="billing">
             <Text style={adminStyles.muted}>{revenue.estimated_revenue_note ?? 'Estimated values are derived from active subscription tier pricing.'}</Text>
             <Row left="Premium monthly" right={money(monthlyPricing.premium, currency)} />
             <Row left="Premium annual" right={money(annualPricing.premium, currency)} />
@@ -214,7 +208,7 @@ export default function AdminRevenueScreen() {
             <Row left="Pro annual" right={money(annualPricing.pro, currency)} />
             <Row left="USD to VND rate" right={n(data.usd_to_vnd_rate)} />
             <Row left="Generated" right={date(data.generated_at)} />
-          </AdminSectionCard>
+          </AdminToneCard>
         </View>
       ) : (
         <AdminStateCard state="empty" />

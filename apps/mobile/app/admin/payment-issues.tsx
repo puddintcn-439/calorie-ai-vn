@@ -3,11 +3,14 @@ import { StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
 import { Text } from '../../components/i18n-text';
 import { theme } from '../../components/theme';
 import {
+  AdminChip,
   AdminSectionCard,
   AdminShell,
   AdminStateCard,
   AdminStatusBadge,
+  type AdminTone,
   adminChrome,
+  adminTones,
   adminStyles,
 } from '../../components/admin/AdminShell';
 import { adminService, type AdminPaymentIssue, type AdminPaymentIssuesResponse } from '../../services/admin.service';
@@ -32,12 +35,30 @@ function getAdminError(error: any) {
   return 'Could not load payment issues right now.';
 }
 
-function badgeTone(status: string): 'neutral' | 'success' | 'warning' | 'danger' | 'info' {
+function badgeTone(status: string): AdminTone {
   if (status === 'resolved') return 'success';
   if (status === 'rejected') return 'danger';
   if (status === 'in_review') return 'info';
   if (status === 'open') return 'warning';
   return 'neutral';
+}
+
+function issueTypeTone(type: string | null | undefined): AdminTone {
+  if (type === 'refund_request') return 'billing';
+  if (type === 'duplicate_payment') return 'warning';
+  if (type === 'payment_succeeded_but_not_activated') return 'danger';
+  if (type === 'wrong_plan') return 'premium';
+  return 'support';
+}
+
+function IssueMetricBox({ label, value, tone }: { label: string; value: string; tone: AdminTone }) {
+  const resolvedTone = adminTones[tone] ?? adminTones.neutral;
+  return (
+    <View style={[adminStyles.keyBox, { backgroundColor: resolvedTone.faint, borderColor: resolvedTone.border }]}>
+      <Text style={[adminStyles.keyLabel, { color: resolvedTone.text }]}>{label}</Text>
+      <Text style={adminStyles.keyValue}>{value}</Text>
+    </View>
+  );
 }
 
 function IssueCard({ issue, onUpdated }: { issue: AdminPaymentIssue; onUpdated: () => void }) {
@@ -70,17 +91,20 @@ function IssueCard({ issue, onUpdated }: { issue: AdminPaymentIssue; onUpdated: 
     <AdminSectionCard style={styles.issueCard}>
       <View style={styles.issueHeader}>
         <View style={styles.issueIdentity}>
-          <Text style={styles.issueTitle}>{issue.issue_type ?? 'payment_issue'}</Text>
+          <View style={styles.issueTitleRow}>
+            <Text style={styles.issueTitle}>{issue.issue_type ?? 'payment_issue'}</Text>
+            <AdminChip label={issue.issue_type ?? 'other'} tone={issueTypeTone(issue.issue_type)} active />
+          </View>
           <Text style={adminStyles.muted}>{issue.user_email ?? issue.user_id ?? 'Unknown user'}</Text>
         </View>
         <AdminStatusBadge label={issue.status || 'open'} tone={badgeTone(issue.status)} />
       </View>
 
       <View style={adminStyles.grid}>
-        <View style={adminStyles.keyBox}><Text style={adminStyles.keyLabel}>Provider</Text><Text style={adminStyles.keyValue}>{issue.provider ?? '--'}</Text></View>
-        <View style={adminStyles.keyBox}><Text style={adminStyles.keyLabel}>Order</Text><Text style={adminStyles.keyValue}>{orderCode}</Text></View>
-        <View style={adminStyles.keyBox}><Text style={adminStyles.keyLabel}>Amount</Text><Text style={adminStyles.keyValue}>{formatVnd(invoice.amount_vnd)}</Text></View>
-        <View style={adminStyles.keyBox}><Text style={adminStyles.keyLabel}>Created</Text><Text style={adminStyles.keyValue}>{formatDate(issue.created_at)}</Text></View>
+        <IssueMetricBox label="Provider" value={issue.provider ?? '--'} tone="billing" />
+        <IssueMetricBox label="Order" value={String(orderCode)} tone="info" />
+        <IssueMetricBox label="Amount" value={formatVnd(invoice.amount_vnd)} tone="warning" />
+        <IssueMetricBox label="Created" value={formatDate(issue.created_at)} tone="neutral" />
       </View>
 
       {issue.user_message ? (
@@ -103,7 +127,10 @@ function IssueCard({ issue, onUpdated }: { issue: AdminPaymentIssue; onUpdated: 
       </View>
 
       <View style={styles.inputGroup}>
-        <Text style={styles.inputLabel}>admin_note · internal only</Text>
+        <View style={styles.inputLabelRow}>
+          <Text style={styles.inputLabel}>admin_note · internal only</Text>
+          <AdminChip label="Internal" tone="warning" active />
+        </View>
         <TextInput
           value={adminNote}
           onChangeText={setAdminNote}
@@ -117,7 +144,10 @@ function IssueCard({ issue, onUpdated }: { issue: AdminPaymentIssue; onUpdated: 
       </View>
 
       <View style={styles.inputGroup}>
-        <Text style={styles.inputLabel}>resolution · user-facing</Text>
+        <View style={styles.inputLabelRow}>
+          <Text style={styles.inputLabel}>resolution · user-facing</Text>
+          <AdminChip label="User-facing" tone="support" active />
+        </View>
         <TextInput
           value={resolution}
           onChangeText={setResolution}
@@ -148,9 +178,9 @@ function StatusSummary({ issues }: { issues: AdminPaymentIssue[] }) {
       {STATUS_OPTIONS.map((status) => {
         const count = issues.filter((issue) => issue.status === status).length;
         return (
-          <View key={status} style={[styles.summaryBox, styles[`summary_${status}`]]}>
+          <View key={status} style={[styles.summaryBox, { backgroundColor: adminTones[badgeTone(status)].soft, borderColor: adminTones[badgeTone(status)].border }]}>
             <Text style={styles.summaryValue}>{count}</Text>
-            <Text style={styles.summaryLabel}>{status}</Text>
+            <Text style={[styles.summaryLabel, { color: adminTones[badgeTone(status)].text }]}>{status}</Text>
           </View>
         );
       })}
@@ -221,6 +251,7 @@ const styles = StyleSheet.create({
   issueCard: { gap: 12 },
   issueHeader: { flexDirection: 'row', gap: 12, justifyContent: 'space-between', alignItems: 'flex-start' },
   issueIdentity: { flex: 1, gap: 4 },
+  issueTitleRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, alignItems: 'center' },
   issueTitle: { color: adminChrome.text, fontSize: 17, fontWeight: '900' },
   userMessageBox: { borderRadius: 10, backgroundColor: adminChrome.cardMuted, borderWidth: 1, borderColor: adminChrome.border, padding: 12, gap: 4 },
   userMessageLabel: { color: adminChrome.textMuted, fontSize: 11, fontWeight: '900' },
@@ -231,15 +262,12 @@ const styles = StyleSheet.create({
   statusButtonText: { color: adminChrome.textSoft, fontSize: 12, fontWeight: '800' },
   statusButtonTextActive: { color: adminChrome.accent },
   inputGroup: { gap: 6 },
+  inputLabelRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, alignItems: 'center' },
   inputLabel: { color: adminChrome.textSoft, fontSize: 12, fontWeight: '900' },
   input: { minHeight: 74, borderRadius: 8, borderWidth: 1, borderColor: adminChrome.borderStrong, color: adminChrome.text, backgroundColor: adminChrome.cardBg, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, lineHeight: 20 },
   buttonDisabled: { opacity: 0.65 },
   summaryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   summaryBox: { flexGrow: 1, flexBasis: 150, minWidth: 130, borderRadius: 10, borderWidth: 1, padding: 12, gap: 3 },
-  summary_open: { backgroundColor: adminChrome.warningSoft, borderColor: '#fed7aa' },
-  summary_in_review: { backgroundColor: adminChrome.infoSoft, borderColor: '#bfdbfe' },
-  summary_resolved: { backgroundColor: adminChrome.successSoft, borderColor: '#bbf7d0' },
-  summary_rejected: { backgroundColor: adminChrome.dangerSoft, borderColor: '#fecdd3' },
   summaryValue: { color: adminChrome.text, fontSize: 22, lineHeight: 28, fontWeight: '900' },
   summaryLabel: { color: adminChrome.textMuted, fontSize: 12, fontWeight: '800' },
 });

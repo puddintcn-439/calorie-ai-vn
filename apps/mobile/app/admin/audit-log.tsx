@@ -3,11 +3,14 @@ import { StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
 import { Text } from '../../components/i18n-text';
 import { theme } from '../../components/theme';
 import {
+  AdminChip,
   AdminSectionCard,
   AdminShell,
   AdminStateCard,
   AdminStatusBadge,
+  type AdminTone,
   adminChrome,
+  adminTones,
   adminStyles,
 } from '../../components/admin/AdminShell';
 import { adminService, type AdminAuditLogEntry, type AdminAuditLogResponse } from '../../services/admin.service';
@@ -39,16 +42,32 @@ function compactJson(value: any) {
   }
 }
 
+function actionTone(action: string | null | undefined): AdminTone {
+  const normalized = String(action ?? '').toLowerCase();
+  if (normalized.includes('billing') || normalized.includes('payment') || normalized.includes('payos') || normalized.includes('subscription')) return 'billing';
+  if (normalized.includes('security') || normalized.includes('revoke') || normalized.includes('admin')) return 'danger';
+  if (normalized.includes('ai') || normalized.includes('quota')) return 'ai';
+  if (normalized.includes('notification') || normalized.includes('email') || normalized.includes('push')) return 'success';
+  if (normalized.includes('user') || normalized.includes('profile')) return 'info';
+  return 'neutral';
+}
+
 function AuditEntryCard({ entry }: { entry: AdminAuditLogEntry }) {
   const metadata = compactJson(entry.metadata);
+  const tone = actionTone(entry.action);
+  const resolvedTone = adminTones[tone] ?? adminTones.neutral;
+
   return (
-    <AdminSectionCard style={styles.entryCard}>
+    <AdminSectionCard style={[styles.entryCard, { borderLeftColor: resolvedTone.accent, backgroundColor: resolvedTone.faint }]}>
       <View style={styles.entryHeader}>
         <View style={styles.entryCopy}>
-          <Text style={styles.actionText}>{entry.action}</Text>
+          <View style={styles.actionRow}>
+            <Text style={styles.actionText}>{entry.action}</Text>
+            <AdminChip label={tone} tone={tone} active />
+          </View>
           <Text style={adminStyles.muted}>by {entry.actor_email || '--'} · {formatDate(entry.created_at)}</Text>
         </View>
-        <AdminStatusBadge label={entry.target_type} tone="info" />
+        <AdminStatusBadge label={entry.target_type} tone={tone === 'neutral' ? 'info' : tone} />
       </View>
 
       <View style={adminStyles.grid}>
@@ -175,9 +194,10 @@ const styles = StyleSheet.create({
   content: { gap: 12 },
   resultHeader: { flexDirection: 'row', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' },
   sectionTitle: { color: adminChrome.text, fontSize: 18, fontWeight: '900' },
-  entryCard: { gap: 12 },
+  entryCard: { gap: 12, borderLeftWidth: 4 },
   entryHeader: { flexDirection: 'row', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start' },
   entryCopy: { flex: 1, gap: 4 },
+  actionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, alignItems: 'center' },
   actionText: { color: adminChrome.text, fontSize: 17, fontWeight: '900' },
   metadataBox: { borderRadius: 10, backgroundColor: adminChrome.cardMuted, borderWidth: 1, borderColor: adminChrome.border, padding: 12 },
   metadataText: { color: adminChrome.textSoft, fontSize: 12, lineHeight: 18, marginTop: 6 },

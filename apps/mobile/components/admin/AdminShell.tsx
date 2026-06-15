@@ -6,6 +6,18 @@ import { Text } from '../i18n-text';
 import { theme } from '../theme';
 import { useAuthStore } from '../../store/auth.store';
 
+export type AdminTone =
+  | 'neutral'
+  | 'info'
+  | 'success'
+  | 'warning'
+  | 'danger'
+  | 'premium'
+  | 'pro'
+  | 'support'
+  | 'ai'
+  | 'billing';
+
 type AdminRoute = {
   group: 'Overview' | 'Users' | 'Billing' | 'Support' | 'AI Ops' | 'System';
   label: string;
@@ -44,6 +56,19 @@ export const adminChrome = {
   warningSoft: '#fff7ed',
   dangerSoft: '#fff1f2',
   infoSoft: '#eef6ff',
+};
+
+export const adminTones: Record<AdminTone, { accent: string; soft: string; border: string; text: string; faint: string }> = {
+  neutral: { accent: '#64748b', soft: '#f8fafc', border: '#e2e8f0', text: '#334155', faint: '#f8fafc' },
+  info: { accent: '#2563eb', soft: '#eff6ff', border: '#bfdbfe', text: '#1d4ed8', faint: '#f8fbff' },
+  success: { accent: '#10b981', soft: '#ecfdf3', border: '#bbf7d0', text: '#047857', faint: '#f8fffb' },
+  warning: { accent: '#f59e0b', soft: '#fff7ed', border: '#fed7aa', text: '#b45309', faint: '#fffdf8' },
+  danger: { accent: '#f43f5e', soft: '#fff1f2', border: '#fecdd3', text: '#be123c', faint: '#fff8fa' },
+  premium: { accent: '#7c3aed', soft: '#f3efff', border: '#ddd6fe', text: '#6d28d9', faint: '#fbf9ff' },
+  pro: { accent: '#d97706', soft: '#fffbeb', border: '#fde68a', text: '#92400e', faint: '#fffdf5' },
+  support: { accent: '#0d9488', soft: '#ecfeff', border: '#a5f3fc', text: '#0f766e', faint: '#f7feff' },
+  ai: { accent: '#8b5cf6', soft: '#f5f3ff', border: '#ddd6fe', text: '#6d28d9', faint: '#fbfaff' },
+  billing: { accent: '#059669', soft: '#ecfdf5', border: '#a7f3d0', text: '#047857', faint: '#f7fffb' },
 };
 
 function isActiveRoute(pathname: string, href?: string) {
@@ -236,12 +261,142 @@ export function AdminStatusBadge({
   tone = 'neutral',
 }: {
   label: string;
-  tone?: 'neutral' | 'success' | 'warning' | 'danger' | 'info';
+  tone?: AdminTone;
 }) {
+  const resolvedTone = adminTones[tone] ?? adminTones.neutral;
+
   return (
-    <View style={[styles.badge, styles[`badge_${tone}`]]}>
-      <Text style={[styles.badgeText, styles[`badgeText_${tone}`]]}>{label}</Text>
+    <View style={[styles.badge, { backgroundColor: resolvedTone.soft, borderColor: resolvedTone.border }]}>
+      <Text style={[styles.badgeText, { color: resolvedTone.text }]}>{label}</Text>
     </View>
+  );
+}
+
+export function AdminChip({
+  label,
+  tone = 'neutral',
+  active,
+  style,
+}: {
+  label: string;
+  tone?: AdminTone;
+  active?: boolean;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const resolvedTone = adminTones[tone] ?? adminTones.neutral;
+
+  return (
+    <View
+      style={[
+        styles.chip,
+        {
+          backgroundColor: active ? resolvedTone.soft : adminChrome.cardBg,
+          borderColor: active ? resolvedTone.accent : resolvedTone.border,
+        },
+        style,
+      ]}
+    >
+      <Text style={[styles.chipText, { color: active ? resolvedTone.text : adminChrome.textSoft }]}>{label}</Text>
+    </View>
+  );
+}
+
+export function AdminMetricCard({
+  label,
+  value,
+  helper,
+  tone = 'neutral',
+  style,
+}: {
+  label: string;
+  value: string | number;
+  helper?: string;
+  tone?: AdminTone;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const resolvedTone = adminTones[tone] ?? adminTones.neutral;
+
+  return (
+    <AdminSectionCard
+      style={[
+        adminStyles.metricCard,
+        styles.metricCardVisual,
+        { borderTopColor: resolvedTone.accent, backgroundColor: resolvedTone.faint },
+        style,
+      ]}
+    >
+      <View style={styles.metricHeader}>
+        <Text style={adminStyles.metricLabel}>{label}</Text>
+        <View style={[styles.metricDot, { backgroundColor: resolvedTone.accent }]} />
+      </View>
+      <View style={styles.metricCopy}>
+        <Text style={adminStyles.metricValue}>{value}</Text>
+        {helper ? <Text style={adminStyles.muted}>{helper}</Text> : null}
+      </View>
+    </AdminSectionCard>
+  );
+}
+
+export function AdminQuickActionCard({
+  title,
+  body,
+  href,
+  tone = 'neutral',
+  cta = 'Open',
+}: {
+  title: string;
+  body: string;
+  href: string;
+  tone?: AdminTone;
+  cta?: string;
+}) {
+  const resolvedTone = adminTones[tone] ?? adminTones.neutral;
+
+  return (
+    <TouchableOpacity
+      style={[styles.quickActionCard, { borderColor: resolvedTone.border, backgroundColor: resolvedTone.faint }]}
+      onPress={() => router.push(href as any)}
+    >
+      <View style={[styles.quickActionIcon, { backgroundColor: resolvedTone.soft }]}>
+        <Text style={[styles.quickActionIconText, { color: resolvedTone.text }]}>{title.slice(0, 1)}</Text>
+      </View>
+      <View style={styles.quickActionCopy}>
+        <Text style={styles.quickActionTitle}>{title}</Text>
+        <Text style={adminStyles.muted}>{body}</Text>
+      </View>
+      <Text style={[styles.quickActionLink, { color: resolvedTone.text }]}>{cta}</Text>
+    </TouchableOpacity>
+  );
+}
+
+export function AdminToneCard({
+  title,
+  subtitle,
+  tone = 'neutral',
+  children,
+  style,
+}: {
+  title?: string;
+  subtitle?: string;
+  tone?: AdminTone;
+  children: ReactNode;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const resolvedTone = adminTones[tone] ?? adminTones.neutral;
+
+  return (
+    <AdminSectionCard
+      title={title}
+      subtitle={subtitle}
+      style={[
+        styles.toneCard,
+        { backgroundColor: resolvedTone.faint, borderColor: resolvedTone.border },
+        style,
+      ]}
+    >
+      <View style={[styles.toneRail, { backgroundColor: resolvedTone.accent }]} />
+      {children}
+    </AdminSectionCard>
   );
 }
 
@@ -302,6 +457,7 @@ export const adminStyles = StyleSheet.create({
   rowRight: { color: adminChrome.text, fontWeight: '800', textAlign: 'right' },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   keyBox: { minWidth: 160, flexGrow: 1, borderRadius: 8, backgroundColor: adminChrome.cardMuted, padding: 11, borderWidth: 1, borderColor: adminChrome.border },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, alignItems: 'center' },
   keyLabel: { color: adminChrome.textMuted, fontSize: 11, fontWeight: '700' },
   keyValue: { color: adminChrome.text, fontSize: 14, fontWeight: '800', marginTop: 4 },
   primaryButton: { borderRadius: 7, backgroundColor: adminChrome.text, paddingHorizontal: 14, paddingVertical: 10, alignItems: 'center', justifyContent: 'center' },
@@ -362,8 +518,6 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     borderWidth: 1,
     borderColor: 'transparent',
-    borderLeftWidth: 4,
-    borderLeftColor: 'transparent',
     backgroundColor: 'transparent',
     minHeight: 48,
     justifyContent: 'center',
@@ -373,7 +527,7 @@ const styles = StyleSheet.create({
     paddingRight: 12,
   },
   navItemActive: { backgroundColor: adminChrome.accentSoft, borderColor: adminChrome.accent },
-  navItemSidebarActive: { backgroundColor: adminChrome.accentSoft, borderColor: adminChrome.accent, borderLeftColor: adminChrome.accent },
+  navItemSidebarActive: { backgroundColor: adminChrome.accentSoft, borderColor: adminChrome.accent },
   navItemDisabled: { opacity: 0.45 },
   navGroup: { color: adminChrome.textMuted, fontSize: 10, fontWeight: '700', letterSpacing: 0.4 },
   navGroupActive: { color: adminChrome.accent },
@@ -392,17 +546,31 @@ const styles = StyleSheet.create({
   sectionTitle: { color: adminChrome.text, fontSize: 16, fontWeight: '800' },
   sectionSubtitle: { color: adminChrome.textMuted, fontSize: 12, lineHeight: 18 },
   badge: { borderRadius: 6, borderWidth: 1, paddingHorizontal: 8, paddingVertical: 4, alignSelf: 'flex-start' },
-  badge_neutral: { backgroundColor: adminChrome.cardMuted, borderColor: adminChrome.border },
-  badge_success: { backgroundColor: adminChrome.successSoft, borderColor: '#bbf7d0' },
-  badge_warning: { backgroundColor: adminChrome.warningSoft, borderColor: '#fed7aa' },
-  badge_danger: { backgroundColor: adminChrome.dangerSoft, borderColor: '#fecdd3' },
-  badge_info: { backgroundColor: adminChrome.infoSoft, borderColor: '#bfdbfe' },
   badgeText: { fontSize: 11, fontWeight: '800' },
-  badgeText_neutral: { color: adminChrome.textMuted },
-  badgeText_success: { color: '#15803d' },
-  badgeText_warning: { color: '#c2410c' },
-  badgeText_danger: { color: '#be123c' },
-  badgeText_info: { color: '#2563eb' },
+  chip: { borderRadius: 999, borderWidth: 1, paddingHorizontal: 11, paddingVertical: 7, alignSelf: 'flex-start' },
+  chipText: { fontSize: 12, fontWeight: '900' },
+  metricCardVisual: { borderTopWidth: 4, overflow: 'hidden' },
+  metricHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 10 },
+  metricCopy: { gap: 3 },
+  metricDot: { width: 10, height: 10, borderRadius: 5 },
+  quickActionCard: {
+    flexGrow: 1,
+    flexBasis: 250,
+    minWidth: 230,
+    borderRadius: 10,
+    borderWidth: 1,
+    padding: 14,
+    gap: 10,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  quickActionIcon: { width: 32, height: 32, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
+  quickActionIconText: { fontSize: 13, fontWeight: '900' },
+  quickActionCopy: { flex: 1, gap: 3 },
+  quickActionTitle: { color: adminChrome.text, fontSize: 15, fontWeight: '900' },
+  quickActionLink: { fontSize: 12, fontWeight: '900', marginTop: 2 },
+  toneCard: { position: 'relative', overflow: 'hidden' },
+  toneRail: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 4 },
   stateCard: { alignItems: 'center', gap: 8 },
   stateTitle: { color: theme.colors.text, fontSize: 18, fontWeight: '900', textAlign: 'center' },
   stateTitleError: { color: theme.colors.danger },
