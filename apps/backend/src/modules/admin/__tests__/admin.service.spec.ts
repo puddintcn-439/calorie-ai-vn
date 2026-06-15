@@ -112,19 +112,21 @@ describe('AdminService users list filters', () => {
     { id: 'u-pro-beta', email: 'beta.pro@example.com', created_at: '2026-06-03T00:00:00.000Z', updated_at: '2026-06-03T01:00:00.000Z' },
     { id: 'u-free-sub', email: 'free.sub@example.com', created_at: '2026-06-02T00:00:00.000Z', updated_at: '2026-06-02T01:00:00.000Z' },
     { id: 'u-premium-gamma', email: 'gamma.premium@example.com', created_at: '2026-06-01T00:00:00.000Z', updated_at: '2026-06-01T01:00:00.000Z' },
+    { id: 'u-inactive-premium', email: 'inactive.premium@example.com', created_at: '2026-05-31T00:00:00.000Z', updated_at: '2026-05-31T01:00:00.000Z' },
   ];
   const subscriptions = [
     { user_id: 'u-premium-alpha', tier: 'premium', is_active: true, updated_at: '2026-06-04T02:00:00.000Z' },
     { user_id: 'u-pro-beta', tier: 'pro', is_active: true, updated_at: '2026-06-03T02:00:00.000Z' },
     { user_id: 'u-free-sub', tier: 'free', is_active: false, updated_at: '2026-06-02T02:00:00.000Z' },
     { user_id: 'u-premium-gamma', tier: 'premium', is_active: true, updated_at: '2026-06-01T02:00:00.000Z' },
+    { user_id: 'u-inactive-premium', tier: 'premium', is_active: false, updated_at: '2026-05-31T02:00:00.000Z' },
   ];
   const makeUsersService = () => makeService(makeDb({ users, user_subscriptions: subscriptions }));
 
   it('returns paginated users without filters', async () => {
     const result = await makeUsersService().getUsers({ page: 1, pageSize: 2 });
 
-    expect(result.total).toBe(5);
+    expect(result.total).toBe(6);
     expect(result.page).toBe(1);
     expect(result.page_size).toBe(2);
     expect(result.users.map((user) => user.id)).toEqual(['u-free-none', 'u-premium-alpha']);
@@ -140,8 +142,8 @@ describe('AdminService users list filters', () => {
   it('filters free users including users without subscriptions', async () => {
     const result = await makeUsersService().getUsers({ plan: 'free' });
 
-    expect(result.total).toBe(2);
-    expect(result.users.map((user) => user.id)).toEqual(['u-free-none', 'u-free-sub']);
+    expect(result.total).toBe(3);
+    expect(result.users.map((user) => user.id)).toEqual(['u-free-none', 'u-free-sub', 'u-inactive-premium']);
     expect(result.users.every((user) => user.plan_tier === 'free')).toBe(true);
   });
 
@@ -178,7 +180,7 @@ describe('AdminService users list filters', () => {
     const result = await makeUsersService().getUsers({ plan: 'free', page: 1, page_size: 1 });
 
     expect(result.page_size).toBe(1);
-    expect(result.total).toBe(2);
+    expect(result.total).toBe(3);
     expect(result.users).toHaveLength(1);
   });
 
