@@ -354,7 +354,11 @@ const styles = StyleSheet.create({
   sidebarLogoutButton: { borderRadius: 7, borderWidth: 1, borderColor: adminChrome.borderStrong, backgroundColor: adminChrome.cardBg, paddingHorizontal: 12, paddingVertical: 10 },
   sidebarLogoutText: { color: adminChrome.text, fontWeight: '800', textAlign: 'center' },
   navPanel: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+<<<<<<< HEAD
   navPanelSidebar: { flexDirection: 'column', gap: 6, alignSelf: 'stretch', paddingHorizontal: 18 },
+=======
+  navPanelSidebar: { flexDirection: 'column', gap: 6, alignSelf: 'stretch', paddingHorizontal: 6 },
+>>>>>>> f3bf07e9ff33e6e0156852f8dafcae832d338159
   navItem: { borderRadius: 7, borderWidth: 1, borderColor: adminChrome.border, backgroundColor: adminChrome.cardBg, paddingHorizontal: 12, paddingVertical: 9, minWidth: 118 },
   navItemSidebar: {
     minWidth: 0,
@@ -362,6 +366,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     borderWidth: 1,
     borderColor: 'transparent',
+<<<<<<< HEAD
     borderLeftWidth: 4,
     borderLeftColor: 'transparent',
     backgroundColor: 'transparent',
@@ -371,6 +376,11 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingLeft: 14,
     paddingRight: 12,
+=======
+    backgroundColor: 'transparent',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+>>>>>>> f3bf07e9ff33e6e0156852f8dafcae832d338159
   },
   navItemActive: { backgroundColor: adminChrome.accentSoft, borderColor: adminChrome.accent },
   navItemSidebarActive: { backgroundColor: adminChrome.accentSoft, borderColor: adminChrome.accent, borderLeftColor: adminChrome.accent },

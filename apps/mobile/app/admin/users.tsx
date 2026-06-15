@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
 import { router } from 'expo-router';
 import { Text } from '../../components/i18n-text';
@@ -65,33 +65,45 @@ export default function AdminUsersScreen() {
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const requestSeqRef = useRef(0);
   const pageSize = 25;
   const hasNextPage = useMemo(() => response ? response.page * response.page_size < response.total : false, [response]);
+  const appliedSearch = search.trim();
+  const appliedPlan = plan || 'all';
+  const hasAppliedFilters = Boolean(appliedSearch || plan);
 
   const load = useCallback(async () => {
+    const requestSeq = requestSeqRef.current + 1;
+    requestSeqRef.current = requestSeq;
     try {
       setLoading(true);
       setError(null);
-      setResponse(await adminService.fetchUsers({ search, plan, page, pageSize }));
+      const nextResponse = await adminService.fetchUsers({ search: search.trim(), plan, page, pageSize });
+      if (requestSeq !== requestSeqRef.current) return;
+      setResponse(nextResponse);
     } catch (err: any) {
+      if (requestSeq !== requestSeqRef.current) return;
       setResponse(null);
       setError(getAdminError(err));
     } finally {
-      setLoading(false);
+      if (requestSeq === requestSeqRef.current) setLoading(false);
     }
   }, [search, plan, page]);
 
   useEffect(() => { load().catch(() => {}); }, [load]);
 
   const applySearch = () => {
+    if (loading) return;
     setPage(1);
     setSearch(searchDraft.trim());
   };
   const setPlanFilter = (nextPlan: string) => {
+    if (loading || plan === nextPlan) return;
     setPage(1);
     setPlan(nextPlan);
   };
   const clearFilters = () => {
+    if (loading) return;
     setSearchDraft('');
     setSearch('');
     setPlan('');
@@ -112,22 +124,29 @@ export default function AdminUsersScreen() {
             placeholder="Search by email"
             placeholderTextColor={theme.colors.textMuted}
             autoCapitalize="none"
+            editable={!loading}
             style={[adminStyles.input, styles.searchInput]}
             onSubmitEditing={applySearch}
           />
-          <TouchableOpacity style={adminStyles.primaryButton} onPress={applySearch}>
-            <Text style={adminStyles.primaryButtonText}>Search</Text>
+          <TouchableOpacity disabled={loading} style={[adminStyles.primaryButton, loading && styles.controlDisabled]} onPress={applySearch}>
+            <Text style={adminStyles.primaryButtonText}>{loading ? 'Đang lọc...' : 'Search'}</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={adminStyles.secondaryButton} onPress={clearFilters}>
+          <TouchableOpacity disabled={loading || (!hasAppliedFilters && !searchDraft)} style={[adminStyles.secondaryButton, (loading || (!hasAppliedFilters && !searchDraft)) && styles.controlDisabled]} onPress={clearFilters}>
             <Text style={adminStyles.secondaryButtonText}>Clear</Text>
           </TouchableOpacity>
         </View>
+        <Text style={adminStyles.muted}>Nhập email rồi bấm Search để lọc. Nhấn Enter cũng sẽ chạy search.</Text>
         <View style={styles.planRow}>
           {['', 'free', 'premium', 'pro'].map((item) => (
-            <TouchableOpacity key={item || 'all'} style={[styles.planFilter, plan === item && styles.planFilterActive]} onPress={() => setPlanFilter(item)}>
+            <TouchableOpacity key={item || 'all'} disabled={loading} style={[styles.planFilter, plan === item && styles.planFilterActive, loading && styles.controlDisabled]} onPress={() => setPlanFilter(item)}>
               <Text style={[styles.planFilterText, plan === item && styles.planFilterTextActive]}>{item || 'all'}</Text>
             </TouchableOpacity>
           ))}
+        </View>
+        <View style={styles.filterSummary}>
+          <Text style={styles.filterSummaryText}>Search: {appliedSearch || 'all'}</Text>
+          <Text style={styles.filterSummaryText}>Plan: {appliedPlan}</Text>
+          {loading ? <Text style={styles.filterLoadingText}>Đang lọc...</Text> : null}
         </View>
       </AdminSectionCard>
 
@@ -145,10 +164,10 @@ export default function AdminUsersScreen() {
             <AdminStateCard state="empty" title="No users" body="Không có user phù hợp với search/filter hiện tại." onRetry={clearFilters} />
           ) : response.users.map((user) => <UserCard key={user.id} user={user} />)}
           <View style={styles.paginationRow}>
-            <TouchableOpacity disabled={page <= 1} style={[adminStyles.secondaryButton, page <= 1 && styles.pageButtonDisabled]} onPress={() => setPage((current) => Math.max(1, current - 1))}>
+            <TouchableOpacity disabled={loading || page <= 1} style={[adminStyles.secondaryButton, (loading || page <= 1) && styles.pageButtonDisabled]} onPress={() => setPage((current) => Math.max(1, current - 1))}>
               <Text style={adminStyles.secondaryButtonText}>Previous</Text>
             </TouchableOpacity>
-            <TouchableOpacity disabled={!hasNextPage} style={[adminStyles.secondaryButton, !hasNextPage && styles.pageButtonDisabled]} onPress={() => setPage((current) => current + 1)}>
+            <TouchableOpacity disabled={loading || !hasNextPage} style={[adminStyles.secondaryButton, (loading || !hasNextPage) && styles.pageButtonDisabled]} onPress={() => setPage((current) => current + 1)}>
               <Text style={adminStyles.secondaryButtonText}>Next</Text>
             </TouchableOpacity>
           </View>
@@ -168,6 +187,10 @@ const styles = StyleSheet.create({
   planFilterActive: { backgroundColor: adminChrome.accentSoft, borderColor: adminChrome.accent },
   planFilterText: { color: adminChrome.textSoft, fontWeight: '800' },
   planFilterTextActive: { color: adminChrome.accent },
+  filterSummary: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, alignItems: 'center' },
+  filterSummaryText: { borderRadius: 8, borderWidth: 1, borderColor: adminChrome.border, backgroundColor: adminChrome.cardMuted, color: adminChrome.textSoft, fontSize: 12, fontWeight: '800', paddingHorizontal: 10, paddingVertical: 6 },
+  filterLoadingText: { color: adminChrome.accent, fontSize: 12, fontWeight: '900' },
+  controlDisabled: { opacity: 0.55 },
   content: { gap: 12 },
   resultHeader: { flexDirection: 'row', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' },
   sectionTitle: { color: adminChrome.text, fontSize: 18, fontWeight: '900' },

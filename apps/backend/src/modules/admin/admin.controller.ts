@@ -83,6 +83,13 @@ class AdminUsersQueryDto {
   @Min(1)
   @Max(100)
   pageSize?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  page_size?: number;
 }
 
 class AdminPaymentIssuesQueryDto {

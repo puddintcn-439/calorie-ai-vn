@@ -6,13 +6,25 @@ const USER_ID = '4da564f2-6795-4b52-96a1-f0103f11a111';
 
 function makeDb(tables: Record<string, any[]> = {}) {
   const state = Object.fromEntries(Object.entries(tables).map(([table, rows]) => [table, [...rows]])) as Record<string, any[]>;
-  const matches = (row: any, filters: Array<[string, any]>, inFilters: Array<[string, any[]]>) =>
+  const matches = (row: any, filters: Array<[string, any]>, inFilters: Array<[string, any[]]>, notInFilters: Array<[string, any[]]>, ilikeFilters: Array<[string, string]>) =>
     filters.every(([key, value]) => row?.[key] === value)
-    && inFilters.every(([key, values]) => values.includes(row?.[key]));
+    && inFilters.every(([key, values]) => values.includes(row?.[key]))
+    && notInFilters.every(([key, values]) => !values.includes(row?.[key]))
+    && ilikeFilters.every(([key, pattern]) => String(row?.[key] ?? '').toLowerCase().includes(pattern.replace(/%/g, '').toLowerCase()));
   const makeChain = (table: string) => {
-    const chain: any = { filters: [] as Array<[string, any]>, inFilters: [] as Array<[string, any[]]>, orders: [] as Array<[string, boolean]>, insertPayload: null as any, updatePayload: null as any };
+    const chain: any = {
+      filters: [] as Array<[string, any]>,
+      inFilters: [] as Array<[string, any[]]>,
+      notInFilters: [] as Array<[string, any[]]>,
+      ilikeFilters: [] as Array<[string, string]>,
+      orders: [] as Array<[string, boolean]>,
+      insertPayload: null as any,
+      updatePayload: null as any,
+      rangeFrom: null as number | null,
+      rangeTo: null as number | null,
+    };
     const rows = () => {
-      const filtered = (state[table] ?? []).filter((row) => matches(row, chain.filters, chain.inFilters));
+      const filtered = (state[table] ?? []).filter((row) => matches(row, chain.filters, chain.inFilters, chain.notInFilters, chain.ilikeFilters));
       return chain.orders.reduce((items: any[], pair: [string, boolean]) => {
         const [key, ascending] = pair;
         return [...items].sort((a: any, b: any) => {
@@ -22,11 +34,22 @@ function makeDb(tables: Record<string, any[]> = {}) {
         });
       }, filtered as any[]);
     };
+    const pagedRows = () => {
+      const allRows = rows();
+      if (chain.rangeFrom === null || chain.rangeTo === null) return allRows;
+      return allRows.slice(chain.rangeFrom, chain.rangeTo + 1);
+    };
     chain.select = jest.fn().mockReturnValue(chain);
     chain.eq = jest.fn((key: string, value: any) => { chain.filters.push([key, value]); return chain; });
     chain.order = jest.fn((key: string, options?: { ascending?: boolean }) => { chain.orders.push([key, options?.ascending !== false]); return chain; });
     chain.gte = jest.fn().mockReturnValue(chain);
     chain.in = jest.fn((key: string, value: any[]) => { chain.inFilters.push([key, value]); return chain; });
+    chain.not = jest.fn((key: string, operator: string, value: string) => {
+      if (operator === 'in') chain.notInFilters.push([key, String(value).replace(/[()]/g, '').split(',').filter(Boolean)]);
+      return chain;
+    });
+    chain.ilike = jest.fn((key: string, value: string) => { chain.ilikeFilters.push([key, value]); return chain; });
+    chain.range = jest.fn((from: number, to: number) => { chain.rangeFrom = from; chain.rangeTo = to; return chain; });
     chain.insert = jest.fn((payload: any) => { chain.insertPayload = payload; return chain; });
     chain.update = jest.fn((payload: any) => { chain.updatePayload = payload; return chain; });
     chain.limit = jest.fn(async (count: number) => ({ data: rows().slice(0, count), error: null }));
@@ -38,7 +61,7 @@ function makeDb(tables: Record<string, any[]> = {}) {
         return { data: row, error: null };
       }
       if (chain.updatePayload) {
-        const index = (state[table] ?? []).findIndex((row) => matches(row, chain.filters, chain.inFilters));
+        const index = (state[table] ?? []).findIndex((row) => matches(row, chain.filters, chain.inFilters, chain.notInFilters, chain.ilikeFilters));
         if (index >= 0) {
           state[table][index] = { ...state[table][index], ...chain.updatePayload };
           return { data: state[table][index], error: null };
@@ -53,9 +76,9 @@ function makeDb(tables: Record<string, any[]> = {}) {
         state[table].push({ id: `${table}-${state[table].length + 1}`, ...chain.insertPayload });
       }
       if (chain.updatePayload) {
-        state[table] = (state[table] ?? []).map((row) => matches(row, chain.filters, chain.inFilters) ? { ...row, ...chain.updatePayload } : row);
+        state[table] = (state[table] ?? []).map((row) => matches(row, chain.filters, chain.inFilters, chain.notInFilters, chain.ilikeFilters) ? { ...row, ...chain.updatePayload } : row);
       }
-      return Promise.resolve({ data: rows(), count: rows().length, error: null }).then(resolve, reject);
+      return Promise.resolve({ data: pagedRows(), count: rows().length, error: null }).then(resolve, reject);
     };
     return chain;
   };
@@ -81,6 +104,88 @@ type BillingServiceMock = {
   getUserEntitlement: jest.Mock;
   getPayosRenewalReminder: jest.Mock;
 };
+
+describe('AdminService users list filters', () => {
+  const users = [
+    { id: 'u-free-none', email: 'free.none@example.com', created_at: '2026-06-05T00:00:00.000Z', updated_at: '2026-06-05T01:00:00.000Z' },
+    { id: 'u-premium-alpha', email: 'Alpha.Premium@Example.com', created_at: '2026-06-04T00:00:00.000Z', updated_at: '2026-06-04T01:00:00.000Z' },
+    { id: 'u-pro-beta', email: 'beta.pro@example.com', created_at: '2026-06-03T00:00:00.000Z', updated_at: '2026-06-03T01:00:00.000Z' },
+    { id: 'u-free-sub', email: 'free.sub@example.com', created_at: '2026-06-02T00:00:00.000Z', updated_at: '2026-06-02T01:00:00.000Z' },
+    { id: 'u-premium-gamma', email: 'gamma.premium@example.com', created_at: '2026-06-01T00:00:00.000Z', updated_at: '2026-06-01T01:00:00.000Z' },
+  ];
+  const subscriptions = [
+    { user_id: 'u-premium-alpha', tier: 'premium', is_active: true, updated_at: '2026-06-04T02:00:00.000Z' },
+    { user_id: 'u-pro-beta', tier: 'pro', is_active: true, updated_at: '2026-06-03T02:00:00.000Z' },
+    { user_id: 'u-free-sub', tier: 'free', is_active: false, updated_at: '2026-06-02T02:00:00.000Z' },
+    { user_id: 'u-premium-gamma', tier: 'premium', is_active: true, updated_at: '2026-06-01T02:00:00.000Z' },
+  ];
+  const makeUsersService = () => makeService(makeDb({ users, user_subscriptions: subscriptions }));
+
+  it('returns paginated users without filters', async () => {
+    const result = await makeUsersService().getUsers({ page: 1, pageSize: 2 });
+
+    expect(result.total).toBe(5);
+    expect(result.page).toBe(1);
+    expect(result.page_size).toBe(2);
+    expect(result.users.map((user) => user.id)).toEqual(['u-free-none', 'u-premium-alpha']);
+  });
+
+  it('searches email case-insensitively', async () => {
+    const result = await makeUsersService().getUsers({ search: 'alpha.premium@example.com' });
+
+    expect(result.total).toBe(1);
+    expect(result.users[0]).toMatchObject({ id: 'u-premium-alpha', plan_tier: 'premium' });
+  });
+
+  it('filters free users including users without subscriptions', async () => {
+    const result = await makeUsersService().getUsers({ plan: 'free' });
+
+    expect(result.total).toBe(2);
+    expect(result.users.map((user) => user.id)).toEqual(['u-free-none', 'u-free-sub']);
+    expect(result.users.every((user) => user.plan_tier === 'free')).toBe(true);
+  });
+
+  it('filters premium users', async () => {
+    const result = await makeUsersService().getUsers({ plan: 'premium' });
+
+    expect(result.total).toBe(2);
+    expect(result.users.map((user) => user.id)).toEqual(['u-premium-alpha', 'u-premium-gamma']);
+    expect(result.users.every((user) => user.plan_tier === 'premium')).toBe(true);
+  });
+
+  it('filters pro users', async () => {
+    const result = await makeUsersService().getUsers({ plan: 'pro' });
+
+    expect(result.total).toBe(1);
+    expect(result.users[0]).toMatchObject({ id: 'u-pro-beta', plan_tier: 'pro' });
+  });
+
+  it('combines search and plan filters before counting', async () => {
+    const result = await makeUsersService().getUsers({ search: 'premium', plan: 'premium' });
+
+    expect(result.total).toBe(2);
+    expect(result.users.map((user) => user.id)).toEqual(['u-premium-alpha', 'u-premium-gamma']);
+  });
+
+  it('keeps total count scoped to filtered pagination', async () => {
+    const result = await makeUsersService().getUsers({ plan: 'premium', page: 2, pageSize: 1 });
+
+    expect(result.total).toBe(2);
+    expect(result.users.map((user) => user.id)).toEqual(['u-premium-gamma']);
+  });
+
+  it('supports page_size alias with filters', async () => {
+    const result = await makeUsersService().getUsers({ plan: 'free', page: 1, page_size: 1 });
+
+    expect(result.page_size).toBe(1);
+    expect(result.total).toBe(2);
+    expect(result.users).toHaveLength(1);
+  });
+
+  it('rejects invalid plan values safely', async () => {
+    await expect(makeUsersService().getUsers({ plan: 'enterprise' })).rejects.toBeInstanceOf(BadRequestException);
+  });
+});
 
 describe('AdminService user billing detail', () => {
   it('includes safe billing data for PayOS support without raw provider payloads', async () => {
