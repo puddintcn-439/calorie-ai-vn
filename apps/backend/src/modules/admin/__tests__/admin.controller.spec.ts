@@ -68,4 +68,10 @@ describe('AdminController auth', () => {
       .get('/admin/payment-issues')
       .expect(403);
   });
+
+  it('blocks authenticated non-admin users from admin users list', async () => {
+    await request(app.getHttpServer())
+      .get('/admin/users')
+      .expect(403);
+  });
 });

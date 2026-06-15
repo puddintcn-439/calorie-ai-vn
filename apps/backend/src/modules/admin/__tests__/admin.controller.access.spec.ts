@@ -14,6 +14,7 @@ import { ConfigService } from '@nestjs/config';
 describe('AdminController (admin access)', () => {
   let app: INestApplication;
   const adminService = {
+    getUsers: jest.fn().mockResolvedValue({ users: [], total: 0 }),
     getUserDetail: jest.fn().mockResolvedValue({}),
     getPaymentIssues: jest.fn().mockResolvedValue({ issues: [] }),
   } as Partial<AdminService> as AdminService;
@@ -73,6 +74,21 @@ describe('AdminController (admin access)', () => {
 
     await request(app.getHttpServer()).get(`/admin/users/${userId}`).expect(200);
     expect(adminService.getUserDetail).toHaveBeenCalledWith(userId);
+  });
+
+  it('allows admin to list users with filters', async () => {
+    (adminService.getUsers as jest.Mock).mockResolvedValueOnce({ users: [], total: 0 });
+
+    await request(app.getHttpServer())
+      .get('/admin/users?search=alpha%40example.com&plan=premium&page=2&pageSize=25')
+      .expect(200);
+
+    expect(adminService.getUsers).toHaveBeenCalledWith(expect.objectContaining({
+      search: 'alpha@example.com',
+      plan: 'premium',
+      page: '2',
+      pageSize: '25',
+    }));
   });
 
   it('allows admin to list payment issues', async () => {

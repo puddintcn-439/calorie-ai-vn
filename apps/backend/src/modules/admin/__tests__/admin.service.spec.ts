@@ -1,4 +1,4 @@
-import { NotFoundException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { AdminService } from '../admin.service';
 import { SupabaseService } from '../../../common/supabase/supabase.service';
 
