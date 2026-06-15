@@ -60,8 +60,8 @@ Correctness:
 - Plan filter is now based on active subscription state:
   - empty/all: no plan filter
   - free: users without active premium/pro subscriptions
-  - premium: users with active premium subscription
-  - pro: users with active pro subscription
+  - premium: users with active premium subscription and no `cancelled_at`
+  - pro: users with active pro subscription and no `cancelled_at`
 - Search and plan combine before range pagination.
 - `total` comes from the filtered Supabase count.
 - `page` and `pageSize` are bounded in controller DTO and service.
@@ -70,8 +70,9 @@ Correctness:
 
 Fix made:
 
-- Before this audit, inactive premium/pro subscriptions could still affect the users list plan filter. Users with an inactive premium subscription could be excluded from `free` or appear in `premium`.
-- Fixed by applying `is_active = true` to plan filter lookups and current-plan aggregation.
+- Before this audit, inactive or cancelled premium/pro subscriptions could still affect the users list plan filter. Users with a cancelled paid row could be excluded from `free` or appear in `premium/pro`.
+- Fixed by requiring active paid list/filter evidence to satisfy `is_active = true` and `cancelled_at IS NULL`.
+- Fixed current list aggregation so a cancelled paid row is displayed as current access `free` with subscription status `cancelled`, matching revenue plan distribution.
 
 Performance notes:
 
@@ -90,7 +91,7 @@ Index recommendations:
 Automated coverage:
 
 - `AdminService users list filters` covers search, free/premium/pro, search + plan, total count, pagination, page_size alias, invalid plan.
-- Added coverage for inactive premium users being treated as free for list/filter purposes.
+- Added coverage for inactive premium and cancelled pro users being treated as non-paid for list/filter purposes.
 
 ### `/admin/overview`
 
@@ -147,8 +148,8 @@ Correctness:
 - Refunds are subtracted via `billing_refunds`.
 - Active paid subscriptions require `is_paid = true`, status `active/trialing`, and `cancelled_at IS NULL`.
 - User plan distribution is based on all registered users, not subscription record count:
-  - Premium: registered users whose current/latest active paid access is premium.
-  - Pro: registered users whose current/latest active paid access is pro.
+  - Premium: registered users whose current/latest active paid access is premium and has no `cancelled_at`.
+  - Pro: registered users whose current/latest active paid access is pro and has no `cancelled_at`.
   - Free: registered users without active premium/pro access, including users with no subscription rows and inactive paid rows without cancellation.
   - Cancelled: registered users whose latest subscription row has `cancelled_at` and who do not have active premium/pro access.
   - Each registered user is counted once; `plan_distribution_total` should equal `total_users`.
@@ -315,11 +316,11 @@ Index recommendations:
 
 ## Bugs Found And Fixed
 
-1. Admin Users plan filter treated inactive premium/pro subscription rows as paid-plan evidence.
-   - Impact: inactive paid users could appear under `premium/pro` or be excluded from `free`.
-   - Fix: plan filter now only uses `user_subscriptions.is_active = true` for premium/pro membership and free exclusion.
-   - Fix: current list plan aggregation now reads active subscriptions only.
-   - Test: added inactive premium fixture to users list filter tests.
+1. Admin Users plan filter treated inactive/cancelled premium/pro subscription rows as paid-plan evidence.
+   - Impact: inactive or cancelled paid users could appear under `premium/pro` or be excluded from `free`.
+   - Fix: plan filter now only uses `user_subscriptions.is_active = true` and `cancelled_at IS NULL` for premium/pro membership and free exclusion.
+   - Fix: current list plan aggregation now marks cancelled paid rows as current access `free` with subscription status `cancelled`.
+   - Test: added inactive premium and cancelled pro fixtures to users list filter tests.
 
 ## No Fix Needed In This Pass
 

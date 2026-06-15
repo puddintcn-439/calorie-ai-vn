@@ -41,6 +41,7 @@ function makeDb(tables: Record<string, any[]> = {}) {
     };
     chain.select = jest.fn().mockReturnValue(chain);
     chain.eq = jest.fn((key: string, value: any) => { chain.filters.push([key, value]); return chain; });
+    chain.is = jest.fn((key: string, value: any) => { chain.filters.push([key, value]); return chain; });
     chain.order = jest.fn((key: string, options?: { ascending?: boolean }) => { chain.orders.push([key, options?.ascending !== false]); return chain; });
     chain.gte = jest.fn().mockReturnValue(chain);
     chain.in = jest.fn((key: string, value: any[]) => { chain.inFilters.push([key, value]); return chain; });
@@ -113,20 +114,22 @@ describe('AdminService users list filters', () => {
     { id: 'u-free-sub', email: 'free.sub@example.com', created_at: '2026-06-02T00:00:00.000Z', updated_at: '2026-06-02T01:00:00.000Z' },
     { id: 'u-premium-gamma', email: 'gamma.premium@example.com', created_at: '2026-06-01T00:00:00.000Z', updated_at: '2026-06-01T01:00:00.000Z' },
     { id: 'u-inactive-premium', email: 'inactive.premium@example.com', created_at: '2026-05-31T00:00:00.000Z', updated_at: '2026-05-31T01:00:00.000Z' },
+    { id: 'u-cancelled-pro', email: 'cancelled.pro@example.com', created_at: '2026-05-30T00:00:00.000Z', updated_at: '2026-05-30T01:00:00.000Z' },
   ];
   const subscriptions = [
-    { user_id: 'u-premium-alpha', tier: 'premium', is_active: true, updated_at: '2026-06-04T02:00:00.000Z' },
-    { user_id: 'u-pro-beta', tier: 'pro', is_active: true, updated_at: '2026-06-03T02:00:00.000Z' },
+    { user_id: 'u-premium-alpha', tier: 'premium', is_active: true, cancelled_at: null, updated_at: '2026-06-04T02:00:00.000Z' },
+    { user_id: 'u-pro-beta', tier: 'pro', is_active: true, cancelled_at: null, updated_at: '2026-06-03T02:00:00.000Z' },
     { user_id: 'u-free-sub', tier: 'free', is_active: false, updated_at: '2026-06-02T02:00:00.000Z' },
-    { user_id: 'u-premium-gamma', tier: 'premium', is_active: true, updated_at: '2026-06-01T02:00:00.000Z' },
+    { user_id: 'u-premium-gamma', tier: 'premium', is_active: true, cancelled_at: null, updated_at: '2026-06-01T02:00:00.000Z' },
     { user_id: 'u-inactive-premium', tier: 'premium', is_active: false, updated_at: '2026-05-31T02:00:00.000Z' },
+    { user_id: 'u-cancelled-pro', tier: 'pro', is_active: true, cancelled_at: '2026-05-30T02:00:00.000Z', updated_at: '2026-05-30T02:00:00.000Z' },
   ];
   const makeUsersService = () => makeService(makeDb({ users, user_subscriptions: subscriptions }));
 
   it('returns paginated users without filters', async () => {
     const result = await makeUsersService().getUsers({ page: 1, pageSize: 2 });
 
-    expect(result.total).toBe(6);
+    expect(result.total).toBe(7);
     expect(result.page).toBe(1);
     expect(result.page_size).toBe(2);
     expect(result.users.map((user) => user.id)).toEqual(['u-free-none', 'u-premium-alpha']);
@@ -142,8 +145,8 @@ describe('AdminService users list filters', () => {
   it('filters free users including users without subscriptions', async () => {
     const result = await makeUsersService().getUsers({ plan: 'free' });
 
-    expect(result.total).toBe(3);
-    expect(result.users.map((user) => user.id)).toEqual(['u-free-none', 'u-free-sub', 'u-inactive-premium']);
+    expect(result.total).toBe(4);
+    expect(result.users.map((user) => user.id)).toEqual(['u-free-none', 'u-free-sub', 'u-inactive-premium', 'u-cancelled-pro']);
     expect(result.users.every((user) => user.plan_tier === 'free')).toBe(true);
   });
 
@@ -160,6 +163,17 @@ describe('AdminService users list filters', () => {
 
     expect(result.total).toBe(1);
     expect(result.users[0]).toMatchObject({ id: 'u-pro-beta', plan_tier: 'pro' });
+  });
+
+  it('does not treat cancelled paid rows as active paid access', async () => {
+    const result = await makeUsersService().getUsers({ search: 'cancelled.pro@example.com' });
+
+    expect(result.total).toBe(1);
+    expect(result.users[0]).toMatchObject({
+      id: 'u-cancelled-pro',
+      plan_tier: 'free',
+      subscription_status: 'cancelled',
+    });
   });
 
   it('combines search and plan filters before counting', async () => {
@@ -180,7 +194,7 @@ describe('AdminService users list filters', () => {
     const result = await makeUsersService().getUsers({ plan: 'free', page: 1, page_size: 1 });
 
     expect(result.page_size).toBe(1);
-    expect(result.total).toBe(3);
+    expect(result.total).toBe(4);
     expect(result.users).toHaveLength(1);
   });
 
