@@ -29,6 +29,16 @@ type SubscriptionRow = {
   updated_at?: string | null;
 };
 
+type UserPlanMix = {
+  total_users: number;
+  active_free: number;
+  active_premium: number;
+  active_pro: number;
+  cancelled: number;
+  paid_users: number;
+  plan_distribution_total: number;
+};
+
 @Injectable()
 export class AdminRevenueService {
   constructor(
@@ -44,22 +54,22 @@ export class AdminRevenueService {
     monthStart.setHours(0, 0, 0, 0);
     const usdToVnd = this.usdToVndRate();
 
-    const [subscriptions, usersCount, aiUsageRows, confirmedRevenue] = await Promise.all([
+    const [subscriptions, userIds, aiUsageRows, confirmedRevenue] = await Promise.all([
       this.fetchSubscriptions(),
-      this.countUsers(),
+      this.fetchUserIds(),
       this.fetchAiUsageRows(monthStart.toISOString()),
       this.billingService.getConfirmedRevenueSummary(now),
     ]);
 
     const active = subscriptions.filter((row) => row.is_active !== false && !row.cancelled_at);
     const cancelled = subscriptions.filter((row) => row.is_active === false || Boolean(row.cancelled_at));
-    const activeByTier = this.countByTier(active);
+    const userPlanMix = this.buildUserPlanMix(userIds, subscriptions);
     const activeTrial = active.filter((row) => String(row.payment_provider ?? '').toLowerCase() === 'trial').length;
     const activeManualGrant = active.filter((row) => String(row.payment_provider ?? '').toLowerCase() === 'manual').length;
     const activePaidEstimatedRows = active.filter((row) => this.isEstimatedPaidSubscription(row));
-    const paidUsers = (activeByTier.premium ?? 0) + (activeByTier.pro ?? 0);
+    const paidUsers = userPlanMix.paid_users;
     const activeSubscriptions = active.length;
-    const totalUsers = usersCount || Math.max(activeSubscriptions, subscriptions.length);
+    const totalUsers = userPlanMix.total_users;
     const estimatedMrrVnd = active.reduce((sum, row) => sum + this.priceForTier(row.tier), 0);
     const estimatedPaidMrrVnd = activePaidEstimatedRows.reduce((sum, row) => sum + this.priceForTier(row.tier), 0);
     const estimatedArrVnd = estimatedMrrVnd * 12;
@@ -93,14 +103,16 @@ export class AdminRevenueService {
         total_users: totalUsers,
         total_subscription_rows: subscriptions.length,
         active_subscriptions: activeSubscriptions,
-        active_free: activeByTier.free ?? 0,
-        active_premium: activeByTier.premium ?? 0,
-        active_pro: activeByTier.pro ?? 0,
+        active_free: userPlanMix.active_free,
+        active_premium: userPlanMix.active_premium,
+        active_pro: userPlanMix.active_pro,
         active_trial: activeTrial,
         active_manual_grant: activeManualGrant,
         active_paid_estimated: activePaidEstimatedRows.length,
         paid_users: paidUsers,
-        cancelled: cancelled.length,
+        cancelled: userPlanMix.cancelled,
+        cancelled_subscription_rows: cancelled.length,
+        plan_distribution_total: userPlanMix.plan_distribution_total,
         by_provider: this.countByProvider(active),
       },
       revenue: {
@@ -149,9 +161,13 @@ export class AdminRevenueService {
     return Array.isArray(data) ? data : [];
   }
 
-  private async countUsers(): Promise<number> {
-    const result = await this.supabase.db.from('users').select('id', { count: 'exact', head: true });
-    return Number(result?.count ?? 0) || 0;
+  private async fetchUserIds(): Promise<string[]> {
+    const { data, error } = await this.supabase.db
+      .from('users')
+      .select('id')
+      .limit(100000);
+    if (error) throw error;
+    return [...new Set((Array.isArray(data) ? data : []).map((row: any) => String(row?.id ?? '').trim()).filter(Boolean))];
   }
 
   private async fetchAiUsageRows(sinceIso: string): Promise<any[]> {
@@ -164,14 +180,6 @@ export class AdminRevenueService {
     return Array.isArray(data) ? data : [];
   }
 
-  private countByTier(rows: SubscriptionRow[]): Record<string, number> {
-    return rows.reduce((acc, row) => {
-      const tier = String(row.tier ?? 'free');
-      acc[tier] = (acc[tier] ?? 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
-  }
-
   private countByProvider(rows: SubscriptionRow[]): Record<string, number> {
     return rows.reduce((acc, row) => {
       const provider = String(row.payment_provider ?? 'unknown');
@@ -182,6 +190,62 @@ export class AdminRevenueService {
 
   private priceForTier(tier: string | null | undefined): number {
     return PRICING_VND[String(tier ?? 'free')] ?? 0;
+  }
+
+  private buildUserPlanMix(userIds: string[], subscriptions: SubscriptionRow[]): UserPlanMix {
+    const registeredUsers = new Set(userIds.map((id) => String(id ?? '').trim()).filter(Boolean));
+    const rowsByUser = new Map<string, SubscriptionRow[]>();
+    for (const row of subscriptions) {
+      const userId = String(row.user_id ?? '').trim();
+      if (!userId || !registeredUsers.has(userId)) continue;
+      const rows = rowsByUser.get(userId) ?? [];
+      rows.push(row);
+      rowsByUser.set(userId, rows);
+    }
+
+    const mix: UserPlanMix = {
+      total_users: registeredUsers.size,
+      active_free: 0,
+      active_premium: 0,
+      active_pro: 0,
+      cancelled: 0,
+      paid_users: 0,
+      plan_distribution_total: 0,
+    };
+
+    for (const userId of registeredUsers) {
+      const rows = this.sortSubscriptionsNewestFirst(rowsByUser.get(userId) ?? []);
+      const activePaid = rows.filter((row) => this.isActivePaidAccess(row));
+      if (activePaid.length > 0) {
+        const current = this.sortSubscriptionsNewestFirst(activePaid)[0];
+        if (String(current?.tier ?? '').toLowerCase() === 'pro') mix.active_pro += 1;
+        else mix.active_premium += 1;
+        continue;
+      }
+
+      const latest = rows[0];
+      if (latest && Boolean(latest.cancelled_at)) mix.cancelled += 1;
+      else mix.active_free += 1;
+    }
+
+    mix.paid_users = mix.active_premium + mix.active_pro;
+    mix.plan_distribution_total = mix.active_free + mix.active_premium + mix.active_pro + mix.cancelled;
+    return mix;
+  }
+
+  private isActivePaidAccess(row: SubscriptionRow): boolean {
+    const tier = String(row.tier ?? '').toLowerCase();
+    return ['premium', 'pro'].includes(tier) && row.is_active !== false && !row.cancelled_at;
+  }
+
+  private sortSubscriptionsNewestFirst(rows: SubscriptionRow[]): SubscriptionRow[] {
+    return [...rows].sort((left, right) => this.subscriptionTimestamp(right) - this.subscriptionTimestamp(left));
+  }
+
+  private subscriptionTimestamp(row: SubscriptionRow): number {
+    const value = row.updated_at ?? row.created_at ?? row.started_at ?? row.renews_at ?? row.cancelled_at;
+    const parsed = value ? new Date(value).getTime() : 0;
+    return Number.isFinite(parsed) ? parsed : 0;
   }
 
   private isEstimatedPaidSubscription(row: SubscriptionRow): boolean {

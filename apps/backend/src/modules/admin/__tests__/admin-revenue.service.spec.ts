@@ -11,13 +11,17 @@ function tableQuery(data: any[] = [], error: any = null) {
   return chain;
 }
 
-function makeDb(subscriptions: any[], aiUsageRows: any[] = [], userCount = 10) {
+function makeUsers(users: number | any[]) {
+  if (Array.isArray(users)) return users;
+  return Array.from({ length: users }, (_, index) => ({ id: `user-${index + 1}` }));
+}
+
+function makeDb(subscriptions: any[], aiUsageRows: any[] = [], users: number | any[] = 10) {
+  const userRows = makeUsers(users);
   return {
     from: jest.fn().mockImplementation((table: string) => {
       if (table === 'users') {
-        return {
-          select: jest.fn().mockResolvedValue({ count: userCount, error: null }),
-        };
+        return tableQuery(userRows);
       }
       if (table === 'ai_usage_events') {
         return tableQuery(aiUsageRows);
@@ -72,11 +76,17 @@ describe('AdminRevenueService', () => {
 
   it('separates trial and manual grants from estimated paid subscriptions', async () => {
     const service = makeService(makeDb([
-      { user_id: 'paid-premium', tier: 'premium', is_active: true, payment_provider: 'stripe' },
-      { user_id: 'paid-pro', tier: 'pro', is_active: true, payment_provider: 'app_store' },
-      { user_id: 'trial', tier: 'premium', is_active: true, payment_provider: 'trial' },
-      { user_id: 'manual', tier: 'pro', is_active: true, payment_provider: 'manual' },
-      { user_id: 'unknown', tier: 'premium', is_active: true, payment_provider: 'unknown' },
+      { user_id: 'paid-premium', tier: 'premium', is_active: true, payment_provider: 'stripe', updated_at: '2026-06-10T00:00:00.000Z' },
+      { user_id: 'paid-pro', tier: 'pro', is_active: true, payment_provider: 'app_store', updated_at: '2026-06-10T00:00:00.000Z' },
+      { user_id: 'trial', tier: 'premium', is_active: true, payment_provider: 'trial', updated_at: '2026-06-10T00:00:00.000Z' },
+      { user_id: 'manual', tier: 'pro', is_active: true, payment_provider: 'manual', updated_at: '2026-06-10T00:00:00.000Z' },
+      { user_id: 'unknown', tier: 'premium', is_active: true, payment_provider: 'unknown', updated_at: '2026-06-10T00:00:00.000Z' },
+    ], [], [
+      { id: 'paid-premium' },
+      { id: 'paid-pro' },
+      { id: 'trial' },
+      { id: 'manual' },
+      { id: 'unknown' },
     ]));
 
     const result = await service.getRevenue();
@@ -89,5 +99,43 @@ describe('AdminRevenueService', () => {
     expect(result.revenue.estimated_paid_mrr_vnd).toBe(188000);
     expect(result.revenue.estimated_paid_arr_vnd).toBe(2256000);
     expect(result.revenue.estimated_revenue_note).toContain('Confirmed paid revenue');
+  });
+
+  it('counts all registered users in current user plan distribution without double counting', async () => {
+    const service = makeService(makeDb([
+      { user_id: 'no-subscription-deleted-row', tier: 'premium', is_active: true, payment_provider: 'stripe', updated_at: '2026-06-10T00:00:00.000Z' },
+      { user_id: 'active-premium', tier: 'premium', is_active: true, payment_provider: 'stripe', updated_at: '2026-06-10T00:00:00.000Z' },
+      { user_id: 'active-pro', tier: 'pro', is_active: true, payment_provider: 'stripe', updated_at: '2026-06-10T00:00:00.000Z' },
+      { user_id: 'inactive-premium', tier: 'premium', is_active: false, payment_provider: 'stripe', updated_at: '2026-06-09T00:00:00.000Z' },
+      { user_id: 'cancelled-latest', tier: 'premium', is_active: false, payment_provider: 'stripe', cancelled_at: '2026-06-11T00:00:00.000Z', updated_at: '2026-06-11T00:00:00.000Z' },
+      { user_id: 'active-pro-with-old-premium', tier: 'premium', is_active: true, payment_provider: 'stripe', updated_at: '2026-05-01T00:00:00.000Z' },
+      { user_id: 'active-pro-with-old-premium', tier: 'pro', is_active: true, payment_provider: 'stripe', updated_at: '2026-06-12T00:00:00.000Z' },
+      { user_id: 'cancelled-but-reactivated', tier: 'premium', is_active: false, payment_provider: 'stripe', cancelled_at: '2026-06-01T00:00:00.000Z', updated_at: '2026-06-01T00:00:00.000Z' },
+      { user_id: 'cancelled-but-reactivated', tier: 'premium', is_active: true, payment_provider: 'stripe', updated_at: '2026-06-13T00:00:00.000Z' },
+    ], [], [
+      { id: 'no-subscription' },
+      { id: 'active-premium' },
+      { id: 'active-pro' },
+      { id: 'inactive-premium' },
+      { id: 'cancelled-latest' },
+      { id: 'active-pro-with-old-premium' },
+      { id: 'cancelled-but-reactivated' },
+    ]));
+
+    const result = await service.getRevenue();
+
+    expect(result.subscriptions.total_users).toBe(7);
+    expect(result.subscriptions.active_free).toBe(2);
+    expect(result.subscriptions.active_premium).toBe(2);
+    expect(result.subscriptions.active_pro).toBe(2);
+    expect(result.subscriptions.cancelled).toBe(1);
+    expect(result.subscriptions.paid_users).toBe(4);
+    expect(result.subscriptions.plan_distribution_total).toBe(7);
+    expect(
+      result.subscriptions.active_free
+      + result.subscriptions.active_premium
+      + result.subscriptions.active_pro
+      + result.subscriptions.cancelled,
+    ).toBe(result.subscriptions.total_users);
   });
 });

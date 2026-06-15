@@ -146,17 +146,24 @@ Correctness:
 - Open/pending invoices are excluded by the paid status filter.
 - Refunds are subtracted via `billing_refunds`.
 - Active paid subscriptions require `is_paid = true`, status `active/trialing`, and `cancelled_at IS NULL`.
-- Estimated subscription revenue uses active `user_subscriptions`; confirmed revenue should be preferred for PayOS reconciliation.
+- User plan distribution is based on all registered users, not subscription record count:
+  - Premium: registered users whose current/latest active paid access is premium.
+  - Pro: registered users whose current/latest active paid access is pro.
+  - Free: registered users without active premium/pro access, including users with no subscription rows and inactive paid rows without cancellation.
+  - Cancelled: registered users whose latest subscription row has `cancelled_at` and who do not have active premium/pro access.
+  - Each registered user is counted once; `plan_distribution_total` should equal `total_users`.
+- Estimated subscription revenue still uses active `user_subscriptions`; confirmed revenue should be preferred for PayOS reconciliation.
 - Currency conversion uses configured `USD_TO_VND_RATE`, fallback `26000`.
 
 Automated coverage:
 
 - `billing.service.spec.ts` covers paid invoices, refund subtraction, VND/USD conversion, empty/unavailable billing tables.
-- `admin-revenue.service.spec.ts` covers confirmed revenue passthrough and trial/manual grant separation.
+- `admin-revenue.service.spec.ts` covers confirmed revenue passthrough, trial/manual grant separation, and all-user plan distribution without double counting.
 
 Known gaps/manual QA:
 
 - Estimated MRR is intentionally separate from confirmed ledger revenue and may include trial/manual grants in the legacy estimate.
+- User plan distribution ignores subscription rows for deleted/unregistered users.
 - Validate real PayOS paid/open/refund states on staging with actual webhook data.
 
 Index recommendations:
@@ -301,7 +308,7 @@ Index recommendations:
 | Overview | `GET /admin/overview` | `telemetry_events`, `users`, `food_logs`, `ai_usage_events` | none | Partial via service/controller coverage | Verify staging timezone and high-volume counts | Add aggregate RPC/indexes for large data; configurable timezone |
 | Users | `GET /admin/users` | `users`, `user_subscriptions`, `ai_usage_events`, `food_logs`, `telemetry_events` | `search`, `plan`, `page`, `pageSize/page_size` | Strong focused service coverage | Verify slow search against real dataset | Add email/search and subscription indexes; consider RPC/view for plan filter |
 | User detail | `GET /admin/users/:id` | user, subscription, billing, AI usage, food logs, telemetry | path UUID | Safe billing/no leakage tests | Verify real PayOS latest invoice support expectation | Consider latest paid invoice separate from latest invoice |
-| Revenue | `GET /admin/revenue` | subscriptions, users, AI usage, billing ledger | none | Billing and admin revenue tests | Reconcile real PayOS paid/open/refund staging invoices | Index billing invoice/refund/subscription date/status fields |
+| Revenue | `GET /admin/revenue` | users, subscriptions, AI usage, billing ledger | none | Billing and admin revenue tests, including all-user plan distribution | Reconcile real PayOS paid/open/refund staging invoices | Index billing invoice/refund/subscription date/status fields |
 | Payment issues | `GET/PATCH /admin/payment-issues` | payment issues, users, invoices, audit log, notifications | `status`, `provider`, `userId`; no pagination | Safe list/update/notification tests | Verify support queue with real cases | Add pagination and stricter userId UUID DTO; indexes by status/provider/date |
 | AI Usage | `GET /admin/ai-usage` | `ai_usage_events` | `days` 1-180 | AI usage service coverage | Verify top-users output remains admin-safe | Add AI usage compound indexes; consider calendar buckets |
 | Audit Log | `GET /admin/audit-log` | `admin_audit_log` | actor/action/target filters, page/pageSize | Controller access and service indirect coverage | Verify key admin actions appear after staging workflows | Add audit indexes and keep metadata secret-free |

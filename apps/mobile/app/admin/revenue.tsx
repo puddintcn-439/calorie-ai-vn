@@ -161,7 +161,7 @@ export default function AdminRevenueScreen() {
           </View>
 
           <View style={styles.chartGrid}>
-            <AdminSectionCard title="Subscription distribution" subtitle="Current account mix across free and paid tiers." style={styles.chartCard}>
+            <AdminSectionCard title="User plan distribution" subtitle="All registered users grouped by current access tier." style={styles.chartCard}>
               <ChartBar label="Free" value={num(subscriptions.active_free)} max={Math.max(num(subscriptions.active_free), num(subscriptions.active_premium), num(subscriptions.active_pro), num(subscriptions.cancelled))} color={adminChrome.textMuted} />
               <ChartBar label="Premium" value={num(subscriptions.active_premium)} max={Math.max(num(subscriptions.active_free), num(subscriptions.active_premium), num(subscriptions.active_pro), num(subscriptions.cancelled))} color={adminChrome.purple} />
               <ChartBar label="Pro" value={num(subscriptions.active_pro)} max={Math.max(num(subscriptions.active_free), num(subscriptions.active_premium), num(subscriptions.active_pro), num(subscriptions.cancelled))} color={adminChrome.mint} />
@@ -177,13 +177,14 @@ export default function AdminRevenueScreen() {
             </AdminSectionCard>
           </View>
 
-          <AdminSectionCard title="Subscription mix" subtitle="Current active subscription distribution.">
+          <AdminSectionCard title="User plan mix" subtitle="All registered users grouped by current access tier. Active subscriptions remains the row count for subscription records.">
             <Row left="Total users" right={n(subscriptions.total_users)} />
             <Row left="Active subscriptions" right={n(subscriptions.active_subscriptions)} />
             <Row left="Free" right={n(subscriptions.active_free)} />
             <Row left="Premium" right={n(subscriptions.active_premium)} />
             <Row left="Pro" right={n(subscriptions.active_pro)} />
             <Row left="Cancelled" right={n(subscriptions.cancelled)} />
+            <Row left="Distribution total" right={n(subscriptions.plan_distribution_total)} />
           </AdminSectionCard>
 
           <AdminToneCard title="AI cost" subtitle="Cost attribution used by margin calculations." tone="warning">
