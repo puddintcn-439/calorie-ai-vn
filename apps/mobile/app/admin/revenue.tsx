@@ -66,14 +66,14 @@ function num(value: any) {
 }
 
 function ChartBar({ label, value, max, color }: { label: string; value: number; max: number; color: string }) {
-  const width = max > 0 ? Math.max(4, Math.min(100, (value / max) * 100)) : 0;
+  const width = max > 0 && value > 0 ? Math.max(4, Math.min(100, (value / max) * 100)) : 0;
   return (
     <View style={styles.chartRow}>
       <View style={styles.chartHeader}>
         <Text style={styles.chartLabel}>{label}</Text>
         <Text style={styles.chartValue}>{n(value)}</Text>
       </View>
-      <View style={styles.track}>{max > 0 ? <View style={[styles.bar, { width: `${width}%`, backgroundColor: color }]} /> : null}</View>
+      <View style={styles.track}>{width > 0 ? <View style={[styles.bar, { width: `${width}%`, backgroundColor: color }]} /> : null}</View>
     </View>
   );
 }
@@ -120,7 +120,7 @@ export default function AdminRevenueScreen() {
     { label: 'Estimated ARR', value: money(revenue[`estimated_arr_${suffix}`], currency), helper: 'Estimated annual run rate', tone: 'premium' as AdminTone },
     { label: 'AI Cost MTD', value: money(aiCost[`month_to_date_${suffix}`], currency), helper: `${n(aiCost.requests_month_to_date)} requests · ${n(aiCost.credits_month_to_date)} credits`, tone: 'warning' as AdminTone },
     { label: 'Gross Margin', value: money(margin[`estimated_monthly_gross_margin_${suffix}`], currency), helper: pct(margin.estimated_gross_margin_rate), tone: marginTone },
-    { label: 'Paid Conversion', value: pct(conversion.paid_conversion_rate), helper: `${n(conversion.paid_users)} paid / ${n(conversion.total_users)} users`, tone: 'success' as AdminTone },
+    { label: 'Paid-tier Access', value: pct(conversion.paid_conversion_rate), helper: `${n(conversion.paid_users)} premium/pro access / ${n(conversion.total_users)} users`, tone: 'success' as AdminTone },
     { label: 'ARPPU', value: money(revenue[`arppu_${suffix}`], currency), helper: 'Average revenue per paid user', tone: 'info' as AdminTone },
   ], [aiCost, conversion, currency, margin, marginTone, revenue, suffix]);
 
@@ -171,7 +171,7 @@ export default function AdminRevenueScreen() {
             <AdminSectionCard title="Revenue guardrails" subtitle="Margin, conversion, and AI cost signals for production checks." style={styles.chartCard}>
               <View style={styles.signalGrid}>
                 <View style={styles.signalBox}><Text style={styles.signalValue}>{pct(margin.estimated_gross_margin_rate)}</Text><Text style={styles.signalLabel}>gross margin</Text></View>
-                <View style={styles.signalBox}><Text style={styles.signalValue}>{pct(conversion.paid_conversion_rate)}</Text><Text style={styles.signalLabel}>paid conversion</Text></View>
+                <View style={styles.signalBox}><Text style={styles.signalValue}>{pct(conversion.paid_conversion_rate)}</Text><Text style={styles.signalLabel}>paid-tier access</Text></View>
                 <View style={styles.signalBox}><Text style={styles.signalValue}>{money(aiCost[`month_to_date_${suffix}`], currency)}</Text><Text style={styles.signalLabel}>AI cost MTD</Text></View>
               </View>
             </AdminSectionCard>
@@ -197,7 +197,7 @@ export default function AdminRevenueScreen() {
           <AdminToneCard title="Margin" subtitle="Estimated subscription margin after AI cost." tone={marginTone}>
             <Row left="Estimated monthly gross margin" right={money(margin[`estimated_monthly_gross_margin_${suffix}`], currency)} />
             <Row left="Estimated gross margin rate" right={pct(margin.estimated_gross_margin_rate)} />
-            <Row left="Paid conversion" right={pct(conversion.paid_conversion_rate)} />
+            <Row left="Paid-tier access" right={pct(conversion.paid_conversion_rate)} sub="Premium/pro current access; confirmed paid revenue is shown in the ledger section." />
             <Row left="ARPPU" right={money(revenue[`arppu_${suffix}`], currency)} />
           </AdminToneCard>
 

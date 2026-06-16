@@ -62,6 +62,7 @@ Correctness:
   - free: users without active premium/pro subscriptions
   - premium: users with active premium subscription and no `cancelled_at`
   - pro: users with active pro subscription and no `cancelled_at`
+  - cancelled: users whose current subscription state is cancelled and who do not have active paid access
 - Search and plan combine before range pagination.
 - `total` comes from the filtered Supabase count.
 - `page` and `pageSize` are bounded in controller DTO and service.
@@ -72,7 +73,7 @@ Fix made:
 
 - Before this audit, inactive or cancelled premium/pro subscriptions could still affect the users list plan filter. Users with a cancelled paid row could be excluded from `free` or appear in `premium/pro`.
 - Fixed by requiring active paid list/filter evidence to satisfy `is_active = true` and `cancelled_at IS NULL`.
-- Fixed current list aggregation so a cancelled paid row is displayed as current access `free` with subscription status `cancelled`, matching revenue plan distribution.
+- Fixed current list aggregation so a cancelled paid row is displayed as current access `free` with subscription status `cancelled`, and can be filtered with `plan=cancelled`, matching revenue plan distribution.
 
 Performance notes:
 
@@ -91,7 +92,7 @@ Index recommendations:
 Automated coverage:
 
 - `AdminService users list filters` covers search, free/premium/pro, search + plan, total count, pagination, page_size alias, invalid plan.
-- Added coverage for inactive premium and cancelled pro users being treated as non-paid for list/filter purposes.
+- Added coverage for inactive premium and cancelled pro users being treated as non-paid for list/filter purposes, with cancelled users filtered separately from free users.
 
 ### `/admin/overview`
 
@@ -154,6 +155,7 @@ Correctness:
   - Cancelled: registered users whose latest subscription row has `cancelled_at` and who do not have active premium/pro access.
   - Each registered user is counted once; `plan_distribution_total` should equal `total_users`.
 - Estimated subscription revenue still uses active `user_subscriptions`; confirmed revenue should be preferred for PayOS reconciliation.
+- UI labels premium/pro access rate as `Paid-tier access`, not confirmed paid conversion, because trial/manual premium access can exist outside paid ledger revenue.
 - Currency conversion uses configured `USD_TO_VND_RATE`, fallback `26000`.
 
 Automated coverage:
@@ -257,6 +259,7 @@ Correctness:
 - Service clamps/rounds `days` again.
 - Data range starts at now minus `windowDays - 1` days.
 - Summary uses request/cost/status/source rows from `ai_usage_events`.
+- Status mix includes `reserved`, `success`, `fallback`, `failed`, and `blocked` so status counts reconcile with total requests when there are unfinalized AI reservations.
 - Admin assertion is performed in `AiUsageService` using requester email.
 
 Known gaps/manual QA:
@@ -319,7 +322,7 @@ Index recommendations:
 1. Admin Users plan filter treated inactive/cancelled premium/pro subscription rows as paid-plan evidence.
    - Impact: inactive or cancelled paid users could appear under `premium/pro` or be excluded from `free`.
    - Fix: plan filter now only uses `user_subscriptions.is_active = true` and `cancelled_at IS NULL` for premium/pro membership and free exclusion.
-   - Fix: current list plan aggregation now marks cancelled paid rows as current access `free` with subscription status `cancelled`.
+   - Fix: current list plan aggregation now marks cancelled paid rows as current access `free` with subscription status `cancelled`, and `plan=cancelled` filters them separately from `plan=free`.
    - Test: added inactive premium and cancelled pro fixtures to users list filter tests.
 
 ## No Fix Needed In This Pass

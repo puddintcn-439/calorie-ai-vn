@@ -555,6 +555,7 @@ export class BillingService {
         is_active: true,
         payment_provider: entitlement.provider ?? 'stripe',
         renews_at: entitlement.active_until ?? null,
+        cancelled_at: null,
         updated_at: new Date().toISOString(),
       }, { onConflict: 'user_id' });
 
@@ -565,6 +566,21 @@ export class BillingService {
         entitlement,
         synced: false,
         skipped_reason: this.safeErrorMessage(error),
+      };
+    }
+
+    const { error: userUpdateError } = await this.supabase.db
+      .from('users')
+      .update({ subscription_tier: entitlement.tier, updated_at: new Date().toISOString() })
+      .eq('id', entitlement.user_id);
+
+    if (userUpdateError) {
+      return {
+        ok: false,
+        user_id: entitlement.user_id,
+        entitlement,
+        synced: false,
+        skipped_reason: this.safeErrorMessage(userUpdateError),
       };
     }
 

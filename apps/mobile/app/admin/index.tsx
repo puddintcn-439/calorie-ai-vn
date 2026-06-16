@@ -36,7 +36,7 @@ function toNumber(value: number | null | undefined) {
 }
 
 function ChartBar({ label, value, max, color }: { label: string; value: number; max: number; color: string }) {
-  const width = max > 0 ? Math.max(4, Math.min(100, (value / max) * 100)) : 0;
+  const width = max > 0 && value > 0 ? Math.max(4, Math.min(100, (value / max) * 100)) : 0;
 
   return (
     <View style={styles.chartRow}>
@@ -45,7 +45,7 @@ function ChartBar({ label, value, max, color }: { label: string; value: number; 
         <Text style={styles.chartValue}>{formatNumber(value)}</Text>
       </View>
       <View style={styles.track}>
-        {max > 0 ? <View style={[styles.bar, { width: `${width}%`, backgroundColor: color }]} /> : <View style={styles.emptyBar} />}
+        {width > 0 ? <View style={[styles.bar, { width: `${width}%`, backgroundColor: color }]} /> : <View style={styles.emptyBar} />}
       </View>
     </View>
   );

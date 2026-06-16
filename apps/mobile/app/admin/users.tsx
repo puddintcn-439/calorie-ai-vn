@@ -37,6 +37,7 @@ function getAdminError(error: any) {
 function planTone(plan: string | null | undefined): AdminTone {
   if (plan === 'premium') return 'premium';
   if (plan === 'pro') return 'pro';
+  if (plan === 'cancelled') return 'warning';
   if (plan === 'free') return 'neutral';
   return 'info';
 }
@@ -161,7 +162,7 @@ export default function AdminUsersScreen() {
       subtitle="Tìm user, kiểm tra plan, quota, credits và hoạt động gần đây trước khi đi vào user detail."
       onRefresh={load}
     >
-      <AdminSectionCard title="Search and filters" subtitle="Search theo email. Plan filter chỉ đổi query, không thay đổi dữ liệu.">
+      <AdminSectionCard title="Search and filters" subtitle="Search theo email. Plan filter phản ánh current access: free, paid hoặc cancelled.">
         <View style={styles.searchRow}>
           <TextInput
             value={searchDraft}
@@ -182,7 +183,7 @@ export default function AdminUsersScreen() {
         </View>
         <Text style={adminStyles.muted}>Nhập email rồi bấm Search để lọc. Nhấn Enter cũng sẽ chạy search.</Text>
         <View style={styles.planRow}>
-          {['', 'free', 'premium', 'pro'].map((item) => (
+          {['', 'free', 'premium', 'pro', 'cancelled'].map((item) => (
             <TouchableOpacity key={item || 'all'} disabled={loading} style={[styles.planFilter, plan === item && styles.planFilterActive, loading && styles.controlDisabled]} onPress={() => setPlanFilter(item)}>
               <AdminChip label={item || 'all'} tone={item ? planTone(item) : 'info'} active={plan === item} />
             </TouchableOpacity>

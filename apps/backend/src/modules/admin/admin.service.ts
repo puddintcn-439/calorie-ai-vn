@@ -7,10 +7,10 @@ import { NotificationsService } from '../notifications/notifications.service';
 type SupabaseCountResult = { count: number | null; error: any };
 type AdminActor = { email?: string; role?: string; user_id?: string | null; source?: string };
 type PaymentIssueStatus = 'open' | 'in_review' | 'resolved' | 'rejected';
-type AdminUsersPlan = 'free' | 'premium' | 'pro';
+type AdminUsersPlan = 'free' | 'premium' | 'pro' | 'cancelled';
 
 const PAYMENT_ISSUE_STATUSES: PaymentIssueStatus[] = ['open', 'in_review', 'resolved', 'rejected'];
-const ADMIN_USERS_PLANS: AdminUsersPlan[] = ['free', 'premium', 'pro'];
+const ADMIN_USERS_PLANS: AdminUsersPlan[] = ['free', 'premium', 'pro', 'cancelled'];
 
 @Injectable()
 export class AdminService {
@@ -108,30 +108,23 @@ export class AdminService {
     const plan = String(value ?? '').trim().toLowerCase();
     if (!plan || plan === 'all') return null;
     if (ADMIN_USERS_PLANS.includes(plan as AdminUsersPlan)) return plan as AdminUsersPlan;
-    throw new BadRequestException('Invalid plan filter. Expected all, free, premium, or pro.');
+    throw new BadRequestException('Invalid plan filter. Expected all, free, premium, pro, or cancelled.');
   }
   private async fetchAdminUsersPlanFilter(plan: AdminUsersPlan | null): Promise<{ includeIds?: string[]; excludeIds?: string[] }> {
     if (!plan) return {};
+    const accessByUser = await this.fetchCurrentSubscriptionAccessByUser();
     if (plan === 'free') {
-      const { data, error } = await this.supabase.db
-        .from('user_subscriptions')
-        .select('user_id')
-        .in('tier', ['premium', 'pro'])
-        .eq('is_active', true)
-        .is('cancelled_at', null)
-        .limit(100000);
-      if (error) throw error;
-      return { excludeIds: this.uniqueIds(data, 'user_id') };
+      return {
+        excludeIds: [...accessByUser.entries()]
+          .filter(([, access]) => access.tier !== 'free' || access.status === 'cancelled')
+          .map(([userId]) => userId),
+      };
     }
-    const { data, error } = await this.supabase.db
-      .from('user_subscriptions')
-      .select('user_id')
-      .eq('tier', plan)
-      .eq('is_active', true)
-      .is('cancelled_at', null)
-      .limit(100000);
-    if (error) throw error;
-    return { includeIds: this.uniqueIds(data, 'user_id') };
+    return {
+      includeIds: [...accessByUser.entries()]
+        .filter(([, access]) => plan === 'cancelled' ? access.status === 'cancelled' : access.tier === plan && access.status === 'active')
+        .map(([userId]) => userId),
+    };
   }
   private uniqueIds(rows: any, column: string): string[] {
     return [...new Set((Array.isArray(rows) ? rows : []).map((row: any) => String(row?.[column] ?? '').trim()).filter(Boolean))];
@@ -144,11 +137,15 @@ export class AdminService {
   private async requireUser(userId: string): Promise<any> { const { data, error } = await this.supabase.db.from('users').select('id, email').eq('id', userId).maybeSingle(); if (error) throw error; if (!data) throw new NotFoundException('User not found'); return data; }
   private async writeAuditLog(input: { actor: AdminActor; action: string; targetType: string; targetId: string; reason: string; metadata?: Record<string, any> }) { const actorEmail = String(input.actor?.email ?? '').trim().toLowerCase() || 'unknown'; const { error } = await this.supabase.db.from('admin_audit_log').insert({ actor_user_id: input.actor?.user_id ?? null, actor_email: actorEmail, action: input.action, target_type: input.targetType, target_id: input.targetId, reason: input.reason, metadata: input.metadata ?? {} }); if (error) throw error; }
   private async fetchAiUsageRows(sinceIso: string): Promise<any[]> { const { data } = await this.supabase.db.from('ai_usage_events').select('status, estimated_cost_usd, credits_consumed, created_at').gte('created_at', sinceIso).limit(5000); return Array.isArray(data) ? data : []; }
-  private async fetchSubscriptionsForUsers(userIds: string[]): Promise<Map<string, { tier: string; status: string }>> { const map = new Map<string, { tier: string; status: string }>(); if (userIds.length === 0) return map; const { data } = await this.supabase.db.from('user_subscriptions').select('user_id, tier, is_active, cancelled_at, created_at, updated_at').in('user_id', userIds).order('updated_at', { ascending: false }); for (const row of Array.isArray(data) ? data : []) { const userId = String(row.user_id); if (!userId || map.has(userId)) continue; map.set(userId, this.currentAccessFromSubscription(row)); } return map; }
+  private async fetchCurrentSubscriptionAccessByUser(): Promise<Map<string, { tier: string; status: string }>> { const { data, error } = await this.supabase.db.from('user_subscriptions').select('user_id, tier, is_active, cancelled_at, started_at, renews_at, created_at, updated_at').limit(100000); if (error) throw error; return this.buildCurrentSubscriptionAccessMap(Array.isArray(data) ? data : []); }
+  private async fetchSubscriptionsForUsers(userIds: string[]): Promise<Map<string, { tier: string; status: string }>> { if (userIds.length === 0) return new Map(); const { data } = await this.supabase.db.from('user_subscriptions').select('user_id, tier, is_active, cancelled_at, started_at, renews_at, created_at, updated_at').in('user_id', userIds).order('updated_at', { ascending: false }); return this.buildCurrentSubscriptionAccessMap(Array.isArray(data) ? data : []); }
   private async fetchSubscriptionForUser(userId: string) { const { data } = await this.supabase.db.from('user_subscriptions').select('tier, is_active, started_at, renews_at, cancelled_at, created_at, updated_at').eq('user_id', userId).order('updated_at', { ascending: false }).limit(1); const row = Array.isArray(data) ? data[0] : null; return row ? { ...row, status: this.subscriptionStatus(row) } : { tier: 'free', status: 'unknown' }; }
+  private buildCurrentSubscriptionAccessMap(rows: any[]): Map<string, { tier: string; status: string }> { const rowsByUser = new Map<string, any[]>(); for (const row of rows) { const userId = String(row?.user_id ?? '').trim(); if (!userId) continue; const current = rowsByUser.get(userId) ?? []; current.push(row); rowsByUser.set(userId, current); } const map = new Map<string, { tier: string; status: string }>(); for (const [userId, userRows] of rowsByUser.entries()) { const sorted = this.sortSubscriptionsNewestFirst(userRows); const activePaid = sorted.filter((row) => this.isCurrentPaidSubscription(row)); map.set(userId, activePaid.length > 0 ? this.currentAccessFromSubscription(activePaid[0]) : this.currentAccessFromSubscription(sorted[0])); } return map; }
   private currentAccessFromSubscription(row: any): { tier: string; status: string } { if (this.isCurrentPaidSubscription(row)) return { tier: String(row.tier ?? 'free').toLowerCase(), status: 'active' }; if (row?.cancelled_at) return { tier: 'free', status: 'cancelled' }; if (row?.is_active === false) return { tier: 'free', status: 'inactive' }; return { tier: 'free', status: 'unknown' }; }
   private subscriptionStatus(row: any): string { if (row?.cancelled_at) return 'cancelled'; if (row?.is_active === false) return 'inactive'; if (row?.is_active === true) return 'active'; return 'unknown'; }
   private isCurrentPaidSubscription(row: any): boolean { const tier = String(row?.tier ?? '').toLowerCase(); return ['premium', 'pro'].includes(tier) && row?.is_active === true && !row?.cancelled_at; }
+  private sortSubscriptionsNewestFirst(rows: any[]): any[] { return [...rows].sort((left, right) => this.subscriptionTimestamp(right) - this.subscriptionTimestamp(left)); }
+  private subscriptionTimestamp(row: any): number { const value = row?.updated_at ?? row?.created_at ?? row?.started_at ?? row?.renews_at ?? row?.cancelled_at; const parsed = value ? new Date(value).getTime() : 0; return Number.isFinite(parsed) ? parsed : 0; }
   private async fetchAiUsageForUsers(userIds: string[], sinceIso: string): Promise<Map<string, { requests: number; credits: number }>> { const map = new Map<string, { requests: number; credits: number }>(); if (userIds.length === 0) return map; const { data } = await this.supabase.db.from('ai_usage_events').select('user_id, credits_consumed').in('user_id', userIds).in('status', ['reserved', 'success', 'failed', 'fallback']).gte('created_at', sinceIso).limit(10000); for (const row of Array.isArray(data) ? data : []) { const userId = String(row.user_id); const current = map.get(userId) ?? { requests: 0, credits: 0 }; current.requests += 1; current.credits += Number(row.credits_consumed ?? 1); map.set(userId, current); } return map; }
   private async fetchFoodLogCountsForUsers(userIds: string[]): Promise<Map<string, number>> { const map = new Map<string, number>(); if (userIds.length === 0) return map; const { data } = await this.supabase.db.from('food_logs').select('user_id').in('user_id', userIds).limit(10000); for (const row of Array.isArray(data) ? data : []) map.set(String(row.user_id), (map.get(String(row.user_id)) ?? 0) + 1); return map; }
   private async fetchLastActiveForUsers(userIds: string[]): Promise<Map<string, string>> { const map = new Map<string, string>(); if (userIds.length === 0) return map; const { data } = await this.supabase.db.from('telemetry_events').select('user_id, created_at').in('user_id', userIds).order('created_at', { ascending: false }).limit(10000); for (const row of Array.isArray(data) ? data : []) { const userId = String(row.user_id); if (!map.has(userId)) map.set(userId, String(row.created_at)); } return map; }

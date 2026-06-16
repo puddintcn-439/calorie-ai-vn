@@ -133,6 +133,7 @@ export interface AiUsageSummary {
   generated_at: string;
   window_days: number;
   total_requests: number;
+  total_reserved: number;
   total_success: number;
   total_fallback: number;
   total_failed: number;

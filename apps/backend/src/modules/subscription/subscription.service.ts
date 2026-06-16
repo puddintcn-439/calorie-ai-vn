@@ -37,6 +37,22 @@ export class SubscriptionService {
     } as UserSubscription;
   }
 
+  private currentAccessSubscription(subscription: UserSubscription): UserSubscription {
+    const tier = String(subscription.tier ?? 'free') as SubscriptionTier;
+    const isPaidTier = tier === 'premium' || tier === 'pro';
+    const renewsAt = subscription.renews_at ? new Date(String(subscription.renews_at)) : null;
+    const isExpired = Boolean(renewsAt && !Number.isNaN(renewsAt.getTime()) && renewsAt <= new Date());
+    const isCurrentPaid = isPaidTier && subscription.is_active !== false && !subscription.cancelled_at && !isExpired;
+
+    if (isCurrentPaid || tier === 'free') return subscription;
+
+    return {
+      ...subscription,
+      tier: 'free',
+      is_active: true,
+    } as UserSubscription;
+  }
+
   /**
    * Get user's current subscription (or create free trial if not exists)
    */
@@ -77,7 +93,7 @@ export class SubscriptionService {
           .eq('user_id', userId)
           .single();
 
-        if (!refetchError && existing) return existing as UserSubscription;
+        if (!refetchError && existing) return this.currentAccessSubscription(existing as UserSubscription);
       }
 
       if (createError) throw createError;
@@ -92,7 +108,7 @@ export class SubscriptionService {
     }
 
     if (error) throw error;
-    return data as UserSubscription;
+    return this.currentAccessSubscription(data as UserSubscription);
   }
 
   /**
@@ -115,9 +131,11 @@ export class SubscriptionService {
           tier: dto.tier,
           started_at: now.toISOString(),
           renews_at: renewsAt.toISOString(),
+          cancelled_at: null,
           is_active: true,
           payment_provider: dto.payment_provider,
           payment_id: dto.payment_id,
+          updated_at: now.toISOString(),
         },
         { onConflict: 'user_id' },
       )

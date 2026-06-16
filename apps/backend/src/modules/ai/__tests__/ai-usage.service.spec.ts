@@ -3,7 +3,7 @@ import { AiUsageService } from '../ai-usage.service';
 import { SupabaseService } from '../../../common/supabase/supabase.service';
 import { SubscriptionService } from '../../subscription/subscription.service';
 
-function makeDb(overrides?: Partial<any>) {
+function makeDb(overrides?: Partial<any>, summaryRows: any[] = []) {
   const usageQuery = {
     eq: jest.fn().mockReturnThis(),
     in: jest.fn().mockReturnThis(),
@@ -11,7 +11,7 @@ function makeDb(overrides?: Partial<any>) {
   };
   const summaryQuery = {
     gte: jest.fn().mockReturnThis(),
-    order: jest.fn().mockResolvedValue({ data: [], error: null }),
+    order: jest.fn().mockResolvedValue({ data: summaryRows, error: null }),
   };
   const adjustmentQuery = {
     eq: jest.fn().mockReturnThis(),
@@ -221,7 +221,26 @@ describe('AiUsageService', () => {
   });
 
   it('allows admin summary for configured admin email and honors days window', async () => {
-    const db = makeDb();
+    const db = makeDb(undefined, [
+      {
+        user_id: 'u1',
+        feature: 'scan_text',
+        provider: 'primary',
+        model: 'gemini',
+        status: 'reserved',
+        estimated_cost_usd: 0.001,
+        created_at: '2026-06-11T08:00:00.000Z',
+      },
+      {
+        user_id: 'u1',
+        feature: 'scan_text',
+        provider: 'primary',
+        model: 'gemini',
+        status: 'success',
+        estimated_cost_usd: 0.002,
+        created_at: '2026-06-11T08:01:00.000Z',
+      },
+    ]);
     const service = new AiUsageService(
       { db } as unknown as SupabaseService,
       {
@@ -239,6 +258,10 @@ describe('AiUsageService', () => {
     const result = await service.getUsageSummary('admin@example.com', 30);
 
     expect(result.window_days).toBe(30);
+    expect(result.total_requests).toBe(2);
+    expect(result.total_reserved).toBe(1);
+    expect(result.total_success).toBe(1);
+    expect(result.estimated_cost_usd).toBe(0.003);
     expect(db.from).toHaveBeenCalledWith('ai_usage_events');
   });
 });

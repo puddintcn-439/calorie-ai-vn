@@ -56,6 +56,37 @@ describe('SubscriptionService.getUserSubscription', () => {
     expect(result.tier).toBe('free');
   });
 
+  it('normalizes cancelled paid legacy rows to current free access', async () => {
+    const sub = { id: 's1', user_id: 'u1', tier: 'pro', is_active: true, cancelled_at: '2026-06-01T00:00:00.000Z' };
+    const db = {
+      from: jest.fn().mockReturnValue({
+        select: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockReturnThis(),
+        single: jest.fn().mockResolvedValue({ data: sub, error: null }),
+      }),
+    };
+    const service = new SubscriptionService({ db } as unknown as SupabaseService);
+    const result = await service.getUserSubscription('u1');
+    expect(result.tier).toBe('free');
+    expect(result.is_active).toBe(true);
+  });
+
+  it('normalizes expired paid legacy rows to current free access', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-06-15T00:00:00.000Z'));
+    const sub = { id: 's1', user_id: 'u1', tier: 'premium', is_active: true, renews_at: '2026-06-01T00:00:00.000Z' };
+    const db = {
+      from: jest.fn().mockReturnValue({
+        select: jest.fn().mockReturnThis(),
+        eq: jest.fn().mockReturnThis(),
+        single: jest.fn().mockResolvedValue({ data: sub, error: null }),
+      }),
+    };
+    const service = new SubscriptionService({ db } as unknown as SupabaseService);
+    const result = await service.getUserSubscription('u1');
+    expect(result.tier).toBe('free');
+    jest.useRealTimers();
+  });
+
   it('refetches subscription when free tier creation races an existing row', async () => {
     const existing = { id: 's2', user_id: 'u2', tier: 'premium', is_active: true };
     let selectCalls = 0;
@@ -142,11 +173,12 @@ describe('SubscriptionService.getUserSubscription', () => {
 describe('SubscriptionService.upgradeSubscription', () => {
   it('upgrades to premium tier', async () => {
     const upgraded = { id: 's3', user_id: 'u1', tier: 'premium', is_active: true };
+    const upsert = jest.fn().mockReturnThis();
     const db = {
       from: jest.fn().mockImplementation((table: string) => {
         if (table === 'user_subscriptions') {
           return {
-            upsert: jest.fn().mockReturnThis(),
+            upsert,
             select: jest.fn().mockReturnThis(),
             single: jest.fn().mockResolvedValue({ data: upgraded, error: null }),
           };
@@ -160,6 +192,12 @@ describe('SubscriptionService.upgradeSubscription', () => {
     const service = new SubscriptionService({ db } as unknown as SupabaseService);
     const result = await service.upgradeSubscription('u1', { tier: 'premium', payment_provider: 'stripe', payment_id: 'pi_123' });
     expect(result.tier).toBe('premium');
+    expect(upsert).toHaveBeenCalledWith(expect.objectContaining({
+      user_id: 'u1',
+      tier: 'premium',
+      cancelled_at: null,
+      is_active: true,
+    }), { onConflict: 'user_id' });
   });
 
   it('throws ForbiddenException for invalid tier', async () => {

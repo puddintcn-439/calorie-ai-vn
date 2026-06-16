@@ -138,7 +138,7 @@ export default function AdminUserDetailScreen() {
   const quota: any = detail?.ai_quota ?? null;
   const subscriptionTier = String(detail?.subscription?.tier ?? 'free');
   const subscriptionStatus = String(detail?.subscription?.status ?? 'unknown');
-  const isPremium = subscriptionTier !== 'free' && subscriptionStatus !== 'inactive';
+  const hasActivePaidAccess = ['premium', 'pro'].includes(subscriptionTier) && ['active', 'trialing', 'paid'].includes(subscriptionStatus);
 
   return (
     <AdminShell
@@ -168,7 +168,7 @@ export default function AdminUserDetailScreen() {
                   <Text style={adminStyles.rowTitle}>Current access</Text>
                   <Text style={adminStyles.muted}>Backend remains the source of truth for paid access.</Text>
                 </View>
-                <AdminStatusBadge label={isPremium ? 'Paid active' : 'Free / inactive'} tone={isPremium ? 'success' : 'neutral'} />
+                <AdminStatusBadge label={hasActivePaidAccess ? 'Paid active' : 'No active paid access'} tone={hasActivePaidAccess ? 'success' : 'neutral'} />
               </View>
               <View style={adminStyles.grid}>
                 <KeyValue label="Tier" value={detail.subscription?.tier ?? 'free'} />

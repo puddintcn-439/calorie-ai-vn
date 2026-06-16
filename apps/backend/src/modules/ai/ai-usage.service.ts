@@ -268,6 +268,7 @@ export class AiUsageService {
       generated_at: new Date().toISOString(),
       window_days: windowDays,
       total_requests: summary.total_requests,
+      total_reserved: summary.status.reserved ?? 0,
       total_success: summary.status.success ?? 0,
       total_fallback: summary.status.fallback ?? 0,
       total_failed: summary.status.failed ?? 0,

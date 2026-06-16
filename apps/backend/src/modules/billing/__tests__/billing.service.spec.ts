@@ -1065,7 +1065,9 @@ describe('BillingService', () => {
 
   it('syncs paid billing entitlement into legacy user_subscriptions', async () => {
     const db = makeDb({
+      users: { data: [{ id: 'user-1', subscription_tier: 'free' }] },
       billing_subscriptions: { data: [{ id: 'bs_1', user_id: 'user-1', tier: 'pro', provider: 'stripe', status: 'active', is_paid: true, billing_period_end: '2999-01-01T00:00:00.000Z', cancelled_at: null }] },
+      user_subscriptions: { data: [{ id: 'legacy_cancelled', user_id: 'user-1', tier: 'premium', is_active: true, payment_provider: 'trial', renews_at: null, cancelled_at: '2026-06-01T00:00:00.000Z' }] },
     });
     const service = makeService(db);
 
@@ -1078,6 +1080,11 @@ describe('BillingService', () => {
       is_active: true,
       payment_provider: 'stripe',
       renews_at: '2999-01-01T00:00:00.000Z',
+      cancelled_at: null,
+    });
+    expect(db.state.users[0]).toMatchObject({
+      id: 'user-1',
+      subscription_tier: 'pro',
     });
   });
 

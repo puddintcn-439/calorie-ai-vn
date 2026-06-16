@@ -145,8 +145,8 @@ describe('AdminService users list filters', () => {
   it('filters free users including users without subscriptions', async () => {
     const result = await makeUsersService().getUsers({ plan: 'free' });
 
-    expect(result.total).toBe(4);
-    expect(result.users.map((user) => user.id)).toEqual(['u-free-none', 'u-free-sub', 'u-inactive-premium', 'u-cancelled-pro']);
+    expect(result.total).toBe(3);
+    expect(result.users.map((user) => user.id)).toEqual(['u-free-none', 'u-free-sub', 'u-inactive-premium']);
     expect(result.users.every((user) => user.plan_tier === 'free')).toBe(true);
   });
 
@@ -176,6 +176,17 @@ describe('AdminService users list filters', () => {
     });
   });
 
+  it('filters cancelled users separately from free users', async () => {
+    const result = await makeUsersService().getUsers({ plan: 'cancelled' });
+
+    expect(result.total).toBe(1);
+    expect(result.users[0]).toMatchObject({
+      id: 'u-cancelled-pro',
+      plan_tier: 'free',
+      subscription_status: 'cancelled',
+    });
+  });
+
   it('combines search and plan filters before counting', async () => {
     const result = await makeUsersService().getUsers({ search: 'premium', plan: 'premium' });
 
@@ -194,7 +205,7 @@ describe('AdminService users list filters', () => {
     const result = await makeUsersService().getUsers({ plan: 'free', page: 1, page_size: 1 });
 
     expect(result.page_size).toBe(1);
-    expect(result.total).toBe(4);
+    expect(result.total).toBe(3);
     expect(result.users).toHaveLength(1);
   });
 

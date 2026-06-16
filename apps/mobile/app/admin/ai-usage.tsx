@@ -53,14 +53,14 @@ function toNumber(value: any) {
 }
 
 function StatusBar({ label, value, max, color }: { label: string; value: number; max: number; color: string }) {
-  const width = max > 0 ? Math.max(4, Math.min(100, (value / max) * 100)) : 0;
+  const width = max > 0 && value > 0 ? Math.max(4, Math.min(100, (value / max) * 100)) : 0;
   return (
     <View style={styles.statusRow}>
       <View style={styles.statusHeader}>
         <Text style={styles.statusLabel}>{label}</Text>
         <Text style={styles.statusValue}>{formatNumber(value)}</Text>
       </View>
-      <View style={styles.track}>{max > 0 ? <View style={[styles.bar, { width: `${width}%`, backgroundColor: color }]} /> : null}</View>
+      <View style={styles.track}>{width > 0 ? <View style={[styles.bar, { width: `${width}%`, backgroundColor: color }]} /> : null}</View>
     </View>
   );
 }
@@ -112,6 +112,7 @@ export default function AdminAiUsageScreen() {
           <View style={adminStyles.metricGrid}>
             <AdminMetricCard label="Total requests" value={formatNumber(summary.total_requests)} helper={`${windowDays}d window`} tone="ai" />
             <AdminMetricCard label="Estimated cost" value={formatUsd(summary.estimated_cost_usd)} helper="Provider spend estimate" tone="warning" />
+            <AdminMetricCard label="Reserved" value={formatNumber(summary.total_reserved)} helper="Reserved but not finalized" tone={toNumber(summary.total_reserved) > 0 ? 'warning' : 'neutral'} />
             <AdminMetricCard label="Success" value={formatNumber(summary.total_success)} helper="Completed calls" tone="success" />
             <AdminMetricCard label="Fallback" value={formatNumber(summary.total_fallback)} helper="Fallback path used" tone="warning" />
             <AdminMetricCard label="Failed" value={formatNumber(summary.total_failed)} helper="Provider/app failures" tone={toNumber(summary.total_failed) > 0 ? 'danger' : 'neutral'} />
@@ -120,10 +121,11 @@ export default function AdminAiUsageScreen() {
 
           <AdminToneCard title="Status mix" subtitle="Production signal for success, fallback, failed, and blocked requests." tone="ai">
             <View style={styles.statusGrid}>
-              <StatusBar label="Success" value={toNumber(summary.total_success)} max={Math.max(toNumber(summary.total_success), toNumber(summary.total_fallback), toNumber(summary.total_failed), toNumber(summary.total_blocked))} color={adminChrome.mint} />
-              <StatusBar label="Fallback" value={toNumber(summary.total_fallback)} max={Math.max(toNumber(summary.total_success), toNumber(summary.total_fallback), toNumber(summary.total_failed), toNumber(summary.total_blocked))} color={adminChrome.amber} />
-              <StatusBar label="Failed" value={toNumber(summary.total_failed)} max={Math.max(toNumber(summary.total_success), toNumber(summary.total_fallback), toNumber(summary.total_failed), toNumber(summary.total_blocked))} color={adminChrome.rose} />
-              <StatusBar label="Blocked" value={toNumber(summary.total_blocked)} max={Math.max(toNumber(summary.total_success), toNumber(summary.total_fallback), toNumber(summary.total_failed), toNumber(summary.total_blocked))} color={adminChrome.purple} />
+              <StatusBar label="Reserved" value={toNumber(summary.total_reserved)} max={Math.max(toNumber(summary.total_reserved), toNumber(summary.total_success), toNumber(summary.total_fallback), toNumber(summary.total_failed), toNumber(summary.total_blocked))} color={adminChrome.amber} />
+              <StatusBar label="Success" value={toNumber(summary.total_success)} max={Math.max(toNumber(summary.total_reserved), toNumber(summary.total_success), toNumber(summary.total_fallback), toNumber(summary.total_failed), toNumber(summary.total_blocked))} color={adminChrome.mint} />
+              <StatusBar label="Fallback" value={toNumber(summary.total_fallback)} max={Math.max(toNumber(summary.total_reserved), toNumber(summary.total_success), toNumber(summary.total_fallback), toNumber(summary.total_failed), toNumber(summary.total_blocked))} color={adminChrome.blue} />
+              <StatusBar label="Failed" value={toNumber(summary.total_failed)} max={Math.max(toNumber(summary.total_reserved), toNumber(summary.total_success), toNumber(summary.total_fallback), toNumber(summary.total_failed), toNumber(summary.total_blocked))} color={adminChrome.rose} />
+              <StatusBar label="Blocked" value={toNumber(summary.total_blocked)} max={Math.max(toNumber(summary.total_reserved), toNumber(summary.total_success), toNumber(summary.total_fallback), toNumber(summary.total_failed), toNumber(summary.total_blocked))} color={adminChrome.purple} />
             </View>
           </AdminToneCard>
 
