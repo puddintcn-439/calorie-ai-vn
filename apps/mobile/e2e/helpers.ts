@@ -6,6 +6,8 @@ export async function gotoApp(page: Page, path: string) {
 
 export async function setAuthToken(page: Page, token = 'test-token', userId = 'user-1') {
   await page.addInitScript(({ token: authToken, userId: authUserId }) => {
+    sessionStorage.setItem('auth_token', authToken);
+    sessionStorage.setItem('user_id', authUserId);
     localStorage.setItem('auth_token', authToken);
     localStorage.setItem('user_id', authUserId);
   }, { token, userId });

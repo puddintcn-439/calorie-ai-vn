@@ -1,5 +1,6 @@
-import React, { ReactNode, useEffect, useRef } from 'react';
+import React, { ReactNode, useEffect, useRef, useState } from 'react';
 import {
+  AccessibilityInfo,
   Animated,
   Easing,
   KeyboardAvoidingView,
@@ -82,9 +83,10 @@ export function ScreenShell({
   return (
     <LinearGradient
       colors={[colors.bgTop, colors.bgMid, colors.surfaceAlt, colors.bgBottom]}
-      locations={[0, 0.38, 0.72, 1]}
+      locations={[0, 0.34, 0.7, 1]}
       style={styles.gradient}
     >
+      <AmbientBackdrop />
       <SafeAreaView style={styles.safeArea}>
         <KeyboardAvoidingView
           style={styles.keyboardAvoider}
@@ -116,11 +118,103 @@ export function ScreenShell({
   );
 }
 
-export function SurfaceCard({ children, style }: { children: ReactNode; style?: StyleProp<ViewStyle> }) {
+function AmbientBackdrop() {
+  const drift = useRef(new Animated.Value(0)).current;
+  const [reduceMotion, setReduceMotion] = useState(false);
+  const { colors, mode } = useAppTheme();
+  const useNativeDriver = Platform.OS !== 'web';
+
+  useEffect(() => {
+    AccessibilityInfo.isReduceMotionEnabled().then(setReduceMotion);
+    const subscription = AccessibilityInfo.addEventListener('reduceMotionChanged', setReduceMotion);
+    return () => subscription.remove();
+  }, []);
+
+  useEffect(() => {
+    if (reduceMotion) return undefined;
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(drift, {
+          toValue: 1,
+          duration: 9000,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver,
+        }),
+        Animated.timing(drift, {
+          toValue: 0,
+          duration: 9000,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver,
+        }),
+      ]),
+    );
+    animation.start();
+    return () => animation.stop();
+  }, [drift, reduceMotion, useNativeDriver]);
+
+  return (
+    <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+      <Animated.View
+        style={[
+          styles.ambientOrb,
+          styles.ambientOrbTop,
+          {
+            backgroundColor: mode === 'dark' ? colors.accentMint : '#d9efa9',
+            opacity: mode === 'dark' ? 0.09 : 0.26,
+            transform: [
+              { translateX: drift.interpolate({ inputRange: [0, 1], outputRange: [-18, 28] }) },
+              { translateY: drift.interpolate({ inputRange: [0, 1], outputRange: [-8, 34] }) },
+              { scale: drift.interpolate({ inputRange: [0, 1], outputRange: [1, 1.14] }) },
+            ],
+          },
+        ]}
+      />
+      <Animated.View
+        style={[
+          styles.ambientOrb,
+          styles.ambientOrbBottom,
+          {
+            backgroundColor: colors.accentCyan,
+            opacity: mode === 'dark' ? 0.08 : 0.12,
+            transform: [
+              { translateX: drift.interpolate({ inputRange: [0, 1], outputRange: [28, -24] }) },
+              { translateY: drift.interpolate({ inputRange: [0, 1], outputRange: [20, -18] }) },
+              { scale: drift.interpolate({ inputRange: [0, 1], outputRange: [1.08, 0.96] }) },
+            ],
+          },
+        ]}
+      />
+      <View
+        style={[
+          styles.ambientGrid,
+          Platform.OS === 'web'
+            ? ({
+                backgroundImage: `linear-gradient(${colors.borderSubtle}45 1px, transparent 1px), linear-gradient(90deg, ${colors.borderSubtle}45 1px, transparent 1px)`,
+                backgroundSize: '32px 32px',
+                maskImage: 'linear-gradient(to bottom, rgba(0,0,0,.35), transparent 58%)',
+              } as any)
+            : null,
+        ]}
+      />
+    </View>
+  );
+}
+
+export function SurfaceCard({
+  children,
+  style,
+  revealDelay = 0,
+}: {
+  children: ReactNode;
+  style?: StyleProp<ViewStyle>;
+  revealDelay?: number;
+}) {
   const { width } = useWindowDimensions();
   const isCompact = width < 480;
   const fade = useRef(new Animated.Value(0)).current;
   const scale = useRef(new Animated.Value(0.98)).current;
+  const lift = useRef(new Animated.Value(0)).current;
+  const [spotlight, setSpotlight] = useState({ x: 50, y: 0, visible: false });
   const useNativeDriver = Platform.OS !== 'web';
   const { colors, radii } = useAppTheme();
 
@@ -129,41 +223,89 @@ export function SurfaceCard({ children, style }: { children: ReactNode; style?: 
       Animated.timing(fade, {
         toValue: 1,
         duration: 280,
+        delay: revealDelay,
         easing: Easing.out(Easing.quad),
         useNativeDriver,
       }),
       Animated.timing(scale, {
         toValue: 1,
         duration: 320,
+        delay: revealDelay,
         easing: Easing.out(Easing.quad),
         useNativeDriver,
       }),
     ]).start();
-  }, [fade, scale]);
+  }, [fade, revealDelay, scale, useNativeDriver]);
+
+  const setHovered = (hovered: boolean) => {
+    setSpotlight((current) => ({ ...current, visible: hovered }));
+    Animated.spring(lift, {
+      toValue: hovered ? -3 : 0,
+      speed: 22,
+      bounciness: 4,
+      useNativeDriver,
+    }).start();
+  };
+
+  const pointerProps = Platform.OS === 'web'
+    ? ({
+        onPointerEnter: () => setHovered(true),
+        onPointerLeave: () => setHovered(false),
+        onPointerMove: (event: any) => {
+          const rect = event.currentTarget?.getBoundingClientRect?.();
+          if (!rect) return;
+          setSpotlight({
+            x: ((event.clientX - rect.left) / rect.width) * 100,
+            y: ((event.clientY - rect.top) / rect.height) * 100,
+            visible: true,
+          });
+        },
+      } as any)
+    : {};
 
   return (
     <Animated.View
+      {...pointerProps}
       style={[
         {
           backgroundColor: colors.surface,
           borderRadius: radii.xl,
           borderWidth: 1,
           borderColor: colors.borderSubtle,
-          padding: isCompact ? 16 : 20,
+          padding: 16,
           ...(Platform.OS === 'web'
-            ? { boxShadow: `0px 16px 34px ${colors.shadow}18` }
+            ? {
+                boxShadow: `0px 22px 50px ${colors.shadow}16, inset 0 1px 0 rgba(255,255,255,.48)`,
+                transitionProperty: 'border-color, box-shadow',
+                transitionDuration: '240ms',
+              }
             : {
                 shadowColor: colors.shadow,
-                shadowOpacity: 0.1,
-                shadowRadius: isCompact ? 12 : 18,
-                shadowOffset: { width: 0, height: 10 },
+                shadowOpacity: 0.12,
+                shadowRadius: isCompact ? 16 : 22,
+                shadowOffset: { width: 0, height: 14 },
               }),
-          elevation: isCompact ? 2 : 3,
+          elevation: isCompact ? 3 : 5,
         },
         style,
-        { opacity: fade, transform: [{ scale }] },
+        { opacity: fade, transform: [{ translateY: lift }, { scale }] },
       ]}
     >
+      {Platform.OS === 'web' ? (
+        <View
+          pointerEvents="none"
+          style={[
+            StyleSheet.absoluteFill,
+            {
+              borderRadius: radii.xl,
+              opacity: spotlight.visible ? 1 : 0,
+              backgroundImage: `radial-gradient(360px circle at ${spotlight.x}% ${spotlight.y}%, ${colors.accentMint}24, transparent 64%)`,
+              transitionProperty: 'opacity',
+              transitionDuration: '220ms',
+            } as any,
+          ]}
+        />
+      ) : null}
       {children}
     </Animated.View>
   );
@@ -238,12 +380,35 @@ export function SkeletonBlock({
 }
 
 const styles = StyleSheet.create({
-  gradient: { flex: 1 },
-  safeArea: { flex: 1 },
+  gradient: { flex: 1, overflow: 'hidden' },
+  ambientOrb: {
+    position: 'absolute',
+    width: 330,
+    height: 330,
+    borderRadius: 165,
+    ...(Platform.OS === 'web' ? ({ filter: 'blur(44px)' } as any) : null),
+  },
+  ambientOrbTop: {
+    top: -180,
+    right: -140,
+  },
+  ambientOrbBottom: {
+    bottom: -190,
+    left: -160,
+  },
+  ambientGrid: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    opacity: 0.35,
+  },
+  safeArea: { flex: 1, zIndex: 1 },
   keyboardAvoider: { flex: 1 },
   scrollContent: { padding: 20, rowGap: 16 },
   scrollContentCompact: { paddingHorizontal: 16, paddingTop: 16 },
-  scrollContentDesktop: { paddingHorizontal: 28, paddingTop: 24 },
+  scrollContentDesktop: { paddingHorizontal: 20, paddingTop: 24 },
   noScrollContent: { flex: 1, paddingHorizontal: 20, paddingTop: 16 },
   noScrollContentCompact: { paddingHorizontal: 16 },
   noScrollContentDesktop: {},
@@ -256,23 +421,25 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
   },
   eyebrow: {
-    fontSize: 12,
-    letterSpacing: 0.7,
-    fontWeight: '700',
-    marginBottom: 9,
+    fontSize: 11,
+    letterSpacing: 1.15,
+    fontWeight: '800',
+    marginBottom: 10,
+    textTransform: 'uppercase',
   },
   heroTitle: {
-    fontSize: 33,
-    lineHeight: 38,
+    fontSize: 38,
+    lineHeight: 41,
     fontWeight: '900',
-    marginBottom: 12,
+    letterSpacing: -1.25,
+    marginBottom: 13,
   },
   heroTitleMobile: {
-    fontSize: 27,
-    lineHeight: 32,
+    fontSize: 31,
+    lineHeight: 34,
   },
   bodyText: {
     fontSize: 15,
-    lineHeight: 23,
+    lineHeight: 24,
   },
 });

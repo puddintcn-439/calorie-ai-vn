@@ -104,7 +104,7 @@ function bodyFor(args: {
     return localized(locale, 'Bữa tới chỉ cần thêm một nguồn đạm rõ ràng trước, chưa cần tối ưu toàn bộ khẩu phần.', 'For the next meal, add one clear protein source first. No need to optimize the whole plate.');
   }
   if (interventionType === 'meal_logging') {
-    return localized(locale, 'Dữ liệu log đang hụt. Log bữa gần nhất, kể cả ước lượng thô, sẽ giúp Coach kéo lại kế hoạch.', 'Logging is slipping. Log the nearest meal, even roughly, so Coach can recover the plan.');
+  return localized(locale, 'Dữ liệu nhật ký đang hụt. Ghi bữa gần nhất, kể cả ước lượng thô, sẽ giúp Coach điều chỉnh lại kế hoạch.', 'Logging is slipping. Log the nearest meal, even roughly, so Coach can recover the plan.');
   }
   if (interventionType === 'plan_completion') {
     return localized(locale, 'Hoàn thành một task nhỏ trong Today Plan để biến forecast thành hành động thật.', 'Complete one small Today Plan task to turn the forecast into action.');

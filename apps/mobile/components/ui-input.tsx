@@ -21,7 +21,7 @@ interface UiInputProps extends TextInputProps {
 export function UiInput({ label, containerStyle, error, style, ...rest }: UiInputProps) {
   const [focused, setFocused] = useState(false);
   const borderAnim = useRef(new Animated.Value(0)).current;
-  const { colors, radii } = useAppTheme();
+  const { colors, radii, spacing } = useAppTheme();
   const { tx } = useI18n();
 
   const handleFocus = () => {
@@ -46,12 +46,12 @@ export function UiInput({ label, containerStyle, error, style, ...rest }: UiInpu
 
   const borderColor = borderAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [colors.borderSubtle, colors.accentMint],
+    outputRange: [colors.borderSubtle, colors.accentPrimary],
   });
 
   return (
-    <View style={[styles.wrapper, containerStyle]}>
-      {label ? <Text style={[styles.label, { color: colors.textSoft }]}>{label}</Text> : null}
+    <View style={[styles.wrapper, { marginBottom: spacing.md }, containerStyle]}>
+      {label ? <Text style={[styles.label, { color: colors.textSoft, marginBottom: 10 }]}>{label}</Text> : null}
       <Animated.View
         style={[
           styles.inputWrap,
@@ -72,7 +72,7 @@ export function UiInput({ label, containerStyle, error, style, ...rest }: UiInpu
           onBlur={handleBlur}
         />
       </Animated.View>
-      {error ? <Text style={[styles.error, { color: colors.danger }]}>{error}</Text> : null}
+      {error ? <Text accessibilityRole="alert" style={[styles.error, { color: colors.danger, marginTop: spacing.xxs }]}>{error}</Text> : null}
     </View>
   );
 }
@@ -85,25 +85,25 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 16,
     fontWeight: '700',
-    marginBottom: 7,
+    marginBottom: 10,
     letterSpacing: 0.2,
   },
   inputWrap: {
     borderWidth: 1,
     overflow: 'hidden',
-    minHeight: 52,
+    minHeight: 54,
     justifyContent: 'center',
   },
   input: {
     fontSize: 15,
     lineHeight: 20,
     paddingVertical: 14,
-    paddingHorizontal: 15,
+    paddingHorizontal: 17,
     textAlignVertical: 'center',
   },
   error: {
     fontSize: 12,
     lineHeight: 16,
-    marginTop: 6,
+    marginTop: 4,
   },
 });

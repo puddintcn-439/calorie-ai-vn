@@ -24,7 +24,14 @@ export function VisualHeroCard({
   return (
     <SurfaceCard style={[styles.card, wide && styles.cardWide, compact && styles.cardCompact, { backgroundColor: colors.surfaceLifted, borderColor: colors.borderSubtle }, style]}>
       <Image source={imageSource} style={[styles.image, wide && styles.imageWide, { backgroundColor: colors.surfaceAlt, opacity: mode === 'dark' ? 0.88 : 1 }, compact && styles.imageCompact]} resizeMode="cover" />
-      <View style={[styles.copy, wide && styles.copyWide, compact && styles.copyCompact]}>
+      <View
+        style={[
+          styles.copy,
+          { backgroundColor: colors.surfaceLifted, borderColor: colors.borderSubtle },
+          wide && styles.copyWide,
+          compact && styles.copyCompact,
+        ]}
+      >
         <Eyebrow>{eyebrow}</Eyebrow>
         <HeroTitle>{title}</HeroTitle>
         <BodyText style={styles.body}>{body}</BodyText>
@@ -56,18 +63,30 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   imageCompact: {
-    height: 126,
+    height: 158,
   },
   copy: {
     padding: 18,
+    marginHorizontal: 14,
+    marginTop: -34,
+    marginBottom: 14,
+    borderRadius: 20,
+    borderWidth: 1,
   },
   copyWide: {
     flex: 1,
     justifyContent: 'center',
     padding: 24,
+    marginHorizontal: 0,
+    marginVertical: 0,
+    borderWidth: 0,
+    borderRadius: 0,
   },
   copyCompact: {
-    padding: 16,
+    padding: 18,
+    marginHorizontal: 10,
+    marginTop: -30,
+    marginBottom: 10,
   },
   body: {
     maxWidth: 700,

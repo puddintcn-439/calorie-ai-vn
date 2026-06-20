@@ -92,20 +92,20 @@ export function EmptyState({
 const styles = StyleSheet.create({
   card: {
     alignItems: 'center',
-    paddingVertical: 22,
+    paddingVertical: 24,
   },
   compactCard: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 12,
-    gap: 14,
+    gap: 16,
   },
   image: {
     width: '100%',
     maxWidth: 560,
     aspectRatio: 16 / 7,
     alignSelf: 'center',
-    marginBottom: 14,
+    marginBottom: 16,
   },
   compactImage: {
     width: 86,

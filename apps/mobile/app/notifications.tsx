@@ -102,7 +102,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: theme.colors.bgBottom },
   content: { padding: 16, gap: 16 },
   header: { flexDirection: 'row', gap: 12, alignItems: 'flex-start' },
-  backButton: { width: 40, height: 40, borderRadius: 14, borderWidth: 1, borderColor: theme.colors.border, backgroundColor: theme.colors.surface, alignItems: 'center', justifyContent: 'center' },
+  backButton: { width: 48, height: 48, borderRadius: 16, borderWidth: 1, borderColor: theme.colors.border, backgroundColor: theme.colors.surface, alignItems: 'center', justifyContent: 'center' },
   headerText: { flex: 1, gap: 5 },
   eyebrow: { color: theme.colors.accentCyan, fontSize: 12, fontWeight: '900' },
   title: { color: theme.colors.text, fontSize: 28, fontWeight: '900' },

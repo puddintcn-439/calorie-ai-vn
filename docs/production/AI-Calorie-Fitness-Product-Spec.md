@@ -161,6 +161,18 @@ Flow: AI detect → map to nutrition DB → show top matches + confidence → us
 
 **Important**
 - Không để AI trực tiếp gán calories. AI chỉ cung cấp candidate names/portions/confidence.  
+
+### 8.1 Portion precision UX
+
+- Mọi món đã ghi phải có `quantity` và `estimated_grams`; giao diện hiển thị rõ khối lượng mỗi phần và tổng khối lượng.
+- Thành phần `PortionInput` được dùng chung cho sửa Nhật ký, kết quả AI và tìm món:
+  - nhập trực tiếp gram/ml;
+  - bước tăng/giảm 10 g;
+  - gợi ý nhanh 50 g, 100 g, 1 tô và 1 cái;
+  - vùng chạm tối thiểu 44 dp, bố cục theo lưới 8 pt.
+- Khi người dùng đổi khẩu phần, calories và macro được scale từ giá trị gốc theo tổng khối lượng mới. Không gọi AI lại chỉ để đổi gram.
+- Text/voice nhận diện các mẫu phổ biến như `200g`, `1 tô`, `1 cái`, `1 ly`. Nếu mô tả không có khẩu phần, ứng dụng yêu cầu người dùng xác nhận trước khi lưu.
+- Khẩu phần AI luôn là ước tính có thể chỉnh sửa; UI không trình bày con số như một phép đo tuyệt đối.
 - Lưu `confidence` và cho người dùng sửa trước khi lưu.  
 - Cache common meals and provide nearest DB lookup with fuzzy matching.
 

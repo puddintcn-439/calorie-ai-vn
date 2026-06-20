@@ -8,6 +8,7 @@ import { UiInput } from '../../components/ui-input';
 import { createThemedStyles, useAppTheme } from '../../components/theme';
 import { Text } from '../../components/i18n-text';
 import { Alert } from '../../components/i18n-alert';
+import { useI18n } from '../../components/i18n';
 
 const loginHeroImage = require('../../assets/images/scan-hero.jpg') as number;
 
@@ -17,11 +18,18 @@ export default function LoginScreen() {
   const isCompact = width < 480;
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
   const [loading, setLoading] = useState(false);
   const { login } = useAuthStore();
+  const { t } = useI18n();
 
   const handleLogin = async () => {
-    if (!email || !password) return;
+    const nextErrors: typeof errors = {};
+    if (!email.trim()) nextErrors.email = t('auth.validation.emailRequired');
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) nextErrors.email = t('auth.validation.emailInvalid');
+    if (!password) nextErrors.password = t('auth.validation.passwordRequired');
+    setErrors(nextErrors);
+    if (Object.keys(nextErrors).length > 0) return;
     setLoading(true);
     try {
       await login(email, password);
@@ -39,11 +47,6 @@ export default function LoginScreen() {
         <Eyebrow>auth.login.eyebrow</Eyebrow>
         <HeroTitle>auth.login.title</HeroTitle>
         <BodyText>auth.login.body</BodyText>
-        <View style={styles.badgeRow}>
-          <View style={styles.badge}><Text style={styles.badgeText} i18nKey="auth.login.photoScan" /></View>
-          <View style={styles.badge}><Text style={styles.badgeText} i18nKey="auth.login.vietnameseFood" /></View>
-          <View style={styles.badge}><Text style={styles.badgeText} i18nKey="auth.login.aiCoach" /></View>
-        </View>
       </View>
 
       <SurfaceCard style={styles.formCard}>
@@ -51,16 +54,26 @@ export default function LoginScreen() {
         <Text style={styles.subtitle} i18nKey="auth.login.subtitle" />
 
         <UiInput
+          label="auth.email.label"
           value={email}
-          onChangeText={setEmail}
+          onChangeText={(value) => {
+            setEmail(value);
+            if (errors.email) setErrors((current) => ({ ...current, email: undefined }));
+          }}
           placeholder="auth.email.placeholder"
+          error={errors.email}
           keyboardType="email-address"
           autoCapitalize="none"
         />
         <UiInput
+          label="auth.password.label"
           value={password}
-          onChangeText={setPassword}
+          onChangeText={(value) => {
+            setPassword(value);
+            if (errors.password) setErrors((current) => ({ ...current, password: undefined }));
+          }}
           placeholder="auth.password.placeholder"
+          error={errors.password}
           secureTextEntry
         />
 
@@ -72,28 +85,25 @@ export default function LoginScreen() {
   );
 }
 
-const styles = createThemedStyles((colors, radii) => ({
-  authScrollContent: { flexGrow: 1, justifyContent: 'center', paddingVertical: 18 },
+const styles = createThemedStyles((colors, radii, spacing) => ({
+  authScrollContent: { flexGrow: 1, justifyContent: 'center', paddingVertical: spacing.lg },
   centeredContent: { flex: 1, justifyContent: 'center', maxWidth: 560, alignSelf: 'center', width: '100%' },
   heroImage: {
     width: '100%',
     height: 150,
     borderRadius: radii.xl,
-    marginBottom: 18,
+    marginBottom: spacing.md,
     backgroundColor: colors.surfaceAlt,
     borderWidth: 1,
     borderColor: colors.borderStrong,
   },
   heroImageCompact: {
     height: 118,
-    marginBottom: 14,
+    marginBottom: spacing.md,
   },
-  heroBlock: { marginBottom: 16, paddingHorizontal: 2 },
-  badgeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 14 },
-  badge: { minHeight: 34, paddingHorizontal: 12, paddingVertical: 8, borderRadius: radii.lg, backgroundColor: colors.surfaceAlt, borderWidth: 1, borderColor: colors.border },
-  badgeText: { color: colors.textSoft, fontSize: 12, lineHeight: 16, fontWeight: '800' },
-  formCard: { width: '100%', padding: 22 },
-  sectionTitle: { color: colors.text, fontSize: 23, lineHeight: 29, fontWeight: '900', marginBottom: 6 },
-  subtitle: { color: colors.textMuted, marginBottom: 22, fontSize: 14, lineHeight: 21 },
-  submitBtn: { marginBottom: 10, marginTop: 6 },
+  heroBlock: { marginBottom: spacing.md },
+  formCard: { width: '100%', padding: spacing.md },
+  sectionTitle: { color: colors.text, fontSize: 23, lineHeight: 29, fontWeight: '900', marginBottom: spacing.xs },
+  subtitle: { color: colors.textMuted, marginBottom: spacing.lg, fontSize: 14, lineHeight: 21 },
+  submitBtn: { marginBottom: spacing.xs, marginTop: spacing.xs },
 }));
