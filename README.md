@@ -6,7 +6,7 @@ AI calorie and nutrition tracker with fast food logging, barcode lookup, activit
 
 | Layer | Tech |
 | --- | --- |
-| Mobile | React Native, Expo SDK 54, Expo Router |
+| Mobile | React Native, Expo SDK 56, Expo Router |
 | State | Zustand |
 | Backend | NestJS, Passport JWT |
 | Database | Supabase PostgreSQL, Auth, Storage |
@@ -23,7 +23,8 @@ calorie-ai-vn/
 ├── packages/
 │   └── types/           # Shared TypeScript interfaces
 ├── supabase/
-│   └── migrations/      # Database schema
+│   ├── migrations/          # Reviewed incremental production migrations
+│   └── migrations.disabled/ # Baseline/optional SQL kept out of automatic execution
 ├── docs/                # Build, QA, production, and delivery notes
 └── k8s/
     └── prod/            # Production Kubernetes manifests
@@ -69,7 +70,15 @@ cp .env.example apps/mobile/.env
 
 ### Database
 
-Run Supabase migrations in order from `supabase/migrations/`. For reliable scan/search UX, seed both global staples and localized foods; barcode fallback uses Open Food Facts and caches normalized products locally.
+Production schema changes must be applied from reviewed SQL files. `supabase/migrations/` currently contains incremental migrations, while baseline and optional migrations are retained in `supabase/migrations.disabled/` and are not safe to execute blindly.
+
+The command below is only for the disposable PostgreSQL database used by smoke tests. It is not a production migration command:
+
+```bash
+npm run db:bootstrap:smoke
+```
+
+Before applying production changes, compare the live Supabase schema with [docs/production/supabase-schema-gap-checklist.md](docs/production/supabase-schema-gap-checklist.md), back up the database, and apply only the reviewed missing migrations. For reliable scan/search UX, seed both global staples and localized foods; barcode fallback uses Open Food Facts and caches normalized products locally.
 
 ### Start Dev Servers
 

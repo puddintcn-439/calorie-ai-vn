@@ -92,7 +92,7 @@ Optional tables (for features):
 ### Deploy Backend
 - [ ] Staging server provisioned (DigitalOcean, Railway, AWS, etc.)
 - [ ] Environment variables loaded from secrets manager
-- [ ] Migrations applied: `npm run migrate` (or manual Supabase apply)
+- [ ] Reviewed missing Supabase SQL migrations applied manually or through the approved deployment tooling. Do not use `npm run db:bootstrap:smoke` against staging or production.
 - [ ] Service started: `npm start` (verify on port 3000)
 - [ ] Health check passes: `curl https://staging-api.calorieai.app/health`
 - [ ] Endpoints accessible with auth token
@@ -233,7 +233,7 @@ Optional tables (for features):
 
 ### If Mobile Build Fails
 - Clear cache: `rm -rf node_modules package-lock.json && npm install`
-- Check Expo SDK compatibility (currently 54.0.34)
+- Check Expo SDK compatibility (currently Expo SDK 56)
 - Verify TypeScript strict mode hasn't caught new errors
 
 ---

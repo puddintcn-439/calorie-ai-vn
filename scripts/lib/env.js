@@ -16,22 +16,12 @@ function getSupabaseDbUrl() {
   return requireEnv('SUPABASE_DB_URL', ['DATABASE_URL']);
 }
 
-function getSupabaseUrl() {
-  return requireEnv('SUPABASE_URL');
-}
-
-function getSupabaseServiceKey() {
-  return requireEnv('SUPABASE_SERVICE_KEY');
-}
-
 function redactConnectionString(value) {
   return value.replace(/\/\/([^:@/]+)(?::[^@/]*)?@/, '//<user>:<password>@');
 }
 
 module.exports = {
   getSupabaseDbUrl,
-  getSupabaseUrl,
-  getSupabaseServiceKey,
   redactConnectionString,
   requireEnv,
 };

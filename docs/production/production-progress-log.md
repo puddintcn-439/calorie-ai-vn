@@ -3,6 +3,26 @@
 Use one new entry for each production readiness review or milestone.
 
 ## Review Entry
+- Timestamp: 2026-06-21T00:00:00Z
+- Scope: Documentation and CI migration cleanup
+- Reviewer: Codex
+- Gate Status: CONDITIONAL NO-GO
+
+### Completed Actions
+- Updated README from Expo SDK 54 to Expo SDK 56.
+- Documented the split between active incremental migrations and disabled baseline/optional SQL.
+- Renamed the CI-only database command to `db:bootstrap:smoke` and removed the ambiguous production-like `migrate` command.
+- Removed the obsolete manual migration workflow and two unreferenced legacy scripts.
+- Recorded current automated evidence: 418 backend tests (12 skipped), 36 Playwright mobile-web tests, clean TypeScript checks, and passing Docker smoke CI.
+
+### Remaining Risks
+- The live Supabase schema still requires an environment-specific audit; repository contents alone cannot prove deployment state.
+- Native-device and store-distribution QA remain external.
+
+### Decision
+- Keep the readiness score at 72% until a full cross-domain reassessment is completed.
+
+## Review Entry
 - Timestamp: 2026-05-19T00:00:00Z
 - Scope: Readiness documentation normalization
 - Reviewer: Codex
