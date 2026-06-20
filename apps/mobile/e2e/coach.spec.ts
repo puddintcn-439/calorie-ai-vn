@@ -5,6 +5,7 @@ import {
   gotoApp,
   jsonResponse,
   setAuthToken,
+  setLocale,
 } from './helpers';
 
 test.describe('Coach flows', () => {
@@ -13,7 +14,7 @@ test.describe('Coach flows', () => {
     let coachRequestBody: any = null;
 
     await setAuthToken(page);
-    await page.addInitScript(() => window.localStorage.setItem('app_locale', 'en'));
+    await setLocale(page);
     await page.route('**/*', async (route) => {
       const request = route.request();
       const url = new URL(request.url());

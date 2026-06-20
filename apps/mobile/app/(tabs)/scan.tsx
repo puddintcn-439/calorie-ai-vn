@@ -192,7 +192,7 @@ export default function ScanScreen() {
   const showStickyResultActions = Boolean(scanResult && !isScanning && currentItems.length);
 
   const getQuotaByFeature = useCallback((feature: AiQuotaRemainingItem['feature']) => {
-    return quotaSummary?.quotas.find((item) => item.feature === feature) ?? null;
+    return quotaSummary?.quotas?.find((item) => item.feature === feature) ?? null;
   }, [quotaSummary]);
 
   const isLowQuota = (item: AiQuotaRemainingItem | null): boolean => {

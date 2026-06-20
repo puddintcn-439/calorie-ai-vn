@@ -32,7 +32,7 @@ test.describe('Auth flows', () => {
     expect(protectedRequests).toEqual([]);
   });
 
-  test('register stores token in localStorage', async ({ page }) => {
+  test('register stores token in web auth storage', async ({ page }) => {
     // Prevent app startup from hitting a real backend for profile checks
     await page.route('**/user/profile', async (route) => {
       await route.fulfill({ status: 401, contentType: 'application/json', body: JSON.stringify({ message: 'unauth' }) });
@@ -53,21 +53,26 @@ test.describe('Auth flows', () => {
           body: JSON.stringify({ email: 'test@example.com', password: 'password123', full_name: 'Test User' }),
         });
         const data = await res.json();
-        localStorage.setItem('auth_token', data.access_token);
-        localStorage.setItem('user_id', data.user_id);
+        sessionStorage.setItem('auth_token', data.access_token);
+        sessionStorage.setItem('user_id', data.user_id);
       });
 
-      // wait briefly for storage to settle
-      await page.waitForTimeout(100);
-
-      const token = await page.evaluate(() => localStorage.getItem('auth_token'));
-      expect(token).toBe('reg-token');
+      await expect.poll(() => page.evaluate(() => sessionStorage.getItem('auth_token'))).toBe('reg-token');
   });
 
-  test('login stores token in localStorage', async ({ page }) => {
-    // Prevent app startup from hitting a real backend for profile checks
+  test('login stores token in web auth storage', async ({ page }) => {
+    await page.route('**/*', async (route) => {
+      const url = new URL(route.request().url());
+      if (url.port === '3000') {
+        await route.fulfill(jsonResponse({}));
+        return;
+      }
+      await route.continue();
+    });
+
+    // Keep the authenticated landing page from invalidating the freshly stored token.
     await page.route('**/user/profile', async (route) => {
-      await route.fulfill({ status: 401, contentType: 'application/json', body: JSON.stringify({ message: 'unauth' }) });
+      await route.fulfill(jsonResponse({ id: 'user-1', email: 'test@example.com' }));
     });
 
     await page.route('**/auth/login', async (route) => {
@@ -81,9 +86,6 @@ test.describe('Auth flows', () => {
 
     await page.getByRole('button', { name: 'Đăng nhập' }).click();
 
-    await page.waitForTimeout(300);
-
-    const token = await page.evaluate(() => localStorage.getItem('auth_token'));
-    expect(token).toBe('login-token');
+    await expect.poll(() => page.evaluate(() => sessionStorage.getItem('auth_token'))).toBe('login-token');
   });
 });

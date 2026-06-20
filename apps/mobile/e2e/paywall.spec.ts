@@ -5,6 +5,7 @@ import {
   gotoApp,
   jsonResponse,
   setAuthToken,
+  setLocale,
 } from './helpers';
 
 test.describe('Paywall flows', () => {
@@ -12,7 +13,7 @@ test.describe('Paywall flows', () => {
     const consoleMessages = collectImportantConsoleMessages(page);
 
     await setAuthToken(page);
-    await page.addInitScript(() => window.localStorage.setItem('app_locale', 'en'));
+    await setLocale(page);
     await page.route('**/*', async (route) => {
       const request = route.request();
       const url = new URL(request.url());
