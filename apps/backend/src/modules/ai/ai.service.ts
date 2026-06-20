@@ -1294,16 +1294,32 @@ Follow the Dynamic Intervention Decision as the action policy. If mode is silent
           }
         }
 
+        const raw = debugPath
+          ? fs.readFileSync(debugPath, 'utf8')
+          : JSON.stringify({
+              items: [{
+                name: 'Simulated meal',
+                name_vi: 'Bữa ăn mô phỏng',
+                category: 'other',
+                quantity: 1,
+                unit: 'serving',
+                estimated_grams: 250,
+                calories: 420,
+                protein_g: 24,
+                carbs_g: 48,
+                fat_g: 14,
+                confidence: 0.9,
+              }],
+            });
+        const simulatedMs = Number(this.config.get('AI_SIMULATED_LATENCY_MS') ?? 8200);
+        await new Promise((r) => setTimeout(r, simulatedMs));
+        const fakeResult = { response: { text: () => raw } };
         if (debugPath) {
-          const raw = fs.readFileSync(debugPath, 'utf8');
-          const simulatedMs = Number(this.config.get('AI_SIMULATED_LATENCY_MS') ?? 8200);
-          await new Promise((r) => setTimeout(r, simulatedMs));
-          const fakeResult = { response: { text: () => raw } };
           this.logger.debug(`[AI-PROVIDER] ${opName} simulated duration_ms=${simulatedMs} debugPath=${debugPath}`);
-          return { result: fakeResult, durationMs: simulatedMs };
+        } else {
+          this.logger.debug(`[AI-PROVIDER] ${opName} simulated duration_ms=${simulatedMs} using built-in fixture`);
         }
-
-        this.logger.warn('[AiService] AI_SIMULATE_LOCAL_RESPONSE=true but no tmp/ai_debug_response.json found; falling back to real provider');
+        return { result: fakeResult, durationMs: simulatedMs };
       }
     } catch (e) {
       this.logger.warn('AI simulation failed, falling back to real provider', e as Error);

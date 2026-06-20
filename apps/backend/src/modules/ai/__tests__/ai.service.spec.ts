@@ -190,6 +190,26 @@ describe('AiService.scanImage', () => {
 // scanText
 // ─────────────────────────────────────────────────────────────────────────────
 describe('AiService.scanText', () => {
+  it('uses a built-in fixture when simulation is enabled without a debug file', async () => {
+    const baseConfig = makeConfig();
+    const baseGet = baseConfig.get.bind(baseConfig);
+    const config = {
+      ...baseConfig,
+      get: jest.fn((key: string) => {
+        if (key === 'AI_SIMULATE_LOCAL_RESPONSE') return 'true';
+        if (key === 'AI_SIMULATED_LATENCY_MS') return '0';
+        return baseGet(key);
+      }),
+    } as unknown as ConfigService;
+
+    const result = await new AiService(config, makeMetrics()).scanText('smoke test from CI');
+
+    expect(result.success).toBe(true);
+    expect(result.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: 'Simulated meal', calories: 420 }),
+    ]));
+  });
+
   it('returns parsed scan result for text input', async () => {
     const rawJson = JSON.stringify({ items: [] });
     const { GoogleGenerativeAI } = require('@google/generative-ai');
