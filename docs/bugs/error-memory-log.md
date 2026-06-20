@@ -435,6 +435,8 @@ Use this file to store compact lessons from real failures after they are fixed.
 - Prevention Rule: Developers testing LLM endpoints locally must either provide a valid `GEMINI_API_KEY` or enable `AI_SIMULATE_LOCAL_RESPONSE=true` in local env; CI should mock provider calls for deterministic tests.
 - Files: `apps/backend/src/modules/ai/ai.service.ts`, `apps/backend/.env`, `tmp/ai_debug_response.json`
 
+> Update 2026-06-21: simulation mode now has a built-in valid fixture. `tmp/ai_debug_response.json` remains an optional override and is no longer required for CI/local simulation.
+
 ## 2026-05-11 - AI scan/refine returned 500 when Gemini quota was exhausted
 
 - Scope: backend AI + mobile web UX

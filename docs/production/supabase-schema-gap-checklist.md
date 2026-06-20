@@ -1,97 +1,75 @@
-# Supabase Schema Gap Checklist
+# Supabase Schema Audit Checklist
 
-This checklist reflects the current Supabase project state shown in the dashboard and the repository migrations.
+Updated: 2026-06-21
 
-## Current Project State
+This document describes how to audit schema drift safely. It does not claim to know the current live Supabase table list; that must be verified against the target project at deployment time.
 
-The current Supabase project currently shows only these public tables in the UI:
+## Repository migration layout
 
-- `activity_logs`
-- `food_logs`
-- `foods`
-- `saved_meals`
-- `users`
+- `supabase/migrations/` contains reviewed incremental migrations currently tracked for production evolution (`017` and newer).
+- `supabase/migrations.disabled/` contains baseline, legacy, seed-heavy, or optional migrations. Files in this directory are not automatically applied.
+- `npm run db:bootstrap:smoke` creates only the minimal schema needed by disposable CI/local smoke databases. Never use it as a production migration command.
+- Docker Compose starts a clean PostgreSQL service and does not mount repository SQL into `/docker-entrypoint-initdb.d`.
 
-That means the database is **not yet fully migrated** to match the repository schema.
+## Pre-deployment audit
 
-## Missing Tables / Objects
+1. Export or inspect the target Supabase schema.
+2. Confirm a restorable backup exists.
+3. Compare required tables, columns, indexes, constraints, functions, triggers, and RLS policies with the reviewed SQL.
+4. Select only migrations missing from the target environment.
+5. Review dependencies such as `public.users`, Supabase `auth` functions, and extensions before execution.
+6. Apply migrations in a transaction where supported.
+7. Record the migration names, execution time, operator, and rollback plan.
 
-The following tables exist in the repository migrations but are not visible in the current Supabase project table list:
+## Core feature objects to verify
 
-- `reminder_preferences` — migration: `supabase/migrations/005_reminders.sql`
-- `correction_events` — migration: `supabase/migrations/004_corrections.sql`
-- `user_subscriptions` — migration: `supabase/migrations/006_subscriptions.sql`
-- `user_context_events` — migration: `supabase/migrations/011_user_context_events.sql`
-- `logging_events` — migration: `supabase/migrations/010_logging_events.sql`
-- `push_notification_tokens` — migration: `supabase/migrations/009_push_tokens.sql`
-- `user_behavioral_patterns` — migration: `supabase/migrations/012_coach_insights.sql`
-- `user_coaching_insights` — migration: `supabase/migrations/012_coach_insights.sql`
-- `user_coaching_summaries` — migration: `supabase/migrations/012_coach_insights.sql`
-- `body_progress` — migration: `supabase/migrations/013_body_progress.sql`
-- `user_daily_roadmap` — migration: `supabase/migrations/014_user_daily_roadmap.sql`
-- `users.health_flags` column/constraint — migration: `supabase/migrations/015_user_health_flags.sql`
-- `foods.saturated_fat_g`, quality nutrient columns on `food_logs`, and saved-meal quality totals — migration: `supabase/migrations/016_food_quality_nutrients.sql`
-- `users.goal_plan` JSONB column/constraint — migration: `supabase/migrations/017_add_goal_plan_to_users.sql`
-- `user_activity_preferences` — migration: `supabase/migrations/018_user_activity_preferences.sql`
+- Identity/profile: `users`, profile target and goal-plan columns.
+- Nutrition: `foods`, `food_logs`, `saved_meals`, quality nutrient columns.
+- Activity: `activity_logs`, sync metadata, `user_activity_preferences`, `user_daily_roadmap`.
+- Coaching: insights, summaries, behavioral patterns, intervention memory.
+- Reminders: `reminder_preferences`, push tokens, reminder feedback and notification log.
+- Product telemetry: logging/correction events, forecast snapshots and calibration.
+- Billing/admin: subscriptions, billing ledger, payment issues, admin roles, audit log, and quota adjustments.
+- AI operations: usage ledger, quota concurrency guards, and credit budgets.
 
-## Existing Tables Already Present
+## Active incremental migrations
 
-- `users` — migration: `supabase/migrations/001_users.sql`
-- `foods` — migration: `supabase/migrations/002_foods.sql`
-- `food_logs` — migration: `supabase/migrations/003_logs.sql`
-- `saved_meals` — migration: `supabase/migrations/004_saved_meals.sql`
-- `activity_logs` — migration: `supabase/migrations/006_activities.sql` + `supabase/migrations/007_activity_sync.sql`
+Review `supabase/migrations/` in lexical order. At the time of this update it includes:
 
-## Impacted Features
+- `017_add_goal_plan_to_users.sql`
+- `018_push_reminder_hardening.sql`
+- `019_reminder_feedback_loop.sql`
+- `020_intervention_memory.sql`
+- `021_beta_measurement_kit.sql`
+- `022_forecast_calibration.sql`
+- `022_remove_scan_image_url_from_corrections.sql`
+- `023_ai_usage_ledger.sql`
+- `032_ai_usage_quota_concurrency_guard.sql`
+- `033_ai_usage_credit_budget.sql`
+- `034_admin_audit_log.sql`
+- `035_admin_roles_rbac.sql`
+- `036_admin_quota_adjustments.sql`
+- `037_normalize_subscription_consistency.sql`
 
-If the missing tables are not migrated, the following features are incomplete or will fail at runtime:
+The duplicate `022` prefix means filename sorting alone is not sufficient evidence of deployment order. Check the target schema and migration history before applying either file.
 
-- Reminder preferences and push scheduling
-- Correction telemetry
-- Login / scan funnel analytics
-- Subscription tier storage
-- Activity sync metadata
-- Behavioral coaching summaries and insights
-- Body progress tracking
-- Profile health guardrails and medical-review warnings
-- Today quality nutrient tracking for fiber, sodium, total sugar, and saturated fat
-- Backend-clamped personal goal plans
-- Profile activity preferences, Today movement recommendations, and Log quick completion from the user's preferred activities
+## Baseline and optional migrations
 
-## Recommended Migration Order
+Baseline files such as `001_users.sql`, food/log/activity tables, and several billing migrations currently live under `supabase/migrations.disabled/`. Their location is intentional: they may already exist in production or may require environment-specific review.
 
-Run in this order to minimize dependency issues:
+Do not move or batch-run these files merely to make a fresh local PostgreSQL instance initialize. CI uses the dedicated smoke bootstrap instead.
 
-1. `001_users.sql`
-2. `002_foods.sql`
-3. `003_logs.sql`
-4. `004_saved_meals.sql`
-5. `004_corrections.sql`
-6. `005_per_meal_targets.sql`
-7. `005_reminders.sql`
-8. `006_activities.sql`
-9. `006_subscriptions.sql`
-10. `007_activity_sync.sql`
-11. `008_food_canonical.sql`
-12. `009_push_tokens.sql`
-13. `010_logging_events.sql`
-14. `011_user_context_events.sql`
-15. `012_coach_insights.sql`
-16. `013_body_progress.sql`
-17. `014_user_daily_roadmap.sql`
-18. `015_user_health_flags.sql`
-19. `016_food_quality_nutrients.sql`
-20. `017_add_goal_plan_to_users.sql`
-21. `018_user_activity_preferences.sql`
+## Post-migration verification
 
-## Verification Steps After Migration
+- Backend `/health` reports a connected database.
+- Backend type-check, unit tests, and smoke tests pass.
+- RLS policies allow users to access only their own rows.
+- Service-role operations still work.
+- The mobile auth, logging, scan, reminders, coaching, and subscription flows pass against staging.
+- No unexpected tables or columns were dropped.
 
-- Confirm the Supabase table list and `users` columns match the repository migrations.
-- Confirm RLS policies exist for user-owned data.
-- Confirm the backend health endpoint still passes DB checks.
-- Run backend tests against the migrated database.
+## Rollback
 
-## Notes
-
-- The repository already contains the migration files; the missing step is applying them to this Supabase project.
-- If the project was created from a partial SQL import or if migrations were never run, this is a schema drift issue rather than a code issue.
+- Prefer restoring from the pre-migration backup for destructive failures.
+- For additive migrations, prepare explicit rollback SQL before deployment.
+- Never rely on `npm run db:bootstrap:smoke` for rollback or production repair.

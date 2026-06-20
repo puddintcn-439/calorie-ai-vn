@@ -1,18 +1,18 @@
 # Production Readiness Report
 
 ## Metadata
-- Date: 2026-05-19 (current source of truth)
+- Date: 2026-06-21 (current source of truth)
 - Scope: calorie-ai-vn (monorepo)
 - Target Go-Live: 2026-Q3 (conditional)
 - Reviewer: Codex
 
 ## Source-of-Truth Note
-- This file is the active production-readiness source of truth as of 2026-05-19.
+- This file is the active production-readiness source of truth as of 2026-06-21.
 - `docs/production/PRODUCTION_READINESS_FINAL.md` is superseded and must not be used as the primary readiness reference.
 - The superseded file previously claimed 92% readiness with future-dated sign-off dates (2026-05-26 / 2026-05-30), which are not valid current evidence on 2026-05-19.
 
 ## Executive Summary
-- Readiness Percentage: **72%**
+- Readiness Percentage: **72%** (score retained; a full cross-domain reassessment has not been performed)
 - Gate Status: **CONDITIONAL NO-GO** (near go-live; one remaining blocker is external dependency — EAS cloud build requires Expo account login, not a code issue)
 - Remaining Blockers:
   - Supabase schema in the live project is incomplete: only 5 public tables are visible in the dashboard, while the repo expects the full 16-table schema.
@@ -29,8 +29,8 @@
 | Reliability and Resilience | 15 | 3.0 | 9.0 | Live backend health returns healthy with DB connected; backend builds and 233 tests pass; health/readiness endpoints and smoke suite exist | No explicit retry/backoff policy for external AI and native sync dependencies; no failure-budget or chaos evidence |
 | Observability and Alerting | 12 | 3.5 | 8.4 | Request logging + structured metrics endpoint `/health/metrics` with counters for auth, AI scan, activity sync, HTTP 4xx/5xx; computed alert flags; monitoring-runbook.md with SLO thresholds, polling scripts, and per-incident runbooks; container health probes documented | No external alerting hook wired yet (Telegram/Slack/BetterStack); no production dashboard |
 | Performance and Capacity | 10 | 2.0 | 4.0 | App and API runnable; throttle exists for AI surfaces | No load testing, capacity forecast, or latency SLO documentation |
-| CI/CD and Release Safety | 10 | 4.0 | 8.0 | GitHub Actions CI fixed (coverage gate, smoke tests with real Postgres service); deploy.yml has pre-deploy smoke, post-deploy health check loop (30s/6 attempts), rollback step, and GitHub deployment status record; Dockerfile multi-stage with non-root user and HEALTHCHECK | Deploy rollback step requires real deploy command to be inserted (infra-specific) |
-| Testing Quality | 10 | 4.0 | 8.0 | 233/233 backend tests pass; smoke e2e passes; TypeScript check clean for both backend and mobile | Mobile has no automated UI/e2e suite |
+| CI/CD and Release Safety | 10 | 4.0 | 8.0 | GitHub Actions CI includes a clean PostgreSQL smoke bootstrap, backend health/AI debug smoke, mobile web E2E, secret scan, type-checks, and build checks; deploy.yml includes health verification and rollback handling | Production rollout still depends on environment-specific deployment credentials and hooks |
+| Testing Quality | 10 | 4.0 | 8.0 | 418 backend tests pass (12 skipped), 36/36 Playwright mobile-web tests pass across desktop and mobile Chrome, and backend/mobile TypeScript checks pass | Native-device HealthKit, Health Connect, camera, receipt, and store-distribution QA remain external |
 | Data Integrity, Backup, Restore | 10 | 3.5 | 7.0 | Sequential migrations exist; log/activity sync dedupe tested | No documented backup policy, restore drill, or migration rollback rehearsal |
 | Incident Response and Runbooks | 8 | 3.5 | 5.6 | Incident runbook v1 + monitoring-runbook.md with per-incident response steps; error-memory workflow active | No named on-call owner, escalation automation, or drill evidence |
 | Compliance and Governance | 3 | 1.5 | 0.9 | Readiness docs and workflow governance present | No privacy policy, retention policy, or compliance checklist |
@@ -54,7 +54,7 @@ Adjusted readiness = 72%
 - P1 (next sprint):
   - Wire one external alert (BetterStack free / Telegram) to poll `/health/metrics` and fire on `alerts[].fired === true`
   - Execute first EAS cloud build (`npm exec eas-cli -- login` then `npm run build:android:preview`) and record Build ID in mobile-preview-build-qa-record.md
-  - Add mobile smoke/e2e coverage for auth and daily log flows
+  - Extend mobile E2E coverage to native-device-only HealthKit, Health Connect, camera, receipt, and notification flows
   - Document backup, restore, and migration rollback procedure for Supabase/PostgreSQL
 - P2:
   - Expand compliance docs: privacy, retention, consent, and data export/deletion policy

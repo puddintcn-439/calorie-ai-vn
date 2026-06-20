@@ -67,12 +67,12 @@ jobs:
           done
           pg_isready -h localhost -p 5432 -U postgres || (docker compose -f docker-compose.yml logs postgres || true; exit 1)
 
-      - name: Run DB migrations
+      - name: Bootstrap smoke-test schema
         if: steps.secret_check.outputs.configured == 'true'
         env:
           SUPABASE_DB_URL: 'postgres://postgres:postgres@localhost:5432/calorie_ai'
         run: |
-          npm run migrate
+          npm run db:bootstrap:smoke
 
       - name: Start backend (real provider)
         if: steps.secret_check.outputs.configured == 'true'

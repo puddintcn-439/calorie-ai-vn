@@ -2,7 +2,7 @@ name: CI smoke tests (docker-compose)
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
 
 jobs:
@@ -43,11 +43,11 @@ jobs:
           done
           pg_isready -h localhost -p 5432 -U postgres || (docker compose -f docker-compose.yml logs postgres || true; exit 1)
 
-      - name: Run DB migrations
+      - name: Bootstrap smoke-test schema
         env:
           SUPABASE_DB_URL: 'postgres://postgres:postgres@localhost:5432/calorie_ai'
         run: |
-          npm run migrate
+          npm run db:bootstrap:smoke
 
       - name: Start backend
         env:

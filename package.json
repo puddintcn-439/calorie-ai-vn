@@ -19,7 +19,7 @@
     "dev:ports:clean": "powershell -ExecutionPolicy Bypass -File ./scripts/kill-dev-ports.ps1",
     "dev:backend:ready": "powershell -ExecutionPolicy Bypass -File ./scripts/start-backend-dev.ps1",
     "dev:mobile:web:ready": "powershell -ExecutionPolicy Bypass -File ./scripts/start-mobile-web.ps1",
-    "migrate": "node ./scripts/apply-migration.js"
+    "db:bootstrap:smoke": "node ./scripts/bootstrap-smoke-db.js"
   },
   "devDependencies": {
     "pg": "^8.20.0",
