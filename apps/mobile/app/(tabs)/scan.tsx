@@ -6,7 +6,8 @@ import {
   ScrollView,
   ActivityIndicator,
   Image,
-  Platform
+  Platform,
+  Modal,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
@@ -27,7 +28,7 @@ import { formatKcal, formatMacro, formatPercent, roundTo, safeNumber, safePositi
 
 const IMAGE_MEDIA_TYPES = ['images'] as any;
 import { telemetryService } from '../../services/telemetry.service';
-import { router } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { ScreenShell, SkeletonBlock, SurfaceCard, useBottomNavContentPadding } from '../../components/ui-shell';
 import { EmptyState } from '../../components/empty-state';
 import { createThemedStyles, theme, useAppTheme } from '../../components/theme';
@@ -40,6 +41,8 @@ import { Alert } from '../../components/i18n-alert';
 import { useI18n } from '../../components/i18n';
 import type { I18nKey } from '../../components/i18n';
 import { appLogger } from '../../services/logger.service';
+import { PortionInput } from '../../components/portion-input';
+import { parsePortionText, scaleNutrition } from '../../services/portion.service';
 
 const scanHeroIllustration = require('../../assets/images/scan-hero.jpg') as number;
 type CameraModule = typeof import('expo-camera');
@@ -118,6 +121,7 @@ function getAiFallbackNoticeKey(reason: string, parseMode?: string): I18nKey {
 export default function ScanScreen() {
   useAppTheme();
   const { t } = useI18n();
+  const { mode: requestedMode } = useLocalSearchParams<{ mode?: string }>();
   // Determine default meal based on current time
   const getDefaultMeal = (): MealType => {
     const hour = new Date().getHours();
@@ -158,6 +162,8 @@ export default function ScanScreen() {
   const [scanElapsedSeconds, setScanElapsedSeconds] = useState(0);
   const [correctionCount, setCorrectionCount] = useState(0);
   const [correctionFeedbackVisible, setCorrectionFeedbackVisible] = useState(false);
+  const [portionEditorIndex, setPortionEditorIndex] = useState<number | null>(null);
+  const [portionEditorGrams, setPortionEditorGrams] = useState(100);
 
   // Context state
   const { activeContexts, toggleContext } = useContextStore();
@@ -186,7 +192,7 @@ export default function ScanScreen() {
   const showStickyResultActions = Boolean(scanResult && !isScanning && currentItems.length);
 
   const getQuotaByFeature = useCallback((feature: AiQuotaRemainingItem['feature']) => {
-    return quotaSummary?.quotas.find((item) => item.feature === feature) ?? null;
+    return quotaSummary?.quotas?.find((item) => item.feature === feature) ?? null;
   }, [quotaSummary]);
 
   const isLowQuota = (item: AiQuotaRemainingItem | null): boolean => {
@@ -350,6 +356,62 @@ export default function ScanScreen() {
     setCorrectionFeedbackVisible(false);
   };
 
+  const applyParsedPortion = (result: AIScanResponse, source: string): AIScanResponse => {
+    const parsed = parsePortionText(source);
+    if (!parsed.grams || !result.items[0]) return result;
+    const first = result.items[0];
+    const scaled = scaleNutrition({
+      grams: Math.max(1, first.estimated_grams),
+      calories: first.calories,
+      protein: first.protein_g,
+      carbs: first.carbs_g,
+      fat: first.fat_g,
+    }, parsed.grams);
+
+    return {
+      ...result,
+      items: [
+        {
+          ...first,
+          quantity: parsed.quantity,
+          unit: parsed.unit ?? first.unit,
+          estimated_grams: parsed.grams,
+          calories: scaled.calories,
+          protein_g: scaled.protein,
+          carbs_g: scaled.carbs,
+          fat_g: scaled.fat,
+        },
+        ...result.items.slice(1),
+      ],
+    };
+  };
+
+  const promptForMissingPortion = (result: AIScanResponse, source: string) => {
+    const parsed = parsePortionText(source);
+    if (parsed.matched || result.items.length === 0) return;
+    setPortionEditorIndex(0);
+    setPortionEditorGrams(Math.max(1, safeRound(result.items[0].estimated_grams || 100)));
+  };
+
+  const openPortionEditor = (index: number, grams: number) => {
+    setPortionEditorIndex(index);
+    setPortionEditorGrams(Math.max(1, safeRound(grams)));
+  };
+
+  const confirmPortionEditor = () => {
+    if (portionEditorIndex === null) return;
+    updateItemGrams(portionEditorIndex, portionEditorGrams);
+    setPortionEditorIndex(null);
+  };
+
+  useFocusEffect(
+    useCallback(() => {
+      if (requestedMode === 'text') {
+        selectInputMode('text');
+      }
+    }, [requestedMode]),
+  );
+
   const promptAfterLog = (logs: FoodLog[], summary: string) => {
     Alert.alert(t('screen.tabs.scan.prompt.logged'), summary, [
       { text: t('screen.tabs.scan.prompt.keepScanning'), style: 'cancel' },
@@ -504,9 +566,11 @@ export default function ScanScreen() {
     const startedAt = Date.now();
     void telemetryService.emitLogAttempted('text');
     try {
-      const result = await scanText(textInput.trim());
+      const rawResult = await scanText(textInput.trim());
+      const result = applyParsedPortion(rawResult, textInput.trim());
       if (!result.success) setLastFailedScan({ mode: 'text', payload: textInput.trim() });
       applyScanResult(result);
+      promptForMissingPortion(result, textInput.trim());
       void telemetryService.emitLogParsed('text', {
         elapsed_ms: Date.now() - startedAt,
         item_count: result.items.length,
@@ -532,14 +596,16 @@ export default function ScanScreen() {
     const startedAt = Date.now();
     void telemetryService.emitLogAttempted('voice');
     try {
-      const result = await scanVoice({
+      const rawResult = await scanVoice({
         transcript,
         meal_hint: selectedMeal,
         locale: 'vi-VN',
         context: { source: 'mobile_voice', device_language: 'vi' },
       });
+      const result = applyParsedPortion(rawResult, transcript);
       if (!result.success) setLastFailedScan({ mode: 'voice', payload: transcript });
       applyScanResult(result);
+      promptForMissingPortion(result, transcript);
       void telemetryService.emitLogParsed('voice', {
         elapsed_ms: Date.now() - startedAt,
         item_count: result.items.length,
@@ -773,8 +839,12 @@ export default function ScanScreen() {
     try {
       const res = await apiClient.get<Food[]>(`/food/search?q=${encodeURIComponent(q)}`);
       const foods = res.data ?? [];
+      const parsedPortion = parsePortionText(q);
       setSearchResults(foods);
-      setSearchGramsById(Object.fromEntries(foods.map((food) => [food.id, String(safeRound(food.serving_size_g ?? 100))])));
+      setSearchGramsById(Object.fromEntries(foods.map((food) => [
+        food.id,
+        String(safeRound(parsedPortion.grams ?? food.serving_size_g ?? 100)),
+      ])));
     } catch {
       Alert.alert('screen.tabs.scan.alert.033', 'screen.tabs.scan.alert.034');
     } finally {
@@ -973,17 +1043,12 @@ export default function ScanScreen() {
                   <Text style={styles.resultCalorie}>{formatKcal(kcal)}</Text>
                 </View>
                 <Text style={styles.resultDetail}>{t('screen.tabs.scan.label.defaultServing', { grams: formatMacro(food.serving_size_g ?? 100) })}</Text>
-                <View style={styles.portionRow}>
-                  <Text style={styles.portionLabel} i18nKey="screen.tabs.scan.label.grams" />
-                  <TextInput
-                    style={styles.portionInput}
-                    value={searchGramsById[food.id] ?? String(safeRound(food.serving_size_g ?? 100))}
-                    onChangeText={(value) => setSearchGramsById((prev) => ({ ...prev, [food.id]: value }))}
-                    keyboardType="numeric"
-                    placeholder="100"
-                    placeholderTextColor={theme.colors.textDisabled}
-                  />
-                </View>
+                <PortionInput
+                  value={Math.max(1, Number(searchGramsById[food.id] ?? food.serving_size_g ?? 100) || 100)}
+                  onChange={(value) => setSearchGramsById((prev) => ({ ...prev, [food.id]: String(value) }))}
+                  label="screen.tabs.scan.label.grams"
+                  testID={`scan-search-portion-${food.id}`}
+                />
                 <Text style={styles.resultMacros}>
                   P: {formatMacro(roundTo(safeNumber(food.protein_g) * ratio, 1))}  C: {formatMacro(roundTo(safeNumber(food.carbs_g) * ratio, 1))}  F: {formatMacro(roundTo(safeNumber(food.fat_g) * ratio, 1))}
                 </Text>
@@ -1290,8 +1355,8 @@ export default function ScanScreen() {
               <ScanResultItem
                 key={`${item.name}-${item.calories}-${item.estimated_grams}-${i}`}
                 item={item}
-                onDecrease={() => updateItemGrams(i, item.estimated_grams - 25)}
-                onIncrease={() => updateItemGrams(i, item.estimated_grams + 25)}
+                onGramsChange={(grams) => updateItemGrams(i, grams)}
+                onRefine={() => openPortionEditor(i, item.estimated_grams)}
                 onNameChange={(name) => updateItemName(i, name)}
                 onRemove={() => removeItem(i)}
               />
@@ -1389,6 +1454,43 @@ export default function ScanScreen() {
           </SurfaceCard>
         </View>
       ) : null}
+
+      <Modal
+        visible={portionEditorIndex !== null}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setPortionEditorIndex(null)}
+      >
+        <View style={styles.portionSheetOverlay}>
+          <View style={styles.portionSheet}>
+            <View style={styles.portionSheetHeader}>
+              <View style={styles.portionSheetCopy}>
+                <Text style={styles.portionSheetTitle} i18nKey="screen.tabs.scan.portionPrompt" />
+                <Text style={styles.portionSheetBody} i18nKey="screen.tabs.scan.portionPromptBody" />
+              </View>
+              <TouchableOpacity
+                style={styles.portionSheetClose}
+                onPress={() => setPortionEditorIndex(null)}
+                accessibilityRole="button"
+                accessibilityLabel={t('common.cancel')}
+              >
+                <Ionicons name="close" size={22} color={theme.colors.textMuted} />
+              </TouchableOpacity>
+            </View>
+
+            <PortionInput
+              value={portionEditorGrams}
+              onChange={setPortionEditorGrams}
+              label="screen.tabs.scan.portionWeight"
+              testID="scan-portion-sheet"
+            />
+
+            <TouchableOpacity style={styles.portionSheetConfirm} onPress={confirmPortionEditor} testID="scan-portion-confirm">
+              <Text style={styles.portionSheetConfirmText} i18nKey="screen.tabs.scan.portionConfirm" />
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -1500,14 +1602,14 @@ function ContextPicker({ activeContexts, onToggle }: { activeContexts: ContextMo
 
 function ScanResultItem({
   item,
-  onDecrease,
-  onIncrease,
+  onGramsChange,
+  onRefine,
   onNameChange,
   onRemove,
 }: {
   item: AIDetectedItem;
-  onDecrease: () => void;
-  onIncrease: () => void;
+  onGramsChange: (grams: number) => void;
+  onRefine: () => void;
   onNameChange: (name: string) => void;
   onRemove: () => void;
 }) {
@@ -1576,34 +1678,30 @@ function ScanResultItem({
             <Text style={styles.editHint}>✏️</Text>
           </TouchableOpacity>
           <View style={styles.calorieColumn}>
-            <Text style={styles.resultCalorie}>{formatKcal(item.calories)}</Text>
+            <Text style={styles.resultCalorie} testID="scan-result-calories">{formatKcal(item.calories)}</Text>
             <Text style={styles.resultRange}>{formatCalorieRange(item.calories_min ?? item.calories, item.calories_max ?? item.calories)}</Text>
           </View>
         </View>
       )}
 
       <Text style={styles.resultDetail}>{safeNumber(item.quantity)} {item.unit} (~{formatMacro(item.estimated_grams)})</Text>
-      <Text style={styles.resultMacros}>P: {formatMacro(item.protein_g)}  C: {formatMacro(item.carbs_g)}  F: {formatMacro(item.fat_g)}</Text>
-      <View style={styles.adjustRow}>
-        <TouchableOpacity
-          style={styles.adjustBtn}
-          onPress={onDecrease}
-          accessibilityRole="button"
-          accessibilityLabel={t('screen.tabs.scan.text.033')}
-          testID="scan-decrease-portion"
-        >
-          <Text style={styles.adjustBtnText} i18nKey="screen.tabs.scan.text.033" />
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.adjustBtn}
-          onPress={onIncrease}
-          accessibilityRole="button"
-          accessibilityLabel={t('screen.tabs.scan.text.034')}
-          testID="scan-increase-portion"
-        >
-          <Text style={styles.adjustBtnText} i18nKey="screen.tabs.scan.text.034" />
-        </TouchableOpacity>
-      </View>
+      <Text style={styles.resultMacros} testID="scan-result-macros">P: {formatMacro(item.protein_g)}  C: {formatMacro(item.carbs_g)}  F: {formatMacro(item.fat_g)}</Text>
+      <PortionInput
+        value={item.estimated_grams}
+        onChange={onGramsChange}
+        compact
+        label="screen.tabs.scan.portionWeight"
+        testID="scan-result-portion"
+      />
+      <TouchableOpacity
+        style={styles.refinePortionButton}
+        onPress={onRefine}
+        accessibilityRole="button"
+        testID="scan-refine-portion"
+      >
+        <Ionicons name="options-outline" size={17} color={theme.colors.info} />
+        <Text style={styles.refinePortionButtonText} i18nKey="screen.tabs.scan.refinePortion" />
+      </TouchableOpacity>
     </SurfaceCard>
   );
 }
@@ -1801,22 +1899,8 @@ const styles = createThemedStyles((colors, radii) => ({
   resultRange: { color: colors.textMuted, fontSize: 12, marginTop: 2 },
   resultDetail: { color: colors.textMuted, fontSize: 13, marginBottom: 2 },
   resultMacros: { color: colors.textMuted, fontSize: 12 },
-  portionRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginVertical: 8 },
-  portionLabel: { color: colors.textMuted, fontSize: 12, fontWeight: '800' },
-  portionInput: {
-    minWidth: 90,
-    borderWidth: 1,
-    borderColor: colors.borderSubtle,
-    borderRadius: 8,
-    backgroundColor: colors.surfaceAlt,
-    color: colors.text,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    fontSize: 14,
-  },
-  adjustRow: { flexDirection: 'row', gap: 10, marginTop: 10 },
-  adjustBtn: { backgroundColor: colors.surfaceInfo, borderWidth: 1, borderColor: colors.borderInfo, borderRadius: 8, paddingHorizontal: 13, paddingVertical: 9 },
-  adjustBtnText: { color: colors.textSoft, fontSize: 12, fontWeight: '700' },
+  refinePortionButton: { minHeight: 44, marginTop: 8, borderRadius: 12, borderWidth: 1, borderColor: colors.borderInfo, backgroundColor: colors.surfaceInfo, paddingHorizontal: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  refinePortionButtonText: { color: colors.info, fontSize: 13, fontWeight: '900' },
   lowConfidenceBanner: { backgroundColor: colors.surfaceDanger, borderColor: colors.borderDanger, borderWidth: 1, marginBottom: 12 },
   lowConfidenceTitle: { color: colors.danger, fontSize: 15, fontWeight: '800', marginBottom: 6 },
   lowConfidenceBody: { color: colors.danger, fontSize: 13, lineHeight: 19 },
@@ -1971,6 +2055,15 @@ const styles = createThemedStyles((colors, radii) => ({
   transcriptContainer: { marginVertical: 12 },
   transcriptLabel: { color: colors.textMuted, fontSize: 12, fontWeight: '600', marginBottom: 8 },
   voiceHintText: { color: colors.textMuted, fontSize: 13, fontStyle: 'italic', textAlign: 'center', marginVertical: 16, lineHeight: 20 },
+  portionSheetOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: colors.overlay },
+  portionSheet: { padding: 16, paddingBottom: 24, gap: 16, borderTopLeftRadius: 24, borderTopRightRadius: 24, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.borderSubtle },
+  portionSheetHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 },
+  portionSheetCopy: { flex: 1, minWidth: 0 },
+  portionSheetTitle: { color: colors.text, fontSize: 19, lineHeight: 24, fontWeight: '900' },
+  portionSheetBody: { color: colors.textMuted, fontSize: 13, lineHeight: 19, marginTop: 4 },
+  portionSheetClose: { width: 48, height: 48, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surfaceMuted, borderWidth: 1, borderColor: colors.borderSubtle },
+  portionSheetConfirm: { minHeight: 48, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primary, paddingHorizontal: 16 },
+  portionSheetConfirmText: { color: colors.textOnAccent, fontSize: 15, fontWeight: '900' },
 }));
 
 

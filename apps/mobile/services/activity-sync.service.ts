@@ -203,7 +203,7 @@ function buildSyncedEntry(params: {
   } = params;
 
   if (steps <= 0 && distanceKm <= 0 && caloriesBurned <= 0) {
-    throw new Error('Khong tim thay du lieu van dong trong ngay da chon.');
+    throw new Error('Không tìm thấy dữ liệu vận động trong ngày đã chọn.');
   }
 
   return {
@@ -233,7 +233,7 @@ async function buildAndroidHealthConnectBatch(date: string): Promise<ActivitySyn
 
   const sdkStatus = await healthConnect.getSdkStatus();
   if (sdkStatus !== healthConnect.SdkAvailabilityStatus.SDK_AVAILABLE) {
-    throw new Error('Google Health Connect chua san sang tren thiet bi nay.');
+    throw new Error('Google Health Connect chưa sẵn sàng trên thiết bị này.');
   }
 
   await healthConnect.initialize();
@@ -301,10 +301,10 @@ async function buildAndroidHealthConnectBatch(date: string): Promise<ActivitySyn
 async function buildIosHealthKitBatch(date: string): Promise<ActivitySyncBatchDto> {
   const snapshot = await readAppleHealthDailySnapshot(date);
   if (!snapshot.available) {
-    throw new Error('Apple Health khong kha dung tren thiet bi hien tai.');
+    throw new Error('Apple Health không khả dụng trên thiết bị hiện tại.');
   }
   if (!snapshot.authorized) {
-    throw new Error('Can cap quyen Apple Health truoc khi dong bo.');
+    throw new Error('Cần cấp quyền Apple Health trước khi đồng bộ.');
   }
 
   return buildSyncedEntry({
@@ -351,7 +351,7 @@ class ActivitySyncService {
           grantedPermissions: [],
           missingPermissions: [...HEALTH_SYNC_PERMISSION_KEYS],
           today: null,
-          notes: ['Health Connect chua san sang tren thiet bi nay.'],
+          notes: ['Health Connect chưa sẵn sàng trên thiết bị này.'],
         };
       }
 
@@ -370,7 +370,7 @@ class ActivitySyncService {
           grantedPermissions: grantedKeys,
           missingPermissions: [...missingPermissions],
           today: null,
-          notes: ['Can cap them quyen truoc khi doc du lieu van dong hom nay.'],
+          notes: ['Cần cấp thêm quyền trước khi đọc dữ liệu vận động hôm nay.'],
         };
       }
 
@@ -407,7 +407,7 @@ class ActivitySyncService {
           caloriesBurned: Math.round(activeCalories > 0 ? activeCalories : totalCalories),
           steps_estimated_kcal: estimatedStepsKcal,
         },
-        notes: ['Snapshot doc truc tiep tu Google Health Connect tren thiet bi hien tai.'],
+        notes: ['Dữ liệu được đọc trực tiếp từ Google Health Connect trên thiết bị hiện tại.'],
       };
     }
 
@@ -421,7 +421,7 @@ class ActivitySyncService {
           grantedPermissions: [],
           missingPermissions: [...APPLE_HEALTH_READ_TYPES],
           today: null,
-          notes: ['Apple Health khong kha dung tren thiet bi hien tai.'],
+          notes: ['Apple Health không khả dụng trên thiết bị hiện tại.'],
         };
       }
 
@@ -433,7 +433,7 @@ class ActivitySyncService {
           grantedPermissions: [],
           missingPermissions: [...APPLE_HEALTH_READ_TYPES],
           today: null,
-          notes: ['Can cap quyen Apple Health truoc khi doc du lieu van dong hom nay.'],
+          notes: ['Cần cấp quyền Apple Health trước khi đọc dữ liệu vận động hôm nay.'],
         };
       }
 
@@ -452,7 +452,7 @@ class ActivitySyncService {
           caloriesBurned: Math.round(snapshot.caloriesBurned),
           steps_estimated_kcal: estimatedStepsKcal,
         },
-        notes: ['Snapshot doc truc tiep tu Apple Health tren thiet bi hien tai.'],
+        notes: ['Dữ liệu được đọc trực tiếp từ Apple Health trên thiết bị hiện tại.'],
       };
     }
 
@@ -477,11 +477,11 @@ class ActivitySyncService {
             platform: 'android',
             providerName: 'Google Health Connect',
             status: 'needs-install',
-            statusLabel: 'Can cai hoac cap nhat',
-            detail: 'Health Connect chua san sang tren may nay. Cai dat hoac cap nhat roi mo lai app de test sync.',
+            statusLabel: 'Cần cài đặt hoặc cập nhật',
+            detail: 'Health Connect chưa sẵn sàng trên máy này. Hãy cài đặt hoặc cập nhật rồi mở lại ứng dụng để kiểm tra đồng bộ.',
             deepLink: HEALTH_SYNC_SCREEN_LINK,
-            actionLabel: 'Mo trang cai dat',
-            installLabel: 'Cai Health Connect',
+            actionLabel: 'Mở trang cài đặt',
+            installLabel: 'Cài Health Connect',
             supportUrl: HEALTH_CONNECT_STORE_URL,
           };
         }
@@ -491,11 +491,11 @@ class ActivitySyncService {
             platform: 'android',
             providerName: 'Google Health Connect',
             status: 'needs-permission',
-            statusLabel: 'Can cap quyen',
-            detail: `Con thieu quyen: ${diagnostics.missingPermissions.join(', ')}. Mo Health Connect de cap quyen roi quay lai dong bo.`,
+            statusLabel: 'Cần cấp quyền',
+            detail: `Còn thiếu quyền: ${diagnostics.missingPermissions.join(', ')}. Hãy mở Health Connect để cấp quyền rồi quay lại đồng bộ.`,
             deepLink: HEALTH_SYNC_SCREEN_LINK,
-            actionLabel: 'Mo Health Connect',
-            installLabel: 'Mo trang test',
+            actionLabel: 'Mở Health Connect',
+            installLabel: 'Mở trang kiểm tra',
             supportUrl: HEALTH_CONNECT_STORE_URL,
           };
         }
@@ -504,11 +504,11 @@ class ActivitySyncService {
           platform: 'android',
           providerName: 'Google Health Connect',
           status: 'ready',
-          statusLabel: 'San sang tren phone',
-          detail: 'Health Connect da san sang va da co du quyen doc du lieu van dong.',
+          statusLabel: 'Sẵn sàng trên điện thoại',
+          detail: 'Health Connect đã sẵn sàng và có đủ quyền đọc dữ liệu vận động.',
           deepLink: HEALTH_SYNC_SCREEN_LINK,
-          actionLabel: 'Mo Health Connect',
-          installLabel: 'Mo trang test',
+          actionLabel: 'Mở Health Connect',
+          installLabel: 'Mở trang kiểm tra',
           supportUrl: HEALTH_CONNECT_STORE_URL,
         };
       }
@@ -519,11 +519,11 @@ class ActivitySyncService {
             platform: 'ios',
             providerName: 'Apple Health',
             status: 'unsupported',
-            statusLabel: 'Health khong kha dung',
-            detail: 'Apple Health khong kha dung tren thiet bi hien tai.',
+            statusLabel: 'Health không khả dụng',
+            detail: 'Apple Health không khả dụng trên thiết bị hiện tại.',
             deepLink: HEALTH_SYNC_SCREEN_LINK,
-            actionLabel: 'Mo Health / Settings',
-            installLabel: 'Xem huong dan',
+            actionLabel: 'Mở Health / Cài đặt',
+            installLabel: 'Xem hướng dẫn',
             supportUrl: APPLE_HEALTH_SUPPORT_URL,
           };
         }
@@ -533,11 +533,11 @@ class ActivitySyncService {
             platform: 'ios',
             providerName: 'Apple Health',
             status: 'needs-permission',
-            statusLabel: 'Can cap quyen',
-            detail: `Con thieu quyen: ${diagnostics.missingPermissions.join(', ')}. Mo Apple Health hoac Settings de cap quyen.`,
+            statusLabel: 'Cần cấp quyền',
+            detail: `Còn thiếu quyền: ${diagnostics.missingPermissions.join(', ')}. Hãy mở Apple Health hoặc Cài đặt để cấp quyền.`,
             deepLink: HEALTH_SYNC_SCREEN_LINK,
-            actionLabel: 'Mo Health / Settings',
-            installLabel: 'Mo trang test',
+            actionLabel: 'Mở Health / Cài đặt',
+            installLabel: 'Mở trang kiểm tra',
             supportUrl: APPLE_HEALTH_SUPPORT_URL,
           };
         }
@@ -546,11 +546,11 @@ class ActivitySyncService {
           platform: 'ios',
           providerName: 'Apple Health',
           status: 'ready',
-          statusLabel: 'San sang tren iPhone',
-          detail: 'Apple Health da san sang va da co du quyen doc du lieu van dong.',
+          statusLabel: 'Sẵn sàng trên iPhone',
+          detail: 'Apple Health đã sẵn sàng và có đủ quyền đọc dữ liệu vận động.',
           deepLink: HEALTH_SYNC_SCREEN_LINK,
-          actionLabel: 'Mo Health / Settings',
-          installLabel: 'Mo trang test',
+          actionLabel: 'Mở Health / Cài đặt',
+          installLabel: 'Mở trang kiểm tra',
           supportUrl: APPLE_HEALTH_SUPPORT_URL,
         };
       }
@@ -560,11 +560,11 @@ class ActivitySyncService {
           platform: Platform.OS,
           providerName: Platform.OS === 'android' ? 'Google Health Connect' : 'Apple Health',
           status: 'needs-native-build',
-          statusLabel: 'Can native dev build',
-          detail: 'Ban dang chay web/Expo Go. Health sync native chi hoat dong trong dev build hoac ban app da build.',
+          statusLabel: 'Cần bản dựng native',
+          detail: 'Bạn đang chạy web hoặc Expo Go. Đồng bộ sức khỏe chỉ hoạt động trong dev build hoặc bản ứng dụng đã build.',
           deepLink: HEALTH_SYNC_SCREEN_LINK,
-          actionLabel: 'Mo app settings',
-          installLabel: 'Mo trang test',
+          actionLabel: 'Mở cài đặt ứng dụng',
+          installLabel: 'Mở trang kiểm tra',
           supportUrl: Platform.OS === 'android' ? HEALTH_CONNECT_STORE_URL : APPLE_HEALTH_SUPPORT_URL,
         };
       }
@@ -574,11 +574,11 @@ class ActivitySyncService {
       platform: Platform.OS,
       providerName: 'Health Sync',
       status: 'unsupported',
-      statusLabel: 'Chi test duoc tren phone',
-      detail: 'Man hinh nay dang chay tren web. Hay mo ban native tren Android/iPhone de test Activity Sync.',
+      statusLabel: 'Chỉ kiểm tra được trên điện thoại',
+      detail: 'Màn hình này đang chạy trên web. Hãy mở bản native trên Android hoặc iPhone để kiểm tra đồng bộ vận động.',
       deepLink: HEALTH_SYNC_SCREEN_LINK,
-      actionLabel: 'Mo app tren phone',
-      installLabel: 'Xem huong dan',
+      actionLabel: 'Mở ứng dụng trên điện thoại',
+      installLabel: 'Xem hướng dẫn',
     };
   }
 
@@ -613,7 +613,7 @@ class ActivitySyncService {
       return;
     }
 
-    throw new Error('Chi mo duoc Health settings tren phone native.');
+    throw new Error('Chỉ có thể mở cài đặt Health trên ứng dụng native.');
   }
 
   async openSupportUrl(): Promise<void> {
@@ -627,7 +627,7 @@ class ActivitySyncService {
       return;
     }
 
-    throw new Error('Khong co support link tren nen tang hien tai.');
+    throw new Error('Không có liên kết hỗ trợ trên nền tảng hiện tại.');
   }
 
   async syncToday(date?: string): Promise<ActivitySyncResult> {

@@ -5,6 +5,7 @@ import {
   gotoApp,
   jsonResponse,
   setAuthToken,
+  setLocale,
 } from './helpers';
 
 test.describe('Beta analytics screen', () => {
@@ -12,7 +13,7 @@ test.describe('Beta analytics screen', () => {
     const consoleMessages = collectImportantConsoleMessages(page);
 
     await setAuthToken(page);
-    await page.addInitScript(() => window.localStorage.setItem('app_locale', 'en'));
+    await setLocale(page);
     await page.route('**/*', async (route) => {
       const url = new URL(route.request().url());
       const path = url.pathname;
@@ -74,6 +75,24 @@ test.describe('Beta analytics screen', () => {
             'Collect more forecast outcomes before tuning weights (28/100).',
             'Reminder fatigue is visible; reduce frequency or shift timing for ignored reminders.',
           ],
+        }));
+      }
+
+      if (path === '/telemetry/ai-usage-summary') {
+        return route.fulfill(jsonResponse({
+          generated_at: '2026-06-07T00:00:00.000Z',
+          window_days: 30,
+          total_requests: 0,
+          total_reserved: 0,
+          total_success: 0,
+          total_fallback: 0,
+          total_failed: 0,
+          total_blocked: 0,
+          estimated_cost_usd: 0,
+          top_features: [],
+          top_users: [],
+          providers: [],
+          models: [],
         }));
       }
 

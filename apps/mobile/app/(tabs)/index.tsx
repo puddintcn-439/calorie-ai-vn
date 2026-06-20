@@ -1254,7 +1254,7 @@ export default function DashboardScreen() {
         </TouchableOpacity>
       </View>
 
-      <SurfaceCard style={[
+      <SurfaceCard revealDelay={70} style={[
         styles.nextActionCard,
         isCompact && styles.nextActionCardCompact,
         nextAction.tone === 'good' && styles.nextActionCardGood,
@@ -1281,7 +1281,7 @@ export default function DashboardScreen() {
         </TouchableOpacity>
       </SurfaceCard>
 
-      <SurfaceCard style={[
+      <SurfaceCard revealDelay={130} style={[
         styles.coachBridgeCard,
         coachBridge.tone === 'good' && styles.coachBridgeGood,
         coachBridge.tone === 'warn' && styles.coachBridgeWarn,
@@ -1305,7 +1305,7 @@ export default function DashboardScreen() {
       </SurfaceCard>
 
       {healthScore ? (
-        <SurfaceCard style={styles.healthScoreCard}>
+        <SurfaceCard revealDelay={190} style={styles.healthScoreCard}>
           <View style={styles.healthScoreHeader}>
             <View style={styles.healthScoreCopy}>
               <Text style={styles.healthScoreEyebrow} i18nKey="screen.tabs.index.health.eyebrow" />
@@ -1495,9 +1495,19 @@ export default function DashboardScreen() {
           <AnimatedIonicon name="camera" size={20} color={theme.colors.textOnAccent} motion="pulse" />
           <Text style={styles.primaryActionText} i18nKey="screen.tabs.index.text.002" />
         </TouchableOpacity>
-        <TouchableOpacity style={[styles.secondaryAction, isCompact && styles.secondaryActionCompact]} onPress={() => router.push('/log' as never)}>
+        <TouchableOpacity
+          style={[styles.secondaryAction, isCompact && styles.secondaryActionCompact]}
+          onPress={() => router.push({ pathname: '/scan', params: { mode: 'text' } } as never)}
+          accessibilityRole="button"
+          accessibilityLabel={t('screen.tabs.index.text.003')}
+          accessibilityHint={t('screen.tabs.index.text.003.hint')}
+          testID="dashboard-text-entry-button"
+        >
           <AnimatedIonicon name="create-outline" size={18} color={theme.colors.accentMint} motion="float" />
-          <Text style={styles.secondaryActionText} i18nKey="screen.tabs.index.text.003" />
+          <View style={styles.secondaryActionCopy}>
+            <Text style={styles.secondaryActionText} i18nKey="screen.tabs.index.text.003" />
+            <Text style={styles.secondaryActionHint} i18nKey="screen.tabs.index.text.003.hint" />
+          </View>
         </TouchableOpacity>
       </View>
 
@@ -1927,14 +1937,16 @@ const styles = createThemedStyles((colors, radii) => ({
   },
   dashboardTitle: {
     color: colors.text,
-    fontSize: 34,
-    lineHeight: 39,
+    fontSize: 38,
+    lineHeight: 40,
     fontWeight: '900',
+    letterSpacing: -1.35,
     marginBottom: 10,
   },
   dashboardTitleCompact: {
-    fontSize: 28,
-    lineHeight: 33,
+    fontSize: 32,
+    lineHeight: 34,
+    letterSpacing: -1,
     marginBottom: 6,
   },
   heroBody: {
@@ -1949,7 +1961,7 @@ const styles = createThemedStyles((colors, radii) => ({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    borderRadius: radii.lg,
+    borderRadius: 999,
     paddingHorizontal: 13,
     backgroundColor: colors.surfaceWarning,
     borderWidth: 1,
@@ -1972,6 +1984,7 @@ const styles = createThemedStyles((colors, radii) => ({
     alignItems: 'center',
     flexWrap: 'wrap',
     gap: 15,
+    overflow: 'hidden',
   },
   nextActionCardCompact: {
     padding: 12,
@@ -2109,7 +2122,7 @@ const styles = createThemedStyles((colors, radii) => ({
   coachBridgeButton: {
     minHeight: 42,
     minWidth: 96,
-    borderRadius: radii.lg,
+    borderRadius: 999,
     backgroundColor: colors.accentMint,
     paddingHorizontal: 11,
     alignItems: 'center',
@@ -3051,6 +3064,8 @@ const styles = createThemedStyles((colors, radii) => ({
   },
   movementLogButton: {
     minHeight: 42,
+    maxWidth: '100%',
+    flexShrink: 1,
     borderRadius: radii.lg,
     backgroundColor: colors.accentMint,
     paddingHorizontal: 13,
@@ -3062,11 +3077,14 @@ const styles = createThemedStyles((colors, radii) => ({
   movementActionRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    maxWidth: '100%',
     gap: 8,
     marginTop: 2,
   },
   movementSecondaryButton: {
     minHeight: 42,
+    maxWidth: '100%',
+    flexShrink: 1,
     borderRadius: radii.lg,
     borderWidth: 1,
     borderColor: colors.borderSuccess,
@@ -3166,8 +3184,18 @@ const styles = createThemedStyles((colors, radii) => ({
   },
   secondaryActionText: {
     color: colors.accentMint,
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '800',
+  },
+  secondaryActionCopy: {
+    flexShrink: 1,
+    alignItems: 'flex-start',
+  },
+  secondaryActionHint: {
+    color: colors.textMuted,
+    fontSize: 10,
+    lineHeight: 14,
+    marginTop: 1,
   },
   nudgeRow: {
     gap: 10,

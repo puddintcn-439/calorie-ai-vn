@@ -6,9 +6,17 @@ export async function gotoApp(page: Page, path: string) {
 
 export async function setAuthToken(page: Page, token = 'test-token', userId = 'user-1') {
   await page.addInitScript(({ token: authToken, userId: authUserId }) => {
+    sessionStorage.setItem('auth_token', authToken);
+    sessionStorage.setItem('user_id', authUserId);
     localStorage.setItem('auth_token', authToken);
     localStorage.setItem('user_id', authUserId);
   }, { token, userId });
+}
+
+export async function setLocale(page: Page, locale: 'vi' | 'en' = 'en') {
+  await page.addInitScript((value) => {
+    sessionStorage.setItem('app_locale', value);
+  }, locale);
 }
 
 export function jsonResponse(obj: any) {
@@ -626,7 +634,7 @@ export function collectImportantConsoleMessages(page: Page) {
     }
   });
   page.on('pageerror', (error) => {
-    messages.push(`pageerror: ${error.message}`);
+    messages.push(`pageerror: ${error.stack ?? error.message}`);
   });
 
   return messages;
@@ -638,8 +646,22 @@ export async function expectNoUnsafeRenderedText(page: Page) {
 }
 
 export async function expectBottomNavDoesNotCoverInteractiveContent(page: Page) {
-  const offenders = await page.evaluate(() => {
-    window.scrollTo(0, document.documentElement.scrollHeight);
+  const offenders = await page.evaluate(async () => {
+    const scrollable = Array.from(document.querySelectorAll<HTMLElement>('*'))
+      .filter((element) => {
+        const style = window.getComputedStyle(element);
+        return /(auto|scroll)/.test(style.overflowY) && element.scrollHeight > element.clientHeight + 1;
+      })
+      .sort((a, b) => (b.scrollHeight - b.clientHeight) - (a.scrollHeight - a.clientHeight))[0];
+
+    if (scrollable) {
+      scrollable.scrollTop = scrollable.scrollHeight;
+    } else {
+      window.scrollTo(0, document.documentElement.scrollHeight);
+    }
+
+    await new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve())));
+
     const tablist = document.querySelector('[role="tablist"]');
     const tabRect = tablist?.getBoundingClientRect();
     const protectedTop = tabRect ? tabRect.top : window.innerHeight - 86;

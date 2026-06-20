@@ -48,111 +48,188 @@ export type AppColors = {
   tabBar: string;
 };
 
+// Semantic design tokens. Legacy accent names remain available while screens
+// migrate incrementally, but new components should prefer these aliases.
+export type SemanticColors = AppColors & {
+  primary: string;
+  neutralBackground: string;
+  accent: string;
+  accentPrimary: string;
+  accentSecondary: string;
+  accentTertiary: string;
+};
+
+export const spacing = {
+  xxs: 4,
+  xs: 8,
+  sm: 12,
+  md: 16,
+  lg: 24,
+  xl: 32,
+  xxl: 40,
+  xxxl: 48,
+  huge: 56,
+  giant: 64,
+} as const;
+
+export const layout = {
+  safeAreaMarginPhone: spacing.md,
+  safeAreaMarginTablet: 20,
+  minTouchTarget: 48,
+  cardPadding: spacing.md,
+  cardGap: spacing.md,
+} as const;
+
+function hexToRgb(hex: string) {
+  const normalized = hex.replace('#', '');
+  if (!/^[\da-f]{6}$/i.test(normalized)) return null;
+  return {
+    r: Number.parseInt(normalized.slice(0, 2), 16),
+    g: Number.parseInt(normalized.slice(2, 4), 16),
+    b: Number.parseInt(normalized.slice(4, 6), 16),
+  };
+}
+
+export function contrastRatio(foreground: string, background: string) {
+  const fg = hexToRgb(foreground);
+  const bg = hexToRgb(background);
+  if (!fg || !bg) return 1;
+  const luminance = ({ r, g, b }: typeof fg) => {
+    const channels = [r, g, b].map((value) => {
+      const channel = value / 255;
+      return channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2];
+  };
+  const first = luminance(fg);
+  const second = luminance(bg);
+  return (Math.max(first, second) + 0.05) / (Math.min(first, second) + 0.05);
+}
+
 export const colorPalettes: Record<ResolvedThemeMode, AppColors> = {
   light: {
-    bgTop: '#f7faf6',
-    bgMid: '#edf4ef',
-    bgBottom: '#e7eef0',
-    surface: '#ffffff',
-    surfaceAlt: '#edf5f1',
-    surfaceWarm: '#fff6e2',
-    surfaceLifted: '#fbfdfb',
-    surfacePressed: '#dfeae5',
-    surfaceMuted: '#f2f6f3',
-    surfaceSuccess: '#e0f4e9',
-    surfaceInfo: '#e4f2f5',
-    surfaceWarning: '#fff1cf',
-    surfaceDanger: '#fde8e5',
-    border: '#d0ded7',
-    borderStrong: '#a7bdb4',
-    borderSubtle: '#e4ece8',
-    borderSuccess: '#8acdaa',
-    borderInfo: '#94c8d3',
-    borderWarning: '#ddb95f',
-    borderDanger: '#ec9e96',
-    text: '#11231d',
-    textSoft: '#344d45',
-    textMuted: '#667b73',
-    textDisabled: '#98a7a1',
-    textOnAccent: '#062018',
+    bgTop: '#f7f8f2',
+    bgMid: '#eef2e8',
+    bgBottom: '#e8eee8',
+    surface: '#fcfdf9',
+    surfaceAlt: '#edf2e8',
+    surfaceWarm: '#fbf1d8',
+    surfaceLifted: '#ffffff',
+    surfacePressed: '#e2e9de',
+    surfaceMuted: '#f1f4ee',
+    surfaceSuccess: '#e8f3df',
+    surfaceInfo: '#e7f0ed',
+    surfaceWarning: '#f8edd2',
+    surfaceDanger: '#f8e7e2',
+    border: '#cbd7ca',
+    borderStrong: '#9eb09f',
+    borderSubtle: '#dde5da',
+    borderSuccess: '#aacb8e',
+    borderInfo: '#a8c7bf',
+    borderWarning: '#d3b96d',
+    borderDanger: '#dc9c8e',
+    text: '#142018',
+    textSoft: '#3d5143',
+    textMuted: '#657568',
+    textDisabled: '#9aa69c',
+    textOnAccent: '#15200f',
     textOnDanger: '#ffffff',
-    accentMint: '#5fc28b',
-    accentCyan: '#2c8797',
-    accentAmber: '#c98924',
-    accentCoral: '#d66f5f',
-    accentLeaf: '#639f46',
-    accentPlum: '#7d759f',
-    success: '#178855',
-    info: '#217d91',
-    warning: '#a66d11',
-    danger: '#c93b32',
-    progressBg: '#d7e5df',
-    overlay: 'rgba(15, 23, 42, 0.42)',
-    shadow: '#0f172a',
-    tabBar: '#ffffff',
+    accentMint: '#b7df72',
+    accentCyan: '#376f64',
+    accentAmber: '#b47b24',
+    accentCoral: '#c76958',
+    accentLeaf: '#6f9444',
+    accentPlum: '#766e8b',
+    success: '#397a43',
+    info: '#3c756c',
+    warning: '#94651d',
+    danger: '#b6483d',
+    progressBg: '#d8e2d5',
+    overlay: 'rgba(16, 27, 20, 0.48)',
+    shadow: '#26382b',
+    tabBar: 'rgba(252, 253, 249, 0.92)',
   },
   dark: {
-    bgTop: '#0b1413',
-    bgMid: '#101c1a',
-    bgBottom: '#152420',
-    surface: '#14241f',
-    surfaceAlt: '#192c26',
-    surfaceWarm: '#29281c',
-    surfaceLifted: '#1a3029',
-    surfacePressed: '#10211c',
-    surfaceMuted: '#172822',
-    surfaceSuccess: '#132c22',
-    surfaceInfo: '#13292d',
-    surfaceWarning: '#2c2515',
-    surfaceDanger: '#2b1715',
-    border: '#2a4038',
-    borderStrong: '#405d51',
-    borderSubtle: '#20342d',
-    borderSuccess: '#35684b',
-    borderInfo: '#365d63',
-    borderWarning: '#735725',
-    borderDanger: '#7c2f29',
-    text: '#f5f7fb',
-    textSoft: '#b9c7d8',
-    textMuted: '#8796aa',
-    textDisabled: '#6b7280',
-    textOnAccent: '#07111f',
+    bgTop: '#0d120e',
+    bgMid: '#111a13',
+    bgBottom: '#172019',
+    surface: '#182119',
+    surfaceAlt: '#1d291f',
+    surfaceWarm: '#2a281b',
+    surfaceLifted: '#202c21',
+    surfacePressed: '#121a14',
+    surfaceMuted: '#1b251c',
+    surfaceSuccess: '#1c2d1c',
+    surfaceInfo: '#192a26',
+    surfaceWarning: '#2c2818',
+    surfaceDanger: '#301d19',
+    border: '#344238',
+    borderStrong: '#506254',
+    borderSubtle: '#29352c',
+    borderSuccess: '#4f7048',
+    borderInfo: '#486a62',
+    borderWarning: '#755d2b',
+    borderDanger: '#81443a',
+    text: '#f3f5ee',
+    textSoft: '#c5cec3',
+    textMuted: '#8f9e91',
+    textDisabled: '#69766b',
+    textOnAccent: '#16200f',
     textOnDanger: '#ffffff',
-    accentMint: '#79d59d',
-    accentCyan: '#7fc9d3',
-    accentAmber: '#e9b75a',
-    accentCoral: '#eb8f78',
-    accentLeaf: '#a5cf74',
-    accentPlum: '#b7adc9',
-    success: '#4ade80',
-    info: '#7dd3fc',
-    warning: '#fbbf24',
-    danger: '#f87171',
-    progressBg: '#263346',
+    accentMint: '#b9df78',
+    accentCyan: '#75b4a5',
+    accentAmber: '#d6a34f',
+    accentCoral: '#df806c',
+    accentLeaf: '#9fbd70',
+    accentPlum: '#aaa0bd',
+    success: '#7fbc78',
+    info: '#76b1a6',
+    warning: '#d5a44c',
+    danger: '#e17d70',
+    progressBg: '#303d32',
     overlay: 'rgba(0, 0, 0, 0.65)',
-    shadow: '#020617',
-    tabBar: '#101f1c',
+    shadow: '#050805',
+    tabBar: 'rgba(24, 33, 25, 0.94)',
   },
 };
 
 const radii = {
-  sm: 6,
-  lg: 8,
-  xl: 8,
+  sm: 10,
+  lg: 16,
+  xl: 26,
 };
+
+function withSemanticColors(colors: AppColors): SemanticColors {
+  return {
+    ...colors,
+    primary: colors.accentMint,
+    neutralBackground: colors.surfaceMuted,
+    accent: colors.accentAmber,
+    accentPrimary: colors.accentMint,
+    accentSecondary: colors.accentCyan,
+    accentTertiary: colors.accentAmber,
+  };
+}
 
 let currentResolvedMode: ResolvedThemeMode = 'light';
 
 export const theme = {
   get colors() {
-    return colorPalettes[currentResolvedMode];
+    return withSemanticColors(colorPalettes[currentResolvedMode]);
   },
-  darkColors: colorPalettes.dark,
+  darkColors: withSemanticColors(colorPalettes.dark),
   radii,
+  spacing,
+  layout,
 };
 
 export function createThemedStyles(
-  factory: (colors: AppColors, radiusTokens: typeof radii) => Record<string, any>,
+  factory: (
+    colors: SemanticColors,
+    radiusTokens: typeof radii,
+    spacingTokens: typeof spacing,
+    layoutTokens: typeof layout,
+  ) => Record<string, any>,
 ) {
   const cache: Partial<Record<ResolvedThemeMode, Record<string, any>>> = {};
 
@@ -162,7 +239,9 @@ export function createThemedStyles(
 
       const mode = currentResolvedMode;
       if (!cache[mode]) {
-        cache[mode] = StyleSheet.create(factory(colorPalettes[mode], radii) as any);
+        cache[mode] = StyleSheet.create(
+          factory(withSemanticColors(colorPalettes[mode]), radii, spacing, layout) as any,
+        );
       }
 
       return cache[mode]?.[property];
@@ -187,7 +266,9 @@ export function useAppTheme() {
   return {
     mode: resolvedMode,
     requestedMode: themeMode,
-    colors: colorPalettes[resolvedMode],
+    colors: withSemanticColors(colorPalettes[resolvedMode]),
     radii,
+    spacing,
+    layout,
   };
 }

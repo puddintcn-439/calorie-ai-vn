@@ -60,9 +60,9 @@ export function UiButton({
 
   const variantStyle = {
     primary: {
-      backgroundColor: colors.accentMint,
+      backgroundColor: colors.accentPrimary,
       borderWidth: 1,
-      borderColor: colors.accentMint,
+      borderColor: colors.accentPrimary,
     },
     secondary: {
       backgroundColor: colors.surfaceLifted,
@@ -110,7 +110,9 @@ export function UiButton({
     <Animated.View
       style={[
         styles.shadowWrap,
-        variant === 'primary' && Platform.OS === 'web' ? { boxShadow: `0px 10px 18px ${colors.accentMint}24` } : null,
+        variant === 'primary' && Platform.OS === 'web'
+          ? { boxShadow: `0px 12px 26px ${colors.accentPrimary}3d, inset 0 1px 0 rgba(255,255,255,.45)` }
+          : null,
         { transform: [{ scale }] },
       ]}
     >
@@ -128,9 +130,9 @@ export function UiButton({
       >
         {loading ? (
           <View style={styles.loadingRow}>
-            <View style={[styles.loadingDot, { backgroundColor: variant === 'primary' ? colors.textOnAccent : colors.accentMint }]} />
-            <View style={[styles.loadingDot, { backgroundColor: variant === 'primary' ? colors.textOnAccent : colors.accentMint, opacity: 0.72 }]} />
-            <View style={[styles.loadingDot, { backgroundColor: variant === 'primary' ? colors.textOnAccent : colors.accentMint, opacity: 0.48 }]} />
+            <View style={[styles.loadingDot, { backgroundColor: variant === 'primary' ? colors.textOnAccent : colors.accentPrimary }]} />
+            <View style={[styles.loadingDot, { backgroundColor: variant === 'primary' ? colors.textOnAccent : colors.accentPrimary, opacity: 0.72 }]} />
+            <View style={[styles.loadingDot, { backgroundColor: variant === 'primary' ? colors.textOnAccent : colors.accentPrimary, opacity: 0.48 }]} />
           </View>
         ) : (
           <Text style={textStyle}>{translatedLabel}</Text>
@@ -142,9 +144,9 @@ export function UiButton({
 
 const styles = StyleSheet.create({
   base: {
-    minHeight: 50,
+    minHeight: 52,
     paddingVertical: 14,
-    paddingHorizontal: 22,
+    paddingHorizontal: 24,
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
@@ -155,11 +157,12 @@ const styles = StyleSheet.create({
   baseText: {
     fontSize: 15,
     lineHeight: 20,
-    fontWeight: '900',
+    fontWeight: '800',
+    letterSpacing: -0.25,
     textAlign: 'center',
   },
   shadowWrap: {
-    borderRadius: 8,
+    borderRadius: 16,
   },
   loadingRow: {
     flexDirection: 'row',

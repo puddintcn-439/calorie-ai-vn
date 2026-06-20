@@ -33,7 +33,10 @@ function TabIcon({
       styles.tabIconWrap,
       compact && styles.tabIconWrapCompact,
       desktop && styles.tabIconWrapDesktop,
-      focused && { backgroundColor: colors.accentMint },
+      focused && {
+        backgroundColor: colors.accentMint,
+        ...(Platform.OS === 'web' ? { boxShadow: `0 8px 18px ${colors.accentMint}42` } : null),
+      },
     ]}>
       <AnimatedIonicon
         name={name}
@@ -76,18 +79,21 @@ export default function TabsLayout() {
           paddingBottom: (isDesktop ? 2 : isCompact ? 6 : 8) + bottomInset,
           paddingHorizontal: isDesktop ? 8 : 8,
           backgroundColor: colors.tabBar,
-          borderColor: colors.border,
+          borderColor: colors.borderSubtle,
           borderWidth: 1,
-          borderRadius: 8,
+          borderRadius: isDesktop ? 22 : 26,
           ...(Platform.OS === 'web'
-            ? { boxShadow: `0px 12px 24px ${colors.shadow}2f` }
+            ? {
+                boxShadow: `0px 18px 42px ${colors.shadow}2b, inset 0 1px 0 rgba(255,255,255,.55)`,
+                backdropFilter: 'blur(22px) saturate(1.25)',
+              }
             : {
                 shadowColor: colors.shadow,
-                shadowOpacity: 0.18,
-                shadowRadius: 16,
-                shadowOffset: { width: 0, height: 10 },
+                shadowOpacity: 0.22,
+                shadowRadius: 22,
+                shadowOffset: { width: 0, height: 14 },
               }),
-          elevation: 6,
+          elevation: 10,
         },
         tabBarItemStyle: {
           paddingVertical: isDesktop ? 4 : isCompact ? 4 : 6,
@@ -97,6 +103,7 @@ export default function TabsLayout() {
           fontSize: isCompact ? 10 : isDesktop ? 9 : 11,
           lineHeight: isCompact ? 14 : isDesktop ? 13 : 15,
           fontWeight: '800',
+          letterSpacing: -0.15,
           paddingBottom: isCompact ? 2 + Math.round(bottomInset / 2) : isDesktop ? 0 : 6 + Math.round(bottomInset / 2),
         },
         tabBarActiveTintColor: colors.accentMint,
@@ -177,18 +184,18 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   tabIconWrap: {
-    width: 30,
-    height: 27,
-    borderRadius: 8,
+    width: 34,
+    height: 29,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
   tabIconWrapCompact: {
-    width: 28,
-    height: 26,
+    width: 32,
+    height: 28,
   },
   tabIconWrapDesktop: {
-    width: 26,
-    height: 24,
+    width: 30,
+    height: 26,
   },
 });

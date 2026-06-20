@@ -3,6 +3,7 @@ import {
   gotoApp,
   mockNinetyDayJourneyApi,
   setAuthToken,
+  setLocale,
 } from './helpers';
 
 const AUTHENTICATED_ROUTES = [
@@ -26,7 +27,7 @@ const VIETNAMESE_DIACRITICS = /[àáạảãâầấậẩẫăằắặẳẵè
 test.describe('English locale', () => {
   test('primary app routes do not render Vietnamese UI copy', async ({ page }) => {
     await setAuthToken(page);
-    await page.addInitScript(() => window.localStorage.setItem('app_locale', 'en'));
+    await setLocale(page);
     await mockNinetyDayJourneyApi(page);
 
     for (const path of AUTHENTICATED_ROUTES) {
@@ -37,7 +38,7 @@ test.describe('English locale', () => {
   });
 
   test('public auth routes do not render Vietnamese UI copy', async ({ page }) => {
-    await page.addInitScript(() => window.localStorage.setItem('app_locale', 'en'));
+    await setLocale(page);
 
     for (const path of PUBLIC_ROUTES) {
       await gotoApp(page, path);

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   StyleSheet,
@@ -22,6 +22,8 @@ import { RewardToast, RewardToastData } from '../../components/reward-toast';
 import { useI18n } from '../../components/i18n';
 import type { I18nKey } from '../../components/i18n';
 import { TextInput } from '../../components/i18n-text-input';
+import { PortionInput } from '../../components/portion-input';
+import { scaleNutrition } from '../../services/portion.service';
 
 const logHeroIllustration = require('../../assets/images/log-hero.jpg') as number;
 
@@ -203,6 +205,7 @@ export default function LogScreen() {
   const [editingLog, setEditingLog] = useState<FoodLog | null>(null);
   const [editMealType, setEditMealType] = useState<MealType>('lunch');
   const [editName, setEditName] = useState('');
+  const [editQuantity, setEditQuantity] = useState('1');
   const [editGrams, setEditGrams] = useState('');
   const [editCalories, setEditCalories] = useState('');
   const [editProtein, setEditProtein] = useState('');
@@ -212,6 +215,7 @@ export default function LogScreen() {
   const [editingSavedMeal, setEditingSavedMeal] = useState<SavedMeal | null>(null);
   const [editSavedMealName, setEditSavedMealName] = useState('');
   const [reward, setReward] = useState<RewardToastData | null>(null);
+  const editNutritionBase = useRef({ grams: 1, calories: 0, protein: 0, carbs: 0, fat: 0 });
 
   const loadLogData = useCallback(() => {
     if (authLoading || !token) return;
@@ -343,41 +347,66 @@ export default function LogScreen() {
   };
 
   const openEditLog = (log: FoodLog) => {
+    const quantity = Math.max(1, safeNumber(log.quantity, 1));
+    const totalGrams = Math.max(1, safeNumber(log.estimated_grams, 1));
     setEditingLog(log);
     setEditMealType(log.meal_type);
     setEditName(log.name_vi ?? log.name);
-    setEditGrams(String(safeRound(log.estimated_grams)));
+    setEditQuantity(String(quantity));
+    setEditGrams(String(safeRound(totalGrams / quantity)));
     setEditCalories(String(safeRound(log.calories)));
     setEditProtein(String(safeRound(log.protein_g)));
     setEditCarbs(String(safeRound(log.carbs_g)));
     setEditFat(String(safeRound(log.fat_g)));
     setEditNotes(log.notes ?? '');
+    editNutritionBase.current = {
+      grams: totalGrams,
+      calories: safeNumber(log.calories),
+      protein: safeNumber(log.protein_g),
+      carbs: safeNumber(log.carbs_g),
+      fat: safeNumber(log.fat_g),
+    };
   };
 
-  const updateEditGrams = (value: string) => {
-    setEditGrams(value);
-    if (!editingLog) return;
+  const recalculateEditNutrition = (gramsPerPortion: number, quantity: number) => {
+    if (!Number.isFinite(gramsPerPortion) || gramsPerPortion <= 0 || !Number.isFinite(quantity) || quantity <= 0) return;
+    const scaled = scaleNutrition(editNutritionBase.current, gramsPerPortion * quantity);
+    setEditCalories(String(scaled.calories));
+    setEditProtein(String(scaled.protein));
+    setEditCarbs(String(scaled.carbs));
+    setEditFat(String(scaled.fat));
+  };
 
-    const grams = Number(value);
-    if (!Number.isFinite(grams) || grams < 0 || editingLog.estimated_grams <= 0) return;
+  const updateEditGrams = (grams: number) => {
+    setEditGrams(String(grams));
+    recalculateEditNutrition(grams, Math.max(1, Number(editQuantity) || 1));
+  };
 
-    const ratio = grams / editingLog.estimated_grams;
-    setEditCalories(String(safeRound(safeNumber(editingLog.calories) * ratio)));
-    setEditProtein(String(safeRound(safeNumber(editingLog.protein_g) * ratio)));
-    setEditCarbs(String(safeRound(safeNumber(editingLog.carbs_g) * ratio)));
-    setEditFat(String(safeRound(safeNumber(editingLog.fat_g) * ratio)));
+  const updateEditQuantity = (value: string) => {
+    const sanitized = value.replace(/[^\d.]/g, '');
+    setEditQuantity(sanitized);
+    const quantity = Number(sanitized);
+    recalculateEditNutrition(Math.max(1, Number(editGrams) || 1), quantity);
   };
 
   const handleSaveEditedLog = async () => {
     if (!editingLog) return;
 
-    const grams = Number(editGrams);
+    const gramsPerPortion = Number(editGrams);
+    const quantity = Number(editQuantity);
+    const grams = gramsPerPortion * quantity;
     const calories = Number(editCalories);
     const protein = Number(editProtein);
     const carbs = Number(editCarbs);
     const fat = Number(editFat);
 
-    if (![grams, calories, protein, carbs, fat].every((value) => Number.isFinite(value) && value >= 0)) {
+    if (
+      !Number.isFinite(quantity)
+      || quantity <= 0
+      || !Number.isFinite(gramsPerPortion)
+      || gramsPerPortion <= 0
+      || ![grams, calories, protein, carbs, fat].every((value) => Number.isFinite(value) && value >= 0)
+    ) {
       Alert.alert('screen.tabs.log.alert.invalidLogTitle', 'screen.tabs.log.alert.invalidLogBody');
       return;
     }
@@ -387,6 +416,7 @@ export default function LogScreen() {
         meal_type: editMealType,
         name: editName.trim() || editingLog.name,
         name_vi: editName.trim() || editingLog.name_vi,
+        quantity,
         estimated_grams: grams,
         calories,
         protein_g: protein,
@@ -618,68 +648,95 @@ export default function LogScreen() {
           <View style={styles.catalogSheet}>
             <View style={styles.catalogHeader}>
               <Text style={styles.catalogTitle} i18nKey="screen.tabs.log.edit.title" />
-              <TouchableOpacity onPress={() => setEditingLog(null)}>
+              <TouchableOpacity style={styles.modalCloseButton} onPress={() => setEditingLog(null)} accessibilityRole="button" accessibilityLabel={t('common.cancel')}>
                 <Ionicons name="close" size={22} color={theme.colors.textMuted} />
               </TouchableOpacity>
             </View>
 
-            <TextInput
-              value={editName}
-              onChangeText={setEditName}
-              placeholder="screen.tabs.log.edit.foodName"
-              placeholderTextColor={theme.colors.textDisabled}
-              style={styles.editInput}
-            />
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled" contentContainerStyle={styles.editForm}>
+              <View style={styles.editFullField}>
+                <Text style={styles.editLabel} i18nKey="screen.tabs.log.edit.foodName" />
+                <TextInput
+                  value={editName}
+                  onChangeText={setEditName}
+                  placeholder="screen.tabs.log.edit.foodName"
+                  placeholderTextColor={theme.colors.textDisabled}
+                  style={styles.editInput}
+                  testID="log-edit-name"
+                />
+              </View>
 
-            <View style={styles.editMealRow}>
-              {(['breakfast', 'lunch', 'dinner', 'snack'] as MealType[]).map((meal) => (
-                <TouchableOpacity
-                  key={meal}
-                  style={[styles.editMealBtn, editMealType === meal && styles.editMealBtnActive]}
-                  onPress={() => setEditMealType(meal)}
-                >
-                  <Text style={[styles.editMealBtnText, editMealType === meal && styles.editMealBtnTextActive]}>
-                    {t(MEAL_LABELS[meal])}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+              <View style={styles.editFullField}>
+                <Text style={styles.editLabel} i18nKey="screen.tabs.log.edit.quantity" />
+                <TextInput
+                  value={editQuantity}
+                  onChangeText={updateEditQuantity}
+                  keyboardType="decimal-pad"
+                  inputMode="decimal"
+                  style={styles.editInput}
+                  testID="log-edit-quantity"
+                />
+              </View>
 
-            <View style={styles.editGrid}>
-              <View style={styles.editField}>
-                <Text style={styles.editLabel} i18nKey="screen.tabs.log.edit.grams" />
-                <TextInput value={editGrams} onChangeText={updateEditGrams} keyboardType="numeric" style={styles.editInput} />
-              </View>
-              <View style={styles.editField}>
-                <Text style={styles.editLabel} i18nKey="screen.tabs.log.edit.kcal" />
-                <TextInput value={editCalories} onChangeText={setEditCalories} keyboardType="numeric" style={styles.editInput} />
-              </View>
-              <View style={styles.editField}>
-                <Text style={styles.editLabel} i18nKey="screen.tabs.log.edit.protein" />
-                <TextInput value={editProtein} onChangeText={setEditProtein} keyboardType="numeric" style={styles.editInput} />
-              </View>
-              <View style={styles.editField}>
-                <Text style={styles.editLabel} i18nKey="screen.tabs.log.edit.carbs" />
-                <TextInput value={editCarbs} onChangeText={setEditCarbs} keyboardType="numeric" style={styles.editInput} />
-              </View>
-              <View style={styles.editField}>
-                <Text style={styles.editLabel} i18nKey="screen.tabs.log.edit.fat" />
-                <TextInput value={editFat} onChangeText={setEditFat} keyboardType="numeric" style={styles.editInput} />
-              </View>
-            </View>
+              <PortionInput
+                value={Math.max(1, Number(editGrams) || 1)}
+                onChange={updateEditGrams}
+                label="screen.tabs.log.edit.gramsPerPortion"
+                testID="log-edit-portion"
+              />
 
-            <TextInput
-              value={editNotes}
-              onChangeText={setEditNotes}
-              placeholder="screen.tabs.log.edit.notes"
-              placeholderTextColor={theme.colors.textDisabled}
-              style={[styles.editInput, styles.editNotes]}
-              multiline
-            />
+              <View style={styles.editMealRow}>
+                {(['breakfast', 'lunch', 'dinner', 'snack'] as MealType[]).map((meal) => (
+                  <TouchableOpacity
+                    key={meal}
+                    style={[styles.editMealBtn, editMealType === meal && styles.editMealBtnActive]}
+                    onPress={() => setEditMealType(meal)}
+                  >
+                    <Text style={[styles.editMealBtnText, editMealType === meal && styles.editMealBtnTextActive]}>
+                      {t(MEAL_LABELS[meal])}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
 
-            <TouchableOpacity style={styles.catalogConfirmBtn} onPress={() => void handleSaveEditedLog()}>
-              <Text style={styles.catalogConfirmText} i18nKey="screen.tabs.log.edit.save" />
-            </TouchableOpacity>
+              <View style={styles.macroPreview}>
+                <Text style={styles.macroPreviewTitle} i18nKey="screen.tabs.log.edit.nutritionPreview" />
+                <View style={styles.editGrid}>
+                  <View style={styles.editField}>
+                    <Text style={styles.editLabel} i18nKey="screen.tabs.log.edit.kcal" />
+                    <TextInput value={editCalories} onChangeText={setEditCalories} keyboardType="numeric" style={styles.editInput} testID="log-edit-calories" />
+                  </View>
+                  <View style={styles.editField}>
+                    <Text style={styles.editLabel} i18nKey="screen.tabs.log.edit.protein" />
+                    <TextInput value={editProtein} onChangeText={setEditProtein} keyboardType="numeric" style={styles.editInput} testID="log-edit-protein" />
+                  </View>
+                  <View style={styles.editField}>
+                    <Text style={styles.editLabel} i18nKey="screen.tabs.log.edit.carbs" />
+                    <TextInput value={editCarbs} onChangeText={setEditCarbs} keyboardType="numeric" style={styles.editInput} testID="log-edit-carbs" />
+                  </View>
+                  <View style={styles.editField}>
+                    <Text style={styles.editLabel} i18nKey="screen.tabs.log.edit.fat" />
+                    <TextInput value={editFat} onChangeText={setEditFat} keyboardType="numeric" style={styles.editInput} testID="log-edit-fat" />
+                  </View>
+                </View>
+              </View>
+
+              <View style={styles.editFullField}>
+                <Text style={styles.editLabel} i18nKey="screen.tabs.log.edit.notes" />
+                <TextInput
+                  value={editNotes}
+                  onChangeText={setEditNotes}
+                  placeholder="screen.tabs.log.edit.notes"
+                  placeholderTextColor={theme.colors.textDisabled}
+                  style={[styles.editInput, styles.editNotes]}
+                  multiline
+                />
+              </View>
+
+              <TouchableOpacity style={styles.catalogConfirmBtn} onPress={() => void handleSaveEditedLog()} testID="log-edit-save">
+                <Text style={styles.catalogConfirmText} i18nKey="screen.tabs.log.edit.save" />
+              </TouchableOpacity>
+            </ScrollView>
           </View>
         </View>
       </Modal>
@@ -801,10 +858,22 @@ export default function LogScreen() {
                   <View style={styles.logRight}>
                     <Text style={styles.logCalorie}>{formatKcal(log.calories)}</Text>
                     <View style={styles.logActions}>
-                      <TouchableOpacity onPress={() => openEditLog(log)}>
+                      <TouchableOpacity
+                        style={styles.logActionButton}
+                        onPress={() => openEditLog(log)}
+                        accessibilityRole="button"
+                        accessibilityLabel={t('common.edit')}
+                        testID={`log-edit-${log.id}`}
+                      >
                         <Ionicons name="create-outline" size={18} color={theme.colors.accentCyan} />
                       </TouchableOpacity>
-                      <TouchableOpacity onPress={() => void handleRemoveLog(log)}>
+                      <TouchableOpacity
+                        style={styles.logActionButton}
+                        onPress={() => void handleRemoveLog(log)}
+                        accessibilityRole="button"
+                        accessibilityLabel={t('common.delete')}
+                        testID={`log-delete-${log.id}`}
+                      >
                         <Ionicons name="trash-outline" size={18} color={theme.colors.danger} />
                       </TouchableOpacity>
                     </View>
@@ -957,6 +1026,7 @@ const styles = createThemedStyles((colors, radii) => ({
   logDetail: { color: colors.textMuted, fontSize: 12, lineHeight: 17, marginTop: 3 },
   logRight: { alignItems: 'flex-end', gap: 4 },
   logActions: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  logActionButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   logCalorie: { color: colors.accentMint, fontWeight: '900' },
   emptyStateCard: { marginTop: 8 },
   activitySection: { marginBottom: 22, marginTop: 4 },
@@ -980,8 +1050,9 @@ const styles = createThemedStyles((colors, radii) => ({
   activityBurned: { color: colors.warning, fontWeight: '800', fontSize: 13, marginTop: 10, textAlign: 'right' },
   // Exercise catalog modal
   catalogOverlay: { flex: 1, backgroundColor: colors.overlay, justifyContent: 'flex-end' },
-  catalogSheet: { backgroundColor: colors.surface, borderTopLeftRadius: 18, borderTopRightRadius: 18, padding: 22, maxHeight: '85%', borderWidth: 1, borderColor: colors.borderSubtle },
+  catalogSheet: { backgroundColor: colors.surface, borderTopLeftRadius: 18, borderTopRightRadius: 18, padding: 16, maxHeight: '90%', borderWidth: 1, borderColor: colors.borderSubtle },
   catalogHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
+  modalCloseButton: { width: 48, height: 48, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surfaceMuted, borderWidth: 1, borderColor: colors.borderSubtle },
   catalogTitle: { color: colors.text, fontWeight: '900', fontSize: 19, lineHeight: 24 },
   catalogHint: { color: colors.textMuted, fontSize: 13, lineHeight: 19, marginBottom: 14 },
   catalogItem: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surfaceMuted, borderRadius: 8, paddingHorizontal: 15, paddingVertical: 13, marginBottom: 9, borderWidth: 1, borderColor: colors.borderSubtle },
@@ -1005,18 +1076,23 @@ const styles = createThemedStyles((colors, radii) => ({
     borderRadius: 8,
     color: colors.text,
     paddingHorizontal: 13,
+    minHeight: 48,
     paddingVertical: 12,
     fontSize: 15,
   },
-  editMealRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginVertical: 14 },
-  editMealBtn: { paddingHorizontal: 11, paddingVertical: 9, borderRadius: 8, borderWidth: 1, borderColor: colors.borderSubtle, backgroundColor: colors.surfaceMuted },
+  editForm: { gap: 16, paddingBottom: 8 },
+  editFullField: { gap: 8 },
+  editMealRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  editMealBtn: { minHeight: 44, minWidth: 72, paddingHorizontal: 11, paddingVertical: 9, borderRadius: 8, borderWidth: 1, borderColor: colors.borderSubtle, backgroundColor: colors.surfaceMuted, alignItems: 'center', justifyContent: 'center' },
   editMealBtnActive: { backgroundColor: colors.accentMint, borderColor: colors.accentMint },
   editMealBtnText: { color: colors.textMuted, fontWeight: '800', fontSize: 12 },
   editMealBtnTextActive: { color: colors.textOnAccent },
-  editGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 12 },
-  editField: { flexBasis: '30%', flexGrow: 1, minWidth: 92 },
-  editLabel: { color: colors.textMuted, fontSize: 11, fontWeight: '800', marginBottom: 5 },
-  editNotes: { minHeight: 72, textAlignVertical: 'top', marginBottom: 14 },
+  macroPreview: { gap: 8, padding: 12, borderRadius: 16, backgroundColor: colors.surfaceAlt, borderWidth: 1, borderColor: colors.borderSubtle },
+  macroPreviewTitle: { color: colors.text, fontSize: 13, fontWeight: '900' },
+  editGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  editField: { flexBasis: '46%', flexGrow: 1, minWidth: 112 },
+  editLabel: { color: colors.textSoft, fontSize: 12, fontWeight: '800' },
+  editNotes: { minHeight: 72, textAlignVertical: 'top' },
 }));
 
 

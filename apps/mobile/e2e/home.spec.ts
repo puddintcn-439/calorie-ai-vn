@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { gotoApp, setAuthToken, jsonResponse } from './helpers';
+import { gotoApp, setAuthToken, jsonResponse, setLocale } from './helpers';
 
 test.describe('Mobile web smoke', () => {
   test('loads homepage and shows main tabs', async ({ page }) => {
@@ -18,7 +18,7 @@ test.describe('Mobile web smoke', () => {
 
   test('uses stored English locale for primary dashboard copy', async ({ page }) => {
     await setAuthToken(page);
-    await page.addInitScript(() => window.localStorage.setItem('app_locale', 'en'));
+    await setLocale(page);
     await page.route('**/user/profile', async (route) => {
       await route.fulfill(jsonResponse({ full_name: 'Test', weight_kg: 65, height_cm: 170, age: 30, gender: 'male' }));
     });
