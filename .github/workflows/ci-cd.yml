@@ -106,7 +106,26 @@ jobs:
           cache: 'npm'
 
       - name: Install dependencies
-        run: npm ci
+        env:
+          npm_config_fetch_retries: 5
+          npm_config_fetch_retry_mintimeout: 20000
+          npm_config_fetch_retry_maxtimeout: 120000
+          npm_config_maxsockets: 5
+        run: |
+          for attempt in 1 2 3; do
+            if npm ci; then
+              exit 0
+            fi
+
+            if [ "$attempt" -eq 3 ]; then
+              echo "::error::npm ci failed after 3 attempts"
+              exit 1
+            fi
+
+            delay=$((attempt * 15))
+            echo "::warning::npm ci failed on attempt $attempt; retrying in ${delay}s"
+            sleep "$delay"
+          done
 
       - name: Mobile TypeScript check
         run: cd apps/mobile && npx tsc --noEmit

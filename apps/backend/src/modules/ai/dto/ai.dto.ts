@@ -73,6 +73,25 @@ export class ScanVoiceDto {
   context?: ScanVoiceContextDto;
 }
 
+export class ScanVoiceAudioDto {
+  @ApiProperty({ required: false, example: 'vi-VN' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(16)
+  locale?: string;
+
+  @ApiProperty({ required: false, example: 'Asia/Ho_Chi_Minh' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  timezone?: string;
+
+  @ApiProperty({ required: false, enum: MealHint })
+  @IsOptional()
+  @IsEnum(MealHint)
+  meal_hint?: MealHint;
+}
+
 export class ScanImageDto {
   @ApiProperty({ type: 'string', format: 'binary' })
   image: Express.Multer.File;

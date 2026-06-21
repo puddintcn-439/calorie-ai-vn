@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View,
   StyleSheet,
@@ -10,6 +10,7 @@ import {
   Modal,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import { File as ExpoFile } from 'expo-file-system';
 import { Ionicons } from '@expo/vector-icons';
 import { AIScanResponse, AIDetectedItem, Food, FoodLog, MealType, ContextMode, CONTEXT_ADAPTERS } from '@calorie-ai/types';
 import type { AiQuotaRemainingItem, AiQuotaRemainingResponse } from '@calorie-ai/types';
@@ -18,6 +19,7 @@ import {
   scanText,
   refineScan,
   scanVoice,
+  scanVoiceAudio,
   scanReceipt,
   fetchAiUsageQuota,
 } from '../../services/ai.service';
@@ -54,7 +56,18 @@ const useOptionalCameraPermissions = nativeCameraModule?.useCameraPermissions
   ?? (() => [null, async () => ({ granted: false })] as const);
 const NativeAudio: AudioModule | null = Platform.OS === 'web' ? null : (require('expo-av') as typeof import('expo-av')).Audio;
 
+function deleteTemporaryVoiceRecording(uri: string | null | undefined): void {
+  if (!uri || Platform.OS === 'web') return;
+  try {
+    const temporaryFile = new ExpoFile(uri);
+    if (temporaryFile.exists) temporaryFile.delete();
+  } catch {
+    appLogger.warn('Scan', 'Temporary voice recording cleanup failed');
+  }
+}
+
 type InputMode = 'camera' | 'gallery' | 'text' | 'voice' | 'receipt' | 'barcode' | 'search';
+type VoiceCaptureState = 'idle' | 'recording' | 'processing' | 'error';
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
 
 const MODE_ICONS: Record<InputMode, IoniconName> = {
@@ -171,14 +184,19 @@ export default function ScanScreen() {
   const [cameraPermission, requestCameraPermission] = useOptionalCameraPermissions();
 
   // Voice recording state
-  const [recording, setRecording] = useState<any | null>(null);
-  const [isRecording, setIsRecording] = useState(false);
+  const recordingRef = useRef<any | null>(null);
+  const recordingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const recordingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isStoppingRecordingRef = useRef(false);
+  const [voiceCaptureState, setVoiceCaptureState] = useState<VoiceCaptureState>('idle');
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [voiceRecordingNote, setVoiceRecordingNote] = useState('');
   const [voicePermissionGranted, setVoicePermissionGranted] = useState(false);
   const [reward, setReward] = useState<RewardToastData | null>(null);
 
   const { addLog, removeLog, saveMeal } = useLogStore();
+  const isRecording = voiceCaptureState === 'recording';
+  const isProcessingVoice = voiceCaptureState === 'processing';
   const isAiScanning = isScanning || isReceiptScanning;
   // Always prefer editableItems if we have a scan result, even if empty
   const currentItems = scanResult ? editableItems : [];
@@ -435,6 +453,49 @@ export default function ScanScreen() {
     ]);
   };
 
+  const clearVoiceRecordingTimers = () => {
+    if (recordingIntervalRef.current) {
+      clearInterval(recordingIntervalRef.current);
+      recordingIntervalRef.current = null;
+    }
+    if (recordingTimeoutRef.current) {
+      clearTimeout(recordingTimeoutRef.current);
+      recordingTimeoutRef.current = null;
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      clearVoiceRecordingTimers();
+      const activeRecording = recordingRef.current;
+      recordingRef.current = null;
+      if (activeRecording) {
+        const uri = activeRecording.getURI?.();
+        activeRecording.stopAndUnloadAsync()
+          .catch(() => {})
+          .finally(() => deleteTemporaryVoiceRecording(uri));
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (mode === 'voice') return;
+    clearVoiceRecordingTimers();
+    const activeRecording = recordingRef.current;
+    recordingRef.current = null;
+    if (activeRecording) {
+      const uri = activeRecording.getURI?.();
+      activeRecording.stopAndUnloadAsync()
+        .catch(() => {})
+        .finally(() => deleteTemporaryVoiceRecording(uri));
+    }
+    setVoiceCaptureState('idle');
+    setRecordingDuration(0);
+    if (NativeAudio) {
+      NativeAudio.setAudioModeAsync({ allowsRecordingIOS: false }).catch(() => {});
+    }
+  }, [mode]);
+
   const requestMicPermission = async () => {
     if (!NativeAudio) {
       setVoicePermissionGranted(false);
@@ -445,15 +506,80 @@ export default function ScanScreen() {
       const permission = await NativeAudio.requestPermissionsAsync();
       setVoicePermissionGranted(permission.granted);
       return permission.granted;
-    } catch (error) {
-      appLogger.warn('Scan', 'Failed to request microphone permission', error);
+    } catch {
+      appLogger.warn('Scan', 'Microphone permission request failed');
       return false;
+    }
+  };
+
+  const processVoiceRecording = async (activeRecording: any) => {
+    if (isStoppingRecordingRef.current) return;
+    isStoppingRecordingRef.current = true;
+    if (recordingRef.current === activeRecording) {
+      recordingRef.current = null;
+    }
+    clearVoiceRecordingTimers();
+    setVoiceCaptureState('processing');
+    setVoiceRecordingNote(t('screen.tabs.scan.voice.processing'));
+    setIsScanning(true);
+
+    const startedAt = Date.now();
+    let temporaryRecordingUri: string | null = null;
+    void telemetryService.emitLogAttempted('voice');
+
+    try {
+      temporaryRecordingUri = activeRecording.getURI?.() ?? null;
+      await activeRecording.stopAndUnloadAsync();
+      const uri = activeRecording.getURI() ?? temporaryRecordingUri;
+      if (!uri) throw new Error('Recording URI unavailable');
+      temporaryRecordingUri = uri;
+
+      const rawResult = await scanVoiceAudio({
+        uri,
+        locale: 'vi-VN',
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        meal_hint: selectedMeal,
+      });
+      const transcript = rawResult.transcript?.trim() ?? '';
+      if (!transcript) {
+        throw new Error('No transcript returned');
+      }
+
+      setVoiceTranscript(transcript);
+      const result = applyParsedPortion(rawResult, transcript);
+      applyScanResult(result);
+      promptForMissingPortion(result, transcript);
+      setVoiceCaptureState('idle');
+      setVoiceRecordingNote('');
+      void telemetryService.emitLogParsed('voice', {
+        elapsed_ms: Date.now() - startedAt,
+        item_count: result.items.length,
+        ai_confidence: result.ai_confidence,
+        correction_count: 0,
+      });
+    } catch (error) {
+      void telemetryService.emitLogFailed('voice', 'voice_audio_error', Date.now() - startedAt);
+      setVoiceCaptureState('error');
+      const status = (error as { response?: { status?: number } })?.response?.status;
+      setVoiceRecordingNote(t(status === 413
+        ? 'screen.tabs.scan.voice.tooLarge'
+        : 'screen.tabs.scan.voice.unclear'));
+      setScanNotice(t('screen.tabs.scan.notice.voiceError'));
+      appLogger.warn('Scan', 'Voice audio processing failed');
+    } finally {
+      deleteTemporaryVoiceRecording(temporaryRecordingUri);
+      setIsScanning(false);
+      isStoppingRecordingRef.current = false;
+      if (NativeAudio) {
+        NativeAudio.setAudioModeAsync({ allowsRecordingIOS: false }).catch(() => {});
+      }
     }
   };
 
   const startVoiceRecording = async () => {
     try {
       if (!NativeAudio) {
+        setVoiceCaptureState('error');
         setVoiceRecordingNote(t('screen.tabs.scan.voice.webNote'));
         return;
       }
@@ -474,53 +600,32 @@ export default function ScanScreen() {
       const rec = new NativeAudio.Recording();
       await rec.prepareToRecordAsync(NativeAudio.RecordingOptionsPresets.HIGH_QUALITY);
       await rec.startAsync();
-      
-      setRecording(rec);
-      setIsRecording(true);
+
+      recordingRef.current = rec;
+      setVoiceCaptureState('recording');
       setRecordingDuration(0);
       setVoiceTranscript('');
       setVoiceRecordingNote('');
+      setScanNotice(null);
 
-      // Animate duration counter
-      const durationInterval = setInterval(() => {
-        setRecordingDuration((d) => d + 1);
+      recordingIntervalRef.current = setInterval(() => {
+        setRecordingDuration((duration) => Math.min(30, duration + 1));
       }, 1000);
-
-      // Store interval ID in ref for cleanup
-      (window as any).__voiceRecordingInterval = durationInterval;
-    } catch (error) {
-      appLogger.warn('Scan', 'Failed to start recording', error);
+      recordingTimeoutRef.current = setTimeout(() => {
+        void processVoiceRecording(rec);
+      }, 30000);
+    } catch {
+      setVoiceCaptureState('error');
+      setVoiceRecordingNote(t('screen.tabs.scan.voice.unclear'));
+      appLogger.warn('Scan', 'Failed to start recording');
       Alert.alert('screen.tabs.scan.alert.005', 'screen.tabs.scan.alert.006');
     }
   };
 
   const stopVoiceRecording = async () => {
-    try {
-      if (!recording) return;
-
-      // Clear duration interval
-      if ((window as any).__voiceRecordingInterval) {
-        clearInterval((window as any).__voiceRecordingInterval);
-      }
-
-      await recording.stopAndUnloadAsync();
-      const uri = recording.getURI();
-      
-      setRecording(null);
-      setIsRecording(false);
-
-      if (uri) {
-        setVoiceRecordingNote(t('screen.tabs.scan.voice.recordedNote', { seconds: recordingDuration }));
-        Alert.alert(
-          'screen.tabs.scan.alert.007',
-          'screen.tabs.scan.alert.008',
-        );
-      }
-    } catch (error) {
-      appLogger.warn('Scan', 'Failed to stop recording', error);
-      Alert.alert('screen.tabs.scan.alert.009', 'screen.tabs.scan.alert.010');
-      setIsRecording(false);
-    }
+    const activeRecording = recordingRef.current;
+    if (!activeRecording) return;
+    await processVoiceRecording(activeRecording);
   };
 
   const handleCameraCapture = async () => {
@@ -1235,32 +1340,50 @@ export default function ScanScreen() {
         {/* ── Voice Mode ── */}
         {mode === 'voice' && (
           <View style={styles.textInputContainer}>
-            {!isRecording ? (
-              <TouchableOpacity 
-                style={[styles.captureButton, voiceRecordingNote && styles.captureButtonSecondary]}
-                onPress={startVoiceRecording}
-              >
-                <AnimatedIonicon name="mic" size={40} color={voiceRecordingNote ? theme.colors.info : theme.colors.success} motion="pulse" />
-                <Text style={[styles.captureText, voiceRecordingNote && { color: theme.colors.info }]}>
-                  {voiceRecordingNote ? t('screen.tabs.scan.voice.recordAgain') : t('screen.tabs.scan.voice.recordDraft')}
-                </Text>
-              </TouchableOpacity>
-            ) : (
+            {isProcessingVoice ? (
+              <View style={styles.voiceProcessingContainer} accessibilityLiveRegion="polite">
+                <ActivityIndicator color={theme.colors.primary} size="large" />
+                <Text style={styles.captureText}>{t('screen.tabs.scan.voice.processing')}</Text>
+              </View>
+            ) : isRecording ? (
               <View style={styles.recordingActiveContainer}>
                 <View style={styles.recordingPulse}>
                   <Text style={styles.recordingDuration}>{recordingDuration}s</Text>
                 </View>
+                <Text style={styles.captureText}>{t('screen.tabs.scan.voice.recording')}</Text>
                 <TouchableOpacity 
                   style={styles.stopRecordingButton}
                   onPress={stopVoiceRecording}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('screen.tabs.scan.voice.stop')}
                 >
                   <AnimatedIonicon name="stop" size={32} color={theme.colors.text} motion="pulse" />
-                  <Text style={styles.stopRecordingText} i18nKey="screen.tabs.scan.text.018" />
+                  <Text style={styles.stopRecordingText}>{t('screen.tabs.scan.voice.stop')}</Text>
                 </TouchableOpacity>
               </View>
+            ) : Platform.OS === 'web' ? (
+              <Text style={styles.voiceHintText}>{t('screen.tabs.scan.voice.webNote')}</Text>
+            ) : (
+              <TouchableOpacity
+                style={[styles.captureButton, voiceCaptureState === 'error' && styles.captureButtonSecondary]}
+                onPress={startVoiceRecording}
+                testID="voice-record-button"
+                accessibilityRole="button"
+                accessibilityLabel={t('screen.tabs.scan.voice.tapToSpeak')}
+              >
+                <AnimatedIonicon
+                  name="mic"
+                  size={40}
+                  color={voiceCaptureState === 'error' ? theme.colors.info : theme.colors.success}
+                  motion="pulse"
+                />
+                <Text style={[styles.captureText, voiceCaptureState === 'error' && { color: theme.colors.info }]}>
+                  {t('screen.tabs.scan.voice.tapToSpeak')}
+                </Text>
+              </TouchableOpacity>
             )}
 
-            {!!voiceRecordingNote && (
+            {!!voiceRecordingNote && !isProcessingVoice && Platform.OS !== 'web' && (
               <Text style={styles.voiceHintText}>{voiceRecordingNote}</Text>
             )}
 
@@ -1269,11 +1392,12 @@ export default function ScanScreen() {
                 <Text style={styles.transcriptLabel} i18nKey="screen.tabs.scan.text.019" />
                 <TextInput
                   style={styles.textInput}
+                  testID="voice-transcript-input"
                   value={voiceTranscript}
                   onChangeText={setVoiceTranscript}
                   placeholderTextColor={theme.colors.textDisabled}
                   multiline
-                  editable={!isScanning}
+                  editable={!isScanning && !isProcessingVoice}
                 />
               </View>
             ) : (
@@ -1281,21 +1405,23 @@ export default function ScanScreen() {
                 <Text style={styles.transcriptLabel} i18nKey="screen.tabs.scan.text.020" />
                 <TextInput
                   style={styles.textInput}
+                  testID="voice-transcript-input"
                   value={voiceTranscript}
                   onChangeText={setVoiceTranscript}
                   placeholder="screen.tabs.scan.placeholder.voiceDescription"
                   placeholderTextColor={theme.colors.textDisabled}
                   multiline
-                  editable={!isScanning}
+                  editable={!isScanning && !isProcessingVoice}
                 />
               </View>
             )}
 
             <MealPicker selected={selectedMeal} onSelect={setSelectedMeal} />
             <TouchableOpacity 
-              style={[styles.analyzeButton, (!voiceTranscript || isScanning) && styles.buttonDisabled]} 
+              style={[styles.analyzeButton, (!voiceTranscript || isScanning || isProcessingVoice) && styles.buttonDisabled]}
+              testID="voice-analyze-button"
               onPress={handleVoiceScan}
-              disabled={!voiceTranscript || isScanning}
+              disabled={!voiceTranscript || isScanning || isProcessingVoice}
             >
               <Text style={styles.analyzeButtonText}>
                 {isScanning ? t('screen.tabs.scan.action.analyzing') : t('screen.tabs.scan.action.analyzeDescription')}
@@ -2028,6 +2154,7 @@ const styles = createThemedStyles((colors, radii) => ({
   barcodeProductName: { color: colors.text, fontSize: 18, fontWeight: '800', marginBottom: 4 },
   barcodeServing: { color: colors.textMuted, fontSize: 13, marginBottom: 12 },
   // Voice recording styles
+  voiceProcessingContainer: { minHeight: 144, alignItems: 'center', justifyContent: 'center', gap: 16, paddingVertical: 24 },
   recordingActiveContainer: { alignItems: 'center', paddingVertical: 20, gap: 20 },
   recordingPulse: { 
     width: 120, 

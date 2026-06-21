@@ -23,6 +23,7 @@ export interface AIScanResponse {
   total_fat_g: number;
   ai_confidence: number;
   metadata?: Record<string, unknown>;
+  transcript?: string;
   raw_ai_response?: string;
   processing_ms: number;
 }

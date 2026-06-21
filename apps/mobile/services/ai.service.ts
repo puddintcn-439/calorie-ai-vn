@@ -16,6 +16,15 @@ export interface ScanVoicePayload {
   };
 }
 
+export interface ScanVoiceAudioPayload {
+  uri: string;
+  name?: string;
+  type?: string;
+  locale?: string;
+  timezone?: string;
+  meal_hint?: 'breakfast' | 'lunch' | 'dinner' | 'snack';
+}
+
 export interface ScanReceiptPayload {
   uri: string;
   locale?: string;
@@ -50,6 +59,38 @@ export async function scanText(text: string): Promise<AIScanResponse> {
 
 export async function scanVoice(payload: ScanVoicePayload): Promise<AIScanResponse> {
   const res = await withRetry(() => apiClient.post<AIScanResponse>('/ai/scan/voice', payload));
+  return res.data;
+}
+
+export async function scanVoiceAudio(payload: ScanVoiceAudioPayload): Promise<AIScanResponse> {
+  const formData = new FormData();
+  const filename = payload.name ?? 'voice-food-log.m4a';
+  const mimeType = payload.type ?? inferAudioMimeType(payload.uri);
+
+  if (Platform.OS === 'web') {
+    const response = await fetch(payload.uri);
+    const blob = await response.blob();
+    const audioBlob = blob.type === mimeType ? blob : blob.slice(0, blob.size, mimeType);
+    formData.append('audio', audioBlob, filename);
+  } else {
+    formData.append('audio', {
+      uri: payload.uri,
+      name: filename,
+      type: mimeType,
+    } as any);
+  }
+
+  if (payload.locale) formData.append('locale', payload.locale);
+  if (payload.timezone) formData.append('timezone', payload.timezone);
+  if (payload.meal_hint) formData.append('meal_hint', payload.meal_hint);
+
+  // Intentionally do not retry this multipart request. If the server completed
+  // transcription but the response was lost, an automatic retry would create a
+  // second AI usage reservation and could double-charge the same user action.
+  const res = await apiClient.post<AIScanResponse>('/ai/scan/voice-audio', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 45000,
+  });
   return res.data;
 }
 
@@ -125,6 +166,15 @@ async function prepareImageForUpload(
   );
 
   return { uri: result.uri, name: filename, type: 'image/jpeg' };
+}
+
+function inferAudioMimeType(uri: string): string {
+  const cleanUri = uri.split('?')[0].toLowerCase();
+  if (cleanUri.endsWith('.mp3')) return 'audio/mpeg';
+  if (cleanUri.endsWith('.wav')) return 'audio/wav';
+  if (cleanUri.endsWith('.webm')) return 'audio/webm';
+  if (cleanUri.endsWith('.mp4')) return 'audio/mp4';
+  return 'audio/m4a';
 }
 
 export async function refineScan(

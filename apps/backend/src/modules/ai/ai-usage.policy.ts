@@ -49,6 +49,18 @@ export const ESTIMATED_COST_USD: Record<AiUsageFeature, number> = {
   scan_receipt: 0.004,
 };
 
+// Voice audio performs two provider operations while remaining one user action:
+// transcription followed by the existing voice food parser. Keep one quota event
+// and finalize it with the combined estimate to avoid double-charging credits.
+export const VOICE_TRANSCRIPTION_ESTIMATED_COST_USD = 0.0015;
+export const VOICE_AUDIO_ESTIMATED_COST_USD =
+  ESTIMATED_COST_USD.scan_voice + VOICE_TRANSCRIPTION_ESTIMATED_COST_USD;
+
+export function estimateVoiceAudioCost(transcriptionAttempts = 1): number {
+  return ESTIMATED_COST_USD.scan_voice
+    + VOICE_TRANSCRIPTION_ESTIMATED_COST_USD * Math.max(1, transcriptionAttempts);
+}
+
 // Credit weights make production pricing safer than independent per-feature quotas.
 // A paid user can spend their monthly budget flexibly, while expensive image/receipt
 // features consume more budget than text/coach requests.

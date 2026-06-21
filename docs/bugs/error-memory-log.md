@@ -519,3 +519,18 @@ Backend build failed (exit ). Aborting.
 - Prevention Rule: In Node < 22 environments, ensure `ws` is present and pass it to `createClient(url, key, { realtime: { transport: ws } })`. Add a short integration smoke test in CI that starts the backend image and asserts `/health` responds to catch this early.
 - Files: `apps/backend/package.json`, `apps/backend/src/common/supabase/supabase.service.ts`, `docker-compose.yml`
 
+## 2026-06-21 — npm registry ECONNRESET during GitHub Actions
+
+- **Symptom:** `npm ci` failed while fetching `@firebase/logger` with
+  `ECONNRESET` and `Invalid response body ... aborted`.
+- **Classification:** transient npm registry/network failure; not a source-code,
+  lockfile, Node version, or dependency deprecation failure.
+- **Evidence:** other parallel jobs installed the same lockfile successfully in
+  the same workflow run.
+- **Mitigation:** npm fetch retries plus a bounded three-attempt install loop
+  with backoff in the affected CI job.
+- **Rule for future incidents:** inspect the exact failed step before upgrading
+  packages. Deprecation warnings printed before a network reset are not the
+  root cause.
+- **Follow-up:** new dependency-install workflow steps must apply bounded retry
+  behavior and must still fail after the final attempt.
