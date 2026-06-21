@@ -38,3 +38,6 @@ Thumbs.db
 # Temporary files
 tmp/
 .tmp/
+
+# Load test results (runtime output, changes every run)
+load-tests/results/
