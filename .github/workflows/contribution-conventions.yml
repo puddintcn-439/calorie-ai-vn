@@ -1,6 +1,8 @@
 name: Contribution conventions
 
 on:
+  push:
+    branches-ignore: [main, develop]
   pull_request:
     branches: [main, develop]
     types: [opened, edited, synchronize, reopened]
@@ -13,18 +15,17 @@ jobs:
     name: Validate branch, commits, and PR title
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout PR head
+      - name: Checkout branch head
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 0
 
-      - name: Validate naming conventions
+      - name: Validate branch and commit conventions
         shell: bash
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
-          PR_TITLE: ${{ github.event.pull_request.title }}
+          BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          HEAD_BRANCH: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.ref || github.ref_name }}
         run: |
           set -euo pipefail
 
@@ -36,9 +37,10 @@ jobs:
             exit 1
           fi
 
-          if [[ ! "$PR_TITLE" =~ $subject_pattern ]]; then
-            echo "::error::Invalid PR title '$PR_TITLE'. Use type(scope): description without author/tool prefixes."
-            exit 1
+          if [[ "$BASE_SHA" =~ ^0+$ ]]; then
+            commit_range='HEAD~1..HEAD'
+          else
+            commit_range="$BASE_SHA..HEAD"
           fi
 
           invalid_commits=0
@@ -47,6 +49,20 @@ jobs:
               echo "::error::Invalid commit subject '$subject'. Use type(scope): description."
               invalid_commits=1
             fi
-          done < <(git log --format='%s' "$BASE_SHA"..HEAD)
+          done < <(git log --format='%s' "$commit_range")
 
           exit "$invalid_commits"
+
+      - name: Validate PR title
+        if: github.event_name == 'pull_request'
+        shell: bash
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          set -euo pipefail
+          subject_pattern='^(feat|fix|update|refactor|docs|test|ci|chore|hotfix|release)(\([a-z0-9._/-]+\))?!?: .+'
+
+          if [[ ! "$PR_TITLE" =~ $subject_pattern ]]; then
+            echo "::error::Invalid PR title '$PR_TITLE'. Use type(scope): description without author/tool prefixes."
+            exit 1
+          fi
