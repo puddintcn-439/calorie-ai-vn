@@ -16,16 +16,14 @@ export class AiQueueService {
   private readonly concurrency: number;
 
   constructor(private config: ConfigService) {
-    this.concurrency = Number(this.config.get('AI_PROVIDER_MAX_CONCURRENCY') ?? 3);
+    const configuredConcurrency = Number(this.config.get('AI_PROVIDER_MAX_CONCURRENCY') ?? 3);
+    this.concurrency = Number.isFinite(configuredConcurrency)
+      ? Math.max(1, Math.floor(configuredConcurrency))
+      : 3;
     this.logger.debug(`[AiQueueService] concurrency=${this.concurrency}`);
   }
 
   async execute<T>(opName: string, fn: () => Promise<T>): Promise<T> {
-    if (this.concurrency <= 1) {
-      this.logger.debug(`[AiQueue] executing inline ${opName}`);
-      return fn();
-    }
-
     if (this.running < this.concurrency) {
       this.running += 1;
       try {

@@ -15,6 +15,14 @@ The audio endpoint uses `JwtAuthGuard`, per-user throttling, and the existing
 `scan_voice` AI usage feature. The existing transcript-only
 `POST /ai/scan/voice` endpoint remains available as the manual fallback.
 
+Voice audio remains one user quota action and consumes the existing
+`scan_voice` credit weight once. Its usage event is finalized with the combined
+estimated cost of transcription attempts and food parsing. A primary timeout
+followed by a backup attempt therefore records both transcription attempts
+without creating a second user quota event. The provider/model labels use
+`gemini_voice_audio` so admin usage views can distinguish audio from the
+transcript-only endpoint without adding a second quota event.
+
 ## API contract
 
 - Endpoint: `POST /ai/scan/voice-audio`
@@ -25,6 +33,7 @@ The audio endpoint uses `JwtAuthGuard`, per-user throttling, and the existing
 - Rate limit: 10 requests per minute per authenticated user
 - Mobile recording limit: 30 seconds
 - Mobile request timeout: 45 seconds
+- Gemini transcription timeout: 25–30 seconds total, with budget reserved for backup
 
 Supported MIME types:
 
@@ -56,7 +65,8 @@ the buffer to Gemini for transcription. Transcript content is not included in
 application logs or error messages.
 
 Expo records to an operating-system-managed temporary URI so the file can be
-uploaded. The app does not copy that file into persistent application storage.
+uploaded. The app does not copy that file into persistent application storage
+and deletes the temporary file after upload where Expo FileSystem permits it.
 
 ## Provider and fallback behavior
 
@@ -71,6 +81,16 @@ continues to call the original transcript endpoint.
 
 On web, direct recording is intentionally disabled because the current flow
 uses the native `expo-av` recorder. The transcript input remains available.
+
+The mobile audio upload is intentionally not retried automatically. If the
+server finishes an AI request but its HTTP response is lost, retrying would
+reserve quota again and could charge the same recording twice. The UI instead
+keeps the editable manual transcript fallback and offers another explicit try.
+
+Expo AV's `HIGH_QUALITY` preset produces MPEG-4 AAC in an `.m4a` container on
+both iOS and Android. The client sends `audio/m4a`; the backend also accepts
+`audio/mp4`, which covers servers or clients that label the same container that
+way.
 
 ## Manual QA
 

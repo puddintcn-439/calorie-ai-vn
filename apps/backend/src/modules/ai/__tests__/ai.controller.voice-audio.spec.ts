@@ -71,6 +71,9 @@ describe('AiController voice audio', () => {
     transcriptionService.transcribe.mockResolvedValue({
       transcript: 'một tô bún bò',
       provider: 'primary',
+      model: 'gemini-audio-test',
+      attempts: 1,
+      estimatedCostUsd: 0.0015,
     });
 
     const moduleRef = await Test.createTestingModule({
@@ -142,6 +145,7 @@ describe('AiController voice audio', () => {
       });
 
     expect(response.status).toBe(413);
+    expect(response.body.message).toBe('Audio file must be 5 MB or smaller.');
     expect(transcriptionService.transcribe).not.toHaveBeenCalled();
   });
 
@@ -184,12 +188,57 @@ describe('AiController voice audio', () => {
         parse_mode: 'voice',
         input_mode: 'voice_audio',
         transcription_provider: 'primary',
+        transcription_model: 'gemini-audio-test',
+        transcription_attempts: 1,
+        usage_accounting: {
+          quota_events: 1,
+          estimated_cost_usd: 0.0027,
+        },
       },
     });
+    expect(aiUsageService.reserveUsage).toHaveBeenCalledTimes(1);
     expect(aiUsageService.finalizeUsage).toHaveBeenCalledWith(
       'usage-1',
-      expect.objectContaining({ status: 'success' }),
+      expect.objectContaining({
+        status: 'success',
+        provider: 'gemini_voice_audio:primary',
+        model: 'gemini-audio-test+gemini-test',
+        estimatedCostUsd: 0.0027,
+      }),
     );
+  });
+
+  it('accounts for both transcription attempts without reserving quota twice', async () => {
+    transcriptionService.transcribe.mockResolvedValueOnce({
+      transcript: 'một tô bún bò',
+      provider: 'backup',
+      model: 'gemini-audio-test',
+      attempts: 2,
+      estimatedCostUsd: 0.003,
+    });
+
+    const response = await request(app.getHttpServer())
+      .post('/ai/scan/voice-audio')
+      .set('Authorization', 'Bearer test-token')
+      .attach('audio', Buffer.from('safe-audio-bytes'), {
+        filename: 'voice.m4a',
+        contentType: 'audio/m4a',
+      })
+      .expect(200);
+
+    expect(aiUsageService.reserveUsage).toHaveBeenCalledTimes(1);
+    expect(aiUsageService.reserveUsage).toHaveBeenCalledWith('user-1', 'scan_voice');
+    expect(aiUsageService.finalizeUsage).toHaveBeenCalledWith(
+      'usage-1',
+      expect.objectContaining({
+        provider: 'gemini_voice_audio:backup',
+        estimatedCostUsd: 0.0042,
+      }),
+    );
+    expect(response.body.metadata.usage_accounting).toEqual({
+      quota_events: 1,
+      estimated_cost_usd: 0.0042,
+    });
   });
 
   it('keeps the existing transcript endpoint working without transcription', async () => {
@@ -221,6 +270,9 @@ describe('AiController voice audio', () => {
     transcriptionService.transcribe.mockResolvedValueOnce({
       transcript: sensitiveTranscript,
       provider: 'primary',
+      model: 'gemini-audio-test',
+      attempts: 1,
+      estimatedCostUsd: 0.0015,
     });
     const logSpy = jest.spyOn(console, 'log').mockImplementation();
     const warnSpy = jest.spyOn(console, 'warn').mockImplementation();

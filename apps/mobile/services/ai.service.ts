@@ -84,6 +84,9 @@ export async function scanVoiceAudio(payload: ScanVoiceAudioPayload): Promise<AI
   if (payload.timezone) formData.append('timezone', payload.timezone);
   if (payload.meal_hint) formData.append('meal_hint', payload.meal_hint);
 
+  // Intentionally do not retry this multipart request. If the server completed
+  // transcription but the response was lost, an automatic retry would create a
+  // second AI usage reservation and could double-charge the same user action.
   const res = await apiClient.post<AIScanResponse>('/ai/scan/voice-audio', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
     timeout: 45000,

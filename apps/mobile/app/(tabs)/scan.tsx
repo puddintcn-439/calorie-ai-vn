@@ -10,6 +10,7 @@ import {
   Modal,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import { File as ExpoFile } from 'expo-file-system';
 import { Ionicons } from '@expo/vector-icons';
 import { AIScanResponse, AIDetectedItem, Food, FoodLog, MealType, ContextMode, CONTEXT_ADAPTERS } from '@calorie-ai/types';
 import type { AiQuotaRemainingItem, AiQuotaRemainingResponse } from '@calorie-ai/types';
@@ -54,6 +55,16 @@ const CameraView = nativeCameraModule?.CameraView;
 const useOptionalCameraPermissions = nativeCameraModule?.useCameraPermissions
   ?? (() => [null, async () => ({ granted: false })] as const);
 const NativeAudio: AudioModule | null = Platform.OS === 'web' ? null : (require('expo-av') as typeof import('expo-av')).Audio;
+
+function deleteTemporaryVoiceRecording(uri: string | null | undefined): void {
+  if (!uri || Platform.OS === 'web') return;
+  try {
+    const temporaryFile = new ExpoFile(uri);
+    if (temporaryFile.exists) temporaryFile.delete();
+  } catch {
+    appLogger.warn('Scan', 'Temporary voice recording cleanup failed');
+  }
+}
 
 type InputMode = 'camera' | 'gallery' | 'text' | 'voice' | 'receipt' | 'barcode' | 'search';
 type VoiceCaptureState = 'idle' | 'recording' | 'processing' | 'error';
@@ -459,7 +470,10 @@ export default function ScanScreen() {
       const activeRecording = recordingRef.current;
       recordingRef.current = null;
       if (activeRecording) {
-        activeRecording.stopAndUnloadAsync().catch(() => {});
+        const uri = activeRecording.getURI?.();
+        activeRecording.stopAndUnloadAsync()
+          .catch(() => {})
+          .finally(() => deleteTemporaryVoiceRecording(uri));
       }
     };
   }, []);
@@ -470,7 +484,10 @@ export default function ScanScreen() {
     const activeRecording = recordingRef.current;
     recordingRef.current = null;
     if (activeRecording) {
-      activeRecording.stopAndUnloadAsync().catch(() => {});
+      const uri = activeRecording.getURI?.();
+      activeRecording.stopAndUnloadAsync()
+        .catch(() => {})
+        .finally(() => deleteTemporaryVoiceRecording(uri));
     }
     setVoiceCaptureState('idle');
     setRecordingDuration(0);
@@ -498,24 +515,27 @@ export default function ScanScreen() {
   const processVoiceRecording = async (activeRecording: any) => {
     if (isStoppingRecordingRef.current) return;
     isStoppingRecordingRef.current = true;
+    if (recordingRef.current === activeRecording) {
+      recordingRef.current = null;
+    }
     clearVoiceRecordingTimers();
     setVoiceCaptureState('processing');
     setVoiceRecordingNote(t('screen.tabs.scan.voice.processing'));
     setIsScanning(true);
 
     const startedAt = Date.now();
+    let temporaryRecordingUri: string | null = null;
     void telemetryService.emitLogAttempted('voice');
 
     try {
+      temporaryRecordingUri = activeRecording.getURI?.() ?? null;
       await activeRecording.stopAndUnloadAsync();
-      const uri = activeRecording.getURI();
-      recordingRef.current = null;
+      const uri = activeRecording.getURI() ?? temporaryRecordingUri;
       if (!uri) throw new Error('Recording URI unavailable');
+      temporaryRecordingUri = uri;
 
       const rawResult = await scanVoiceAudio({
         uri,
-        name: 'voice-food-log.m4a',
-        type: 'audio/m4a',
         locale: 'vi-VN',
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         meal_hint: selectedMeal,
@@ -537,16 +557,17 @@ export default function ScanScreen() {
         ai_confidence: result.ai_confidence,
         correction_count: 0,
       });
-    } catch {
+    } catch (error) {
       void telemetryService.emitLogFailed('voice', 'voice_audio_error', Date.now() - startedAt);
       setVoiceCaptureState('error');
-      setVoiceRecordingNote(t('screen.tabs.scan.voice.unclear'));
+      const status = (error as { response?: { status?: number } })?.response?.status;
+      setVoiceRecordingNote(t(status === 413
+        ? 'screen.tabs.scan.voice.tooLarge'
+        : 'screen.tabs.scan.voice.unclear'));
       setScanNotice(t('screen.tabs.scan.notice.voiceError'));
       appLogger.warn('Scan', 'Voice audio processing failed');
     } finally {
-      if (recordingRef.current === activeRecording) {
-        recordingRef.current = null;
-      }
+      deleteTemporaryVoiceRecording(temporaryRecordingUri);
       setIsScanning(false);
       isStoppingRecordingRef.current = false;
       if (NativeAudio) {

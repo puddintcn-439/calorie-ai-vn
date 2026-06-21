@@ -8,7 +8,12 @@ import {
   HttpStatus,
   UploadedFile,
   UseInterceptors,
+  UseFilters,
   UnprocessableEntityException,
+  ArgumentsHost,
+  Catch,
+  ExceptionFilter,
+  PayloadTooLargeException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiBearerAuth, ApiBody, ApiConsumes } from '@nestjs/swagger';
@@ -29,6 +34,8 @@ import { stripImageMetadata } from '../../common/privacy/image-privacy.util';
 import { AiUsageService } from './ai-usage.service';
 import { AiUsageFeature, AIScanResponse, AICoachResponse } from '@calorie-ai/types';
 import { GeminiAudioTranscriptionService } from './gemini-audio-transcription.service';
+import { estimateVoiceAudioCost, VOICE_AUDIO_ESTIMATED_COST_USD } from './ai-usage.policy';
+import { MulterError } from 'multer';
 
 type UploadedBinaryFile = {
   buffer: Buffer;
@@ -37,6 +44,36 @@ type UploadedBinaryFile = {
 };
 
 const MAX_VOICE_AUDIO_BYTES = 5 * 1024 * 1024;
+
+@Catch(MulterError, PayloadTooLargeException)
+class VoiceAudioUploadExceptionFilter implements ExceptionFilter {
+  catch(error: MulterError | PayloadTooLargeException, host: ArgumentsHost): void {
+    const response = host.switchToHttp().getResponse();
+    const isTooLarge = error instanceof PayloadTooLargeException
+      || (error instanceof MulterError && error.code === 'LIMIT_FILE_SIZE');
+    response.status(isTooLarge ? HttpStatus.PAYLOAD_TOO_LARGE : HttpStatus.UNPROCESSABLE_ENTITY).json({
+      statusCode: isTooLarge ? HttpStatus.PAYLOAD_TOO_LARGE : HttpStatus.UNPROCESSABLE_ENTITY,
+      message: isTooLarge
+        ? 'Audio file must be 5 MB or smaller.'
+        : 'The audio upload could not be processed.',
+      error: isTooLarge ? 'Payload Too Large' : 'Unprocessable Entity',
+    });
+  }
+}
+
+type AiTrackingOverride = {
+  provider?: string;
+  model?: string;
+  estimatedCostUsd?: number;
+  errorCategory?: string | null;
+  errorMessage?: string | null;
+};
+
+type AiUsageReservation = {
+  provider?: string;
+  model?: string;
+  estimated_cost_usd?: number;
+};
 
 @ApiTags('AI')
 @ApiBearerAuth()
@@ -73,30 +110,38 @@ export class AiController {
     userId: string,
     feature: AiUsageFeature,
     action: () => Promise<T>,
+    tracking?: {
+      onSuccess?: (response: T, reservation: AiUsageReservation) => AiTrackingOverride;
+      onError?: (error: unknown, reservation: AiUsageReservation) => AiTrackingOverride;
+    },
   ): Promise<T> {
     const reservation = await this.aiUsageService.reserveUsage(userId, feature);
 
     try {
       const response = await action();
       const status = this.inferAiStatus(response);
+      const override = tracking?.onSuccess?.(response, reservation) ?? {};
       await this.aiUsageService.finalizeUsage(reservation.id!, {
         status,
-        provider: reservation.provider,
-        model: reservation.model,
+        provider: override.provider ?? reservation.provider,
+        model: override.model ?? reservation.model,
         cacheHit: 'metadata' in response ? Boolean(response.metadata?.cache_hit) : false,
-        estimatedCostUsd: reservation.estimated_cost_usd,
-        errorCategory: 'metadata' in response && response.success === false ? String(response.metadata?.ai_fallback ?? 'ai_fallback') : null,
+        estimatedCostUsd: override.estimatedCostUsd ?? reservation.estimated_cost_usd,
+        errorCategory: override.errorCategory
+          ?? ('metadata' in response && response.success === false ? String(response.metadata?.ai_fallback ?? 'ai_fallback') : null),
+        errorMessage: override.errorMessage,
       });
       return response;
     } catch (error) {
+      const override = tracking?.onError?.(error, reservation) ?? {};
       await this.aiUsageService.finalizeUsage(reservation.id!, {
         status: 'failed',
-        provider: reservation.provider,
-        model: reservation.model,
+        provider: override.provider ?? reservation.provider,
+        model: override.model ?? reservation.model,
         cacheHit: false,
-        estimatedCostUsd: reservation.estimated_cost_usd,
-        errorCategory: 'error',
-        errorMessage: String((error as any)?.message ?? error),
+        estimatedCostUsd: override.estimatedCostUsd ?? reservation.estimated_cost_usd,
+        errorCategory: override.errorCategory ?? 'error',
+        errorMessage: override.errorMessage ?? String((error as any)?.message ?? error),
       });
       throw error;
     }
@@ -144,16 +189,19 @@ export class AiController {
   @Post('scan/voice-audio')
   @HttpCode(HttpStatus.OK)
   @Throttle({ default: { ttl: 60000, limit: 10 } })
-  @UseInterceptors(FileInterceptor('audio', {
-    limits: { fileSize: MAX_VOICE_AUDIO_BYTES, files: 1 },
-    fileFilter: (_req, file, callback) => {
-      if (!GeminiAudioTranscriptionService.isSupportedMimeType(file.mimetype)) {
-        callback(new UnprocessableEntityException('Unsupported audio format. Use m4a, mp3, wav, or webm.'), false);
-        return;
-      }
-      callback(null, true);
-    },
-  }))
+  @UseFilters(new VoiceAudioUploadExceptionFilter())
+  @UseInterceptors(
+    FileInterceptor('audio', {
+      limits: { fileSize: MAX_VOICE_AUDIO_BYTES, files: 1 },
+      fileFilter: (_req, file, callback) => {
+        if (!GeminiAudioTranscriptionService.isSupportedMimeType(file.mimetype)) {
+          callback(new UnprocessableEntityException('Unsupported audio format. Use m4a, mp3, wav, or webm.'), false);
+          return;
+        }
+        callback(null, true);
+      },
+    }),
+  )
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {
@@ -180,12 +228,20 @@ export class AiController {
     }
 
     const userId = this.resolveUserId(req);
+    let transcriptionUsage: {
+      provider: 'primary' | 'backup';
+      model: string;
+      estimatedCostUsd: number;
+      attempts: number;
+    } | null = null;
+
     return this.runTrackedAiRequest(userId, 'scan_voice', async () => {
       const transcription = await this.audioTranscriptionService.transcribe({
         buffer: file.buffer,
         mimeType: file.mimetype,
         locale: dto.locale,
       });
+      transcriptionUsage = transcription;
       const response = await this.aiService.scanVoice(transcription.transcript, {
         locale: dto.locale,
         timezone: dto.timezone,
@@ -203,8 +259,37 @@ export class AiController {
           ...(response.metadata ?? {}),
           input_mode: 'voice_audio',
           transcription_provider: transcription.provider,
+          transcription_model: transcription.model,
+          transcription_attempts: transcription.attempts,
+          usage_accounting: {
+            quota_events: 1,
+            estimated_cost_usd: estimateVoiceAudioCost(transcription.attempts),
+          },
         },
       };
+    }, {
+      onSuccess: (_response, reservation) => ({
+        provider: `gemini_voice_audio:${transcriptionUsage?.provider ?? 'unknown'}`,
+        model: `${transcriptionUsage?.model ?? 'unknown'}+${reservation.model ?? 'voice-parser'}`,
+        estimatedCostUsd: estimateVoiceAudioCost(transcriptionUsage?.attempts),
+      }),
+      onError: (error, reservation) => {
+        const usage = GeminiAudioTranscriptionService.getSafeUsageFromError(error);
+        const parserStarted = transcriptionUsage !== null;
+        return {
+          provider: parserStarted
+            ? `gemini_voice_audio:${transcriptionUsage?.provider ?? 'unknown'}`
+            : 'gemini_voice_audio',
+          model: parserStarted
+            ? `${transcriptionUsage?.model ?? 'unknown'}+${reservation.model ?? 'voice-parser'}`
+            : (usage?.model ?? 'voice-transcription'),
+          estimatedCostUsd: parserStarted
+            ? estimateVoiceAudioCost(transcriptionUsage?.attempts)
+            : (usage?.estimatedCostUsd ?? VOICE_AUDIO_ESTIMATED_COST_USD),
+          errorCategory: usage?.category ?? (parserStarted ? 'voice_parser_error' : 'voice_audio_error'),
+          errorMessage: 'Voice audio processing failed safely.',
+        };
+      },
     });
   }
 
