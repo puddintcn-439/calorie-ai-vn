@@ -1392,6 +1392,7 @@ export default function ScanScreen() {
                 <Text style={styles.transcriptLabel} i18nKey="screen.tabs.scan.text.019" />
                 <TextInput
                   style={styles.textInput}
+                  testID="voice-transcript-input"
                   value={voiceTranscript}
                   onChangeText={setVoiceTranscript}
                   placeholderTextColor={theme.colors.textDisabled}
@@ -1404,6 +1405,7 @@ export default function ScanScreen() {
                 <Text style={styles.transcriptLabel} i18nKey="screen.tabs.scan.text.020" />
                 <TextInput
                   style={styles.textInput}
+                  testID="voice-transcript-input"
                   value={voiceTranscript}
                   onChangeText={setVoiceTranscript}
                   placeholder="screen.tabs.scan.placeholder.voiceDescription"
@@ -1417,6 +1419,7 @@ export default function ScanScreen() {
             <MealPicker selected={selectedMeal} onSelect={setSelectedMeal} />
             <TouchableOpacity 
               style={[styles.analyzeButton, (!voiceTranscript || isScanning || isProcessingVoice) && styles.buttonDisabled]}
+              testID="voice-analyze-button"
               onPress={handleVoiceScan}
               disabled={!voiceTranscript || isScanning || isProcessingVoice}
             >
