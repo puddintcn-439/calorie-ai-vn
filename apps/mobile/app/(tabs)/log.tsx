@@ -161,14 +161,14 @@ function buildExerciseRoadmap(
       : bodyStatus === 'normal'
         ? [
             { title: 'log.roadmap.normal.1.title', detail: 'log.roadmap.normal.1.detail', activity_type: 'walking', duration_min: 30 },
-            { title: 'profile.roadmap.normal.2.title', detail: 'log.roadmap.normal.2.detail', activity_type: 'gym', duration_min: 30 },
-            { title: 'profile.roadmap.normal.3.title', detail: 'log.roadmap.normal.3.detail', activity_type: 'yoga', duration_min: 20 },
+            { title: 'log.roadmap.normal.2.title', detail: 'log.roadmap.normal.2.detail', activity_type: 'gym', duration_min: 30 },
+            { title: 'log.roadmap.normal.3.title', detail: 'log.roadmap.normal.3.detail', activity_type: 'yoga', duration_min: 20 },
           ]
         : bodyStatus === 'obese'
           ? [
-              { title: 'profile.roadmap.obese.1.title', detail: 'log.roadmap.obese.1.detail', activity_type: 'walking', duration_min: 35 },
-              { title: 'profile.roadmap.obese.2.title', detail: 'log.roadmap.obese.2.detail', activity_type: 'gym', duration_min: 25 },
-              { title: 'profile.roadmap.obese.3.title', detail: 'log.roadmap.obese.3.detail', activity_type: 'cycling', duration_min: 20 },
+              { title: 'log.roadmap.obese.1.title', detail: 'log.roadmap.obese.1.detail', activity_type: 'walking', duration_min: 35 },
+              { title: 'log.roadmap.obese.2.title', detail: 'log.roadmap.obese.2.detail', activity_type: 'gym', duration_min: 25 },
+              { title: 'log.roadmap.obese.3.title', detail: 'log.roadmap.obese.3.detail', activity_type: 'cycling', duration_min: 20 },
             ]
           : goal === 'lose_weight'
             ? [
@@ -179,7 +179,7 @@ function buildExerciseRoadmap(
             : [
                 { title: 'log.roadmap.default.1.title', detail: 'log.roadmap.default.1.detail', activity_type: 'walking', duration_min: 25 },
                 { title: 'log.roadmap.default.2.title', detail: 'log.roadmap.default.2.detail', activity_type: 'gym', duration_min: 25 },
-                { title: 'profile.roadmap.default.3.title', detail: 'log.roadmap.default.3.detail', activity_type: 'yoga', duration_min: 15 },
+                { title: 'log.roadmap.default.3.title', detail: 'log.roadmap.default.3.detail', activity_type: 'yoga', duration_min: 15 },
               ];
 
   return base.map((item, index) => ({

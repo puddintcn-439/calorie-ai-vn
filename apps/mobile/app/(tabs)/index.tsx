@@ -716,7 +716,7 @@ function buildMovementPlan(
     title = gapToTarget > 300
       ? tr('screen.tabs.index.movement.deficit.title', locale)
       : activityType === 'running'
-        ? 'Cardio zone 2'
+        ? tr('screen.tabs.index.movement.cardioZone2.title', locale)
         : tr('screen.tabs.index.movement.briskWalk.title', locale);
     detail = gapToTarget > 300
       ? tr('screen.tabs.index.movement.deficit.detail', locale)
@@ -806,13 +806,10 @@ export default function DashboardScreen() {
     fetchTodaySummary().catch(() => {});
     fetchSummary().catch(() => {});
     fetchProfileMeta().catch(() => {});
+    fetchActivityLogs().catch(() => {});
     fetchReminderEffectiveness().catch(() => setReminderEffectiveness(null));
     fetchBehaviorMemory().catch(() => setBehaviorMemory(null));
-  }, [authLoading, fetchBehaviorMemory, fetchProfileMeta, fetchReminderEffectiveness, fetchSummary, fetchTodaySummary, token]);
-
-  useEffect(() => {
-    refreshDashboardData();
-  }, [refreshDashboardData]);
+  }, [authLoading, fetchActivityLogs, fetchBehaviorMemory, fetchProfileMeta, fetchReminderEffectiveness, fetchSummary, fetchTodaySummary, token]);
 
   useEffect(() => {
     if (todaySummary?.profile) {
@@ -985,7 +982,11 @@ export default function DashboardScreen() {
         activity: formatNumber(activityMinutes),
       });
   const todayPlanMetricValue = hasRoadmapPlan ? remainingRoadmapItems.length : Math.abs(planRemaining);
-  const todayPlanMetricLabel = hasRoadmapPlan ? 'tasks left' : planRemaining >= 0 ? 'left' : 'over';
+  const todayPlanMetricLabel = hasRoadmapPlan
+    ? t('screen.tabs.index.plan.metricTasks')
+    : planRemaining >= 0
+      ? t('screen.tabs.index.plan.metricLeft')
+      : t('screen.tabs.index.plan.metricOver');
   const healthScore = todaySummary?.health_score;
   const healthTrendDelta = healthScore?.trend.delta_vs_7d ?? null;
   const healthTrendTone = healthScore?.trend.direction === 'up'

@@ -19,13 +19,14 @@ export default function RegisterScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
-  const [errors, setErrors] = useState<{ email?: string; password?: string }>({});
+  const [errors, setErrors] = useState<{ fullName?: string; email?: string; password?: string }>({});
   const [loading, setLoading] = useState(false);
   const { register } = useAuthStore();
   const { t } = useI18n();
 
   const handleRegister = async () => {
     const nextErrors: typeof errors = {};
+    if (!fullName.trim()) nextErrors.fullName = t('auth.validation.fullNameRequired');
     if (!email.trim()) nextErrors.email = t('auth.validation.emailRequired');
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) nextErrors.email = t('auth.validation.emailInvalid');
     if (!password) nextErrors.password = t('auth.validation.passwordRequired');
@@ -58,8 +59,12 @@ export default function RegisterScreen() {
         <UiInput
           label="auth.register.fullName.label"
           value={fullName}
-          onChangeText={setFullName}
+          onChangeText={(value) => {
+            setFullName(value);
+            if (errors.fullName) setErrors((current) => ({ ...current, fullName: undefined }));
+          }}
           placeholder="auth.register.fullName.placeholder"
+          error={errors.fullName}
         />
         <UiInput
           label="auth.email.label"

@@ -177,6 +177,8 @@ export default function ScanScreen() {
   const [correctionFeedbackVisible, setCorrectionFeedbackVisible] = useState(false);
   const [portionEditorIndex, setPortionEditorIndex] = useState<number | null>(null);
   const [portionEditorGrams, setPortionEditorGrams] = useState(100);
+  const [saveMealModalVisible, setSaveMealModalVisible] = useState(false);
+  const [saveMealName, setSaveMealName] = useState('');
 
   // Context state
   const { activeContexts, toggleContext } = useContextStore();
@@ -790,24 +792,24 @@ export default function ScanScreen() {
     if (!currentItems.length || isLogging) return;
     setIsLogging(true);
     try {
-      const createdLogs: FoodLog[] = [];
-      for (const item of currentItems) {
-        const created = await addLog({
-          name: item.name_vi ?? item.name,
-          meal_type: selectedMeal,
-          calories: item.calories,
-          protein_g: item.protein_g,
-          carbs_g: item.carbs_g,
-          fat_g: item.fat_g,
-          fiber_g: item.fiber_g,
-          sugar_g: item.sugar_g,
-          saturated_fat_g: item.saturated_fat_g,
-          sodium_mg: item.sodium_mg,
-          estimated_grams: item.estimated_grams,
-          image_url: scannedImage ?? undefined,
-        });
-        createdLogs.push(created);
-      }
+      const createdLogs = await Promise.all(
+        currentItems.map((item) =>
+          addLog({
+            name: item.name_vi ?? item.name,
+            meal_type: selectedMeal,
+            calories: item.calories,
+            protein_g: item.protein_g,
+            carbs_g: item.carbs_g,
+            fat_g: item.fat_g,
+            fiber_g: item.fiber_g,
+            sugar_g: item.sugar_g,
+            saturated_fat_g: item.saturated_fat_g,
+            sodium_mg: item.sodium_mg,
+            estimated_grams: item.estimated_grams,
+            image_url: scannedImage ?? undefined,
+          }),
+        ),
+      );
       setReward({
         title: t('screen.tabs.scan.reward.mealLogged'),
         body: t('screen.tabs.scan.reward.mealLoggedBody', { count: currentItems.length, calories: formatKcal(totalCalories) }),
@@ -818,33 +820,38 @@ export default function ScanScreen() {
     finally { setIsLogging(false); }
   };
 
-  const handleSaveAsMeal = async () => {
+  const handleSaveAsMeal = () => {
     if (!currentItems.length) return;
-    Alert.prompt(t('screen.tabs.scan.alert.saveCollectionTitle'), t('screen.tabs.scan.alert.saveCollectionMessage'), async (name: string | null) => {
-      if (!name?.trim()) return;
-      setIsSavingMeal(true);
-      try {
-        await saveMeal(name.trim(), currentItems.map((i) => ({
-          name: i.name,
-          name_vi: i.name_vi,
-          calories: i.calories,
-          protein_g: i.protein_g,
-          carbs_g: i.carbs_g,
-          fat_g: i.fat_g,
-          fiber_g: i.fiber_g,
-          sugar_g: i.sugar_g,
-          saturated_fat_g: i.saturated_fat_g,
-          sodium_mg: i.sodium_mg,
-          estimated_grams: i.estimated_grams,
-        })));
-        setReward({
-          title: t('screen.tabs.scan.reward.collectionSaved'),
-          body: t('screen.tabs.scan.reward.collectionReady', { name }),
-          icon: 'bookmark',
-        });
-      } catch { Alert.alert('screen.tabs.scan.alert.027', 'screen.tabs.scan.alert.028'); }
-      finally { setIsSavingMeal(false); }
-    }, 'plain-text');
+    setSaveMealName('');
+    setSaveMealModalVisible(true);
+  };
+
+  const confirmSaveAsMeal = async () => {
+    const name = saveMealName.trim();
+    if (!name) return;
+    setSaveMealModalVisible(false);
+    setIsSavingMeal(true);
+    try {
+      await saveMeal(name, currentItems.map((i) => ({
+        name: i.name,
+        name_vi: i.name_vi,
+        calories: i.calories,
+        protein_g: i.protein_g,
+        carbs_g: i.carbs_g,
+        fat_g: i.fat_g,
+        fiber_g: i.fiber_g,
+        sugar_g: i.sugar_g,
+        saturated_fat_g: i.saturated_fat_g,
+        sodium_mg: i.sodium_mg,
+        estimated_grams: i.estimated_grams,
+      })));
+      setReward({
+        title: t('screen.tabs.scan.reward.collectionSaved'),
+        body: t('screen.tabs.scan.reward.collectionReady', { name }),
+        icon: 'bookmark',
+      });
+    } catch { Alert.alert('screen.tabs.scan.alert.027', 'screen.tabs.scan.alert.028'); }
+    finally { setIsSavingMeal(false); }
   };
 
   const handleBarcodeScan = async ({ data: barcode }: { data: string }) => {
@@ -1008,7 +1015,7 @@ export default function ScanScreen() {
         {quotaSummary ? (
           <SurfaceCard style={styles.quotaCard}>
             <View style={styles.quotaHeader}>
-              <Text style={styles.quotaTitle}>AI Quota Today</Text>
+              <Text style={styles.quotaTitle} i18nKey="screen.tabs.scan.quota.title" />
               <Text style={styles.quotaPlan}>{String(quotaSummary.plan_tier ?? 'free').toUpperCase()}</Text>
             </View>
             <View style={styles.quotaRows}>
@@ -1020,7 +1027,7 @@ export default function ScanScreen() {
                 return (
                   <View key={`quota-${entry.feature}`} style={[styles.quotaRow, low && styles.quotaRowWarn]}>
                     <Text style={styles.quotaLabel}>{entry.label}</Text>
-                    <Text style={[styles.quotaValue, low && styles.quotaValueWarn]}>{remaining}/{limit} remaining</Text>
+                    <Text style={[styles.quotaValue, low && styles.quotaValueWarn]}>{remaining}/{limit} {t('screen.tabs.scan.quota.remaining')}</Text>
                   </View>
                 );
               })}
@@ -1500,7 +1507,7 @@ export default function ScanScreen() {
                 <Text style={styles.correctionTitle} i18nKey="screen.tabs.scan.correction.title" />
                 <Text style={styles.correctionBody} i18nKey="screen.tabs.scan.correction.body" />
                 {correctionCount > 1 ? (
-                  <Text style={styles.correctionMeta}>{correctionCount} corrections this scan</Text>
+                  <Text style={styles.correctionMeta}>{t('screen.tabs.scan.correction.meta', { count: correctionCount })}</Text>
                 ) : null}
               </SurfaceCard>
             ) : null}
@@ -1580,6 +1587,51 @@ export default function ScanScreen() {
           </SurfaceCard>
         </View>
       ) : null}
+
+      <Modal
+        visible={saveMealModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setSaveMealModalVisible(false)}
+      >
+        <View style={styles.portionSheetOverlay}>
+          <View style={styles.portionSheet}>
+            <View style={styles.portionSheetHeader}>
+              <View style={styles.portionSheetCopy}>
+                <Text style={styles.portionSheetTitle} i18nKey="screen.tabs.scan.alert.saveCollectionTitle" />
+                <Text style={styles.portionSheetBody} i18nKey="screen.tabs.scan.alert.saveCollectionMessage" />
+              </View>
+              <TouchableOpacity
+                style={styles.portionSheetClose}
+                onPress={() => setSaveMealModalVisible(false)}
+                accessibilityRole="button"
+                accessibilityLabel={t('common.cancel')}
+              >
+                <Ionicons name="close" size={22} color={theme.colors.textMuted} />
+              </TouchableOpacity>
+            </View>
+            <TextInput
+              style={styles.saveMealInput}
+              value={saveMealName}
+              onChangeText={setSaveMealName}
+              placeholder="screen.tabs.scan.saveMeal.placeholder"
+              placeholderTextColor={theme.colors.textDisabled}
+              autoFocus
+              returnKeyType="done"
+              onSubmitEditing={() => void confirmSaveAsMeal()}
+              testID="scan-save-meal-name-input"
+            />
+            <TouchableOpacity
+              style={[styles.portionSheetConfirm, !saveMealName.trim() && styles.buttonDisabled]}
+              onPress={() => void confirmSaveAsMeal()}
+              disabled={!saveMealName.trim()}
+              testID="scan-save-meal-confirm"
+            >
+              <Text style={styles.portionSheetConfirmText} i18nKey="common.save" />
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       <Modal
         visible={portionEditorIndex !== null}
@@ -2189,6 +2241,7 @@ const styles = createThemedStyles((colors, radii) => ({
   portionSheetTitle: { color: colors.text, fontSize: 19, lineHeight: 24, fontWeight: '900' },
   portionSheetBody: { color: colors.textMuted, fontSize: 13, lineHeight: 19, marginTop: 4 },
   portionSheetClose: { width: 48, height: 48, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surfaceMuted, borderWidth: 1, borderColor: colors.borderSubtle },
+  saveMealInput: { backgroundColor: colors.surfaceMuted, borderWidth: 1, borderColor: colors.borderSubtle, borderRadius: 8, color: colors.text, paddingHorizontal: 13, minHeight: 48, paddingVertical: 12, fontSize: 15, marginBottom: 16 },
   portionSheetConfirm: { minHeight: 48, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primary, paddingHorizontal: 16 },
   portionSheetConfirmText: { color: colors.textOnAccent, fontSize: 15, fontWeight: '900' },
 }));
