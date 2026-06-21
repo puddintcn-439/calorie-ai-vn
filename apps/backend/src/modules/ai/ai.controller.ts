@@ -11,7 +11,7 @@ import {
   UnprocessableEntityException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { ApiTags, ApiBearerAuth, ApiConsumes } from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth, ApiBody, ApiConsumes } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { AiService } from './ai.service';
 import {
@@ -20,6 +20,7 @@ import {
   CoachMessageDto,
   RefineScanDto,
   ScanVoiceDto,
+  ScanVoiceAudioDto,
   ScanReceiptDto,
 } from './dto/ai.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -27,11 +28,15 @@ import { UserThrottlerGuard } from './guards/user-throttler.guard';
 import { stripImageMetadata } from '../../common/privacy/image-privacy.util';
 import { AiUsageService } from './ai-usage.service';
 import { AiUsageFeature, AIScanResponse, AICoachResponse } from '@calorie-ai/types';
+import { GeminiAudioTranscriptionService } from './gemini-audio-transcription.service';
 
 type UploadedBinaryFile = {
   buffer: Buffer;
   mimetype: string;
+  originalname?: string;
 };
+
+const MAX_VOICE_AUDIO_BYTES = 5 * 1024 * 1024;
 
 @ApiTags('AI')
 @ApiBearerAuth()
@@ -41,6 +46,7 @@ export class AiController {
   constructor(
     private readonly aiService: AiService,
     private readonly aiUsageService: AiUsageService,
+    private readonly audioTranscriptionService: GeminiAudioTranscriptionService,
   ) {}
 
   private resolveUserId(req: any): string {
@@ -133,6 +139,73 @@ export class AiController {
       meal_hint: dto.meal_hint,
       context: dto.context,
     }, userId));
+  }
+
+  @Post('scan/voice-audio')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { ttl: 60000, limit: 10 } })
+  @UseInterceptors(FileInterceptor('audio', {
+    limits: { fileSize: MAX_VOICE_AUDIO_BYTES, files: 1 },
+    fileFilter: (_req, file, callback) => {
+      if (!GeminiAudioTranscriptionService.isSupportedMimeType(file.mimetype)) {
+        callback(new UnprocessableEntityException('Unsupported audio format. Use m4a, mp3, wav, or webm.'), false);
+        return;
+      }
+      callback(null, true);
+    },
+  }))
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['audio'],
+      properties: {
+        audio: { type: 'string', format: 'binary' },
+        locale: { type: 'string', example: 'vi-VN' },
+        timezone: { type: 'string', example: 'Asia/Ho_Chi_Minh' },
+        meal_hint: { type: 'string', enum: ['breakfast', 'lunch', 'dinner', 'snack'] },
+      },
+    },
+  })
+  async scanVoiceAudio(
+    @UploadedFile() file: UploadedBinaryFile | undefined,
+    @Body() dto: ScanVoiceAudioDto,
+    @Request() req: any,
+  ) {
+    if (!file?.buffer?.length) {
+      throw new UnprocessableEntityException('Audio file is required.');
+    }
+    if (!GeminiAudioTranscriptionService.isSupportedMimeType(file.mimetype)) {
+      throw new UnprocessableEntityException('Unsupported audio format. Use m4a, mp3, wav, or webm.');
+    }
+
+    const userId = this.resolveUserId(req);
+    return this.runTrackedAiRequest(userId, 'scan_voice', async () => {
+      const transcription = await this.audioTranscriptionService.transcribe({
+        buffer: file.buffer,
+        mimeType: file.mimetype,
+        locale: dto.locale,
+      });
+      const response = await this.aiService.scanVoice(transcription.transcript, {
+        locale: dto.locale,
+        timezone: dto.timezone,
+        meal_hint: dto.meal_hint,
+        context: {
+          source: 'voice_audio',
+          device_language: dto.locale?.split('-')[0],
+        },
+      }, userId);
+
+      return {
+        ...response,
+        transcript: transcription.transcript,
+        metadata: {
+          ...(response.metadata ?? {}),
+          input_mode: 'voice_audio',
+          transcription_provider: transcription.provider,
+        },
+      };
+    });
   }
 
   @Post('scan/receipt')
