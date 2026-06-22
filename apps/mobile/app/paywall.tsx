@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { createThemedStyles, theme, useAppTheme } from '../components/theme';
+import { createThemedStyles, useAppTheme } from '../components/theme';
 import { Text } from '../components/i18n-text';
 import { useI18n } from '../components/i18n';
 import {
@@ -37,12 +37,12 @@ type StatusMessage = {
   text: string;
 };
 
-const PAYMENT_ISSUE_OPTIONS: Array<{ type: BillingPaymentIssueType; label: string }> = [
-  { type: 'refund_request', label: 'Yêu cầu hoàn tiền' },
-  { type: 'duplicate_payment', label: 'Thanh toán trùng' },
-  { type: 'payment_succeeded_but_not_activated', label: 'Đã trả tiền nhưng chưa kích hoạt' },
-  { type: 'wrong_plan', label: 'Sai gói' },
-  { type: 'other', label: 'Khác' },
+const PAYMENT_ISSUE_OPTIONS: Array<{ type: BillingPaymentIssueType; labelKey: string }> = [
+  { type: 'refund_request', labelKey: 'screen.paywall.support.issue.refund' },
+  { type: 'duplicate_payment', labelKey: 'screen.paywall.support.issue.duplicate' },
+  { type: 'payment_succeeded_but_not_activated', labelKey: 'screen.paywall.support.issue.notActivated' },
+  { type: 'wrong_plan', labelKey: 'screen.paywall.support.issue.wrongPlan' },
+  { type: 'other', labelKey: 'screen.paywall.support.issue.other' },
 ];
 
 const PAYOS_PLANS: PaywallPlan[] = [
@@ -126,7 +126,7 @@ function getPlanTestId(plan: PaywallPlan) {
 }
 
 export default function PaywallScreen() {
-  useAppTheme();
+  const { colors } = useAppTheme();
   const { t, locale } = useI18n();
   const router = useRouter();
   const params = useLocalSearchParams<{ returnTo?: string; feature?: string }>();
@@ -247,7 +247,7 @@ export default function PaywallScreen() {
       setPaymentIssueMessage('');
       setPaymentIssueResult({
         tone: 'success',
-        text: 'Yêu cầu đã được ghi nhận. Admin sẽ kiểm tra và phản hồi.',
+        text: t('screen.paywall.support.successMessage'),
       });
     } catch (error) {
       setPaymentIssueResult({
@@ -270,7 +270,7 @@ export default function PaywallScreen() {
             accessibilityLabel={t('screen.paywall.text.012')}
             testID="paywall-back-button"
           >
-            <MaterialIcons name="arrow-back" size={20} color={theme.colors.text} />
+            <MaterialIcons name="arrow-back" size={20} color={colors.text} />
           </TouchableOpacity>
           <Text style={styles.eyebrow} i18nKey="screen.paywall.eyebrow" />
           <Text style={styles.title} i18nKey="screen.paywall.text.001" />
@@ -293,7 +293,7 @@ export default function PaywallScreen() {
             'screen.paywall.copy.webhookActivation',
           ].map((key) => (
             <View key={key} style={styles.noteRow}>
-              <MaterialIcons name="check-circle" size={18} color={theme.colors.success} />
+              <MaterialIcons name="check-circle" size={18} color={colors.success} />
               <Text style={styles.noteText}>{t(key as any)}</Text>
             </View>
           ))}
@@ -335,7 +335,7 @@ export default function PaywallScreen() {
                 <View style={styles.featuresList}>
                   {plan.featureKeys.map((featureKey) => (
                     <View key={featureKey} style={styles.featureRow}>
-                      <MaterialIcons name="done" size={18} color={theme.colors.accentMint} />
+                      <MaterialIcons name="done" size={18} color={colors.accentMint} />
                       <Text style={styles.featureText}>{t(featureKey as any)}</Text>
                     </View>
                   ))}
@@ -354,10 +354,10 @@ export default function PaywallScreen() {
                   testID={getPlanTestId(plan)}
                 >
                   {isLoading ? (
-                    <ActivityIndicator size="small" color={theme.colors.textOnAccent} />
+                    <ActivityIndicator size="small" color={colors.textOnAccent} />
                   ) : (
                     <>
-                      <MaterialIcons name="open-in-new" size={18} color={theme.colors.textOnAccent} />
+                      <MaterialIcons name="open-in-new" size={18} color={colors.textOnAccent} />
                       <Text style={styles.buyButtonText} i18nKey="screen.paywall.action.buyWithPayos" />
                     </>
                   )}
@@ -382,10 +382,10 @@ export default function PaywallScreen() {
               testID="paywall-check-status-button"
             >
               {statusLoading ? (
-                <ActivityIndicator size="small" color={theme.colors.textOnAccent} />
+                <ActivityIndicator size="small" color={colors.textOnAccent} />
               ) : (
                 <>
-                  <MaterialIcons name="refresh" size={18} color={theme.colors.textOnAccent} />
+                  <MaterialIcons name="refresh" size={18} color={colors.textOnAccent} />
                   <Text style={styles.statusButtonText} i18nKey="screen.paywall.action.checkStatus" />
                 </>
               )}
@@ -397,7 +397,7 @@ export default function PaywallScreen() {
               <MaterialIcons
                 name={renewalReminder.reminder_window === 'expired' ? 'error' : 'schedule'}
                 size={22}
-                color={renewalReminder.reminder_window === 'expired' ? theme.colors.danger : theme.colors.warning}
+                color={renewalReminder.reminder_window === 'expired' ? colors.danger : colors.warning}
               />
               <View style={styles.renewalTextGroup}>
                 <Text style={styles.renewalTitle} i18nKey="screen.paywall.renewal.title" />
@@ -418,10 +418,10 @@ export default function PaywallScreen() {
 
           {hasActivePayosPlan ? (
             <View style={styles.activePlan}>
-              <MaterialIcons name="verified" size={22} color={theme.colors.success} />
+              <MaterialIcons name="verified" size={22} color={colors.success} />
               <View style={styles.activePlanTextGroup}>
                 <Text style={styles.activePlanTitle}>
-                  {t('screen.paywall.status.activeTier', { tier: entitlement.tier.toUpperCase() })}
+                  {t('screen.paywall.status.activeTier', { tier: entitlement!.tier.toUpperCase() })}
                 </Text>
                 <Text style={styles.activePlanBody}>
                   {activeUntilText
@@ -430,12 +430,12 @@ export default function PaywallScreen() {
                 </Text>
               </View>
             </View>
-          ) : (
+          ) : entitlement !== null ? (
             <View style={styles.pendingPlan}>
-              <MaterialIcons name="hourglass-empty" size={22} color={theme.colors.warning} />
+              <MaterialIcons name="hourglass-empty" size={22} color={colors.warning} />
               <Text style={styles.pendingText} i18nKey="screen.paywall.status.waitingWebhook" />
             </View>
-          )}
+          ) : null}
         </View>
 
         {message ? (
@@ -449,7 +449,7 @@ export default function PaywallScreen() {
             <MaterialIcons
               name={message.tone === 'success' ? 'check-circle' : message.tone === 'error' ? 'error' : 'info'}
               size={20}
-              color={message.tone === 'success' ? theme.colors.success : message.tone === 'error' ? theme.colors.danger : theme.colors.info}
+              color={message.tone === 'success' ? colors.success : message.tone === 'error' ? colors.danger : colors.info}
             />
             <Text
               style={[
@@ -466,17 +466,17 @@ export default function PaywallScreen() {
         <View style={styles.supportCard}>
           <View style={styles.supportHeader}>
             <View style={styles.supportHeaderText}>
-              <Text style={styles.supportTitle}>Báo lỗi thanh toán / yêu cầu hỗ trợ</Text>
-              <Text style={styles.supportBody}>Gửi yêu cầu để admin kiểm tra. Hoàn tiền không được xử lý tự động.</Text>
+              <Text style={styles.supportTitle} i18nKey="screen.paywall.support.title" />
+              <Text style={styles.supportBody} i18nKey="screen.paywall.support.body" />
             </View>
             <TouchableOpacity
               style={styles.supportToggle}
               onPress={() => router.push('/notifications' as any)}
               accessibilityRole="button"
-              accessibilityLabel="Xem thông báo hỗ trợ"
+              accessibilityLabel={t('screen.paywall.support.notificationsLabel')}
               testID="paywall-notifications-button"
             >
-              <MaterialIcons name="notifications" size={20} color={theme.colors.text} />
+              <MaterialIcons name="notifications" size={20} color={colors.text} />
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.supportToggle}
@@ -484,7 +484,7 @@ export default function PaywallScreen() {
               accessibilityRole="button"
               testID="paywall-payment-issue-toggle"
             >
-              <MaterialIcons name={supportExpanded ? 'expand-less' : 'expand-more'} size={22} color={theme.colors.text} />
+              <MaterialIcons name={supportExpanded ? 'expand-less' : 'expand-more'} size={22} color={colors.text} />
             </TouchableOpacity>
           </View>
 
@@ -499,15 +499,15 @@ export default function PaywallScreen() {
                     accessibilityRole="button"
                     accessibilityState={{ selected: paymentIssueType === option.type }}
                   >
-                    <Text style={[styles.issueTypeText, paymentIssueType === option.type && styles.issueTypeTextActive]}>{option.label}</Text>
+                    <Text style={[styles.issueTypeText, paymentIssueType === option.type && styles.issueTypeTextActive]} i18nKey={option.labelKey as any} />
                   </TouchableOpacity>
                 ))}
               </View>
               <TextInput
                 value={paymentIssueMessage}
                 onChangeText={setPaymentIssueMessage}
-                placeholder="Mô tả ngắn vấn đề thanh toán"
-                placeholderTextColor={theme.colors.textMuted}
+                placeholder={t('screen.paywall.support.placeholder')}
+                placeholderTextColor={colors.textMuted}
                 multiline
                 maxLength={1000}
                 style={styles.supportInput}
@@ -522,9 +522,9 @@ export default function PaywallScreen() {
                 testID="paywall-payment-issue-submit"
               >
                 {paymentIssueLoading ? (
-                  <ActivityIndicator size="small" color={theme.colors.textOnAccent} />
+                  <ActivityIndicator size="small" color={colors.textOnAccent} />
                 ) : (
-                  <Text style={styles.supportSubmitText}>Gửi yêu cầu hỗ trợ</Text>
+                  <Text style={styles.supportSubmitText} i18nKey="screen.paywall.support.submit" />
                 )}
               </TouchableOpacity>
               {paymentIssueResult ? (
