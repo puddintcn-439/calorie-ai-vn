@@ -615,6 +615,7 @@ export default function ProfileScreen() {
   const [notificationsCollapsed, setNotificationsCollapsed] = useState(true);
   const [goalCollapsed, setGoalCollapsed] = useState(true);
   const [calorieCollapsed, setCalorieCollapsed] = useState(true);
+  const [subscriptionCollapsed, setSubscriptionCollapsed] = useState(true);
   const [goalPlanTargetKg, setGoalPlanTargetKg] = useState<number | undefined>(undefined);
   const [goalPlanDurationWeeks, setGoalPlanDurationWeeks] = useState<number | undefined>(undefined);
   const [goalPlanDirection, setGoalPlanDirection] = useState<'loss' | 'maintain' | 'gain'>('loss');
@@ -1836,83 +1837,98 @@ export default function ProfileScreen() {
         </SurfaceCard>
       </View>
 
-      <SurfaceCard style={styles.sectionCard}>
-        <Text style={styles.sectionTitle} i18nKey="screen.tabs.profile.text.032" />
-        <View style={styles.subscriptionCard}>
-          <View style={styles.subscriptionHeader}>
-            <View>
-              <Text style={styles.subscriptionTier}>{subscription?.tier === 'premium' ? 'Premium' : subscription?.tier === 'pro' ? 'Pro' : t('profile.subscription.free')}</Text>
-              <Text style={styles.subscriptionStatus}>
+      <SurfaceCard style={[styles.sectionCard, subscriptionCollapsed && styles.sectionCardCompact]}>
+        <TouchableOpacity onPress={() => setSubscriptionCollapsed((s) => !s)} activeOpacity={0.8} style={styles.sectionHeaderRow}>
+          <View>
+            <Text style={styles.sectionTitle} i18nKey="screen.tabs.profile.text.032" />
+            {subscriptionCollapsed && (
+              <Text style={styles.sectionSubtitle}>
+                {subscription?.tier === 'premium' ? 'Premium' : subscription?.tier === 'pro' ? 'Pro' : t('profile.subscription.free')}
+                {' · '}
                 {subscription?.is_active ? t('profile.subscription.active') : t('profile.subscription.expired')}
               </Text>
-            </View>
-            <MaterialIcons
-              name={subscription?.tier === 'pro' ? 'star' : subscription?.tier === 'premium' ? 'favorite' : 'favorite-border'}
-              size={32}
-              color={subscription?.tier === 'pro' ? colors.warning : subscription?.tier === 'premium' ? colors.accentCoral : colors.textDisabled}
-            />
+            )}
           </View>
+          <MaterialIcons name={subscriptionCollapsed ? 'expand-more' : 'expand-less'} size={26} color={colors.textMuted} />
+        </TouchableOpacity>
 
-          <Text style={styles.subscriptionHelper} i18nKey="profile.subscription.helper" />
-
-          <View style={[styles.planSelectorRow, isDesktop && styles.planSelectorRowDesktop]}>
-            {(Object.keys(SUBSCRIPTION_TIERS) as SubscriptionTier[]).map((tier) => {
-              const tierInfo = SUBSCRIPTION_TIERS[tier];
-              const isCurrentTier = subscription?.tier === tier;
-              const accent = tier === 'pro' ? colors.warning : tier === 'premium' ? colors.accentCoral : colors.accentMint;
-
-              return (
-                <TouchableOpacity
-                  key={tier}
-                  style={[
-                    styles.planOption,
-                    isCurrentTier && styles.planOptionActive,
-                    isCurrentTier && { borderColor: accent, backgroundColor: colors.surfaceInfo },
-                  ]}
-                  onPress={() => void handleChangeSubscriptionTier(tier)}
-                  disabled={isSubscriptionLoading}
-                >
-                  <View style={styles.planOptionHeader}>
-                    <Text style={styles.planOptionName}>{tierInfo.name}</Text>
-                    {tierInfo.tag ? <Text style={[styles.planOptionTag, { color: accent }]}>{tierInfo.tag}</Text> : null}
-                  </View>
-                  <Text style={styles.planOptionDescription}>{tierInfo.description}</Text>
-                  <Text style={styles.planOptionPrice}>
-                    {tier === 'free' ? t('profile.subscription.free') : t('profile.subscription.priceMonthly', { price: tierInfo.price_usd_monthly })}
-                  </Text>
-                  <Text style={[styles.planOptionAction, isCurrentTier && { color: accent }]}>
-                    {isCurrentTier ? t('profile.subscription.current') : t('profile.subscription.switch')}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-
-          {features && (
-            <View style={styles.featuresPreview}>
-              <Text style={styles.featuresLabel} i18nKey="screen.tabs.profile.text.033" />
-              <View style={styles.featureGrid}>
-                {[
-                  { name: 'ai_coach', label: 'AI Coach' },
-                  { name: 'meal_reminders', label: t('profile.feature.reminders') },
-                  { name: 'weekly_reports', label: t('profile.feature.reports') },
-                  { name: 'healthkit_sync', label: 'HealthKit' },
-                ].map(({ name, label }) => (
-                  <View key={name} style={styles.featureCheckItem}>
-                    <MaterialIcons
-                      name={features[name as keyof typeof features] ? 'check-circle' : 'cancel'}
-                      size={18}
-                      color={features[name as keyof typeof features] ? colors.success : colors.textDisabled}
-                    />
-                    <Text style={[styles.featureCheckLabel, !features[name as keyof typeof features] && styles.featureCheckLabelDisabled]}>
-                      {label}
-                    </Text>
-                  </View>
-                ))}
+        {!subscriptionCollapsed && (
+          <View style={styles.subscriptionCard}>
+            <View style={styles.subscriptionHeader}>
+              <View>
+                <Text style={styles.subscriptionTier}>{subscription?.tier === 'premium' ? 'Premium' : subscription?.tier === 'pro' ? 'Pro' : t('profile.subscription.free')}</Text>
+                <Text style={styles.subscriptionStatus}>
+                  {subscription?.is_active ? t('profile.subscription.active') : t('profile.subscription.expired')}
+                </Text>
               </View>
+              <MaterialIcons
+                name={subscription?.tier === 'pro' ? 'star' : subscription?.tier === 'premium' ? 'favorite' : 'favorite-border'}
+                size={32}
+                color={subscription?.tier === 'pro' ? colors.warning : subscription?.tier === 'premium' ? colors.accentCoral : colors.textDisabled}
+              />
             </View>
-          )}
-        </View>
+
+            <Text style={styles.subscriptionHelper} i18nKey="profile.subscription.helper" />
+
+            <View style={[styles.planSelectorRow, isDesktop && styles.planSelectorRowDesktop]}>
+              {(Object.keys(SUBSCRIPTION_TIERS) as SubscriptionTier[]).map((tier) => {
+                const tierInfo = SUBSCRIPTION_TIERS[tier];
+                const isCurrentTier = subscription?.tier === tier;
+                const accent = tier === 'pro' ? colors.warning : tier === 'premium' ? colors.accentCoral : colors.accentMint;
+
+                return (
+                  <TouchableOpacity
+                    key={tier}
+                    style={[
+                      styles.planOption,
+                      isCurrentTier && styles.planOptionActive,
+                      isCurrentTier && { borderColor: accent, backgroundColor: colors.surfaceInfo },
+                    ]}
+                    onPress={() => void handleChangeSubscriptionTier(tier)}
+                    disabled={isSubscriptionLoading}
+                  >
+                    <View style={styles.planOptionHeader}>
+                      <Text style={styles.planOptionName}>{tierInfo.name}</Text>
+                      {tierInfo.tag ? <Text style={[styles.planOptionTag, { color: accent }]}>{tierInfo.tag}</Text> : null}
+                    </View>
+                    <Text style={styles.planOptionDescription}>{tierInfo.description}</Text>
+                    <Text style={styles.planOptionPrice}>
+                      {tier === 'free' ? t('profile.subscription.free') : t('profile.subscription.priceMonthly', { price: tierInfo.price_usd_monthly })}
+                    </Text>
+                    <Text style={[styles.planOptionAction, isCurrentTier && { color: accent }]}>
+                      {isCurrentTier ? t('profile.subscription.current') : t('profile.subscription.switch')}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            {features && (
+              <View style={styles.featuresPreview}>
+                <Text style={styles.featuresLabel} i18nKey="screen.tabs.profile.text.033" />
+                <View style={styles.featureGrid}>
+                  {[
+                    { name: 'ai_coach', label: 'AI Coach' },
+                    { name: 'meal_reminders', label: t('profile.feature.reminders') },
+                    { name: 'weekly_reports', label: t('profile.feature.reports') },
+                    { name: 'healthkit_sync', label: 'HealthKit' },
+                  ].map(({ name, label }) => (
+                    <View key={name} style={styles.featureCheckItem}>
+                      <MaterialIcons
+                        name={features[name as keyof typeof features] ? 'check-circle' : 'cancel'}
+                        size={18}
+                        color={features[name as keyof typeof features] ? colors.success : colors.textDisabled}
+                      />
+                      <Text style={[styles.featureCheckLabel, !features[name as keyof typeof features] && styles.featureCheckLabelDisabled]}>
+                        {label}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            )}
+          </View>
+        )}
       </SurfaceCard>
 
         <SurfaceCard style={styles.accountCard}>
