@@ -148,6 +148,7 @@ export default function ScanScreen() {
   const [textInput, setTextInput] = useState('');
   const [voiceTranscript, setVoiceTranscript] = useState('');
   const [scannedImage, setScannedImage] = useState<string | null>(null);
+  const [pendingImage, setPendingImage] = useState<string | null>(null);
   const [scanResult, setScanResult] = useState<AIScanResponse | null>(null);
   const [editableItems, setEditableItems] = useState<AIDetectedItem[]>([]);
   const [isScanning, setIsScanning] = useState(false);
@@ -366,6 +367,7 @@ export default function ScanScreen() {
     setScanNotice(null);
     setSearchResults([]);
     setScannedImage(null);
+    setPendingImage(null);
     setVoiceTranscript('');
     setLastReceiptUri(null);
     setManualBarcode('');
@@ -633,7 +635,10 @@ export default function ScanScreen() {
     const perm = await ImagePicker.requestCameraPermissionsAsync();
     if (!perm.granted) { Alert.alert('screen.tabs.scan.alert.011'); return; }
     const result = await ImagePicker.launchCameraAsync({ mediaTypes: IMAGE_MEDIA_TYPES, quality: 0.8 });
-    if (!result.canceled) await runImageScan(result.assets[0].uri);
+    if (!result.canceled) {
+      setScanResult(null); setEditableItems([]);
+      setPendingImage(result.assets[0].uri);
+    }
   };
 
   const handleGalleryPick = async () => {
@@ -1283,7 +1288,25 @@ export default function ScanScreen() {
 
         {/* ── Camera / Gallery modes ── */}
         {mode === 'camera' && (
-          scannedImage ? (
+          pendingImage ? (
+            <View style={styles.confirmImageBar}>
+              <TouchableOpacity
+                style={styles.confirmUseButton}
+                onPress={() => { const uri = pendingImage; setPendingImage(null); void runImageScan(uri); }}
+              >
+                <Ionicons name="checkmark-circle" size={18} color={colors.textOnAccent} />
+                <Text style={styles.confirmUseText}>{t('screen.tabs.scan.image.use')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.selectedImageAction} onPress={() => { setPendingImage(null); void handleCameraCapture(); }}>
+                <Ionicons name="camera-outline" size={16} color={colors.text} />
+                <Text style={styles.selectedImageActionText}>{t('screen.tabs.scan.image.retake')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.selectedImageAction} onPress={() => setPendingImage(null)}>
+                <Ionicons name="close-outline" size={16} color={colors.textMuted} />
+                <Text style={[styles.selectedImageActionText, { color: colors.textMuted }]}>{t('screen.tabs.scan.image.discard')}</Text>
+              </TouchableOpacity>
+            </View>
+          ) : scannedImage ? (
             <View style={styles.selectedImageBar}>
               <View style={styles.selectedImageLabel}>
                 <Ionicons name="image-outline" size={18} color={colors.success} />
@@ -1295,10 +1318,13 @@ export default function ScanScreen() {
               </TouchableOpacity>
             </View>
           ) : (
-            <TouchableOpacity style={styles.captureButton} onPress={handleCameraCapture}>
-              <AnimatedIonicon name="camera" size={40} color={colors.success} motion="pulse" />
-              <Text style={styles.captureText} i18nKey="screen.tabs.scan.text.015" />
-            </TouchableOpacity>
+            <>
+              <MealPicker selected={selectedMeal} onSelect={setSelectedMeal} />
+              <TouchableOpacity style={styles.captureButton} onPress={handleCameraCapture}>
+                <Ionicons name="camera" size={40} color={colors.success} />
+                <Text style={styles.captureText} i18nKey="screen.tabs.scan.text.015" />
+              </TouchableOpacity>
+            </>
           )
         )}
         {mode === 'gallery' && (
@@ -1456,8 +1482,8 @@ export default function ScanScreen() {
         )}
 
         {/* Preview Image (camera/gallery) */}
-        {scannedImage && mode !== 'barcode' && (
-          <Image source={{ uri: scannedImage }} style={styles.previewImage} resizeMode="cover" />
+        {(scannedImage ?? pendingImage) && mode !== 'barcode' && (
+          <Image source={{ uri: scannedImage ?? pendingImage! }} style={styles.previewImage} resizeMode="cover" />
         )}
 
         {/* Loading spinner for AI scan */}
@@ -2030,6 +2056,9 @@ const styles = createThemedStyles((colors, radii) => ({
     gap: 6,
   },
   selectedImageActionText: { color: colors.text, fontSize: 12, fontWeight: '800' },
+  confirmImageBar: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
+  confirmUseButton: { flex: 1, minHeight: 44, backgroundColor: colors.accentMint, borderRadius: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingHorizontal: 12 },
+  confirmUseText: { color: colors.textOnAccent, fontSize: 13, fontWeight: '800' },
   textInputContainer: { gap: 12, marginBottom: 18 },
   textInput: { backgroundColor: colors.surfaceLifted, borderRadius: 8, padding: 15, color: colors.text, minHeight: 88, borderWidth: 1, borderColor: colors.borderSubtle, fontSize: 15, lineHeight: 22 },
   analyzeButton: { backgroundColor: colors.accentMint, borderRadius: 8, padding: 15, alignItems: 'center', minHeight: 50, justifyContent: 'center' },
