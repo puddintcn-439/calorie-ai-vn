@@ -34,14 +34,12 @@ export interface UserSubscription {
   cancelled_at?: string;
   is_active: boolean;
   payment_provider: 'stripe' | 'in_app' | 'trial';
-  payment_id?: string;
   created_at?: string;
 }
 
 export interface SubscriptionDto {
   tier: SubscriptionTier;
   payment_provider: 'stripe' | 'in_app' | 'trial';
-  payment_id?: string;
 }
 
 export const SUBSCRIPTION_TIERS: Record<SubscriptionTier, SubscriptionTierInfo> = {

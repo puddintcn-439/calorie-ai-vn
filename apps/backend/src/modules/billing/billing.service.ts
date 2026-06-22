@@ -1,4 +1,4 @@
-import { BadRequestException, HttpException, HttpStatus, Injectable, Optional, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, HttpException, HttpStatus, Injectable, Logger, OnModuleInit, Optional, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PayOS } from '@payos/node';
 import { createHash } from 'crypto';
@@ -111,7 +111,8 @@ const BILLING_PAYMENT_ISSUE_TYPES: BillingPaymentIssueType[] = [
 ];
 
 @Injectable()
-export class BillingService {
+export class BillingService implements OnModuleInit {
+  private readonly logger = new Logger(BillingService.name);
   private stripeClient: Stripe.Stripe | null | undefined;
   private payosClient: PayOS | null | undefined;
 
@@ -120,6 +121,19 @@ export class BillingService {
     private readonly config: ConfigService,
     @Optional() private readonly notificationsService?: NotificationsService,
   ) {}
+
+  async onModuleInit() {
+    const webhookUrl = String(this.config.get<string>('PAYOS_WEBHOOK_URL') ?? '').trim();
+    if (!webhookUrl) return;
+    try {
+      const payos = this.getPayosClient();
+      if (!payos) return;
+      await payos.webhooks.confirm(webhookUrl);
+      this.logger.log(`PayOS webhook registered: ${webhookUrl}`);
+    } catch (err: any) {
+      this.logger.warn(`PayOS webhooks.confirm failed (non-fatal): ${err?.message ?? err}`);
+    }
+  }
 
   async getConfirmedRevenueSummary(now = new Date()) {
     const monthStart = new Date(now);
@@ -510,6 +524,25 @@ export class BillingService {
     return this.safeUserPaymentIssue(data);
   }
 
+  private async createPaymentIssueInternal(input: {
+    userId: string;
+    invoiceId?: string | null;
+    subscriptionId?: string | null;
+    issueType: BillingPaymentIssueType;
+    adminNote: string;
+  }) {
+    await this.supabase.db.from('billing_payment_issues').insert({
+      user_id: input.userId,
+      invoice_id: input.invoiceId ?? null,
+      subscription_id: input.subscriptionId ?? null,
+      provider: 'payos',
+      issue_type: input.issueType,
+      status: 'open',
+      admin_note: input.adminNote,
+      updated_at: new Date().toISOString(),
+    });
+  }
+
   async listPaymentIssuesForUser(userId: string) {
     const normalizedUserId = String(userId ?? '').trim();
     if (!normalizedUserId) {
@@ -690,7 +723,16 @@ export class BillingService {
       return { ok: true, provider: 'payos', event_id: eventId, event_type: eventType, duplicate: false, processed: false, skipped_reason: 'missing_order_code' };
     }
 
-    const invoice = await this.findPayosInvoice(orderCode);
+    // Race condition: webhook may arrive before checkout writes the invoice row.
+    // Retry up to 3 times with exponential backoff before giving up.
+    let invoice = await this.findPayosInvoice(orderCode);
+    if (!invoice) {
+      for (const delay of [1000, 2500]) {
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        invoice = await this.findPayosInvoice(orderCode);
+        if (invoice) break;
+      }
+    }
     if (!invoice) {
       await this.updateBillingEventStatus('payos', eventId, {
         status: 'ignored',
@@ -1429,12 +1471,29 @@ export class BillingService {
         synced: sync.synced,
         ...(sync.skipped_reason ? { skipped_reason: sync.skipped_reason } : {}),
       };
+      if (!sync.synced) {
+        await this.createPaymentIssueInternal({
+          userId,
+          invoiceId: result.billing_invoice_id ?? null,
+          subscriptionId: result.billing_subscription_id ?? null,
+          issueType: 'payment_succeeded_but_not_activated',
+          adminNote: `PayOS webhook activation succeeded but entitlement sync failed: ${sync.skipped_reason ?? 'unknown'}`,
+        }).catch(() => {});
+      }
     } catch (error: any) {
+      const errMsg = this.safeErrorMessage(error);
       result.entitlement_sync = {
         attempted: true,
         synced: false,
-        error: this.safeErrorMessage(error),
+        error: errMsg,
       };
+      await this.createPaymentIssueInternal({
+        userId,
+        invoiceId: result.billing_invoice_id ?? null,
+        subscriptionId: result.billing_subscription_id ?? null,
+        issueType: 'payment_succeeded_but_not_activated',
+        adminNote: `PayOS webhook activation succeeded but entitlement sync threw: ${errMsg}`,
+      }).catch(() => {});
     }
     return result;
   }
@@ -1451,6 +1510,8 @@ export class BillingService {
   ): Promise<{ start: string; end: string }> {
     const paidAt = new Date(paidAtIso);
     let start = Number.isNaN(paidAt.getTime()) ? new Date() : paidAt;
+    // Only extend period when renewing the SAME tier — an upgrade to a different
+    // tier should start immediately so the user gets their full paid period.
     const activeSameTier = await this.fetchActivePayosSubscriptions(userId, tier);
     const futureEnd = activeSameTier
       .map((row) => row.billing_period_end ? new Date(String(row.billing_period_end)) : null)

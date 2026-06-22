@@ -462,6 +462,32 @@ create index if not exists idx_billing_events_provider_event on public.billing_e
 create index if not exists idx_billing_events_status_created_at on public.billing_events(status, created_at);
 alter table public.billing_events enable row level security;
 
+create table if not exists public.billing_payment_issues (
+  id                      uuid primary key default gen_random_uuid(),
+  user_id                 uuid not null references public.users(id) on delete cascade,
+  invoice_id              uuid references public.billing_invoices(id) on delete set null,
+  subscription_id         uuid references public.billing_subscriptions(id) on delete set null,
+  provider                text not null check (provider in ('stripe','app_store','google_play','payos','manual','trial')),
+  issue_type              text not null check (issue_type in ('refund_request','duplicate_payment','payment_succeeded_but_not_activated','wrong_plan','other')),
+  status                  text not null default 'open' check (status in ('open','in_review','resolved','rejected')),
+  user_message            text,
+  admin_note              text,
+  resolution              text,
+  created_by_user_id      uuid references public.users(id) on delete set null,
+  resolved_at             timestamptz,
+  resolved_by_admin_id    uuid references public.users(id) on delete set null,
+  created_at              timestamptz not null default now(),
+  updated_at              timestamptz not null default now()
+);
+
+create index if not exists idx_billing_payment_issues_user_id on public.billing_payment_issues(user_id);
+create index if not exists idx_billing_payment_issues_status on public.billing_payment_issues(status, created_at);
+alter table public.billing_payment_issues enable row level security;
+drop policy if exists "Users view own payment issues" on public.billing_payment_issues;
+create policy "Users view own payment issues" on public.billing_payment_issues for select using (auth.uid() = user_id);
+drop policy if exists "Service role full access on payment issues" on public.billing_payment_issues;
+create policy "Service role full access on payment issues" on public.billing_payment_issues for all using (auth.role() = 'service_role');
+
 -- ============================================================
 -- 5. COACHING / ANALYTICS / PROGRESS TABLES
 -- ============================================================
@@ -704,6 +730,9 @@ create trigger behavior_forecast_snapshots_updated_at before update on public.be
 alter table public.users
   add column if not exists subscription_tier text default 'free'
     check (subscription_tier in ('free','premium','pro'));
+
+-- 6a-i. user_subscriptions: remove legacy payment_id (superseded by billing_subscriptions.provider_subscription_id)
+alter table public.user_subscriptions drop column if exists payment_id;
 
 -- 6b. users: per-meal targets
 alter table public.users
@@ -1219,6 +1248,11 @@ on conflict (user_id) do update set
   renews_at        = excluded.renews_at,
   cancelled_at     = null,
   updated_at       = now();
+
+-- Fix is_active for cancelled subscriptions (was incorrectly set to true before fix)
+update public.user_subscriptions
+set is_active = false, updated_at = now()
+where cancelled_at is not null and is_active = true;
 
 -- Rebuild users.subscription_tier from current active access
 with current_access as (

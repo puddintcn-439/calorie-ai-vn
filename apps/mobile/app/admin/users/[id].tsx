@@ -80,6 +80,7 @@ export default function AdminUserDetailScreen() {
   const [actionLoading, setActionLoading] = useState<AdminAction | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+  const [grantTier, setGrantTier] = useState<'premium' | 'pro'>('premium');
 
   const load = useCallback(async () => {
     if (!userId) {
@@ -115,8 +116,8 @@ export default function AdminUserDetailScreen() {
       setActionError(null);
       setActionSuccess(null);
       if (action === 'grant') {
-        await adminService.grantPremium(userId, reason);
-        setActionSuccess('Premium granted and audit log written.');
+        await adminService.grantPremium(userId, reason, grantTier);
+        setActionSuccess(`${grantTier === 'pro' ? 'Pro' : 'Premium'} granted and audit log written.`);
       } else if (action === 'revoke') {
         await adminService.revokePremium(userId, reason);
         setActionSuccess('Premium revoked and audit log written.');
@@ -134,7 +135,7 @@ export default function AdminUserDetailScreen() {
     } finally {
       setActionLoading(null);
     }
-  }, [actionReason, load, userId]);
+  }, [actionReason, grantTier, load, userId]);
 
   const quota: any = detail?.ai_quota ?? null;
   const subscriptionTier = String(detail?.subscription?.tier ?? 'free');
@@ -196,9 +197,16 @@ export default function AdminUserDetailScreen() {
                 />
                 {actionError ? <Text style={[styles.actionError, { color: colors.danger }]}>{actionError}</Text> : null}
                 {actionSuccess ? <Text style={[styles.actionSuccess, { color: colors.accentMint }]}>{actionSuccess}</Text> : null}
+                <View style={styles.tierRow}>
+                  {(['premium', 'pro'] as const).map((t) => (
+                    <TouchableOpacity key={t} style={[styles.tierChip, grantTier === t && styles.tierChipActive]} onPress={() => setGrantTier(t)}>
+                      <Text style={[styles.tierChipText, grantTier === t && styles.tierChipTextActive]}>{t === 'pro' ? 'Pro' : 'Premium'}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
                 <View style={styles.actionRow}>
                   <TouchableOpacity disabled={Boolean(actionLoading)} style={[adminStyles.primaryButton, actionLoading && styles.disabledButton]} onPress={() => runAdminAction('grant')}>
-                    <Text style={adminStyles.primaryButtonText}>{actionLoading === 'grant' ? 'Granting...' : 'Grant Premium'}</Text>
+                    <Text style={adminStyles.primaryButtonText}>{actionLoading === 'grant' ? 'Granting...' : `Grant ${grantTier === 'pro' ? 'Pro' : 'Premium'}`}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity disabled={Boolean(actionLoading)} style={[styles.dangerButton, actionLoading && styles.disabledButton]} onPress={() => runAdminAction('revoke')}>
                     <Text style={adminStyles.dangerText}>{actionLoading === 'revoke' ? 'Revoking...' : 'Revoke Premium'}</Text>
@@ -303,6 +311,11 @@ const styles = StyleSheet.create({
   reminderBox: { gap: 4, borderRadius: 10, borderWidth: 1, borderColor: '#fed7aa', backgroundColor: adminChrome.warningSoft, padding: 12 },
   actionBox: { gap: 12, borderRadius: 10, borderWidth: 1, borderColor: adminChrome.border, backgroundColor: adminChrome.cardMuted, padding: 14 },
   actionTitle: { color: adminChrome.text, fontSize: 16, fontWeight: '900' },
+  tierRow: { flexDirection: 'row', gap: 8, marginBottom: 4 },
+  tierChip: { borderRadius: 8, borderWidth: 1, borderColor: adminChrome.borderStrong, paddingHorizontal: 14, paddingVertical: 7 },
+  tierChipActive: { backgroundColor: adminChrome.accent, borderColor: adminChrome.accent },
+  tierChipText: { color: adminChrome.textSoft, fontSize: 13, fontWeight: '700' },
+  tierChipTextActive: { color: '#ffffff' },
   actionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   dangerButton: { borderRadius: 8, borderWidth: 1, borderColor: adminChrome.rose, backgroundColor: adminChrome.dangerSoft, paddingHorizontal: 16, paddingVertical: 11 },
   quotaButton: { borderRadius: 8, borderWidth: 1, borderColor: adminChrome.blue, backgroundColor: '#eff6ff', paddingHorizontal: 16, paddingVertical: 11 },

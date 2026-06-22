@@ -61,7 +61,15 @@ function IssueMetricBox({ label, value, tone }: { label: string; value: string; 
   );
 }
 
-function IssueCard({ issue, onUpdated }: { issue: AdminPaymentIssue; onUpdated: () => void }) {
+function IssueCard({
+  issue,
+  onUpdated,
+  placeholderColor,
+}: {
+  issue: AdminPaymentIssue;
+  onUpdated: () => void;
+  placeholderColor: string;
+}) {
   const [status, setStatus] = useState<'open' | 'in_review' | 'resolved' | 'rejected'>(
     STATUS_OPTIONS.includes(issue.status as any) ? issue.status as any : 'open',
   );
@@ -135,7 +143,7 @@ function IssueCard({ issue, onUpdated }: { issue: AdminPaymentIssue; onUpdated: 
           value={adminNote}
           onChangeText={setAdminNote}
           placeholder="Internal note for support/admin team. Not visible to user."
-          placeholderTextColor={colors.textMuted}
+          placeholderTextColor={placeholderColor}
           multiline
           maxLength={2000}
           style={styles.input}
@@ -152,7 +160,7 @@ function IssueCard({ issue, onUpdated }: { issue: AdminPaymentIssue; onUpdated: 
           value={resolution}
           onChangeText={setResolution}
           placeholder="Resolution message the user can see in notifications/support history."
-          placeholderTextColor={colors.textMuted}
+          placeholderTextColor={placeholderColor}
           multiline
           maxLength={2000}
           style={styles.input}
@@ -238,7 +246,14 @@ export default function AdminPaymentIssuesScreen() {
       ) : response && response.issues.length > 0 ? (
         <View style={styles.content}>
           <Text style={adminStyles.muted}>{response.total} payment issue case(s)</Text>
-          {response.issues.map((issue) => <IssueCard key={issue.id} issue={issue} onUpdated={load} />)}
+          {response.issues.map((issue) => (
+            <IssueCard
+              key={issue.id}
+              issue={issue}
+              onUpdated={load}
+              placeholderColor={colors.textMuted}
+            />
+          ))}
         </View>
       ) : (
         <AdminStateCard state="empty" title="No payment issues" body="Không có case nào theo filter hiện tại." />

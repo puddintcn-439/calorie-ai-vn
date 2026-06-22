@@ -31,7 +31,6 @@ export class SubscriptionService {
       cancelled_at: undefined,
       is_active: true,
       payment_provider: 'trial',
-      payment_id: undefined,
       created_at: startedAt,
       updated_at: startedAt,
     } as UserSubscription;
@@ -134,7 +133,6 @@ export class SubscriptionService {
           cancelled_at: null,
           is_active: true,
           payment_provider: dto.payment_provider,
-          payment_id: dto.payment_id,
           updated_at: now.toISOString(),
         },
         { onConflict: 'user_id' },
@@ -168,7 +166,8 @@ export class SubscriptionService {
       .update({
         tier: 'free',
         cancelled_at: now.toISOString(),
-        is_active: true,
+        is_active: false,
+        updated_at: now.toISOString(),
       })
       .eq('user_id', userId)
       .select()
@@ -180,10 +179,22 @@ export class SubscriptionService {
 
     if (error) throw error;
 
+    // Sync cancellation to billing_subscriptions — cancel all non-cancelled rows,
+    // not just status='active', to catch past_due/trialing states too.
+    await this.supabase.db
+      .from('billing_subscriptions')
+      .update({
+        status: 'cancelled',
+        cancelled_at: now.toISOString(),
+        updated_at: now.toISOString(),
+      })
+      .eq('user_id', userId)
+      .is('cancelled_at', null);
+
     // Update users table subscription_tier
     await this.supabase.db
       .from('users')
-      .update({ subscription_tier: 'free' })
+      .update({ subscription_tier: 'free', updated_at: now.toISOString() })
       .eq('id', userId);
 
     return data as UserSubscription;

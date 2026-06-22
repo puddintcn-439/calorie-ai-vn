@@ -31,6 +31,13 @@ class AdminResetAiQuotaDto extends AdminActionReasonDto {
   scope?: 'daily' | 'monthly';
 }
 
+class AdminGrantPremiumDto extends AdminActionReasonDto {
+  @IsOptional()
+  @IsString()
+  @IsIn(['premium', 'pro'])
+  tier?: 'premium' | 'pro';
+}
+
 class AdminAuditLogQueryDto {
   @IsOptional()
   @IsString()
@@ -230,11 +237,12 @@ export class AdminController {
 
   @Post('users/:id/grant-premium')
   @AdminRoles('admin')
-  @ApiOperation({ summary: 'Grant premium trial to a user and write admin audit log' })
+  @ApiOperation({ summary: 'Grant premium or pro trial to a user and write admin audit log' })
   @ApiParam({ name: 'id', description: 'User UUID' })
-  @ApiBody({ schema: { type: 'object', required: ['reason'], properties: { reason: { type: 'string', minLength: 5, example: 'Manual support compensation' } } } })
-  grantPremium(@Request() req: any, @Param('id') userId: string, @Body() body: AdminActionReasonDto) {
-    return this.adminService.grantPremium(assertUuid(userId), getAdminActor(req), body.reason);
+  @ApiBody({ schema: { type: 'object', required: ['reason'], properties: { reason: { type: 'string', minLength: 5, example: 'Manual support compensation' }, tier: { type: 'string', enum: ['premium', 'pro'], example: 'pro' } } } })
+  grantPremium(@Request() req: any, @Param('id') userId: string, @Body() body: AdminGrantPremiumDto) {
+    const tier = body.tier === 'pro' ? 'pro' : 'premium';
+    return this.adminService.grantPremium(assertUuid(userId), getAdminActor(req), body.reason, tier);
   }
 
   @Post('users/:id/revoke-premium')

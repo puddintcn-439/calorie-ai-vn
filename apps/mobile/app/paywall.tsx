@@ -1,6 +1,7 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  AppState,
   Linking,
   ScrollView,
   TextInput,
@@ -13,6 +14,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { createThemedStyles, useAppTheme } from '../components/theme';
 import { Text } from '../components/i18n-text';
 import { useI18n } from '../components/i18n';
+import { useSubscriptionStore } from '../store/subscription.store';
 import {
   BillingCheckoutInterval,
   BillingCheckoutTier,
@@ -129,7 +131,7 @@ export default function PaywallScreen() {
   const { colors } = useAppTheme();
   const { t, locale } = useI18n();
   const router = useRouter();
-  const params = useLocalSearchParams<{ returnTo?: string; feature?: string }>();
+  const params = useLocalSearchParams<{ returnTo?: string; feature?: string; status?: string; orderCode?: string; cancel?: string }>();
   const { width } = useWindowDimensions();
   const isWide = width >= 1000;
   const isTablet = width >= 760;
@@ -140,6 +142,10 @@ export default function PaywallScreen() {
   const [renewalReminder, setRenewalReminder] = useState<BillingRenewalReminder | null>(null);
   const [lastOrderCode, setLastOrderCode] = useState<number | null>(null);
   const [message, setMessage] = useState<StatusMessage | null>(null);
+  const lastOrderCodeRef = useRef<number | null>(null);
+  const fetchSubscription = useSubscriptionStore((state) => state.fetchSubscription);
+  const [showManualCheck, setShowManualCheck] = useState(false);
+  const [manualCheckLoading, setManualCheckLoading] = useState(false);
   const [supportExpanded, setSupportExpanded] = useState(false);
   const [paymentIssueType, setPaymentIssueType] = useState<BillingPaymentIssueType>('payment_succeeded_but_not_activated');
   const [paymentIssueMessage, setPaymentIssueMessage] = useState('');
@@ -164,6 +170,103 @@ export default function PaywallScreen() {
   useEffect(() => {
     void loadRenewalReminder();
   }, [loadRenewalReminder]);
+
+  // Keep ref in sync so AppState listener always sees the latest order code
+  useEffect(() => { lastOrderCodeRef.current = lastOrderCode; }, [lastOrderCode]);
+
+  // Handle PayOS redirect back to this screen (web flow: backend redirects here with PayOS params)
+  useEffect(() => {
+    if (!params.status) return;
+    const orderCode = params.orderCode ? Number(params.orderCode) : null;
+    if (orderCode) setLastOrderCode(orderCode);
+    if (params.status === 'PAID' && params.cancel !== 'true') {
+      // Payment succeeded — poll until webhook activates subscription
+      void (async () => {
+        for (let i = 0; i < 8; i++) {
+          try {
+            const latest = await billingService.getEntitlement();
+            if (latest.source === 'paid') {
+              setEntitlement(latest);
+              void loadRenewalReminder();
+              void fetchSubscription();
+              setMessage({
+                tone: 'success',
+                text: t('screen.paywall.status.active', {
+                  tier: latest.tier.toUpperCase(),
+                  activeUntil: formatActiveUntil(latest.active_until, locale),
+                }),
+              });
+              return;
+            }
+          } catch { /* silent */ }
+          await new Promise((resolve) => setTimeout(resolve, 3000));
+        }
+        // Webhook hasn't fired yet — show pending + manual check button
+        setMessage({
+          tone: 'info',
+          text: orderCode
+            ? t('screen.paywall.status.pendingWithOrder', { orderCode })
+            : t('screen.paywall.status.pending'),
+        });
+        setShowManualCheck(true);
+      })();
+    } else if (params.cancel === 'true') {
+      setMessage({ tone: 'info', text: t('screen.paywall.status.pending') });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Auto-poll when user returns from PayOS browser — no manual tap needed
+  useEffect(() => {
+    let pollInterval: ReturnType<typeof setInterval> | null = null;
+    let attempts = 0;
+    const MAX_ATTEMPTS = 6; // 6 × 4s = 24s max
+
+    const poll = async () => {
+      attempts++;
+      if (attempts > MAX_ATTEMPTS) {
+        if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+        return;
+      }
+      try {
+        const latest = await billingService.getEntitlement();
+        if (latest.source === 'paid') {
+          if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+          setEntitlement(latest);
+          void loadRenewalReminder();
+          void fetchSubscription();
+          setMessage({
+            tone: 'success',
+            text: t('screen.paywall.status.active', {
+              tier: latest.tier.toUpperCase(),
+              activeUntil: formatActiveUntil(latest.active_until, locale),
+            }),
+          });
+        }
+      } catch {
+        // silent — don't surface polling errors to the user
+      }
+    };
+
+    const handleAppStateChange = (nextState: string) => {
+      if (nextState === 'active' && lastOrderCodeRef.current !== null) {
+        // User just returned from PayOS — check immediately then every 4s
+        attempts = 0;
+        if (pollInterval) clearInterval(pollInterval);
+        void poll();
+        pollInterval = setInterval(() => void poll(), 4000);
+      } else if (nextState !== 'active') {
+        // App went to background — pause
+        if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+      }
+    };
+
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+    return () => {
+      subscription.remove();
+      if (pollInterval) clearInterval(pollInterval);
+    };
+  }, [t, locale, loadRenewalReminder, fetchSubscription]);
 
   const handleCreateCheckout = async (plan: PaywallPlan) => {
     const loadingKey = `${plan.tier}-${plan.interval}`;
@@ -461,6 +564,42 @@ export default function PaywallScreen() {
               {message.text}
             </Text>
           </View>
+        ) : null}
+
+        {showManualCheck && message?.tone === 'info' ? (
+          <TouchableOpacity
+            style={styles.manualCheckButton}
+            disabled={manualCheckLoading}
+            onPress={async () => {
+              setManualCheckLoading(true);
+              try {
+                const latest = await billingService.getEntitlement();
+                if (latest.source === 'paid') {
+                  setEntitlement(latest);
+                  void loadRenewalReminder();
+                  void fetchSubscription();
+                  setShowManualCheck(false);
+                  setMessage({
+                    tone: 'success',
+                    text: t('screen.paywall.status.active', {
+                      tier: latest.tier.toUpperCase(),
+                      activeUntil: formatActiveUntil(latest.active_until, locale),
+                    }),
+                  });
+                } else {
+                  setMessage({ tone: 'info', text: t('screen.paywall.status.pending') });
+                }
+              } catch {
+                // silent
+              } finally {
+                setManualCheckLoading(false);
+              }
+            }}
+          >
+            {manualCheckLoading
+              ? <ActivityIndicator size="small" color={colors.accent} />
+              : <Text style={styles.manualCheckText} i18nKey="screen.paywall.action.checkStatus" />}
+          </TouchableOpacity>
         ) : null}
 
         <View style={styles.supportCard}>
@@ -865,6 +1004,21 @@ const styles = createThemedStyles((colors, radii) => ({
   },
   messageErrorText: {
     color: colors.danger,
+  },
+  manualCheckButton: {
+    alignSelf: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.accent,
+    minWidth: 160,
+    alignItems: 'center',
+  },
+  manualCheckText: {
+    color: colors.accent,
+    fontSize: 13,
+    fontWeight: '700',
   },
   supportCard: {
     backgroundColor: colors.surface,

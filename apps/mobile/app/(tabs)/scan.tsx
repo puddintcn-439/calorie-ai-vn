@@ -1791,6 +1791,7 @@ function ScanResultItem({
   onRemove: () => void;
 }) {
   const { t } = useI18n();
+  const { colors } = useAppTheme();
   const [editingName, setEditingName] = useState(false);
   const [nameInput, setNameInput] = useState(item.name_vi ?? item.name);
 

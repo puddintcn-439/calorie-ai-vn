@@ -190,7 +190,7 @@ describe('SubscriptionService.upgradeSubscription', () => {
       }),
     };
     const service = new SubscriptionService({ db } as unknown as SupabaseService);
-    const result = await service.upgradeSubscription('u1', { tier: 'premium', payment_provider: 'stripe', payment_id: 'pi_123' });
+    const result = await service.upgradeSubscription('u1', { tier: 'premium', payment_provider: 'stripe' });
     expect(result.tier).toBe('premium');
     expect(upsert).toHaveBeenCalledWith(expect.objectContaining({
       user_id: 'u1',

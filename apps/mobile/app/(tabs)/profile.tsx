@@ -20,7 +20,7 @@ import { useCalorieTargetStore } from '../../store/calorie-target.store';
 import { useInsightsStore } from '../../store/insights.store';
 import { useThemeStore } from '../../store/theme.store';
 import { apiClient } from '../../services/api';
-import { User, ActivityLevel, UserGoal, HealthFlag, GoalPlan, ReminderPreferences, ActivityType, ActivityLog, ACTIVITY_LABELS as EXERCISE_ACTIVITY_LABELS, SUBSCRIPTION_TIERS, SubscriptionTier } from '@calorie-ai/types';
+import { User, ActivityLevel, UserGoal, HealthFlag, GoalPlan, ReminderPreferences, ActivityType, ActivityLog, ACTIVITY_LABELS as EXERCISE_ACTIVITY_LABELS, SUBSCRIPTION_TIERS, SubscriptionFeatures, SubscriptionTier } from '@calorie-ai/types';
 import { ScreenShell, SurfaceCard } from '../../components/ui-shell';
 import { UiButton } from '../../components/ui-button';
 import { UiChip } from '../../components/ui-chip';
@@ -1884,7 +1884,7 @@ export default function ProfileScreen() {
           const tierColor = subscription?.tier === 'pro' ? colors.warning : subscription?.tier === 'premium' ? colors.accentCoral : colors.textMuted;
           const tierName = subscription?.tier === 'pro' ? 'Pro' : subscription?.tier === 'premium' ? 'Premium' : t('profile.subscription.free');
 
-          const KEY_FEATURES: { key: keyof typeof features; labelKey: Parameters<typeof t>[0] }[] = [
+          const KEY_FEATURES: { key: keyof SubscriptionFeatures; labelKey: string }[] = [
             { key: 'ai_coach', labelKey: 'profile.feature.aiCoach' },
             { key: 'meal_reminders', labelKey: 'profile.feature.reminders' },
             { key: 'weekly_reports', labelKey: 'profile.feature.reports' },
@@ -1926,7 +1926,7 @@ export default function ProfileScreen() {
                             color={unlocked ? colors.success : colors.textMuted}
                           />
                           <Text style={[styles.subFeatureChipText, !unlocked && styles.subFeatureChipTextLocked]}>
-                            {t(labelKey)}
+                            {t(labelKey as any)}
                           </Text>
                         </View>
                       );
@@ -2603,7 +2603,7 @@ const styles = createThemedStyles((colors, radii) => ({
   subBody: { gap: 14, paddingTop: 4 },
   subHeroRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   subTierName: { fontSize: 17, fontWeight: '800', color: colors.text, flex: 1 },
-  subStatusPill: { borderRadius: radii.full, paddingHorizontal: 10, paddingVertical: 3 },
+  subStatusPill: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 3 },
   subStatusPillActive: { backgroundColor: colors.surfaceSuccess },
   subStatusPillExpired: { backgroundColor: colors.surfaceDanger },
   subStatusText: { fontSize: 11, fontWeight: '700' },

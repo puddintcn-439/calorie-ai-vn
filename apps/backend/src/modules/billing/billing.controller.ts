@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Headers, Post, Request, UnauthorizedException, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Post, Query, Redirect, Request, UnauthorizedException, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiProperty, ApiTags } from '@nestjs/swagger';
 import { IsIn, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -139,23 +139,21 @@ export class BillingController {
   }
 
   @Get('return/payos')
-  @ApiOperation({ summary: 'PayOS checkout return UX endpoint' })
-  handlePayosReturn() {
-    return {
-      ok: true,
-      provider: 'payos',
-      message: 'Payment status will be confirmed by webhook.',
-    };
+  @Redirect()
+  @ApiOperation({ summary: 'PayOS checkout return — redirects back to the app/web' })
+  handlePayosReturn(@Query() query: Record<string, string>) {
+    const base = process.env.PAYOS_WEB_RETURN_URL || 'http://localhost:19006/paywall';
+    const qs = new URLSearchParams(query).toString();
+    return { url: qs ? `${base}?${qs}` : base, statusCode: 302 };
   }
 
   @Get('cancel/payos')
-  @ApiOperation({ summary: 'PayOS checkout cancel UX endpoint' })
-  handlePayosCancel() {
-    return {
-      ok: true,
-      provider: 'payos',
-      message: 'Payment status will be confirmed by webhook.',
-    };
+  @Redirect()
+  @ApiOperation({ summary: 'PayOS checkout cancel — redirects back to the app/web' })
+  handlePayosCancel(@Query() query: Record<string, string>) {
+    const base = process.env.PAYOS_WEB_RETURN_URL || 'http://localhost:19006/paywall';
+    const qs = new URLSearchParams(query).toString();
+    return { url: qs ? `${base}?${qs}` : base, statusCode: 302 };
   }
 
   @Post('webhooks/app-store')

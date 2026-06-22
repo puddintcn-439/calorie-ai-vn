@@ -11,7 +11,7 @@ interface SubscriptionState {
 
   fetchSubscription: () => Promise<void>;
   changeTier: (tier: 'free' | 'premium' | 'pro') => Promise<void>;
-  upgrade: (tier: 'premium' | 'pro', provider: 'stripe' | 'in_app' | 'trial', paymentId?: string) => Promise<void>;
+  upgrade: (tier: 'premium' | 'pro', provider: 'stripe' | 'in_app' | 'trial') => Promise<void>;
   cancel: () => Promise<void>;
   refreshFeatures: () => Promise<void>;
   clear: () => void;
@@ -44,7 +44,6 @@ export const useSubscriptionStore = create<SubscriptionState>((set) => ({
         : await apiClient.post<UserSubscription>('/subscriptions/upgrade', {
             tier,
             payment_provider: 'trial',
-            payment_id: `manual_${tier}_${Date.now()}`,
           });
 
       featureGatingService.invalidateCache();
@@ -56,13 +55,12 @@ export const useSubscriptionStore = create<SubscriptionState>((set) => ({
     }
   },
 
-  upgrade: async (tier: 'premium' | 'pro', provider: 'stripe' | 'in_app' | 'trial', paymentId?: string) => {
+  upgrade: async (tier: 'premium' | 'pro', provider: 'stripe' | 'in_app' | 'trial') => {
     set({ isLoading: true, error: null });
     try {
       const res = await apiClient.post<UserSubscription>('/subscriptions/upgrade', {
         tier,
         payment_provider: provider,
-        payment_id: paymentId,
       });
       featureGatingService.invalidateCache();
       const refreshedFeatures = await featureGatingService.getUserFeatures();

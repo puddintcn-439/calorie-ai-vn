@@ -10,7 +10,7 @@ import {
   Param,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
-import { IsEnum, IsOptional, IsString } from 'class-validator';
+import { IsEnum } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { SubscriptionService } from './subscription.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -24,11 +24,6 @@ class UpgradeSubscriptionDto {
   @ApiProperty({ enum: ['stripe', 'in_app', 'trial'], description: 'Payment provider' })
   @IsEnum(['stripe', 'in_app', 'trial'])
   payment_provider: 'stripe' | 'in_app' | 'trial';
-
-  @ApiProperty({ required: false, description: 'Payment transaction ID' })
-  @IsString()
-  @IsOptional()
-  payment_id?: string;
 }
 
 @ApiTags('Subscriptions')

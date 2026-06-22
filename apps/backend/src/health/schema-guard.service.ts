@@ -7,6 +7,7 @@ const REQUIRED_TABLES = [
   'food_logs',
   'correction_events',
   'user_subscriptions',
+  'billing_payment_issues',
   'reminder_preferences',
   'push_notification_tokens',
   'reminder_notification_log',

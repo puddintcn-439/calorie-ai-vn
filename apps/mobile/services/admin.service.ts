@@ -147,8 +147,8 @@ export const adminService = {
     return data;
   },
 
-  async grantPremium(userId: string, reason: string): Promise<AdminPremiumActionResponse> {
-    const { data } = await apiClient.post(`/admin/users/${encodeURIComponent(userId)}/grant-premium`, { reason });
+  async grantPremium(userId: string, reason: string, tier: 'premium' | 'pro' = 'premium'): Promise<AdminPremiumActionResponse> {
+    const { data } = await apiClient.post(`/admin/users/${encodeURIComponent(userId)}/grant-premium`, { reason, tier });
     return data;
   },
 
