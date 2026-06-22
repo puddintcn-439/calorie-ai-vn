@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Image,
-  StyleSheet,
   TouchableOpacity,
   useWindowDimensions,
   View
@@ -27,7 +26,7 @@ import {
 } from '@calorie-ai/types';
 import { BodyText, Eyebrow, ScreenShell, SurfaceCard } from '../../components/ui-shell';
 import { EmptyState } from '../../components/empty-state';
-import { createThemedStyles, theme, useAppTheme } from '../../components/theme';
+import { createThemedStyles, useAppTheme } from '../../components/theme';
 import { useGamificationStore } from '../../store/gamification.store';
 import { useLogStore } from '../../store/log.store';
 import { useAuthStore } from '../../store/auth.store';
@@ -152,11 +151,11 @@ function buildProteinTarget(goal?: UserGoal, direction?: GoalPlan['direction'], 
   return Math.round(kg * 1.2);
 }
 
-function focusToneColor(tone: FocusTone) {
-  if (tone === 'good') return theme.colors.accentMint;
-  if (tone === 'warn') return theme.colors.accentAmber;
-  if (tone === 'muted') return theme.colors.textMuted;
-  return theme.colors.accentCyan;
+function focusToneColor(tone: FocusTone, colors: Record<string, string>) {
+  if (tone === 'good') return colors.accentMint;
+  if (tone === 'warn') return colors.accentAmber;
+  if (tone === 'muted') return colors.textMuted;
+  return colors.accentCyan;
 }
 
 function buildDailyFocusItems(args: {
@@ -380,6 +379,7 @@ function buildNutritionNudges(
 }
 
 function CaloriesRing({ consumed, burned, target, compact = false }: { consumed: number; burned: number; target: number; compact?: boolean }) {
+  const { colors } = useAppTheme();
   const { t } = useI18n();
   const size = compact ? 154 : 214;
   const stroke = compact ? 12 : 14;
@@ -395,12 +395,12 @@ function CaloriesRing({ consumed, burned, target, compact = false }: { consumed:
   return (
     <View style={[styles.ringWrap, { width: size, height: size }]}>
       <Svg width={size} height={size} style={styles.ringSvg}>
-        <Circle cx={size / 2} cy={size / 2} r={radius} stroke={theme.colors.progressBg} strokeWidth={stroke} fill="none" />
+        <Circle cx={size / 2} cy={size / 2} r={radius} stroke={colors.progressBg} strokeWidth={stroke} fill="none" />
         <Circle
           cx={size / 2}
           cy={size / 2}
           r={radius}
-          stroke={remaining >= 0 ? theme.colors.accentMint : theme.colors.accentCoral}
+          stroke={remaining >= 0 ? colors.accentMint : colors.accentCoral}
           strokeWidth={stroke}
           fill="none"
           strokeLinecap="round"
@@ -745,7 +745,7 @@ function buildMovementPlan(
 }
 
 export default function DashboardScreen() {
-  useAppTheme();
+  const { colors } = useAppTheme();
   const shownInterventionKeysRef = useRef<Set<string>>(new Set());
   const forecastSnapshotKeysRef = useRef<Set<string>>(new Set());
   const { locale, t } = useI18n();
@@ -1248,7 +1248,7 @@ export default function DashboardScreen() {
           </BodyText>
         </View>
         <TouchableOpacity style={[styles.streakPill, isCompact && styles.streakPillCompact]} onPress={() => router.push('/achievements' as never)}>
-          <AnimatedIonicon name="flame" size={16} color={theme.colors.accentAmber} motion="pulse" />
+          <AnimatedIonicon name="flame" size={16} color={colors.accentAmber} motion="pulse" />
           <Text style={styles.streakText}>
             {t('screen.tabs.index.streak.days', { days: formatNumber(displayStreak) })}
           </Text>
@@ -1265,7 +1265,7 @@ export default function DashboardScreen() {
           <Ionicons
             name={nextAction.icon}
             size={20}
-            color={nextAction.tone === 'warn' ? theme.colors.accentAmber : theme.colors.accentMint}
+            color={nextAction.tone === 'warn' ? colors.accentAmber : colors.accentMint}
           />
         </View>
         <View style={[styles.nextActionCopy, isCompact && styles.nextActionCopyCompact]}>
@@ -1329,7 +1329,7 @@ export default function DashboardScreen() {
               <Ionicons
                 name={healthTrendTone === 'good' ? 'trending-up' : healthTrendTone === 'warn' ? 'trending-down' : 'remove'}
                 size={14}
-                color={healthTrendTone === 'warn' ? theme.colors.accentAmber : theme.colors.accentMint}
+                color={healthTrendTone === 'warn' ? colors.accentAmber : colors.accentMint}
               />
               <Text style={[
                 styles.healthTrendText,
@@ -1357,7 +1357,7 @@ export default function DashboardScreen() {
             <View style={styles.healthSignalList}>
               {healthScore.signals.slice(0, 2).map((signal) => (
                 <View key={signal} style={styles.healthSignalChip}>
-                  <Ionicons name="sparkles" size={13} color={theme.colors.accentCyan} />
+                  <Ionicons name="sparkles" size={13} color={colors.accentCyan} />
                   <Text style={styles.healthSignalText}>{signal}</Text>
                 </View>
               ))}
@@ -1374,7 +1374,7 @@ export default function DashboardScreen() {
             <Text style={styles.healthScoreActionText}>
               {t(`screen.tabs.index.health.action.${healthScore.next_action}` as any)}
             </Text>
-            <Ionicons name="chevron-forward" size={15} color={theme.colors.textOnAccent} />
+            <Ionicons name="chevron-forward" size={15} color={colors.textOnAccent} />
           </TouchableOpacity>
         </SurfaceCard>
       ) : null}
@@ -1414,7 +1414,7 @@ export default function DashboardScreen() {
           <View style={styles.successForecastSteps}>
             {successForecast.recovery_plan.steps.map((step) => (
               <View key={step} style={styles.successForecastStep}>
-                <Ionicons name="checkmark-circle" size={14} color={theme.colors.accentMint} />
+                <Ionicons name="checkmark-circle" size={14} color={colors.accentMint} />
                 <Text style={styles.successForecastStepText}>{step}</Text>
               </View>
             ))}
@@ -1434,7 +1434,7 @@ export default function DashboardScreen() {
             <Text style={styles.successForecastActionText}>
               {successForecastActionLabel(successForecast.recovery_plan.primary_action, locale)}
             </Text>
-            <Ionicons name="chevron-forward" size={15} color={theme.colors.textOnAccent} />
+            <Ionicons name="chevron-forward" size={15} color={colors.textOnAccent} />
           </TouchableOpacity>
         </SurfaceCard>
       ) : null}
@@ -1450,7 +1450,7 @@ export default function DashboardScreen() {
               <Ionicons
                 name={dynamicIntervention.priority === 'critical' ? 'alert-circle' : dynamicIntervention.priority === 'high' ? 'pulse' : 'sparkles'}
                 size={18}
-                color={dynamicInterventionToneValue === 'warn' ? theme.colors.accentAmber : theme.colors.accentMint}
+                color={dynamicInterventionToneValue === 'warn' ? colors.accentAmber : colors.accentMint}
               />
             </View>
             <View style={styles.dynamicInterventionCopy}>
@@ -1463,7 +1463,7 @@ export default function DashboardScreen() {
             <View style={styles.dynamicInterventionSteps}>
               {dynamicIntervention.recovery_steps.map((step) => (
                 <View key={step} style={styles.dynamicInterventionStep}>
-                  <Ionicons name="arrow-forward-circle" size={14} color={theme.colors.accentCyan} />
+                  <Ionicons name="arrow-forward-circle" size={14} color={colors.accentCyan} />
                   <Text style={styles.dynamicInterventionStepText}>{step}</Text>
                 </View>
               ))}
@@ -1486,14 +1486,14 @@ export default function DashboardScreen() {
             }}
           >
             <Text style={styles.dynamicInterventionActionText}>{dynamicIntervention.action_label}</Text>
-            <Ionicons name="chevron-forward" size={15} color={theme.colors.textOnAccent} />
+            <Ionicons name="chevron-forward" size={15} color={colors.textOnAccent} />
           </TouchableOpacity>
         </SurfaceCard>
       ) : null}
 
       <View style={[styles.actionGrid, isCompact && styles.actionGridCompact]}>
         <TouchableOpacity style={[styles.primaryAction, isCompact && styles.primaryActionCompact]} onPress={() => router.push('/scan' as never)}>
-          <AnimatedIonicon name="camera" size={20} color={theme.colors.textOnAccent} motion="pulse" />
+          <AnimatedIonicon name="camera" size={20} color={colors.textOnAccent} motion="pulse" />
           <Text style={styles.primaryActionText} i18nKey="screen.tabs.index.text.002" />
         </TouchableOpacity>
         <TouchableOpacity
@@ -1504,7 +1504,7 @@ export default function DashboardScreen() {
           accessibilityHint={t('screen.tabs.index.text.003.hint')}
           testID="dashboard-text-entry-button"
         >
-          <AnimatedIonicon name="create-outline" size={18} color={theme.colors.accentMint} motion="float" />
+          <AnimatedIonicon name="create-outline" size={18} color={colors.accentMint} motion="float" />
           <View style={styles.secondaryActionCopy}>
             <Text style={styles.secondaryActionText} i18nKey="screen.tabs.index.text.003" />
             <Text style={styles.secondaryActionHint} i18nKey="screen.tabs.index.text.003.hint" />
@@ -1542,7 +1542,7 @@ export default function DashboardScreen() {
                 <Ionicons
                   name={item.is_completed ? 'checkmark-circle' : 'ellipse-outline'}
                   size={18}
-                  color={item.is_completed ? theme.colors.accentMint : theme.colors.textMuted}
+                  color={item.is_completed ? colors.accentMint : colors.textMuted}
                 />
                 <View style={styles.todayPlanRoadmapCopy}>
                   <Text style={styles.todayPlanRoadmapTitle}>{item.task_title}</Text>
@@ -1590,9 +1590,9 @@ export default function DashboardScreen() {
         </View>
 
         <View style={[styles.macroRow, isCompact && styles.macroRowCompact]}>
-          <MacroPill label="screen.tabs.index.label.001" value={`${formatNumber(protein)}g`} color={theme.colors.accentCoral} />
-          <MacroPill label="screen.tabs.index.label.002" value={`${formatNumber(carbs)}g`} color={theme.colors.accentCyan} />
-          <MacroPill label="screen.tabs.index.label.003" value={`${formatNumber(fat)}g`} color={theme.colors.accentAmber} />
+          <MacroPill label="screen.tabs.index.label.001" value={`${formatNumber(protein)}g`} color={colors.accentCoral} />
+          <MacroPill label="screen.tabs.index.label.002" value={`${formatNumber(carbs)}g`} color={colors.accentCyan} />
+          <MacroPill label="screen.tabs.index.label.003" value={`${formatNumber(fat)}g`} color={colors.accentAmber} />
         </View>
 
         <View style={styles.focusStrip}>
@@ -1705,7 +1705,7 @@ export default function DashboardScreen() {
             <AnimatedIonicon
               name="walk-outline"
               size={18}
-              color={movementPlan?.tone === 'caution' || movementPlan?.tone === 'surplus' ? theme.colors.accentAmber : theme.colors.accentMint}
+              color={movementPlan?.tone === 'caution' || movementPlan?.tone === 'surplus' ? colors.accentAmber : colors.accentMint}
               motion="float"
             />
             <Text style={styles.movementTitle} i18nKey="screen.tabs.index.text.013" />
@@ -1724,11 +1724,11 @@ export default function DashboardScreen() {
               <Text style={styles.movementPlanTitle}>{movementPlan.title}</Text>
               <View style={styles.movementMetaRow}>
                 <View style={styles.movementMetaPill}>
-                  <Ionicons name="time-outline" size={13} color={theme.colors.accentMint} />
+                  <Ionicons name="time-outline" size={13} color={colors.accentMint} />
                   <Text style={styles.movementMetaText}>{movementPlan.duration_min} {t('screen.tabs.index.unit.minutes')}</Text>
                 </View>
                 <View style={styles.movementMetaPill}>
-                  <Ionicons name="flame-outline" size={13} color={theme.colors.accentAmber} />
+                  <Ionicons name="flame-outline" size={13} color={colors.accentAmber} />
                   <Text style={styles.movementMetaText}>~{formatNumber(movementPlan.estimated_kcal)} kcal</Text>
                 </View>
               </View>
@@ -1753,15 +1753,15 @@ export default function DashboardScreen() {
                 onPress={logMovementPlan}
                 disabled={isLoggingMovement || movementPlanCompleted}
               >
-                <AnimatedIonicon name="checkmark" size={16} color={theme.colors.textOnAccent} motion="pulse" active={!movementPlanCompleted} />
+                <AnimatedIonicon name="checkmark" size={16} color={colors.textOnAccent} motion="pulse" active={!movementPlanCompleted} />
                 <Text style={styles.movementLogText}>{movementButtonLabel}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.movementSecondaryButton} onPress={() => router.push('/profile' as never)}>
-                <Ionicons name="options-outline" size={15} color={theme.colors.accentMint} />
+                <Ionicons name="options-outline" size={15} color={colors.accentMint} />
                 <Text style={styles.movementSecondaryText} i18nKey="screen.tabs.index.text.016" />
               </TouchableOpacity>
               <TouchableOpacity style={styles.movementSecondaryButton} onPress={() => router.push('/log' as never)}>
-                <Ionicons name="create-outline" size={15} color={theme.colors.accentMint} />
+                <Ionicons name="create-outline" size={15} color={colors.accentMint} />
                 <Text style={styles.movementSecondaryText} i18nKey="screen.tabs.index.text.003" />
               </TouchableOpacity>
             </View>
@@ -1782,14 +1782,14 @@ export default function DashboardScreen() {
             <Ionicons
               name={safetyCard.icon}
               size={18}
-              color={safetyCard.tone === 'review' ? theme.colors.accentAmber : theme.colors.accentMint}
+              color={safetyCard.tone === 'review' ? colors.accentAmber : colors.accentMint}
             />
             <Text style={styles.safetySetupTitle}>{safetyCard.title}</Text>
           </View>
           <Text style={styles.safetySetupBody}>{safetyCard.body}</Text>
           <TouchableOpacity style={styles.safetySetupButton} onPress={() => router.push('/profile' as never)}>
             <Text style={styles.safetySetupButtonText}>{safetyCard.action}</Text>
-            <Ionicons name="chevron-forward" size={15} color={theme.colors.textOnAccent} />
+            <Ionicons name="chevron-forward" size={15} color={colors.textOnAccent} />
           </TouchableOpacity>
         </SurfaceCard>
       )}
@@ -1798,7 +1798,7 @@ export default function DashboardScreen() {
       <View style={styles.nudgeRow}>
         {visibleNudges.map((nudge) => (
           <View key={nudge.title} style={[styles.nudgeChip, styles[`${nudge.tone}Nudge`]]}>
-            <Ionicons name={nudge.icon} size={16} color={nudge.tone === 'warn' ? theme.colors.accentAmber : theme.colors.accentMint} />
+            <Ionicons name={nudge.icon} size={16} color={nudge.tone === 'warn' ? colors.accentAmber : colors.accentMint} />
             <View style={styles.nudgeCopy}>
               <Text style={styles.nudgeTitle}>{nudge.title}</Text>
               <Text style={styles.nudgeBody}>{nudge.body}</Text>
@@ -1873,7 +1873,8 @@ function MacroPill({ label, value, color }: { label: string; value: string; colo
 }
 
 function DailyFocusPill({ item }: { item: DailyFocusItem }) {
-  const accent = focusToneColor(item.tone);
+  const { colors } = useAppTheme();
+  const accent = focusToneColor(item.tone, colors as Record<string, string>);
   const toneStyle = item.tone === 'good'
     ? styles.focusPillGood
     : item.tone === 'warn'
@@ -1907,9 +1908,10 @@ function QualityPill({ label, value, active, over }: { label: string; value: str
 }
 
 function QuickLink({ icon, label, onPress }: { icon: keyof typeof Ionicons.glyphMap; label: string; onPress: () => void }) {
+  const { colors } = useAppTheme();
   return (
     <TouchableOpacity style={styles.quickLink} onPress={onPress}>
-      <Ionicons name={icon} size={18} color={theme.colors.accentCyan} />
+      <Ionicons name={icon} size={18} color={colors.accentCyan} />
       <Text style={styles.quickLinkText}>{label}</Text>
     </TouchableOpacity>
   );

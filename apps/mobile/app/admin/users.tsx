@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
 import { router } from 'expo-router';
 import { Text } from '../../components/i18n-text';
-import { theme } from '../../components/theme';
+import { useAppTheme } from '../../components/theme';
 import {
   AdminChip,
   AdminSectionCard,
@@ -104,6 +104,7 @@ function UserCard({ user }: { user: AdminUserRow }) {
 }
 
 export default function AdminUsersScreen() {
+  const { colors } = useAppTheme();
   const [response, setResponse] = useState<AdminUsersResponse | null>(null);
   const [searchDraft, setSearchDraft] = useState('');
   const [search, setSearch] = useState('');
@@ -168,7 +169,7 @@ export default function AdminUsersScreen() {
             value={searchDraft}
             onChangeText={setSearchDraft}
             placeholder="Search by email"
-            placeholderTextColor={theme.colors.textMuted}
+            placeholderTextColor={colors.textMuted}
             autoCapitalize="none"
             editable={!loading}
             style={[adminStyles.input, styles.searchInput]}

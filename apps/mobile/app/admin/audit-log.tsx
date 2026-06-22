@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
 import { Text } from '../../components/i18n-text';
-import { theme } from '../../components/theme';
+import { useAppTheme } from '../../components/theme';
 import {
   AdminChip,
   AdminSectionCard,
@@ -87,6 +87,7 @@ function AuditEntryCard({ entry }: { entry: AdminAuditLogEntry }) {
 }
 
 export default function AdminAuditLogScreen() {
+  const { colors } = useAppTheme();
   const [response, setResponse] = useState<AdminAuditLogResponse | null>(null);
   const [actorDraft, setActorDraft] = useState('');
   const [actionDraft, setActionDraft] = useState('');
@@ -146,9 +147,9 @@ export default function AdminAuditLogScreen() {
     >
       <AdminSectionCard title="Filters" subtitle="Dùng để truy vết actor, action hoặc target type khi audit staging.">
         <View style={styles.filterGrid}>
-          <TextInput value={actorDraft} onChangeText={setActorDraft} placeholder="Actor email" placeholderTextColor={theme.colors.textMuted} autoCapitalize="none" style={[adminStyles.input, styles.input]} />
-          <TextInput value={actionDraft} onChangeText={setActionDraft} placeholder="Action" placeholderTextColor={theme.colors.textMuted} autoCapitalize="none" style={[adminStyles.input, styles.input]} />
-          <TextInput value={targetTypeDraft} onChangeText={setTargetTypeDraft} placeholder="Target type" placeholderTextColor={theme.colors.textMuted} autoCapitalize="none" style={[adminStyles.input, styles.input]} />
+          <TextInput value={actorDraft} onChangeText={setActorDraft} placeholder="Actor email" placeholderTextColor={colors.textMuted} autoCapitalize="none" style={[adminStyles.input, styles.input]} />
+          <TextInput value={actionDraft} onChangeText={setActionDraft} placeholder="Action" placeholderTextColor={colors.textMuted} autoCapitalize="none" style={[adminStyles.input, styles.input]} />
+          <TextInput value={targetTypeDraft} onChangeText={setTargetTypeDraft} placeholder="Target type" placeholderTextColor={colors.textMuted} autoCapitalize="none" style={[adminStyles.input, styles.input]} />
         </View>
         <View style={styles.filterActions}>
           <TouchableOpacity style={adminStyles.primaryButton} onPress={applyFilters}><Text style={adminStyles.primaryButtonText}>Apply</Text></TouchableOpacity>

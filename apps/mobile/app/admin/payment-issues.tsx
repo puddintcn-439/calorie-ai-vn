@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
 import { Text } from '../../components/i18n-text';
-import { theme } from '../../components/theme';
+import { useAppTheme } from '../../components/theme';
 import {
   AdminChip,
   AdminSectionCard,
@@ -135,7 +135,7 @@ function IssueCard({ issue, onUpdated }: { issue: AdminPaymentIssue; onUpdated: 
           value={adminNote}
           onChangeText={setAdminNote}
           placeholder="Internal note for support/admin team. Not visible to user."
-          placeholderTextColor={theme.colors.textMuted}
+          placeholderTextColor={colors.textMuted}
           multiline
           maxLength={2000}
           style={styles.input}
@@ -152,7 +152,7 @@ function IssueCard({ issue, onUpdated }: { issue: AdminPaymentIssue; onUpdated: 
           value={resolution}
           onChangeText={setResolution}
           placeholder="Resolution message the user can see in notifications/support history."
-          placeholderTextColor={theme.colors.textMuted}
+          placeholderTextColor={colors.textMuted}
           multiline
           maxLength={2000}
           style={styles.input}
@@ -189,6 +189,7 @@ function StatusSummary({ issues }: { issues: AdminPaymentIssue[] }) {
 }
 
 export default function AdminPaymentIssuesScreen() {
+  const { colors } = useAppTheme();
   const [response, setResponse] = useState<AdminPaymentIssuesResponse | null>(null);
   const [status, setStatus] = useState('');
   const [loading, setLoading] = useState(true);

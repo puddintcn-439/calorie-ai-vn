@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
-  StyleSheet,
   ScrollView,
   TouchableOpacity,
   Modal
@@ -13,7 +12,7 @@ import { useAuthStore } from '../../store/auth.store';
 import { FoodLog, MealType, SavedMeal, ActivityLog, ActivityType, ACTIVITY_LABELS, User, ActivityLevel, UserGoal, HealthFlag } from '@calorie-ai/types';
 import { ScreenShell, SkeletonBlock, SurfaceCard } from '../../components/ui-shell';
 import { EmptyState } from '../../components/empty-state';
-import { createThemedStyles, theme, useAppTheme } from '../../components/theme';
+import { createThemedStyles, useAppTheme } from '../../components/theme';
 import { apiClient } from '../../services/api';
 import { formatKcal, formatMacro, safeNumber, safeRound, toFiniteNumber } from '../../services/number-format';
 import { VisualHeroCard } from '../../components/visual-hero-card';
@@ -190,7 +189,7 @@ function buildExerciseRoadmap(
 }
 
 export default function LogScreen() {
-  useAppTheme();
+  const { colors } = useAppTheme();
   const { t, tx } = useI18n();
   const { token, isLoading: authLoading } = useAuthStore();
   const { dailyLog, savedMeals, activityLogs, activityPreferences, isLoading, fetchDailyLog, fetchSavedMeals, fetchActivityLogs, fetchActivityPreferences, updateLog, removeLog, restoreLog, logSavedMeal, updateSavedMeal, deleteSavedMeal, addActivity, deleteActivity } = useLogStore();
@@ -576,7 +575,7 @@ export default function LogScreen() {
             <View style={styles.catalogHeader}>
               <Text style={styles.catalogTitle} i18nKey="screen.tabs.log.text.001" />
               <TouchableOpacity onPress={() => setCatalogVisible(false)}>
-                <Ionicons name="close" size={22} color={theme.colors.textMuted} />
+                <Ionicons name="close" size={22} color={colors.textMuted} />
               </TouchableOpacity>
             </View>
 
@@ -595,7 +594,7 @@ export default function LogScreen() {
                         <Text style={styles.catalogItemName}>{tx(ACTIVITY_LABELS[type])}</Text>
                         <Text style={styles.catalogItemKcal}>{t('screen.tabs.log.catalog.kcalPerMinutes', { kcal: kcal30, minutes: 30 })}</Text>
                       </View>
-                      <Ionicons name="chevron-forward" size={16} color={theme.colors.textMuted} />
+                      <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
                     </TouchableOpacity>
                   );
                 })}
@@ -603,7 +602,7 @@ export default function LogScreen() {
             ) : (
               <View>
                 <TouchableOpacity style={styles.catalogBack} onPress={() => setCatalogSelectedType(null)}>
-                  <Ionicons name="arrow-back" size={16} color={theme.colors.accentMint} />
+                  <Ionicons name="arrow-back" size={16} color={colors.accentMint} />
                   <Text style={styles.catalogBackText} i18nKey="screen.tabs.log.text.002" />
                 </TouchableOpacity>
                 <Text style={styles.catalogSelectedLabel}>{tx(ACTIVITY_LABELS[catalogSelectedType])}</Text>
@@ -649,7 +648,7 @@ export default function LogScreen() {
             <View style={styles.catalogHeader}>
               <Text style={styles.catalogTitle} i18nKey="screen.tabs.log.edit.title" />
               <TouchableOpacity style={styles.modalCloseButton} onPress={() => setEditingLog(null)} accessibilityRole="button" accessibilityLabel={t('common.cancel')}>
-                <Ionicons name="close" size={22} color={theme.colors.textMuted} />
+                <Ionicons name="close" size={22} color={colors.textMuted} />
               </TouchableOpacity>
             </View>
 
@@ -660,7 +659,7 @@ export default function LogScreen() {
                   value={editName}
                   onChangeText={setEditName}
                   placeholder="screen.tabs.log.edit.foodName"
-                  placeholderTextColor={theme.colors.textDisabled}
+                  placeholderTextColor={colors.textDisabled}
                   style={styles.editInput}
                   testID="log-edit-name"
                 />
@@ -727,7 +726,7 @@ export default function LogScreen() {
                   value={editNotes}
                   onChangeText={setEditNotes}
                   placeholder="screen.tabs.log.edit.notes"
-                  placeholderTextColor={theme.colors.textDisabled}
+                  placeholderTextColor={colors.textDisabled}
                   style={[styles.editInput, styles.editNotes]}
                   multiline
                 />
@@ -752,14 +751,14 @@ export default function LogScreen() {
             <View style={styles.catalogHeader}>
               <Text style={styles.catalogTitle} i18nKey="screen.tabs.log.edit.savedMealTitle" />
               <TouchableOpacity onPress={() => setEditingSavedMeal(null)}>
-                <Ionicons name="close" size={22} color={theme.colors.textMuted} />
+                <Ionicons name="close" size={22} color={colors.textMuted} />
               </TouchableOpacity>
             </View>
             <TextInput
               value={editSavedMealName}
               onChangeText={setEditSavedMealName}
               placeholder="screen.tabs.log.edit.savedMealName"
-              placeholderTextColor={theme.colors.textDisabled}
+              placeholderTextColor={colors.textDisabled}
               style={[styles.editInput, { marginBottom: 14 }]}
             />
             <TouchableOpacity style={styles.catalogConfirmBtn} onPress={() => void handleSaveSavedMeal()}>
@@ -813,10 +812,10 @@ export default function LogScreen() {
                       P:{formatSavedMealNumber(totals.protein)} C:{formatSavedMealNumber(totals.carbs)} F:{formatSavedMealNumber(totals.fat)}
                     </Text>
                     <TouchableOpacity style={styles.savedEdit} onPress={() => openEditSavedMeal(meal)}>
-                      <Ionicons name="create-outline" size={15} color={theme.colors.textMuted} />
+                      <Ionicons name="create-outline" size={15} color={colors.textMuted} />
                     </TouchableOpacity>
                     <TouchableOpacity style={styles.savedDelete} onPress={() => handleDeleteSaved(meal)}>
-                      <Ionicons name="close-circle" size={16} color={theme.colors.textDisabled} />
+                      <Ionicons name="close-circle" size={16} color={colors.textDisabled} />
                     </TouchableOpacity>
                   </TouchableOpacity>
                 );
@@ -843,7 +842,7 @@ export default function LogScreen() {
                 <View style={styles.mealProgressBar}>
                   <View style={[styles.mealProgressFill, {
                     width: `${Math.min(total / Math.max(mealTarget, 1) * 100, 100)}%` as any,
-                    backgroundColor: total > mealTarget ? theme.colors.danger : theme.colors.success,
+                    backgroundColor: total > mealTarget ? colors.danger : colors.success,
                   }]} />
                 </View>
               )}
@@ -865,7 +864,7 @@ export default function LogScreen() {
                         accessibilityLabel={t('common.edit')}
                         testID={`log-edit-${log.id}`}
                       >
-                        <Ionicons name="create-outline" size={18} color={theme.colors.accentCyan} />
+                        <Ionicons name="create-outline" size={18} color={colors.accentCyan} />
                       </TouchableOpacity>
                       <TouchableOpacity
                         style={styles.logActionButton}
@@ -874,7 +873,7 @@ export default function LogScreen() {
                         accessibilityLabel={t('common.delete')}
                         testID={`log-delete-${log.id}`}
                       >
-                        <Ionicons name="trash-outline" size={18} color={theme.colors.danger} />
+                        <Ionicons name="trash-outline" size={18} color={colors.danger} />
                       </TouchableOpacity>
                     </View>
                   </View>
@@ -899,7 +898,7 @@ export default function LogScreen() {
           <View style={styles.activityHeader}>
             <Text style={styles.activityTitle} i18nKey="screen.tabs.log.text.009" />
             <TouchableOpacity style={styles.addActivityBtn} onPress={handleAddActivity}>
-              <AnimatedIonicon name="add" size={18} color={theme.colors.textOnAccent} motion="pulse" />
+              <AnimatedIonicon name="add" size={18} color={colors.textOnAccent} motion="pulse" />
             </TouchableOpacity>
           </View>
           {activityLogs.length === 0 ? (
@@ -921,7 +920,7 @@ export default function LogScreen() {
                   ) : null}
                 </View>
                 <TouchableOpacity onPress={() => deleteActivity(act.id)}>
-                  <Ionicons name="trash-outline" size={18} color={theme.colors.danger} />
+                  <Ionicons name="trash-outline" size={18} color={colors.danger} />
                 </TouchableOpacity>
               </View>
             ))

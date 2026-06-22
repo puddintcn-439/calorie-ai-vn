@@ -3,7 +3,7 @@ import { ActivityIndicator, StyleSheet, TextInput, TouchableOpacity, View } from
 import { router } from 'expo-router';
 import { ScreenShell, SurfaceCard } from '../../components/ui-shell';
 import { Text } from '../../components/i18n-text';
-import { theme } from '../../components/theme';
+import { useAppTheme } from '../../components/theme';
 import { adminService } from '../../services/admin.service';
 import { useAuthStore } from '../../store/auth.store';
 
@@ -15,6 +15,7 @@ function getLoginError(error: any) {
 }
 
 export default function AdminLoginScreen() {
+  const { colors } = useAppTheme();
   const login = useAuthStore((state) => state.login);
   const logout = useAuthStore((state) => state.logout);
   const [email, setEmail] = useState('');
@@ -79,7 +80,7 @@ export default function AdminLoginScreen() {
           style={styles.input}
         />
 
-        {error ? <Text style={styles.error}>{error}</Text> : null}
+        {error ? <Text style={[styles.error, { color: colors.danger }]}>{error}</Text> : null}
 
         <TouchableOpacity style={[styles.button, !canSubmit && styles.buttonDisabled]} disabled={!canSubmit} onPress={submit}>
           {loading ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.buttonText}>Sign in</Text>}
@@ -116,6 +117,6 @@ const styles = StyleSheet.create({
   button: { marginTop: 8, borderRadius: 7, backgroundColor: '#0f172a', paddingVertical: 12, alignItems: 'center' },
   buttonDisabled: { opacity: 0.55 },
   buttonText: { color: '#ffffff', fontWeight: '800' },
-  error: { color: theme.colors.danger, fontWeight: '800' },
+  error: { fontWeight: '800' },
   note: { color: '#64748b', fontSize: 12, lineHeight: 18, textAlign: 'center' },
 });

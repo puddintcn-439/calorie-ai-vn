@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { StyleSheet, TextInput, TouchableOpacity, View } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { Text } from '../../../components/i18n-text';
-import { theme } from '../../../components/theme';
+import { useAppTheme } from '../../../components/theme';
 import {
   AdminSectionCard,
   AdminShell,
@@ -70,6 +70,7 @@ function hasBillingData(detail: AdminUserDetail) {
 type AdminAction = 'grant' | 'revoke' | 'resetDaily' | 'resetMonthly';
 
 export default function AdminUserDetailScreen() {
+  const { colors } = useAppTheme();
   const params = useLocalSearchParams<{ id?: string | string[] }>();
   const userId = useMemo(() => Array.isArray(params.id) ? params.id[0] : params.id, [params.id]);
   const [detail, setDetail] = useState<AdminUserDetail | null>(null);
@@ -188,13 +189,13 @@ export default function AdminUserDetailScreen() {
                   value={actionReason}
                   onChangeText={setActionReason}
                   placeholder="Reason, e.g. Support quota compensation"
-                  placeholderTextColor={theme.colors.textMuted}
+                  placeholderTextColor={colors.textMuted}
                   autoCapitalize="sentences"
                   style={adminStyles.input}
                   editable={!actionLoading}
                 />
-                {actionError ? <Text style={styles.actionError}>{actionError}</Text> : null}
-                {actionSuccess ? <Text style={styles.actionSuccess}>{actionSuccess}</Text> : null}
+                {actionError ? <Text style={[styles.actionError, { color: colors.danger }]}>{actionError}</Text> : null}
+                {actionSuccess ? <Text style={[styles.actionSuccess, { color: colors.accentMint }]}>{actionSuccess}</Text> : null}
                 <View style={styles.actionRow}>
                   <TouchableOpacity disabled={Boolean(actionLoading)} style={[adminStyles.primaryButton, actionLoading && styles.disabledButton]} onPress={() => runAdminAction('grant')}>
                     <Text style={adminStyles.primaryButtonText}>{actionLoading === 'grant' ? 'Granting...' : 'Grant Premium'}</Text>
@@ -307,6 +308,6 @@ const styles = StyleSheet.create({
   quotaButton: { borderRadius: 8, borderWidth: 1, borderColor: adminChrome.blue, backgroundColor: '#eff6ff', paddingHorizontal: 16, paddingVertical: 11 },
   quotaText: { color: '#2563eb', fontWeight: '900' },
   disabledButton: { opacity: 0.55 },
-  actionError: { color: theme.colors.danger, fontSize: 12, fontWeight: '800' },
-  actionSuccess: { color: theme.colors.accentMint, fontSize: 12, fontWeight: '800' },
+  actionError: { fontSize: 12, fontWeight: '800' },
+  actionSuccess: { fontSize: 12, fontWeight: '800' },
 });

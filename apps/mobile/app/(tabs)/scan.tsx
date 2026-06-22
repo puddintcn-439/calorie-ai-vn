@@ -1,7 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View,
-  StyleSheet,
   TouchableOpacity,
   ScrollView,
   ActivityIndicator,
@@ -33,7 +32,7 @@ import { telemetryService } from '../../services/telemetry.service';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { ScreenShell, SkeletonBlock, SurfaceCard, useBottomNavContentPadding } from '../../components/ui-shell';
 import { EmptyState } from '../../components/empty-state';
-import { createThemedStyles, theme, useAppTheme } from '../../components/theme';
+import { createThemedStyles, useAppTheme } from '../../components/theme';
 import { AnimatedIonicon } from '../../components/animated-icon';
 import { VisualHeroCard } from '../../components/visual-hero-card';
 import { RewardToast, RewardToastData } from '../../components/reward-toast';
@@ -132,7 +131,7 @@ function getAiFallbackNoticeKey(reason: string, parseMode?: string): I18nKey {
 }
 
 export default function ScanScreen() {
-  useAppTheme();
+  const { colors } = useAppTheme();
   const { t } = useI18n();
   const { mode: requestedMode } = useLocalSearchParams<{ mode?: string }>();
   // Determine default meal based on current time
@@ -1047,7 +1046,7 @@ export default function ScanScreen() {
               <AnimatedIonicon
                 name={MODE_ICONS[m]}
                 size={16}
-                color={mode === m ? theme.colors.textOnAccent : theme.colors.accentCyan}
+                color={mode === m ? colors.textOnAccent : colors.accentCyan}
                 motion="float"
                 active={mode === m}
               />
@@ -1065,7 +1064,7 @@ export default function ScanScreen() {
             <AnimatedIonicon
               name="ellipsis-horizontal"
               size={16}
-              color={(showMoreModes || SECONDARY_INPUT_MODES.includes(mode)) ? theme.colors.textOnAccent : theme.colors.accentCyan}
+              color={(showMoreModes || SECONDARY_INPUT_MODES.includes(mode)) ? colors.textOnAccent : colors.accentCyan}
               motion="float"
               active={showMoreModes || SECONDARY_INPUT_MODES.includes(mode)}
             />
@@ -1087,7 +1086,7 @@ export default function ScanScreen() {
                 <AnimatedIonicon
                   name={MODE_ICONS[m]}
                   size={15}
-                  color={mode === m ? theme.colors.textOnAccent : theme.colors.accentCyan}
+                  color={mode === m ? colors.textOnAccent : colors.accentCyan}
                   motion="float"
                   active={mode === m}
                 />
@@ -1126,7 +1125,7 @@ export default function ScanScreen() {
                 value={searchQuery}
                 onChangeText={setSearchQuery}
                 placeholder="screen.tabs.scan.placeholder.001"
-                placeholderTextColor={theme.colors.textDisabled}
+                placeholderTextColor={colors.textDisabled}
               />
               <TouchableOpacity
                 style={styles.analyzeButton}
@@ -1203,7 +1202,7 @@ export default function ScanScreen() {
                     value={manualBarcode}
                     onChangeText={setManualBarcode}
                     placeholder="screen.tabs.scan.placeholder.002"
-                    placeholderTextColor={theme.colors.textDisabled}
+                    placeholderTextColor={colors.textDisabled}
                     keyboardType="numeric"
                   />
                   <TouchableOpacity style={styles.manualBarcodeButton} onPress={handleManualBarcodeLookup}>
@@ -1213,7 +1212,7 @@ export default function ScanScreen() {
               </SurfaceCard>
             ) : !cameraPermission?.granted ? (
               <TouchableOpacity style={styles.captureButton} onPress={requestCameraPermission}>
-                <AnimatedIonicon name="barcode-outline" size={40} color={theme.colors.success} motion="pulse" />
+                <AnimatedIonicon name="barcode-outline" size={40} color={colors.success} motion="pulse" />
                 <Text style={styles.captureText} i18nKey="screen.tabs.scan.text.009" />
               </TouchableOpacity>
             ) : (
@@ -1223,7 +1222,7 @@ export default function ScanScreen() {
                   barcodeScannerSettings={{ barcodeTypes: ['ean13', 'ean8', 'upc_a', 'upc_e', 'qr'] }} />
                 {isScanning && (
                   <View style={styles.barcodeScanningOverlay}>
-                    <ActivityIndicator color={theme.colors.success} />
+                    <ActivityIndicator color={colors.success} />
                     <Text style={styles.scanningText} i18nKey="screen.tabs.scan.text.010" />
                   </View>
                 )}
@@ -1261,7 +1260,7 @@ export default function ScanScreen() {
                 onChangeText={setBarcodeGrams}
                 keyboardType="numeric"
                 placeholder="100"
-                placeholderTextColor={theme.colors.textDisabled}
+                placeholderTextColor={colors.textDisabled}
               />
             </View>
             <MealPicker selected={selectedMeal} onSelect={setSelectedMeal} />
@@ -1287,17 +1286,17 @@ export default function ScanScreen() {
           scannedImage ? (
             <View style={styles.selectedImageBar}>
               <View style={styles.selectedImageLabel}>
-                <Ionicons name="image-outline" size={18} color={theme.colors.success} />
+                <Ionicons name="image-outline" size={18} color={colors.success} />
                 <Text style={styles.selectedImageText} i18nKey="screen.tabs.scan.image.selected" />
               </View>
               <TouchableOpacity style={styles.selectedImageAction} onPress={handleCameraCapture}>
-                <Ionicons name="camera-outline" size={16} color={theme.colors.text} />
+                <Ionicons name="camera-outline" size={16} color={colors.text} />
                 <Text style={styles.selectedImageActionText} i18nKey="screen.tabs.scan.image.retake" />
               </TouchableOpacity>
             </View>
           ) : (
             <TouchableOpacity style={styles.captureButton} onPress={handleCameraCapture}>
-              <AnimatedIonicon name="camera" size={40} color={theme.colors.success} motion="pulse" />
+              <AnimatedIonicon name="camera" size={40} color={colors.success} motion="pulse" />
               <Text style={styles.captureText} i18nKey="screen.tabs.scan.text.015" />
             </TouchableOpacity>
           )
@@ -1306,17 +1305,17 @@ export default function ScanScreen() {
           scannedImage ? (
             <View style={styles.selectedImageBar}>
               <View style={styles.selectedImageLabel}>
-                <Ionicons name="image-outline" size={18} color={theme.colors.success} />
+                <Ionicons name="image-outline" size={18} color={colors.success} />
                 <Text style={styles.selectedImageText} i18nKey="screen.tabs.scan.image.selected" />
               </View>
               <TouchableOpacity style={styles.selectedImageAction} onPress={handleGalleryPick}>
-                <Ionicons name="images-outline" size={16} color={theme.colors.text} />
+                <Ionicons name="images-outline" size={16} color={colors.text} />
                 <Text style={styles.selectedImageActionText} i18nKey="screen.tabs.scan.image.change" />
               </TouchableOpacity>
             </View>
           ) : (
             <TouchableOpacity style={styles.captureButton} onPress={handleGalleryPick}>
-              <AnimatedIonicon name="images" size={40} color={theme.colors.success} motion="float" />
+              <AnimatedIonicon name="images" size={40} color={colors.success} motion="float" />
               <Text style={styles.captureText} i18nKey="screen.tabs.scan.text.016" />
             </TouchableOpacity>
           )
@@ -1327,7 +1326,7 @@ export default function ScanScreen() {
           <View style={styles.textInputContainer}>
             <TextInput style={styles.textInput} value={textInput} onChangeText={setTextInput}
               placeholder="screen.tabs.scan.placeholder.003"
-              placeholderTextColor={theme.colors.textDisabled} multiline />
+              placeholderTextColor={colors.textDisabled} multiline />
             <TouchableOpacity
               style={[styles.analyzeButton, (!textInput.trim() || isScanning) && styles.buttonDisabled]}
               testID="scan-analyze-text-button"
@@ -1349,7 +1348,7 @@ export default function ScanScreen() {
           <View style={styles.textInputContainer}>
             {isProcessingVoice ? (
               <View style={styles.voiceProcessingContainer} accessibilityLiveRegion="polite">
-                <ActivityIndicator color={theme.colors.primary} size="large" />
+                <ActivityIndicator color={colors.primary} size="large" />
                 <Text style={styles.captureText}>{t('screen.tabs.scan.voice.processing')}</Text>
               </View>
             ) : isRecording ? (
@@ -1364,7 +1363,7 @@ export default function ScanScreen() {
                   accessibilityRole="button"
                   accessibilityLabel={t('screen.tabs.scan.voice.stop')}
                 >
-                  <AnimatedIonicon name="stop" size={32} color={theme.colors.text} motion="pulse" />
+                  <AnimatedIonicon name="stop" size={32} color={colors.text} motion="pulse" />
                   <Text style={styles.stopRecordingText}>{t('screen.tabs.scan.voice.stop')}</Text>
                 </TouchableOpacity>
               </View>
@@ -1381,10 +1380,10 @@ export default function ScanScreen() {
                 <AnimatedIonicon
                   name="mic"
                   size={40}
-                  color={voiceCaptureState === 'error' ? theme.colors.info : theme.colors.success}
+                  color={voiceCaptureState === 'error' ? colors.info : colors.success}
                   motion="pulse"
                 />
-                <Text style={[styles.captureText, voiceCaptureState === 'error' && { color: theme.colors.info }]}>
+                <Text style={[styles.captureText, voiceCaptureState === 'error' && { color: colors.info }]}>
                   {t('screen.tabs.scan.voice.tapToSpeak')}
                 </Text>
               </TouchableOpacity>
@@ -1402,7 +1401,7 @@ export default function ScanScreen() {
                   testID="voice-transcript-input"
                   value={voiceTranscript}
                   onChangeText={setVoiceTranscript}
-                  placeholderTextColor={theme.colors.textDisabled}
+                  placeholderTextColor={colors.textDisabled}
                   multiline
                   editable={!isScanning && !isProcessingVoice}
                 />
@@ -1416,7 +1415,7 @@ export default function ScanScreen() {
                   value={voiceTranscript}
                   onChangeText={setVoiceTranscript}
                   placeholder="screen.tabs.scan.placeholder.voiceDescription"
-                  placeholderTextColor={theme.colors.textDisabled}
+                  placeholderTextColor={colors.textDisabled}
                   multiline
                   editable={!isScanning && !isProcessingVoice}
                 />
@@ -1442,7 +1441,7 @@ export default function ScanScreen() {
           <View style={styles.textInputContainer}>
             <MealPicker selected={selectedMeal} onSelect={setSelectedMeal} />
             <TouchableOpacity style={styles.captureButton} onPress={handleReceiptCapture}>
-              <AnimatedIonicon name="camera" size={40} color={theme.colors.success} motion="pulse" />
+              <AnimatedIonicon name="camera" size={40} color={colors.success} motion="pulse" />
               <Text style={styles.captureText} i18nKey="screen.tabs.scan.text.021" />
             </TouchableOpacity>
             <TouchableOpacity style={styles.secondaryButton} onPress={handleReceiptPick}>
@@ -1528,10 +1527,10 @@ export default function ScanScreen() {
               <Text style={styles.refineTitle} i18nKey="screen.tabs.scan.text.028" />
               <Text style={styles.refineHint} i18nKey="screen.tabs.scan.text.029" />
               <TextInput style={styles.refineInput} value={refineContext} onChangeText={setRefineContext}
-                placeholder="screen.tabs.scan.placeholder.refine" placeholderTextColor={theme.colors.textDisabled} multiline />
+                placeholder="screen.tabs.scan.placeholder.refine" placeholderTextColor={colors.textDisabled} multiline />
               <TouchableOpacity style={[styles.refineButton, (!refineContext.trim() || isRefining) && styles.buttonDisabled]}
                 onPress={handleRefineScan} disabled={!refineContext.trim() || isRefining}>
-                {isRefining ? <ActivityIndicator size="small" color={theme.colors.text} /> : <Text style={styles.refineButtonText} i18nKey="screen.tabs.scan.text.030" />}
+                {isRefining ? <ActivityIndicator size="small" color={colors.text} /> : <Text style={styles.refineButtonText} i18nKey="screen.tabs.scan.text.030" />}
               </TouchableOpacity>
             </SurfaceCard>
           </View>
@@ -1607,7 +1606,7 @@ export default function ScanScreen() {
                 accessibilityRole="button"
                 accessibilityLabel={t('common.cancel')}
               >
-                <Ionicons name="close" size={22} color={theme.colors.textMuted} />
+                <Ionicons name="close" size={22} color={colors.textMuted} />
               </TouchableOpacity>
             </View>
             <TextInput
@@ -1615,7 +1614,7 @@ export default function ScanScreen() {
               value={saveMealName}
               onChangeText={setSaveMealName}
               placeholder="screen.tabs.scan.saveMeal.placeholder"
-              placeholderTextColor={theme.colors.textDisabled}
+              placeholderTextColor={colors.textDisabled}
               autoFocus
               returnKeyType="done"
               onSubmitEditing={() => void confirmSaveAsMeal()}
@@ -1652,7 +1651,7 @@ export default function ScanScreen() {
                 accessibilityRole="button"
                 accessibilityLabel={t('common.cancel')}
               >
-                <Ionicons name="close" size={22} color={theme.colors.textMuted} />
+                <Ionicons name="close" size={22} color={colors.textMuted} />
               </TouchableOpacity>
             </View>
 
@@ -1797,7 +1796,7 @@ function ScanResultItem({
 
   const confidence = safeNumber(item.confidence);
   const confidenceColor =
-    confidence >= 0.8 ? theme.colors.success : confidence >= 0.6 ? theme.colors.warning : theme.colors.danger;
+    confidence >= 0.8 ? colors.success : confidence >= 0.6 ? colors.warning : colors.danger;
   const confidenceLabel =
     confidence >= 0.8
       ? t('screen.tabs.scan.confidence.high')
@@ -1877,7 +1876,7 @@ function ScanResultItem({
         accessibilityRole="button"
         testID="scan-refine-portion"
       >
-        <Ionicons name="options-outline" size={17} color={theme.colors.info} />
+        <Ionicons name="options-outline" size={17} color={colors.info} />
         <Text style={styles.refinePortionButtonText} i18nKey="screen.tabs.scan.refinePortion" />
       </TouchableOpacity>
     </SurfaceCard>
