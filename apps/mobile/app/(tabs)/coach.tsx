@@ -18,7 +18,7 @@ import { useLogStore } from '../../store/log.store';
 import { AICoachAction, BehaviorMemory, CoachingInsight, CoachingSummary, DailyLog, InterventionAnalytics, ReminderEffectivenessSummary } from '@calorie-ai/types';
 import { apiClient } from '../../services/api';
 import { VisualHeroCard } from '../../components/visual-hero-card';
-import { createThemedStyles, theme, useAppTheme } from '../../components/theme';
+import { createThemedStyles, useAppTheme } from '../../components/theme';
 import { Text } from '../../components/i18n-text';
 import { Locale, tr, translateText, useI18n } from '../../components/i18n';
 import { formatPercent, safeRound, toFiniteNumber } from '../../services/number-format';
@@ -382,6 +382,10 @@ function getCoachErrorMessage(error: unknown, locale: Locale): string {
     return tr('screen.tabs.coach.error.premium', locale);
   }
 
+  if (status === 429) {
+    return tr('screen.tabs.coach.error.quota', locale);
+  }
+
   if (status === 401) {
     return tr('screen.tabs.coach.error.session', locale);
   }
@@ -455,7 +459,7 @@ function deriveCoachActions(
 }
 
 export default function CoachScreen() {
-  useAppTheme();
+  const { colors } = useAppTheme();
   const coachScrollRef = useRef<ScrollView>(null);
   const forecastSnapshotKeysRef = useRef<Set<string>>(new Set());
   const bottomContentPadding = useBottomNavContentPadding();
@@ -542,7 +546,7 @@ export default function CoachScreen() {
     } finally {
       setLoadingInsights(false);
     }
-  }, []);
+  }, [locale]);
 
   const refreshCoachData = useCallback(() => {
     fetchTodaySummary().catch(() => {
@@ -550,10 +554,6 @@ export default function CoachScreen() {
     });
     loadInsights().catch(() => {});
   }, [fetchDailyLog, fetchTodaySummary, loadInsights]);
-
-  useEffect(() => {
-    refreshCoachData();
-  }, [refreshCoachData]);
 
   useFocusEffect(
     useCallback(() => {
@@ -735,7 +735,7 @@ export default function CoachScreen() {
     setTimeout(() => {
       coachScrollRef.current?.scrollToEnd({ animated: true });
     }, Platform.OS === 'ios' ? 280 : 180);
-  }, [locale]);
+  }, []);
 
   const renderInsightCard = (insight: CoachingInsight) => (
     <View key={insight.id} style={styles.insightCard}>
@@ -979,7 +979,7 @@ export default function CoachScreen() {
         {/* Insights List */}
         {loadingInsights ? (
           <View style={styles.loadingContainer}>
-            <ActivityIndicator color={theme.colors.accentMint} size="large" />
+            <ActivityIndicator color={colors.accentMint} size="large" />
           </View>
         ) : insightsError ? (
           <SurfaceCard style={styles.noInsightsCard}>
@@ -1072,7 +1072,7 @@ export default function CoachScreen() {
             style={styles.input}
           />
           <UiButton label="screen.tabs.coach.label.003" onPress={handleSend} loading={loading} />
-          {loading ? <ActivityIndicator color={theme.colors.accentMint} style={styles.loading} /> : null}
+          {loading ? <ActivityIndicator color={colors.accentMint} style={styles.loading} /> : null}
         </SurfaceCard>
       </ScrollView>
     </ScreenShell>
