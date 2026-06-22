@@ -1877,83 +1877,85 @@ export default function ProfileScreen() {
           <MaterialIcons name={subscriptionCollapsed ? 'expand-more' : 'expand-less'} size={26} color={colors.textMuted} />
         </TouchableOpacity>
 
-        {!subscriptionCollapsed && (
-          <View style={styles.subscriptionCard}>
-            <View style={styles.subscriptionHeader}>
-              <View>
-                <Text style={styles.subscriptionTier}>{subscription?.tier === 'premium' ? 'Premium' : subscription?.tier === 'pro' ? 'Pro' : t('profile.subscription.free')}</Text>
-                <Text style={styles.subscriptionStatus}>
-                  {subscription?.is_active ? t('profile.subscription.active') : t('profile.subscription.expired')}
-                </Text>
-              </View>
-              <MaterialIcons
-                name={subscription?.tier === 'pro' ? 'star' : subscription?.tier === 'premium' ? 'favorite' : 'favorite-border'}
-                size={32}
-                color={subscription?.tier === 'pro' ? colors.warning : subscription?.tier === 'premium' ? colors.accentCoral : colors.textDisabled}
-              />
-            </View>
+        {!subscriptionCollapsed && (() => {
+          const isPaid = Boolean(subscription?.tier && subscription.tier !== 'free');
+          const isActive = subscription?.is_active ?? false;
+          const tierIcon = subscription?.tier === 'pro' ? 'star' : subscription?.tier === 'premium' ? 'workspace-premium' : 'favorite-border';
+          const tierColor = subscription?.tier === 'pro' ? colors.warning : subscription?.tier === 'premium' ? colors.accentCoral : colors.textMuted;
+          const tierName = subscription?.tier === 'pro' ? 'Pro' : subscription?.tier === 'premium' ? 'Premium' : t('profile.subscription.free');
 
-            <Text style={styles.subscriptionHelper} i18nKey="profile.subscription.helper" />
+          const KEY_FEATURES: { key: keyof typeof features; labelKey: Parameters<typeof t>[0] }[] = [
+            { key: 'ai_coach', labelKey: 'profile.feature.aiCoach' },
+            { key: 'meal_reminders', labelKey: 'profile.feature.reminders' },
+            { key: 'weekly_reports', labelKey: 'profile.feature.reports' },
+            { key: 'healthkit_sync', labelKey: 'profile.feature.healthkit' },
+          ];
 
-            <View style={[styles.planSelectorRow, isDesktop && styles.planSelectorRowDesktop]}>
-              {(Object.keys(SUBSCRIPTION_TIERS) as SubscriptionTier[]).map((tier) => {
-                const tierInfo = SUBSCRIPTION_TIERS[tier];
-                const isCurrentTier = subscription?.tier === tier;
-                const accent = tier === 'pro' ? colors.warning : tier === 'premium' ? colors.accentCoral : colors.accentMint;
+          const openPaywall = () => router.push({ pathname: '/paywall', params: { returnTo: '/profile' } } as never);
 
-                return (
-                  <TouchableOpacity
-                    key={tier}
-                    style={[
-                      styles.planOption,
-                      isCurrentTier && styles.planOptionActive,
-                      isCurrentTier && { borderColor: accent, backgroundColor: colors.surfaceInfo },
-                    ]}
-                    onPress={() => handleChangeSubscriptionTier(tier)}
-                    disabled={isSubscriptionLoading}
-                  >
-                    <View style={styles.planOptionHeader}>
-                      <Text style={styles.planOptionName}>{tierInfo.name}</Text>
-                      {tierInfo.tag ? <Text style={[styles.planOptionTag, { color: accent }]}>{tierInfo.tag}</Text> : null}
-                    </View>
-                    <Text style={styles.planOptionDescription}>{tierInfo.description}</Text>
-                    <Text style={styles.planOptionPrice}>
-                      {tier === 'free' ? t('profile.subscription.free') : t('profile.subscription.priceMonthly', { price: tierInfo.price_usd_monthly })}
-                    </Text>
-                    <Text style={[styles.planOptionAction, isCurrentTier && { color: accent }]}>
-                      {isCurrentTier ? t('profile.subscription.current') : t('profile.subscription.switch')}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-
-            {features && (
-              <View style={styles.featuresPreview}>
-                <Text style={styles.featuresLabel} i18nKey="screen.tabs.profile.text.033" />
-                <View style={styles.featureGrid}>
-                  {[
-                    { name: 'ai_coach', label: 'AI Coach' },
-                    { name: 'meal_reminders', label: t('profile.feature.reminders') },
-                    { name: 'weekly_reports', label: t('profile.feature.reports') },
-                    { name: 'healthkit_sync', label: 'HealthKit' },
-                  ].map(({ name, label }) => (
-                    <View key={name} style={styles.featureCheckItem}>
-                      <MaterialIcons
-                        name={features[name as keyof typeof features] ? 'check-circle' : 'cancel'}
-                        size={18}
-                        color={features[name as keyof typeof features] ? colors.success : colors.textDisabled}
-                      />
-                      <Text style={[styles.featureCheckLabel, !features[name as keyof typeof features] && styles.featureCheckLabelDisabled]}>
-                        {label}
-                      </Text>
-                    </View>
-                  ))}
+          return (
+            <View style={styles.subBody}>
+              {/* Plan hero */}
+              <View style={styles.subHeroRow}>
+                <MaterialIcons name={tierIcon as any} size={26} color={tierColor} />
+                <Text style={styles.subTierName}>{tierName}</Text>
+                <View style={[styles.subStatusPill, isActive ? styles.subStatusPillActive : styles.subStatusPillExpired]}>
+                  <Text style={[styles.subStatusText, isActive ? styles.subStatusTextActive : styles.subStatusTextExpired]}>
+                    {isActive ? t('profile.subscription.active') : t('profile.subscription.expired')}
+                  </Text>
                 </View>
               </View>
-            )}
-          </View>
-        )}
+
+              {/* Feature chips */}
+              {features && (
+                <>
+                  <Text style={styles.subFeatureLabel}>
+                    {isPaid ? t('profile.subscription.activeFeatures') : t('profile.subscription.lockedLabel')}
+                  </Text>
+                  <View style={styles.subFeatureGrid}>
+                    {(isPaid
+                      ? KEY_FEATURES
+                      : KEY_FEATURES.filter(({ key }) => !features[key])
+                    ).map(({ key, labelKey }) => {
+                      const unlocked = features[key];
+                      return (
+                        <View key={key} style={[styles.subFeatureChip, !unlocked && styles.subFeatureChipLocked]}>
+                          <MaterialIcons
+                            name={unlocked ? 'check' : 'lock-outline'}
+                            size={13}
+                            color={unlocked ? colors.success : colors.textMuted}
+                          />
+                          <Text style={[styles.subFeatureChipText, !unlocked && styles.subFeatureChipTextLocked]}>
+                            {t(labelKey)}
+                          </Text>
+                        </View>
+                      );
+                    })}
+                  </View>
+                </>
+              )}
+
+              {/* CTA */}
+              {(!isPaid || !isActive) ? (
+                <TouchableOpacity style={styles.subUpgradeBtn} onPress={openPaywall} activeOpacity={0.85}>
+                  <MaterialIcons name="workspace-premium" size={16} color="#fff" />
+                  <Text style={styles.subUpgradeBtnText}>
+                    {!isActive && isPaid ? t('profile.subscription.renewBtn') : t('profile.subscription.upgradeBtn')}
+                  </Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity style={styles.subManageBtn} onPress={openPaywall} activeOpacity={0.7}>
+                  <Text style={styles.subManageBtnText}>{t('profile.subscription.manage')}</Text>
+                  <MaterialIcons name="chevron-right" size={16} color={colors.accentMint} />
+                </TouchableOpacity>
+              )}
+
+              {!isPaid && (
+                <Text style={styles.subCtaHint}>{t('profile.subscription.upgradeCta')}</Text>
+              )}
+            </View>
+          );
+        })()}
       </SurfaceCard>
       </View>
 
@@ -2598,27 +2600,26 @@ const styles = createThemedStyles((colors, radii) => ({
   previewTitle: { color: colors.text, fontSize: 15, fontWeight: '800', marginBottom: 8 },
   previewBody: { color: colors.textSoft, fontSize: 13, lineHeight: 20 },
   previewMeta: { color: colors.textMuted, fontSize: 12, marginTop: 10, fontWeight: '600' },
-  subscriptionCard: { backgroundColor: colors.surface, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: colors.border },
-  subscriptionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
-  subscriptionTier: { fontSize: 18, fontWeight: '700', color: colors.textSoft, marginBottom: 2 },
-  subscriptionStatus: { fontSize: 12, color: colors.textDisabled },
-  subscriptionHelper: { color: colors.textMuted, fontSize: 13, lineHeight: 19, marginBottom: 12 },
-  planSelectorRow: { gap: 10, marginBottom: 14 },
-  planSelectorRowDesktop: { flexDirection: 'row' },
-  planOption: { flex: 1, backgroundColor: colors.surfaceAlt, borderRadius: 12, borderWidth: 1, borderColor: colors.border, padding: 12, gap: 6 },
-  planOptionActive: { borderWidth: 1.5 },
-  planOptionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
-  planOptionName: { fontSize: 15, fontWeight: '800', color: colors.text },
-  planOptionTag: { fontSize: 11, fontWeight: '800' },
-  planOptionDescription: { color: colors.textMuted, fontSize: 12, lineHeight: 18 },
-  planOptionPrice: { color: colors.textSoft, fontSize: 13, fontWeight: '700' },
-  planOptionAction: { color: colors.accentMint, fontSize: 12, fontWeight: '700', marginTop: 4 },
-  featuresPreview: { marginBottom: 14 },
-  featuresLabel: { fontSize: 12, color: colors.textMuted, fontWeight: '500', marginBottom: 8 },
-  featureGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  featureCheckItem: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 4, paddingHorizontal: 8, backgroundColor: colors.surfaceAlt, borderRadius: 6 },
-  featureCheckLabel: { fontSize: 12, color: colors.textSoft, fontWeight: '500' },
-  featureCheckLabelDisabled: { color: colors.textDisabled },
+  subBody: { gap: 14, paddingTop: 4 },
+  subHeroRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  subTierName: { fontSize: 17, fontWeight: '800', color: colors.text, flex: 1 },
+  subStatusPill: { borderRadius: radii.full, paddingHorizontal: 10, paddingVertical: 3 },
+  subStatusPillActive: { backgroundColor: colors.surfaceSuccess },
+  subStatusPillExpired: { backgroundColor: colors.surfaceDanger },
+  subStatusText: { fontSize: 11, fontWeight: '700' },
+  subStatusTextActive: { color: colors.success },
+  subStatusTextExpired: { color: colors.danger },
+  subFeatureLabel: { fontSize: 12, fontWeight: '700', color: colors.textMuted, marginBottom: -6 },
+  subFeatureGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  subFeatureChip: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 5, paddingHorizontal: 10, backgroundColor: colors.surfaceSuccess, borderRadius: radii.lg },
+  subFeatureChipLocked: { backgroundColor: colors.surfaceAlt },
+  subFeatureChipText: { fontSize: 12, fontWeight: '600', color: colors.success },
+  subFeatureChipTextLocked: { color: colors.textMuted },
+  subUpgradeBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: colors.accentMint, borderRadius: radii.lg, paddingVertical: 13, marginTop: 4 },
+  subUpgradeBtnText: { fontSize: 15, fontWeight: '800', color: '#fff' },
+  subManageBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, paddingVertical: 10, marginTop: 4 },
+  subManageBtnText: { fontSize: 14, fontWeight: '700', color: colors.accentMint },
+  subCtaHint: { fontSize: 12, color: colors.textDisabled, textAlign: 'center', marginTop: -8 },
 }));
 
 
