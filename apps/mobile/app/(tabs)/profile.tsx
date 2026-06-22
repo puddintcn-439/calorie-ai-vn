@@ -1878,64 +1878,128 @@ export default function ProfileScreen() {
         </TouchableOpacity>
 
         {!subscriptionCollapsed && (() => {
-          const isPaid = Boolean(subscription?.tier && subscription.tier !== 'free');
+          const tier = subscription?.tier ?? 'free';
+          const isPaid = tier !== 'free';
           const isActive = subscription?.is_active ?? false;
-          const tierIcon = subscription?.tier === 'pro' ? 'star' : subscription?.tier === 'premium' ? 'workspace-premium' : 'favorite-border';
-          const tierColor = subscription?.tier === 'pro' ? colors.warning : subscription?.tier === 'premium' ? colors.accentCoral : colors.textMuted;
-          const tierName = subscription?.tier === 'pro' ? 'Pro' : subscription?.tier === 'premium' ? 'Premium' : t('profile.subscription.free');
+          const tierColor = tier === 'pro' ? colors.warning : tier === 'premium' ? colors.accentCoral : colors.textMuted;
+          const tierName = tier === 'pro' ? 'Pro' : tier === 'premium' ? 'Premium' : t('profile.subscription.free');
 
-          const KEY_FEATURES: { key: keyof SubscriptionFeatures; labelKey: string }[] = [
-            { key: 'ai_coach', labelKey: 'profile.feature.aiCoach' },
-            { key: 'meal_reminders', labelKey: 'profile.feature.reminders' },
-            { key: 'weekly_reports', labelKey: 'profile.feature.reports' },
-            { key: 'healthkit_sync', labelKey: 'profile.feature.healthkit' },
+          const renewsAt = subscription?.renews_at ? new Date(subscription.renews_at) : null;
+          const renewsText = renewsAt && !Number.isNaN(renewsAt.getTime())
+            ? renewsAt.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' })
+            : null;
+
+          // AI quota per tier (mirrors ai-usage.policy.ts)
+          const AI_QUOTA: Record<string, { scan: number; voice: number; coach: number; text: number }> = {
+            free:    { scan: 1,   voice: 1,  coach: 5,   text: 3   },
+            premium: { scan: 10,  voice: 10, coach: 50,  text: 30  },
+            pro:     { scan: 30,  voice: 30, coach: 150, text: 100 },
+          };
+          const quota = AI_QUOTA[tier] ?? AI_QUOTA.free;
+
+          // Features: only show meaningful ones, mark pro-exclusive
+          type FeatureRow = { key: keyof SubscriptionFeatures; icon: string; label: string; proOnly?: boolean };
+          const FEATURE_ROWS: FeatureRow[] = [
+            { key: 'ai_coach',          icon: 'smart-toy',         label: 'AI Coach' },
+            { key: 'meal_reminders',    icon: 'notifications',     label: 'Nhắc nhở bữa ăn' },
+            { key: 'daily_insights',    icon: 'insights',          label: 'Phân tích hàng ngày' },
+            { key: 'weekly_reports',    icon: 'bar-chart',         label: 'Báo cáo hàng tuần' },
+            { key: 'correction_tracking', icon: 'edit-note',       label: 'Theo dõi chỉnh sửa' },
+            { key: 'custom_goals',      icon: 'flag',              label: 'Mục tiêu tuỳ chỉnh' },
+            { key: 'healthkit_sync',    icon: 'favorite',          label: 'HealthKit / Sức khoẻ', proOnly: true },
+            { key: 'priority_support',  icon: 'headset-mic',       label: 'Hỗ trợ ưu tiên',      proOnly: true },
           ];
+
+          const visibleFeatures = isPaid
+            ? FEATURE_ROWS.filter(({ key }) => SUBSCRIPTION_TIERS[tier as keyof typeof SUBSCRIPTION_TIERS]?.features[key])
+            : FEATURE_ROWS.filter(({ key }) => !SUBSCRIPTION_TIERS.free.features[key]);
 
           const openPaywall = () => router.push({ pathname: '/paywall', params: { returnTo: '/profile' } } as never);
 
           return (
             <View style={styles.subBody}>
-              {/* Plan hero */}
+
+              {/* ── Tier hero ── */}
               <View style={styles.subHeroRow}>
-                <MaterialIcons name={tierIcon as any} size={26} color={tierColor} />
-                <Text style={styles.subTierName}>{tierName}</Text>
+                <View style={[styles.subTierBadge, { backgroundColor: tierColor + '22', borderColor: tierColor + '55' }]}>
+                  <MaterialIcons
+                    name={(tier === 'pro' ? 'star' : tier === 'premium' ? 'workspace-premium' : 'favorite-border') as any}
+                    size={18}
+                    color={tierColor}
+                  />
+                  <Text style={[styles.subTierName, { color: tierColor }]}>{tierName}</Text>
+                </View>
+                <View style={{ flex: 1 }} />
                 <View style={[styles.subStatusPill, isActive ? styles.subStatusPillActive : styles.subStatusPillExpired]}>
                   <Text style={[styles.subStatusText, isActive ? styles.subStatusTextActive : styles.subStatusTextExpired]}>
-                    {isActive ? t('profile.subscription.active') : t('profile.subscription.expired')}
+                    {isActive ? 'Đang hoạt động' : 'Hết hạn'}
                   </Text>
                 </View>
               </View>
 
-              {/* Feature chips */}
-              {features && (
-                <>
-                  <Text style={styles.subFeatureLabel}>
-                    {isPaid ? t('profile.subscription.activeFeatures') : t('profile.subscription.lockedLabel')}
-                  </Text>
-                  <View style={styles.subFeatureGrid}>
-                    {(isPaid
-                      ? KEY_FEATURES
-                      : KEY_FEATURES.filter(({ key }) => !features[key])
-                    ).map(({ key, labelKey }) => {
-                      const unlocked = features[key];
-                      return (
-                        <View key={key} style={[styles.subFeatureChip, !unlocked && styles.subFeatureChipLocked]}>
-                          <MaterialIcons
-                            name={unlocked ? 'check' : 'lock-outline'}
-                            size={13}
-                            color={unlocked ? colors.success : colors.textMuted}
-                          />
-                          <Text style={[styles.subFeatureChipText, !unlocked && styles.subFeatureChipTextLocked]}>
-                            {t(labelKey as any)}
-                          </Text>
-                        </View>
-                      );
-                    })}
-                  </View>
-                </>
+              {renewsText && isPaid && (
+                <Text style={styles.subRenewsText}>
+                  {isActive ? `Gia hạn: ${renewsText}` : `Đã hết hạn: ${renewsText}`}
+                </Text>
               )}
 
-              {/* CTA */}
+              {/* ── AI quota grid ── */}
+              <View style={styles.subSection}>
+                <View style={styles.subSectionHeader}>
+                  <MaterialIcons name="smart-toy" size={14} color={colors.info} />
+                  <Text style={styles.subSectionTitle}>Giới hạn AI mỗi ngày</Text>
+                </View>
+                <View style={styles.subQuotaGrid}>
+                  {([
+                    { icon: 'photo-camera', label: 'Scan ảnh', value: quota.scan },
+                    { icon: 'mic',          label: 'Giọng nói', value: quota.voice },
+                    { icon: 'chat',         label: 'AI Coach',  value: quota.coach },
+                    { icon: 'text-fields',  label: 'Scan text', value: quota.text },
+                  ] as const).map(({ icon, label, value }) => (
+                    <View key={label} style={styles.subQuotaBox}>
+                      <MaterialIcons name={icon as any} size={16} color={tierColor} />
+                      <Text style={[styles.subQuotaNum, { color: tierColor }]}>{value}</Text>
+                      <Text style={styles.subQuotaLabel}>{label}</Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+
+              {/* ── Feature list ── */}
+              <View style={styles.subSection}>
+                <View style={styles.subSectionHeader}>
+                  <MaterialIcons name="check-circle" size={14} color={colors.success} />
+                  <Text style={styles.subSectionTitle}>
+                    {isPaid ? 'Tính năng đang dùng' : 'Tính năng cần nâng cấp'}
+                  </Text>
+                </View>
+                <View style={styles.subFeatureList}>
+                  {visibleFeatures.map(({ key, icon, label, proOnly }) => (
+                    <View key={key} style={styles.subFeatureRow}>
+                      <MaterialIcons
+                        name={icon as any}
+                        size={15}
+                        color={isPaid ? colors.success : colors.textMuted}
+                      />
+                      <Text style={[styles.subFeatureText, !isPaid && styles.subFeatureTextLocked]}>
+                        {label}
+                      </Text>
+                      {proOnly && tier !== 'pro' && !isPaid && (
+                        <View style={styles.subProBadge}>
+                          <Text style={styles.subProBadgeText}>Pro</Text>
+                        </View>
+                      )}
+                      {proOnly && tier === 'pro' && (
+                        <View style={styles.subProBadge}>
+                          <Text style={styles.subProBadgeText}>Pro</Text>
+                        </View>
+                      )}
+                    </View>
+                  ))}
+                </View>
+              </View>
+
+              {/* ── CTA ── */}
               {(!isPaid || !isActive) ? (
                 <TouchableOpacity style={styles.subUpgradeBtn} onPress={openPaywall} activeOpacity={0.85}>
                   <MaterialIcons name="workspace-premium" size={16} color="#fff" />
@@ -1948,10 +2012,6 @@ export default function ProfileScreen() {
                   <Text style={styles.subManageBtnText}>{t('profile.subscription.manage')}</Text>
                   <MaterialIcons name="chevron-right" size={16} color={colors.accentMint} />
                 </TouchableOpacity>
-              )}
-
-              {!isPaid && (
-                <Text style={styles.subCtaHint}>{t('profile.subscription.upgradeCta')}</Text>
               )}
             </View>
           );
@@ -2600,26 +2660,34 @@ const styles = createThemedStyles((colors, radii) => ({
   previewTitle: { color: colors.text, fontSize: 15, fontWeight: '800', marginBottom: 8 },
   previewBody: { color: colors.textSoft, fontSize: 13, lineHeight: 20 },
   previewMeta: { color: colors.textMuted, fontSize: 12, marginTop: 10, fontWeight: '600' },
-  subBody: { gap: 14, paddingTop: 4 },
-  subHeroRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  subTierName: { fontSize: 17, fontWeight: '800', color: colors.text, flex: 1 },
-  subStatusPill: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 3 },
+  subBody: { gap: 12, paddingTop: 4 },
+  subHeroRow: { flexDirection: 'row', alignItems: 'center' },
+  subTierBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 5 },
+  subTierName: { fontSize: 15, fontWeight: '800' },
+  subStatusPill: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
   subStatusPillActive: { backgroundColor: colors.surfaceSuccess },
   subStatusPillExpired: { backgroundColor: colors.surfaceDanger },
   subStatusText: { fontSize: 11, fontWeight: '700' },
   subStatusTextActive: { color: colors.success },
   subStatusTextExpired: { color: colors.danger },
-  subFeatureLabel: { fontSize: 12, fontWeight: '700', color: colors.textMuted, marginBottom: -6 },
-  subFeatureGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  subFeatureChip: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 5, paddingHorizontal: 10, backgroundColor: colors.surfaceSuccess, borderRadius: radii.lg },
-  subFeatureChipLocked: { backgroundColor: colors.surfaceAlt },
-  subFeatureChipText: { fontSize: 12, fontWeight: '600', color: colors.success },
-  subFeatureChipTextLocked: { color: colors.textMuted },
-  subUpgradeBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: colors.accentMint, borderRadius: radii.lg, paddingVertical: 13, marginTop: 4 },
+  subRenewsText: { fontSize: 12, color: colors.textMuted, marginTop: -4 },
+  subSection: { backgroundColor: colors.surfaceAlt, borderRadius: radii.lg, padding: 12, gap: 10 },
+  subSectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  subSectionTitle: { fontSize: 12, fontWeight: '700', color: colors.textSoft, textTransform: 'uppercase', letterSpacing: 0.5 },
+  subQuotaGrid: { flexDirection: 'row', gap: 8 },
+  subQuotaBox: { flex: 1, alignItems: 'center', gap: 3, backgroundColor: colors.surface, borderRadius: radii.sm, paddingVertical: 10 },
+  subQuotaNum: { fontSize: 18, fontWeight: '900' },
+  subQuotaLabel: { fontSize: 10, fontWeight: '600', color: colors.textMuted, textAlign: 'center' },
+  subFeatureList: { gap: 8 },
+  subFeatureRow: { flexDirection: 'row', alignItems: 'center', gap: 9 },
+  subFeatureText: { flex: 1, fontSize: 13, fontWeight: '600', color: colors.text },
+  subFeatureTextLocked: { color: colors.textMuted },
+  subProBadge: { backgroundColor: colors.warning + '25', borderRadius: 999, paddingHorizontal: 7, paddingVertical: 2 },
+  subProBadgeText: { fontSize: 10, fontWeight: '800', color: colors.warning },
+  subUpgradeBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: colors.accentMint, borderRadius: radii.lg, paddingVertical: 13, marginTop: 2 },
   subUpgradeBtnText: { fontSize: 15, fontWeight: '800', color: '#fff' },
-  subManageBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, paddingVertical: 10, marginTop: 4 },
+  subManageBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, paddingVertical: 10, marginTop: 2 },
   subManageBtnText: { fontSize: 14, fontWeight: '700', color: colors.accentMint },
-  subCtaHint: { fontSize: 12, color: colors.textDisabled, textAlign: 'center', marginTop: -8 },
 }));
 
 
