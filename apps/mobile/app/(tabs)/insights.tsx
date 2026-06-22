@@ -1,28 +1,20 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import {
-  View,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  ActivityIndicator,
-  Dimensions
-} from 'react-native';
+import React, { useCallback, useState } from 'react';
+import { View, ScrollView, TouchableOpacity, ActivityIndicator, Text as NativeText } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from 'expo-router';
 import { WeeklyInsights } from '@calorie-ai/types';
 import { useInsightsStore } from '../../store/insights.store';
 import { useCalorieTargetStore } from '../../store/calorie-target.store';
 import { BodyText, Eyebrow, HeroTitle, ScreenShell, SurfaceCard, useBottomNavContentPadding } from '../../components/ui-shell';
-import { createThemedStyles, theme, useAppTheme } from '../../components/theme';
+import { createThemedStyles, useAppTheme } from '../../components/theme';
 import { Text } from '../../components/i18n-text';
 import { Alert } from '../../components/i18n-alert';
 import { formatKcal, formatMacro, formatNumberVi, formatPercent, safeNumber } from '../../services/number-format';
 import { useI18n } from '../../components/i18n';
 
-const screenWidth = Dimensions.get('window').width;
 
 export default function InsightsScreen() {
-  useAppTheme();
+  const { colors } = useAppTheme();
   const { t } = useI18n();
   const bottomContentPadding = useBottomNavContentPadding();
   const { weeklyInsights, isLoading, fetchWeeklyInsights } = useInsightsStore();
@@ -34,13 +26,9 @@ export default function InsightsScreen() {
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
 
   const loadInsightsData = useCallback(() => {
-    fetchWeeklyInsights();
+    fetchWeeklyInsights().catch(() => {});
     fetchRecommendations().catch(() => {});
   }, [fetchRecommendations, fetchWeeklyInsights]);
-
-  useEffect(() => {
-    loadInsightsData();
-  }, [loadInsightsData]);
 
   useFocusEffect(
     useCallback(() => {
@@ -52,7 +40,7 @@ export default function InsightsScreen() {
     return (
       <ScreenShell>
         <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color={theme.colors.accentMint} />
+          <ActivityIndicator size="large" color={colors.accentMint} />
           <Text style={styles.loadingText} i18nKey="screen.tabs.insights.text.001" />
         </View>
       </ScreenShell>
@@ -64,7 +52,7 @@ export default function InsightsScreen() {
       <ScreenShell>
         <View style={styles.centerContainer}>
           <Text style={styles.errorText} i18nKey="screen.tabs.insights.text.002" />
-          <TouchableOpacity style={styles.retryButton} onPress={() => fetchWeeklyInsights()}>
+          <TouchableOpacity style={styles.retryButton} onPress={() => fetchWeeklyInsights().catch(() => {})} accessibilityRole="button">
             <Text style={styles.retryButtonText} i18nKey="screen.tabs.insights.text.003" />
           </TouchableOpacity>
         </View>
@@ -158,8 +146,8 @@ export default function InsightsScreen() {
               <Text style={styles.dayDetailTitle}>
                 {selectedDayData.day_name}, {selectedDayData.date}
               </Text>
-              <TouchableOpacity onPress={() => setSelectedDay(null)}>
-                <Ionicons name="close" size={24} color={theme.colors.textMuted} />
+              <TouchableOpacity onPress={() => setSelectedDay(null)} accessibilityRole="button" accessibilityLabel={t('common.close')}>
+                <Ionicons name="close" size={24} color={colors.textMuted} />
               </TouchableOpacity>
             </View>
 
@@ -267,7 +255,7 @@ export default function InsightsScreen() {
           <View style={styles.planHeader}>
             <Text style={styles.planTitle} i18nKey="screen.tabs.insights.text.026" />
             {isLoadingRecommendations ? (
-              <ActivityIndicator size="small" color={theme.colors.accentMint} />
+              <ActivityIndicator size="small" color={colors.accentMint} />
             ) : null}
           </View>
 
@@ -292,7 +280,7 @@ export default function InsightsScreen() {
                             ? t('screen.tabs.insights.label.003')
                             : t('screen.tabs.insights.label.004')}
                     </Text>
-                    <Text style={styles.planMealTip}>{meal.tips}</Text>
+                    <NativeText style={styles.planMealTip}>{meal.tips}</NativeText>
                   </View>
                   <Text style={styles.planMealCal}>{formatKcal(meal.recommended_calories)}</Text>
                 </View>
@@ -300,7 +288,7 @@ export default function InsightsScreen() {
 
               <View style={styles.planSuggestionBox}>
                 <Text style={styles.planSuggestionTitle} i18nKey="screen.tabs.insights.text.027" />
-                <Text style={styles.planSuggestionText}>{recommendations.weekly_insights?.suggestion ?? t('screen.tabs.insights.recommendationFallback')}</Text>
+                <NativeText style={styles.planSuggestionText}>{recommendations.weekly_insights?.suggestion ?? t('screen.tabs.insights.recommendationFallback')}</NativeText>
               </View>
             </>
           ) : (
@@ -332,7 +320,7 @@ function MealBreakdownRow({
   return (
     <View style={styles.breakdownRow}>
       <View style={styles.breakdownLeft}>
-        <Text style={styles.breakdownLabel}>{label}</Text>
+        <Text style={styles.breakdownLabel} i18nKey={label as any} />
         <Text style={styles.breakdownMeta}>{t('screen.tabs.insights.unit.meals', { count: formatNumberVi(safeCount) })}</Text>
       </View>
       <View style={styles.breakdownBar}>
@@ -385,7 +373,7 @@ const styles = createThemedStyles((colors, radii) => ({
   goodValue: { color: colors.success },
   neutralValue: { color: colors.warning },
 
-  macroCard: { gap: 16, marginBottom: 16 },
+  macroCard: { flexDirection: 'row', gap: 16, marginBottom: 16 },
   macroCircle: { alignItems: 'center' },
   macroPercentage: { color: colors.accentMint, fontSize: 24, fontWeight: '800' },
   macroLabel: { color: colors.textMuted, fontSize: 12, marginTop: 2 },
