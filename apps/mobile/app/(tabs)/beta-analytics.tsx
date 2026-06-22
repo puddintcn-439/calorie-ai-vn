@@ -3,7 +3,7 @@ import { ActivityIndicator, TouchableOpacity, View } from 'react-native';
 import type { AiUsageSummary, BetaAnalyticsSummary } from '@calorie-ai/types';
 import { ScreenShell, SurfaceCard } from '../../components/ui-shell';
 import { Text } from '../../components/i18n-text';
-import { createThemedStyles, theme, useAppTheme } from '../../components/theme';
+import { createThemedStyles, useAppTheme } from '../../components/theme';
 import { telemetryService } from '../../services/telemetry.service';
 
 function formatNumber(value: number | null | undefined, suffix = '') {
@@ -31,7 +31,7 @@ function statusTone(status: string) {
 }
 
 export default function BetaAnalyticsScreen() {
-  useAppTheme();
+  const { colors } = useAppTheme();
   const [summary, setSummary] = useState<BetaAnalyticsSummary | null>(null);
   const [aiUsage, setAiUsage] = useState<AiUsageSummary | null>(null);
   const [aiUsageWindowDays, setAiUsageWindowDays] = useState<7 | 30 | 90>(30);
@@ -107,7 +107,7 @@ export default function BetaAnalyticsScreen() {
 
       {loading ? (
         <SurfaceCard style={styles.centerCard}>
-          <ActivityIndicator color={theme.colors.accentMint} />
+          <ActivityIndicator color={colors.accentMint} />
           <Text style={styles.mutedText}>Loading analytics...</Text>
         </SurfaceCard>
       ) : error ? (
@@ -202,7 +202,7 @@ export default function BetaAnalyticsScreen() {
 
             {aiUsageLoading ? (
               <View style={styles.aiUsageLoader}>
-                <ActivityIndicator color={theme.colors.accentMint} />
+                <ActivityIndicator color={colors.accentMint} />
                 <Text style={styles.mutedText}>Loading AI usage...</Text>
               </View>
             ) : aiUsageError ? (

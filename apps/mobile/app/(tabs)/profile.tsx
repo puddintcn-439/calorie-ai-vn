@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   Animated,
   View,
-  StyleSheet,
   ActivityIndicator,
   useWindowDimensions,
   Switch,
@@ -30,7 +29,7 @@ import MacrosCard from '../../components/macros-card';
 import { VisualHeroCard } from '../../components/visual-hero-card';
 import { AnimatedMaterialIcon } from '../../components/animated-icon';
 import { RewardToast, RewardToastData } from '../../components/reward-toast';
-import { createThemedStyles, theme, useAppTheme } from '../../components/theme';
+import { createThemedStyles, useAppTheme } from '../../components/theme';
 import { useI18n } from '../../components/i18n';
 import type { I18nKey } from '../../components/i18n';
 
@@ -133,8 +132,7 @@ const ACTIVITY_RECOMMENDATION_LABELS: Record<ActivityLevel, I18nKey> = {
   very_active: 'profile.activityRecommendation.veryActive',
 };
 
-function getBodyStatusTone(status: BodyStatus): { bg: string; border: string; accent: string; text: string; badgeBg: string } {
-  const colors = theme.colors;
+function getBodyStatusTone(status: BodyStatus, colors: Record<string, string>): { bg: string; border: string; accent: string; text: string; badgeBg: string } {
   const tones: Record<BodyStatus, { bg: string; border: string; accent: string; text: string; badgeBg: string }> = {
     underweight: {
       bg: colors.surfaceInfo,
@@ -578,7 +576,7 @@ function calculateInstantCalorieTargets(
 }
 
 export default function ProfileScreen() {
-  const { requestedMode } = useAppTheme();
+  const { requestedMode, colors } = useAppTheme();
   const { setThemeMode } = useThemeStore();
   const { logout } = useAuthStore();
   const { locale, setLocale, t, tx } = useI18n();
@@ -640,7 +638,7 @@ export default function ProfileScreen() {
     profile.health_flags,
   ]);
   const assessmentTone = instantAssessment.assessment
-    ? getBodyStatusTone(instantAssessment.assessment.body_status)
+    ? getBodyStatusTone(instantAssessment.assessment.body_status, colors as Record<string, string>)
     : null;
   const assessmentHintText = useMemo(() => {
     if (!instantAssessment.assessment) return tx(instantAssessment.hint);
@@ -1038,10 +1036,8 @@ export default function ProfileScreen() {
 
     try {
       const linkedActivity = editingRoadmapTask ? roadmapActivityByTaskId[editingRoadmapTask.id] : null;
-      if (linkedActivity) {
-        await deleteActivity(linkedActivity.id);
-      }
 
+      // Update/add the preference first; only delete the linked activity log after success
       if (editingRoadmapTask?.persisted_item_id) {
         await updateActivityPreference(editingRoadmapTask.persisted_item_id, {
           title: t('profile.roadmap.customTitle', { activity: activityLabel }),
@@ -1055,6 +1051,10 @@ export default function ProfileScreen() {
           duration_min: durationMin,
           sort_order: activityPreferences.length,
         });
+      }
+
+      if (linkedActivity) {
+        await deleteActivity(linkedActivity.id);
       }
 
       await fetchActivityPreferences();
@@ -1121,7 +1121,7 @@ export default function ProfileScreen() {
 
   const handleLogout = () => {
     if (Platform.OS === 'web') {
-      const confirmed = globalThis.confirm?.(t('profile.logout.confirmMessage')) ?? true;
+      const confirmed = globalThis.confirm?.(t('profile.logout.confirmMessage')) ?? false;
       if (confirmed) {
         void logout();
       }
@@ -1150,7 +1150,7 @@ export default function ProfileScreen() {
   if (isLoading) {
     return (
       <ScreenShell scrollRef={scrollRef}>
-        <ActivityIndicator color={theme.colors.success} style={{ marginTop: 80 }} />
+        <ActivityIndicator color={colors.success} style={{ marginTop: 80 }} />
       </ScreenShell>
     );
   }
@@ -1168,7 +1168,7 @@ export default function ProfileScreen() {
             <View style={styles.catalogHeader}>
               <Text style={styles.catalogTitle}>{editingRoadmapTask ? t('profile.roadmap.catalogTitleEdit') : t('profile.roadmap.catalogTitleAdd')}</Text>
               <TouchableOpacity onPress={() => setRoadmapCatalogVisible(false)}>
-                <MaterialIcons name="close" size={22} color={theme.colors.textMuted} />
+                <MaterialIcons name="close" size={22} color={colors.textMuted} />
               </TouchableOpacity>
             </View>
 
@@ -1193,7 +1193,7 @@ export default function ProfileScreen() {
                           {alreadyAdded ? t('profile.roadmap.catalogAlreadyAdded') : t('profile.roadmap.catalogKcal', { kcal: kcal30, minutes: 30 })}
                         </Text>
                       </View>
-                      <MaterialIcons name={alreadyAdded ? 'check-circle' : 'chevron-right'} size={18} color={alreadyAdded ? theme.colors.accentMint : theme.colors.textMuted} />
+                      <MaterialIcons name={alreadyAdded ? 'check-circle' : 'chevron-right'} size={18} color={alreadyAdded ? colors.accentMint : colors.textMuted} />
                     </TouchableOpacity>
                   );
                 })}
@@ -1201,7 +1201,7 @@ export default function ProfileScreen() {
             ) : (
               <View>
                 <TouchableOpacity style={styles.catalogBack} onPress={() => setRoadmapCatalogType(null)}>
-                  <MaterialIcons name="arrow-back" size={16} color={theme.colors.accentMint} />
+                  <MaterialIcons name="arrow-back" size={16} color={colors.accentMint} />
                   <Text style={styles.catalogBackText} i18nKey="screen.tabs.profile.text.001" />
                 </TouchableOpacity>
                 <Text style={styles.catalogSelectedLabel}>{tx(EXERCISE_ACTIVITY_LABELS[roadmapCatalogType])}</Text>
@@ -1246,15 +1246,15 @@ export default function ProfileScreen() {
 
         <View style={styles.profileShortcutRow}>
           <TouchableOpacity style={styles.profileShortcut} onPress={() => router.push('/progress' as never)}>
-            <AnimatedMaterialIcon name="monitor-weight" size={18} color={theme.colors.accentCyan} motion="float" />
+            <AnimatedMaterialIcon name="monitor-weight" size={18} color={colors.accentCyan} motion="float" />
             <Text style={styles.profileShortcutText} i18nKey="profile.shortcut.body" />
           </TouchableOpacity>
           <TouchableOpacity style={styles.profileShortcut} onPress={() => router.push('/insights' as never)}>
-            <AnimatedMaterialIcon name="insights" size={18} color={theme.colors.accentCyan} motion="pulse" />
+            <AnimatedMaterialIcon name="insights" size={18} color={colors.accentCyan} motion="pulse" />
             <Text style={styles.profileShortcutText} i18nKey="profile.shortcut.insights" />
           </TouchableOpacity>
           <TouchableOpacity style={styles.profileShortcut} onPress={() => router.push('/achievements' as never)}>
-            <AnimatedMaterialIcon name="emoji-events" size={18} color={theme.colors.accentAmber} motion="float" />
+            <AnimatedMaterialIcon name="emoji-events" size={18} color={colors.accentAmber} motion="float" />
             <Text style={styles.profileShortcutText} i18nKey="profile.shortcut.achievements" />
           </TouchableOpacity>
         </View>
@@ -1295,7 +1295,7 @@ export default function ProfileScreen() {
             {setupSteps.map((step) => (
               <TouchableOpacity key={step.key} style={[styles.setupStep, step.done && styles.setupStepDone]} onPress={() => openSetupStep(step.key)}>
                 <View style={[styles.setupStepIcon, step.done && styles.setupStepIconDone]}>
-                  <MaterialIcons name={step.done ? 'check' : step.icon as any} size={16} color={step.done ? theme.colors.textOnAccent : theme.colors.accentCyan} />
+                  <MaterialIcons name={step.done ? 'check' : step.icon as any} size={16} color={step.done ? colors.textOnAccent : colors.accentCyan} />
                 </View>
                 <View style={styles.setupStepCopy}>
                   <Text style={styles.setupStepLabel}>{step.label}</Text>
@@ -1328,7 +1328,7 @@ export default function ProfileScreen() {
                 </Text>
               )}
             </View>
-            <MaterialIcons name={basicCollapsed ? 'expand-more' : 'expand-less'} size={26} color={theme.colors.textMuted} />
+            <MaterialIcons name={basicCollapsed ? 'expand-more' : 'expand-less'} size={26} color={colors.textMuted} />
           </TouchableOpacity>
 
           {!basicCollapsed && (
@@ -1378,7 +1378,7 @@ export default function ProfileScreen() {
                 </Text>
               )}
             </View>
-            <MaterialIcons name={assessmentCollapsed ? 'expand-more' : 'expand-less'} size={26} color={theme.colors.textMuted} />
+            <MaterialIcons name={assessmentCollapsed ? 'expand-more' : 'expand-less'} size={26} color={colors.textMuted} />
           </TouchableOpacity>
 
           {!assessmentCollapsed && (
@@ -1501,7 +1501,7 @@ export default function ProfileScreen() {
               <Text style={styles.sectionSubtitle}>{profile.goal ? tx(GOAL_LABELS[profile.goal]) : t('profile.setup.goalMissing')} · {profile.activity_level ? tx(ACTIVITY_LABELS[profile.activity_level]) : '...'}</Text>
             )}
           </View>
-          <MaterialIcons name={goalCollapsed ? 'expand-more' : 'expand-less'} size={26} color={theme.colors.textMuted} />
+          <MaterialIcons name={goalCollapsed ? 'expand-more' : 'expand-less'} size={26} color={colors.textMuted} />
         </TouchableOpacity>
 
         {!goalCollapsed && (
@@ -1558,7 +1558,7 @@ export default function ProfileScreen() {
                   <View style={styles.roadmapPanelTitleRow}>
                     <Text style={styles.label} i18nKey="screen.tabs.profile.text.019" />
                     <TouchableOpacity style={styles.roadmapAddBtn} onPress={openAddRoadmapExercise}>
-                      <MaterialIcons name="add" size={15} color={theme.colors.textOnAccent} />
+                      <MaterialIcons name="add" size={15} color={colors.textOnAccent} />
                       <Text style={styles.roadmapAddBtnText} i18nKey="screen.tabs.profile.text.020" />
                     </TouchableOpacity>
                   </View>
@@ -1603,14 +1603,14 @@ export default function ProfileScreen() {
                                   style={styles.roadmapActionBtn}
                                   onPress={() => openEditRoadmapExercise(item)}
                                 >
-                                  <MaterialIcons name="edit" size={13} color={theme.colors.accentCyan} />
+                                  <MaterialIcons name="edit" size={13} color={colors.accentCyan} />
                                   <Text style={styles.roadmapActionText} i18nKey="screen.tabs.profile.text.023" />
                                 </TouchableOpacity>
                                 <TouchableOpacity
                                   style={[styles.roadmapActionBtn, styles.roadmapDeleteBtn]}
                                   onPress={() => handleRemoveRoadmapTask(item)}
                                 >
-                                  <MaterialIcons name="delete-outline" size={13} color={theme.colors.danger} />
+                                  <MaterialIcons name="delete-outline" size={13} color={colors.danger} />
                                   <Text style={styles.roadmapDeleteText} i18nKey="screen.tabs.profile.text.024" />
                                 </TouchableOpacity>
                               </View>
@@ -1636,7 +1636,7 @@ export default function ProfileScreen() {
               <Text style={styles.sectionSubtitle}>{profile.daily_calorie_target ? t('profile.calorie.collapsed', { target: profile.daily_calorie_target }) : t('profile.basic.unset')}</Text>
             )}
           </View>
-          <MaterialIcons name={calorieCollapsed ? 'expand-more' : 'expand-less'} size={26} color={theme.colors.textMuted} />
+          <MaterialIcons name={calorieCollapsed ? 'expand-more' : 'expand-less'} size={26} color={colors.textMuted} />
         </TouchableOpacity>
 
         {!calorieCollapsed && (
@@ -1669,12 +1669,12 @@ export default function ProfileScreen() {
           <Switch
             value={reminders.allow_push_notifications ?? true}
             onValueChange={(v) => setReminders((r) => ({ ...r, allow_push_notifications: v }))}
-            trackColor={{ false: theme.colors.border, true: theme.colors.success }}
-            thumbColor={(reminders.allow_push_notifications ?? true) ? theme.colors.accentMint : theme.colors.textMuted}
+            trackColor={{ false: colors.border, true: colors.success }}
+            thumbColor={(reminders.allow_push_notifications ?? true) ? colors.accentMint : colors.textMuted}
           />
 
           <TouchableOpacity onPress={() => setNotificationsCollapsed((s) => !s)} style={{ paddingLeft: 8 }}>
-            <MaterialIcons name={notificationsCollapsed ? 'expand-more' : 'expand-less'} size={26} color={theme.colors.textMuted} />
+            <MaterialIcons name={notificationsCollapsed ? 'expand-more' : 'expand-less'} size={26} color={colors.textMuted} />
           </TouchableOpacity>
         </View>
 
@@ -1687,8 +1687,8 @@ export default function ProfileScreen() {
               <Switch
                 value={reminders.allow_push_notifications ?? true}
                 onValueChange={(v) => setReminders((r) => ({ ...r, allow_push_notifications: v }))}
-                trackColor={{ false: theme.colors.border, true: theme.colors.success }}
-                thumbColor={reminders.allow_push_notifications ? theme.colors.accentMint : theme.colors.textMuted}
+                trackColor={{ false: colors.border, true: colors.success }}
+                thumbColor={reminders.allow_push_notifications ? colors.accentMint : colors.textMuted}
               />
             </View>
 
@@ -1814,7 +1814,7 @@ export default function ProfileScreen() {
               </View>
 
               <SurfaceCard style={styles.previewCard}>
-                {isPreviewLoading && <ActivityIndicator color={theme.colors.accentMint} />}
+                {isPreviewLoading && <ActivityIndicator color={colors.accentMint} />}
                 {!isPreviewLoading && previewNudge && (
                   <>
                     <Text style={styles.previewTitle}>{previewNudge.emoji} {previewNudge.title}</Text>
@@ -1849,7 +1849,7 @@ export default function ProfileScreen() {
             <MaterialIcons
               name={subscription?.tier === 'pro' ? 'star' : subscription?.tier === 'premium' ? 'favorite' : 'favorite-border'}
               size={32}
-              color={subscription?.tier === 'pro' ? theme.colors.warning : subscription?.tier === 'premium' ? theme.colors.accentCoral : theme.colors.textDisabled}
+              color={subscription?.tier === 'pro' ? colors.warning : subscription?.tier === 'premium' ? colors.accentCoral : colors.textDisabled}
             />
           </View>
 
@@ -1859,7 +1859,7 @@ export default function ProfileScreen() {
             {(Object.keys(SUBSCRIPTION_TIERS) as SubscriptionTier[]).map((tier) => {
               const tierInfo = SUBSCRIPTION_TIERS[tier];
               const isCurrentTier = subscription?.tier === tier;
-              const accent = tier === 'pro' ? theme.colors.warning : tier === 'premium' ? theme.colors.accentCoral : theme.colors.accentMint;
+              const accent = tier === 'pro' ? colors.warning : tier === 'premium' ? colors.accentCoral : colors.accentMint;
 
               return (
                 <TouchableOpacity
@@ -1867,7 +1867,7 @@ export default function ProfileScreen() {
                   style={[
                     styles.planOption,
                     isCurrentTier && styles.planOptionActive,
-                    isCurrentTier && { borderColor: accent, backgroundColor: theme.colors.surfaceInfo },
+                    isCurrentTier && { borderColor: accent, backgroundColor: colors.surfaceInfo },
                   ]}
                   onPress={() => void handleChangeSubscriptionTier(tier)}
                   disabled={isSubscriptionLoading}
@@ -1902,7 +1902,7 @@ export default function ProfileScreen() {
                     <MaterialIcons
                       name={features[name as keyof typeof features] ? 'check-circle' : 'cancel'}
                       size={18}
-                      color={features[name as keyof typeof features] ? theme.colors.success : theme.colors.textDisabled}
+                      color={features[name as keyof typeof features] ? colors.success : colors.textDisabled}
                     />
                     <Text style={[styles.featureCheckLabel, !features[name as keyof typeof features] && styles.featureCheckLabelDisabled]}>
                       {label}
@@ -1921,7 +1921,7 @@ export default function ProfileScreen() {
             <Text style={styles.accountHint} i18nKey="profile.account.hint" />
           </View>
           <TouchableOpacity style={styles.profileLogoutButton} onPress={handleLogout}>
-            <MaterialIcons name="logout" size={16} color={theme.colors.danger} />
+            <MaterialIcons name="logout" size={16} color={colors.danger} />
             <Text style={styles.profileLogoutText} i18nKey="profile.logout" />
           </TouchableOpacity>
         </SurfaceCard>
@@ -1989,8 +1989,8 @@ function ReminderTimePickerRow({
         <Switch
           value={enabled}
           onValueChange={onEnabledChange}
-          trackColor={{ false: theme.colors.border, true: theme.colors.success }}
-          thumbColor={enabled ? theme.colors.accentMint : theme.colors.textMuted}
+          trackColor={{ false: colors.border, true: colors.success }}
+          thumbColor={enabled ? colors.accentMint : colors.textMuted}
         />
       </View>
 
