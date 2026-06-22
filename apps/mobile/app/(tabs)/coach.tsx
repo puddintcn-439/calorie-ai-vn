@@ -678,6 +678,7 @@ export default function CoachScreen() {
 
   const handleUsePrompt = (prompt: string) => {
     setInput(prompt);
+    scrollToInput();
   };
 
   const handleCoachAction = async (action: AICoachAction) => {
@@ -1187,7 +1188,7 @@ const styles = createThemedStyles((colors, radii) => ({
   planActions: {
     flexDirection: 'row',
     gap: 10,
-    marginTop: 4,
+    marginTop: 14,
   },
   planPrimaryAction: {
     flex: 1.1,
