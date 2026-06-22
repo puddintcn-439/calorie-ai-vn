@@ -118,17 +118,17 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
-        name="scan"
-        options={{
-          title: t('tabs.scan'),
-          tabBarIcon: ({ color, size, focused }) => <TabIcon name="camera" size={size} color={color} focused={focused} compact={isCompact} desktop={isDesktop} />,
-        }}
-      />
-      <Tabs.Screen
         name="log"
         options={{
           title: t('tabs.log'),
           tabBarIcon: ({ color, size, focused }) => <TabIcon name="list" size={size} color={color} focused={focused} compact={isCompact} desktop={isDesktop} />,
+        }}
+      />
+      <Tabs.Screen
+        name="scan"
+        options={{
+          title: t('tabs.scan'),
+          tabBarIcon: ({ color, size, focused }) => <TabIcon name="camera" size={size} color={color} focused={focused} compact={isCompact} desktop={isDesktop} />,
         }}
       />
       <Tabs.Screen
