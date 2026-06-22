@@ -534,3 +534,27 @@ Backend build failed (exit ). Aborting.
   root cause.
 - **Follow-up:** new dependency-install workflow steps must apply bounded retry
   behavior and must still fail after the final attempt.
+
+## 2026-06-22 - Payment issue cards referenced a theme variable outside component scope
+
+- Scope: mobile admin UI
+- Error Signature: `ReferenceError: colors is not defined` in `IssueCard` at
+  `apps/mobile/app/admin/payment-issues.tsx`, triggered while mapping
+  `response.issues`.
+- Trigger: Rendering one or more payment issue cards containing the internal
+  note and user-facing resolution inputs.
+- Root Cause: `colors` was destructured inside `AdminPaymentIssuesScreen`, but
+  `IssueCard` is a separate component and referenced `colors.textMuted` without
+  receiving that value or calling the theme hook in its own scope.
+- Fix: Passed the resolved `colors.textMuted` token into each `IssueCard` as a
+  typed `placeholderColor` prop and used it for both `TextInput` placeholders.
+- Validation: `npm --workspace apps/mobile run lint` no longer reports
+  `payment-issues.tsx`; the command remains blocked by pre-existing unrelated
+  errors in `app/(tabs)/profile.tsx` and `app/(tabs)/scan.tsx`.
+- Prevention Rule: A nested React component must receive theme tokens through
+  props or resolve them with its own hook; never rely on lexical variables
+  declared inside the parent component function.
+- Files: `apps/mobile/app/admin/payment-issues.tsx`
+- Reuse Signal: Check component scope first whenever a runtime
+  `ReferenceError: <theme variable> is not defined` occurs inside a mapped card
+  or extracted render component.
