@@ -1971,6 +1971,7 @@ function ReminderTimePickerRow({
   onEnabledChange: (v: boolean) => void;
   onTimeChange: (v: string) => void;
 }) {
+  const { colors } = useAppTheme();
   const [showPicker, setShowPicker] = React.useState(false);
 
   const handleTimeSelect = (hours: number, minutes: number) => {
