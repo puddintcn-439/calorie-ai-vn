@@ -33,8 +33,8 @@ export default function LoginScreen() {
     setLoading(true);
     try {
       await login(email, password);
-    } catch (e: any) {
-      Alert.alert('common.error', e?.response?.data?.message ?? 'auth.login.failed');
+    } catch {
+      Alert.alert('common.error', 'auth.login.failed');
     } finally {
       setLoading(false);
     }
@@ -79,6 +79,13 @@ export default function LoginScreen() {
 
         <UiButton label="auth.login.submit" onPress={handleLogin} loading={loading} style={styles.submitBtn} />
 
+        <UiButton
+          label="auth.login.forgotPassword"
+          onPress={() => Alert.alert('auth.login.forgotPasswordTitle', 'auth.login.forgotPasswordBody')}
+          variant="ghost"
+          style={styles.forgotBtn}
+        />
+
         <UiButton label="auth.login.createAccount" onPress={() => router.push('/(auth)/register')} variant="ghost" />
       </SurfaceCard>
     </ScreenShell>
@@ -106,4 +113,5 @@ const styles = createThemedStyles((colors, radii, spacing) => ({
   sectionTitle: { color: colors.text, fontSize: 23, lineHeight: 29, fontWeight: '900', marginBottom: spacing.xs },
   subtitle: { color: colors.textMuted, marginBottom: spacing.lg, fontSize: 14, lineHeight: 21 },
   submitBtn: { marginBottom: spacing.xs, marginTop: spacing.xs },
+  forgotBtn: { marginBottom: 0 },
 }));
