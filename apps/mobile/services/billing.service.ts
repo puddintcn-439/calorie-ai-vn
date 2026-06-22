@@ -1,4 +1,5 @@
 import { apiClient } from './api';
+import { Platform } from 'react-native';
 
 export type BillingCheckoutTier = 'premium' | 'pro';
 export type BillingCheckoutInterval = 'monthly' | 'annual';
@@ -56,9 +57,38 @@ export type BillingPaymentIssue = {
   resolved_at?: string | null;
 };
 
+function webPayosReturnUrls(returnTo: string) {
+  if (Platform.OS !== 'web' || typeof window === 'undefined') return {};
+  const safeReturnTo = returnTo.startsWith('/') && !returnTo.startsWith('//') ? returnTo : '/profile';
+  const returnUrl = new URL('/paywall', window.location.origin);
+  returnUrl.searchParams.set('returnTo', safeReturnTo);
+  const cancelUrl = new URL(returnUrl.toString());
+  cancelUrl.searchParams.set('cancel', 'true');
+  return {
+    return_url: returnUrl.toString(),
+    cancel_url: cancelUrl.toString(),
+  };
+}
+
 export const billingService = {
-  async createPayosCheckout(tier: BillingCheckoutTier, interval: BillingCheckoutInterval): Promise<PayosCheckoutResponse> {
-    const { data } = await apiClient.post<PayosCheckoutResponse>('/billing/checkout/payos', { tier, interval });
+  async createPayosCheckout(
+    tier: BillingCheckoutTier,
+    interval: BillingCheckoutInterval,
+    returnTo = '/profile',
+  ): Promise<PayosCheckoutResponse> {
+    const { data } = await apiClient.post<PayosCheckoutResponse>('/billing/checkout/payos', {
+      tier,
+      interval,
+      ...webPayosReturnUrls(returnTo),
+    });
+    return data;
+  },
+
+  async reconcilePayosCheckout(orderCode: number): Promise<{ status: string; processed: boolean }> {
+    const { data } = await apiClient.post<{ status: string; processed: boolean }>(
+      '/billing/payos/reconcile',
+      { order_code: orderCode },
+    );
     return data;
   },
 

@@ -157,6 +157,9 @@ export default function PaywallScreen() {
     [entitlement?.active_until, locale],
   );
   const hasActivePayosPlan = entitlement?.source === 'paid' && entitlement.provider === 'payos';
+  const paymentReturnPath = params.returnTo?.startsWith('/') && !params.returnTo.startsWith('//')
+    ? params.returnTo
+    : '/profile';
 
   const loadRenewalReminder = useCallback(async () => {
     try {
@@ -182,6 +185,13 @@ export default function PaywallScreen() {
     if (params.status === 'PAID' && params.cancel !== 'true') {
       // Payment succeeded — poll until webhook activates subscription
       void (async () => {
+        if (orderCode) {
+          try {
+            await billingService.reconcilePayosCheckout(orderCode);
+          } catch {
+            // Webhook remains primary; entitlement polling below is the fallback.
+          }
+        }
         for (let i = 0; i < 8; i++) {
           try {
             const latest = await billingService.getEntitlement();
@@ -196,6 +206,7 @@ export default function PaywallScreen() {
                   activeUntil: formatActiveUntil(latest.active_until, locale),
                 }),
               });
+              router.replace(paymentReturnPath as never);
               return;
             }
           } catch { /* silent */ }
@@ -242,6 +253,7 @@ export default function PaywallScreen() {
               activeUntil: formatActiveUntil(latest.active_until, locale),
             }),
           });
+          router.replace(paymentReturnPath as never);
         }
       } catch {
         // silent — don't surface polling errors to the user
@@ -266,7 +278,7 @@ export default function PaywallScreen() {
       subscription.remove();
       if (pollInterval) clearInterval(pollInterval);
     };
-  }, [t, locale, loadRenewalReminder, fetchSubscription]);
+  }, [t, locale, loadRenewalReminder, fetchSubscription, paymentReturnPath, router]);
 
   const handleCreateCheckout = async (plan: PaywallPlan) => {
     const loadingKey = `${plan.tier}-${plan.interval}`;
@@ -274,7 +286,11 @@ export default function PaywallScreen() {
     setMessage(null);
 
     try {
-      const checkout = await billingService.createPayosCheckout(plan.tier, plan.interval);
+      const checkout = await billingService.createPayosCheckout(
+        plan.tier,
+        plan.interval,
+        params.returnTo ?? '/profile',
+      );
       if (!checkout.checkout_url) {
         setMessage({ tone: 'error', text: t('screen.paywall.error.missingCheckoutUrl') });
         return;

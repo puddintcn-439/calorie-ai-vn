@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Headers, Post, Query, Redirect, Request, UnauthorizedException, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiProperty, ApiTags } from '@nestjs/swagger';
-import { IsIn, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
+import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
+import { IsIn, IsInt, IsOptional, IsString, IsUUID, MaxLength, Min } from 'class-validator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { BillingService } from './billing.service';
 
@@ -22,6 +23,25 @@ class PayosCheckoutDto {
   @ApiProperty({ enum: ['monthly', 'annual'] })
   @IsIn(['monthly', 'annual'])
   interval: 'monthly' | 'annual';
+
+  @ApiProperty({ required: false, description: 'Validated app URL used after successful PayOS checkout.' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(2048)
+  return_url?: string;
+
+  @ApiProperty({ required: false, description: 'Validated app URL used after cancelled PayOS checkout.' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(2048)
+  cancel_url?: string;
+}
+
+class ReconcilePayosCheckoutDto {
+  @ApiProperty({ description: 'PayOS order code returned by checkout.' })
+  @IsInt()
+  @Min(1)
+  order_code: number;
 }
 
 class CreatePaymentIssueDto {
@@ -61,8 +81,21 @@ export class BillingController {
     });
   }
 
+  @Post('payos/reconcile')
+  @UseGuards(JwtAuthGuard, ThrottlerGuard)
+  @Throttle({ default: { ttl: 60000, limit: 10 } })
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Reconcile the authenticated user PayOS order after returning from checkout' })
+  reconcilePayosCheckout(@Request() req: any, @Body() body: ReconcilePayosCheckoutDto) {
+    return this.billingService.reconcilePayosCheckout({
+      userId: req.user.id ?? req.user.sub,
+      orderCode: body.order_code,
+    });
+  }
+
   @Post('checkout/payos')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, ThrottlerGuard)
+  @Throttle({ default: { ttl: 60000, limit: 5 } })
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Create a PayOS prepaid checkout link' })
   createPayosCheckout(@Request() req: any, @Body() body: PayosCheckoutDto) {
@@ -71,6 +104,9 @@ export class BillingController {
       email: req.user.email ?? null,
       tier: body.tier,
       interval: body.interval,
+      returnUrl: body.return_url,
+      cancelUrl: body.cancel_url,
+      requestOrigin: req.headers?.origin,
     });
   }
 
@@ -142,18 +178,21 @@ export class BillingController {
   @Redirect()
   @ApiOperation({ summary: 'PayOS checkout return — redirects back to the app/web' })
   handlePayosReturn(@Query() query: Record<string, string>) {
-    const base = process.env.PAYOS_WEB_RETURN_URL || 'http://localhost:19006/paywall';
-    const qs = new URLSearchParams(query).toString();
-    return { url: qs ? `${base}?${qs}` : base, statusCode: 302 };
+    return { url: this.payosWebReturnUrl(query), statusCode: 302 };
   }
 
   @Get('cancel/payos')
   @Redirect()
   @ApiOperation({ summary: 'PayOS checkout cancel — redirects back to the app/web' })
   handlePayosCancel(@Query() query: Record<string, string>) {
+    return { url: this.payosWebReturnUrl(query), statusCode: 302 };
+  }
+
+  private payosWebReturnUrl(query: Record<string, string>) {
     const base = process.env.PAYOS_WEB_RETURN_URL || 'http://localhost:19006/paywall';
-    const qs = new URLSearchParams(query).toString();
-    return { url: qs ? `${base}?${qs}` : base, statusCode: 302 };
+    const url = new URL(base);
+    Object.entries(query).forEach(([key, value]) => url.searchParams.set(key, value));
+    return url.toString();
   }
 
   @Post('webhooks/app-store')

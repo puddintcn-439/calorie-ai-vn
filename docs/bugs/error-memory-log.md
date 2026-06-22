@@ -558,3 +558,74 @@ Backend build failed (exit ). Aborting.
 - Reuse Signal: Check component scope first whenever a runtime
   `ReferenceError: <theme variable> is not defined` occurs inside a mapped card
   or extracted render component.
+
+## 2026-06-22 - PayOS returned to an expired Cloudflare Quick Tunnel
+
+- Scope: billing / backend / Expo web
+- Error Signature: `DNS_PROBE_FINISHED_NXDOMAIN` at
+  `joined-universities-preferred-application.trycloudflare.com/billing/return/payos`
+  after PayOS returned `status=PAID`.
+- Trigger: Complete a Free-to-Pro PayOS checkout whose payment link was created
+  while `PAYOS_RETURN_URL` pointed at a temporary Cloudflare Quick Tunnel.
+- Root Cause: PayOS persisted the temporary `*.trycloudflare.com` callback in
+  the payment link, and that hostname expired before the browser returned.
+- Fix: Expo web now submits its current app-origin return/cancel URLs, the
+  backend validates those origins before creating the PayOS link, and the
+  authenticated return flow reconciles the order through PayOS before routing
+  back to `/profile`. The existing webhook remains the primary activation path.
+- Validation: Backend build, mobile TypeScript lint, billing controller tests,
+  and billing service tests cover allowed callbacks, rejected foreign origins,
+  authenticated reconciliation, and redirect behavior.
+- Prevention Rule: Never store a temporary `*.trycloudflare.com` Quick Tunnel
+  hostname in persistent PayOS return, cancel, or webhook configuration. Use a
+  deployed domain or named tunnel; create a fresh payment link after callback
+  configuration changes because old links retain their original URL.
+- Files: `apps/backend/src/modules/billing/billing.controller.ts`,
+  `apps/backend/src/modules/billing/billing.service.ts`,
+  `apps/mobile/services/billing.service.ts`, `apps/mobile/app/paywall.tsx`,
+  `apps/backend/.env.example`, `docs/billing-payos-v5-rollout-checklist.md`
+- Reuse Signal: Recheck callback lifetime and provider-side URL persistence
+  whenever payment succeeds but the browser lands on DNS/404 instead of the app.
+
+### Local development follow-up
+
+- A `dev:payos:tunnel` helper now replaces stale local webhook tunnel URLs on
+  every development start, and `scripts/start-all.ps1` invokes it automatically
+  before the backend loads its environment.
+- The helper prefers authenticated ngrok because PayOS can reject account-less
+  `trycloudflare.com` hosts with `Webhook url invalid (code: 20)` before sending
+  its validation request. Cloudflare Quick Tunnel remains fallback-only.
+- A second cause of the same PayOS code was registration timing:
+  `webhooks.confirm()` was awaited in `onModuleInit`, before `app.listen()` made
+  the webhook route reachable, so ngrok recorded `502 Bad Gateway`. Registration
+  is now scheduled after startup and no longer blocks the HTTP listener.
+- This automation is a development convenience, not an uptime guarantee.
+  Production payment webhooks must use a Cloudflare Named Tunnel or deployed
+  HTTPS domain.
+- PayOS registration also sends a documented signed sample probe. The endpoint
+  now verifies that probe through the same SDK signature path as every real
+  transaction; there is no unsigned validation bypass.
+
+## 2026-06-22 - Subscription cancellation test mock missed Supabase `.is()`
+
+- Scope: backend test infrastructure
+- Error Signature: `TypeError: this.supabase.db.from(...).update(...).eq(...).is is not a function`
+- Trigger: Running the full `npm test` suite after subscription cancellation added a `cancelled_at IS NULL` filter.
+- Root Cause: The unit-test Supabase chain mock implemented `update()` and `eq()` but not the `.is()` method used by production code.
+- Fix: Extended the test chain with a fluent `.is()` implementation that resolves the mocked update.
+- Validation: The targeted subscription suite and full monorepo test suite are rerun after the fix.
+- Prevention Rule: Supabase fluent-chain mocks must implement every query operator used by the service; prefer a shared chain mock over one-off partial mocks.
+- Files: `apps/backend/src/modules/subscription/__tests__/subscription.service.spec.ts`
+- Reuse Signal: Check mock-chain completeness before changing production code when a test fails with `... is not a function`.
+
+## 2026-06-22 - Login link opened Metro and used the route-group name
+
+- Scope: mobile web / development scripts
+- Error Signature: Expo Router displayed `Unmatched Route — Page could not be found` for `http://localhost:8081/auth/login`.
+- Trigger: Restarting with `scripts/start-all.ps1`, then opening the reported login URL.
+- Root Cause: The script ran plain `expo start`, making port 8081 the Metro entrypoint instead of starting Expo web on port 19006; additionally `(auth)` is a route group and does not produce an `/auth` URL segment.
+- Fix: `start-all.ps1` now runs `npm run dev:web`, which explicitly starts Expo web on port 19006. The correct public route is `/login`, while source remains `app/(auth)/login.tsx`.
+- Validation: Verify `http://localhost:19006/login` renders the login screen and that the PayOS web return remains on port 19006.
+- Prevention Rule: Never infer Expo Router URLs from route-group folder names, and never treat Metro port 8081 as the web application URL.
+- Files: `scripts/start-all.ps1`
+- Reuse Signal: Check route groups and the actual Expo web process whenever an HTTP 200 response still renders `Unmatched Route`.
