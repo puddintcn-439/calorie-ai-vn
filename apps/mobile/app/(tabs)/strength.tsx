@@ -1,14 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import {
-  Pressable,
-  StyleSheet,
-  View
-} from 'react-native';
+import { Pressable, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { ScreenShell, SurfaceCard, Eyebrow, HeroTitle, BodyText } from '../../components/ui-shell';
 import { UiButton } from '../../components/ui-button';
 import { UiInput } from '../../components/ui-input';
-import { createThemedStyles, theme, useAppTheme } from '../../components/theme';
+import { createThemedStyles, useAppTheme } from '../../components/theme';
 import { useLogStore } from '../../store/log.store';
 import { loadPresets, savePreset as savePresetService, removePreset as removePresetService } from '../../services/presets.service';
 import { formatNumberVi } from '../../services/number-format';
@@ -39,10 +35,10 @@ const defaultExercise = (name = ''): LocalExercise => ({
 });
 
 export default function StrengthLogScreen() {
-  useAppTheme();
+  const { colors } = useAppTheme();
   const { t } = useI18n();
   const { addActivity } = useLogStore();
-  const [exercises, setExercises] = useState<LocalExercise[]>([defaultExercise('Squat')]);
+  const [exercises, setExercises] = useState<LocalExercise[]>([defaultExercise()]);
   const [sessionNotes, setSessionNotes] = useState('');
   const [presetsState, setPresetsState] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
@@ -187,7 +183,7 @@ export default function StrengthLogScreen() {
             <Text style={styles.sectionMeta}>{t('screen.tabs.strength.meta.estimated', { minutes: stats.duration })}</Text>
           </View>
           <View style={styles.headerIcon}>
-            <Ionicons name="barbell" size={18} color={theme.colors.accentMint} />
+            <Ionicons name="barbell" size={18} color={colors.accentMint} />
           </View>
         </View>
 
@@ -207,7 +203,7 @@ export default function StrengthLogScreen() {
                 <Text style={styles.presetText}>{preset}</Text>
               </Pressable>
               <Pressable accessibilityLabel={t('screen.tabs.strength.accessibility.removePreset', { name: preset })} onPress={() => handleRemovePreset(preset)} style={styles.presetRemove}>
-                <Ionicons name="close" size={14} color={theme.colors.textMuted} />
+                <Ionicons name="close" size={14} color={colors.textMuted} />
               </Pressable>
             </View>
           ))}
@@ -222,7 +218,7 @@ export default function StrengthLogScreen() {
               <Text style={styles.exerciseTitle}>{exercise.name.trim() || t('screen.tabs.strength.exercise.unnamed')}</Text>
             </View>
             <Pressable accessibilityLabel={t('screen.tabs.strength.accessibility.removeExercise', { index: idx + 1 })} onPress={() => removeExercise(exercise.id)} style={styles.iconDangerButton}>
-              <Ionicons name="trash-outline" size={18} color={theme.colors.danger} />
+              <Ionicons name="trash-outline" size={18} color={colors.danger} />
             </Pressable>
           </View>
 
@@ -249,7 +245,7 @@ export default function StrengthLogScreen() {
               containerStyle={styles.compactInput}
             />
             <Pressable onPress={() => addSetToExercise(exercise.id)} style={styles.addSetButton}>
-              <Ionicons name="add" size={18} color={theme.colors.textOnAccent} />
+              <Ionicons name="add" size={18} color={colors.textOnAccent} />
               <Text style={styles.addSetText} i18nKey="screen.tabs.strength.text.006" />
             </Pressable>
           </View>
@@ -260,10 +256,10 @@ export default function StrengthLogScreen() {
                 <View style={styles.setIndex}>
                   <Text style={styles.setIndexText}>{setIdx + 1}</Text>
                 </View>
-                <Text style={styles.setValue}>{set.reps} reps</Text>
-                <Text style={styles.setValue}>{set.weight_kg} kg</Text>
+                <Text style={styles.setValue}>{t('screen.tabs.strength.set.reps', { reps: set.reps })}</Text>
+                <Text style={styles.setValue}>{t('screen.tabs.strength.set.weight', { kg: set.weight_kg })}</Text>
                 <Pressable accessibilityLabel={t('screen.tabs.strength.accessibility.removeSet', { index: setIdx + 1 })} onPress={() => removeSetFromExercise(exercise.id, setIdx)} style={styles.removeSetButton}>
-                  <Ionicons name="remove" size={16} color={theme.colors.accentCyan} />
+                  <Ionicons name="remove" size={16} color={colors.accentCyan} />
                 </Pressable>
               </View>
             ))}
