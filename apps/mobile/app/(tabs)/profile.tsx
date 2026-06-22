@@ -738,6 +738,15 @@ export default function ProfileScreen() {
       done: reminders.allow_push_notifications ?? true,
       icon: 'notifications-active',
     },
+    {
+      key: 'subscription',
+      label: t('profile.setup.subscription'),
+      detail: subscription?.tier && subscription.tier !== 'free'
+        ? t('profile.setup.subscriptionUpgraded', { tier: subscription.tier === 'premium' ? 'Premium' : 'Pro' })
+        : t('profile.setup.subscriptionFree'),
+      done: Boolean(subscription?.tier && subscription.tier !== 'free'),
+      icon: 'workspace-premium',
+    },
   ] as const, [
     activeGoalPlan?.computed_daily_calorie_target,
     profile.age,
@@ -750,6 +759,7 @@ export default function ProfileScreen() {
     reminders.allow_push_notifications,
     roadmap.length,
     selectedHealthFlags.length,
+    subscription?.tier,
     t,
     tx,
   ]);
@@ -769,6 +779,7 @@ export default function ProfileScreen() {
   const goalRef = React.useRef<any>(null);
   const roadmapRef = React.useRef<any>(null);
   const notificationsRef = React.useRef<any>(null);
+  const subscriptionRef = React.useRef<any>(null);
 
   const scrollToSection = (ref: any) => {
     if (!ref || !ref.current || !scrollRef.current) return;
@@ -807,6 +818,11 @@ export default function ProfileScreen() {
     if (key === 'notifications') {
       setNotificationsCollapsed(false);
       setTimeout(() => scrollToSection(notificationsRef), 160);
+      return;
+    }
+    if (key === 'subscription') {
+      setSubscriptionCollapsed(false);
+      setTimeout(() => scrollToSection(subscriptionRef), 160);
     }
   };
 
@@ -1837,6 +1853,7 @@ export default function ProfileScreen() {
         </SurfaceCard>
       </View>
 
+      <View ref={subscriptionRef}>
       <SurfaceCard style={[styles.sectionCard, subscriptionCollapsed && styles.sectionCardCompact]}>
         <TouchableOpacity onPress={() => setSubscriptionCollapsed((s) => !s)} activeOpacity={0.8} style={styles.sectionHeaderRow}>
           <View>
@@ -1930,6 +1947,7 @@ export default function ProfileScreen() {
           </View>
         )}
       </SurfaceCard>
+      </View>
 
         <SurfaceCard style={styles.accountCard}>
           <View style={styles.accountCopy}>
