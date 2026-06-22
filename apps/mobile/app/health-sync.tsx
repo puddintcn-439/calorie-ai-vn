@@ -1,16 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  Platform,
-  StyleSheet,
-  TouchableOpacity,
-  View
-} from 'react-native';
+import { ActivityIndicator, Platform, TouchableOpacity, View } from 'react-native';
 import { router } from 'expo-router';
 import { ActivitySyncResult } from '@calorie-ai/types';
 import { BodyText, Eyebrow, HeroTitle, ScreenShell, SurfaceCard } from '../components/ui-shell';
 import { UiInput } from '../components/ui-input';
-import { createThemedStyles, theme, useAppTheme } from '../components/theme';
+import { createThemedStyles, useAppTheme } from '../components/theme';
 import { useLogStore } from '../store/log.store';
 import {
   activitySyncService,
@@ -29,7 +23,7 @@ function getTodayDateString() {
 }
 
 export default function HealthSyncScreen() {
-  useAppTheme();
+  const { colors } = useAppTheme();
   const { t, tx } = useI18n();
   const { syncActivity } = useLogStore();
   const [isLoadingInfo, setIsLoadingInfo] = useState(true);
@@ -70,7 +64,7 @@ export default function HealthSyncScreen() {
     };
 
     load(selectedDate).catch(() => {});
-  }, []);
+  }, [selectedDate]);
 
   const handleOpenProvider = async () => {
     try {
@@ -122,13 +116,13 @@ export default function HealthSyncScreen() {
             <Text style={styles.statusTitle} i18nKey="screen.healthSync.text.002" />
             <Text style={styles.statusSubtitle}>{t('screen.healthSync.status.platform', { platform: Platform.OS })}</Text>
           </View>
-          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+          <TouchableOpacity style={styles.backButton} onPress={() => router.back()} accessibilityRole="button">
             <Text style={styles.backButtonText} i18nKey="screen.healthSync.text.003" />
           </TouchableOpacity>
         </View>
 
         {isLoadingInfo ? (
-          <ActivityIndicator color={theme.colors.accentMint} style={styles.loader} />
+          <ActivityIndicator color={colors.accentMint} style={styles.loader} />
         ) : phoneCheckInfo ? (
           <>
             <View style={styles.pillRow}>
@@ -165,7 +159,7 @@ export default function HealthSyncScreen() {
             <Text style={styles.sectionTitle} i18nKey="screen.healthSync.text.010" />
             <Text style={styles.statusSubtitle} i18nKey="screen.healthSync.text.011" />
           </View>
-          <TouchableOpacity style={styles.backButton} onPress={handleRefreshDiagnostics}>
+          <TouchableOpacity style={styles.backButton} onPress={handleRefreshDiagnostics} accessibilityRole="button">
             <Text style={styles.backButtonText}>{isLoadingDiagnostics ? t('screen.healthSync.action.loading') : t('screen.healthSync.action.reload')}</Text>
           </TouchableOpacity>
         </View>
@@ -180,10 +174,10 @@ export default function HealthSyncScreen() {
         />
 
         {isLoadingDiagnostics ? (
-          <ActivityIndicator color={theme.colors.accentMint} style={styles.loader} />
+          <ActivityIndicator color={colors.accentMint} style={styles.loader} />
         ) : diagnostics ? (
           <>
-            <Text style={styles.diagLine}>Availability: {diagnostics.availability}</Text>
+            <Text style={styles.diagLine}>{t('screen.healthSync.diag.availability', { value: diagnostics.availability })}</Text>
             <Text style={styles.diagLine}>
               {t('screen.healthSync.diag.granted', {
                 value: diagnostics.grantedPermissions.length ? diagnostics.grantedPermissions.join(', ') : t('screen.healthSync.value.none'),
@@ -198,9 +192,9 @@ export default function HealthSyncScreen() {
             {diagnostics.today ? (
               <View style={styles.resultBox}>
                 <Text style={styles.resultTitle}>{t('screen.healthSync.diag.snapshot', { date: diagnostics.today.date })}</Text>
-                <Text style={styles.resultLine}>Steps: {diagnostics.today.steps}</Text>
-                <Text style={styles.resultLine}>Distance: {diagnostics.today.distanceKm} km</Text>
-                <Text style={styles.resultLine}>Calories burned: {diagnostics.today.caloriesBurned}</Text>
+                <Text style={styles.resultLine}>{t('screen.healthSync.diag.steps', { value: diagnostics.today.steps })}</Text>
+                <Text style={styles.resultLine}>{t('screen.healthSync.diag.distance', { value: diagnostics.today.distanceKm })}</Text>
+                <Text style={styles.resultLine}>{t('screen.healthSync.diag.calories', { value: diagnostics.today.caloriesBurned })}</Text>
               </View>
             ) : null}
 
@@ -270,10 +264,10 @@ export default function HealthSyncScreen() {
         {lastSyncResult && (
           <View style={styles.resultBox}>
             <Text style={styles.resultTitle} i18nKey="screen.healthSync.text.015" />
-            <Text style={styles.resultLine}>Source: {lastSyncResult.source}</Text>
-            <Text style={styles.resultLine}>Imported: {lastSyncResult.imported_count}</Text>
-            <Text style={styles.resultLine}>Skipped: {lastSyncResult.skipped_count}</Text>
-            <Text style={styles.resultLine}>Calories burned: {lastSyncResult.total_calories_burned}</Text>
+            <Text style={styles.resultLine}>{t('screen.healthSync.sync.source', { value: lastSyncResult.source })}</Text>
+            <Text style={styles.resultLine}>{t('screen.healthSync.sync.imported', { value: lastSyncResult.imported_count })}</Text>
+            <Text style={styles.resultLine}>{t('screen.healthSync.sync.skipped', { value: lastSyncResult.skipped_count })}</Text>
+            <Text style={styles.resultLine}>{t('screen.healthSync.diag.calories', { value: lastSyncResult.total_calories_burned })}</Text>
           </View>
         )}
       </SurfaceCard>
