@@ -236,6 +236,18 @@ export default function ScanScreen() {
     loadQuota().catch(() => {});
   }, [loadQuota]);
 
+  // Refresh quota when tab gains focus (user may have used AI elsewhere)
+  useFocusEffect(
+    useCallback(() => {
+      void loadQuota();
+    }, [loadQuota]),
+  );
+
+  // Refresh quota after every successful AI result (realtime deduction)
+  useEffect(() => {
+    if (scanResult) void loadQuota();
+  }, [scanResult, loadQuota]);
+
   useEffect(() => {
     if (!isAiScanning) {
       setScanElapsedSeconds(0);
@@ -2213,12 +2225,12 @@ const styles = createThemedStyles((colors, radii) => ({
   secondaryButton: { borderRadius: 8, padding: 15, alignItems: 'center', marginBottom: 11, borderWidth: 1, borderColor: colors.borderInfo, backgroundColor: colors.surfaceInfo, minHeight: 50, justifyContent: 'center' },
   secondaryButtonText: { color: colors.info, fontWeight: '900', fontSize: 15 },
   buttonDisabled: { opacity: 0.4 },
-  refineContainer: { marginBottom: 20 },
-  refineTitle: { color: colors.text, fontWeight: '700', fontSize: 16, marginBottom: 4 },
-  refineHint: { color: colors.textMuted, fontSize: 13, marginBottom: 10 },
-  refineInput: { backgroundColor: colors.surfaceMuted, borderRadius: 8, padding: 13, color: colors.text, minHeight: 68, marginBottom: 12, borderWidth: 1, borderColor: colors.borderSubtle },
-  refineButton: { backgroundColor: colors.surfaceInfo, borderRadius: 8, padding: 13, alignItems: 'center', borderWidth: 1, borderColor: colors.borderInfo },
-  refineButtonText: { color: colors.info, fontWeight: '800', fontSize: 14 },
+  refineContainer: { marginBottom: 12 },
+  refineTitle: { color: colors.text, fontWeight: '700', fontSize: 14, marginBottom: 2 },
+  refineHint: { color: colors.textMuted, fontSize: 12, marginBottom: 8 },
+  refineInput: { backgroundColor: colors.surfaceMuted, borderRadius: 8, padding: 10, color: colors.text, minHeight: 48, marginBottom: 8, borderWidth: 1, borderColor: colors.borderSubtle, fontSize: 14 },
+  refineButton: { backgroundColor: colors.surfaceInfo, borderRadius: 8, padding: 10, alignItems: 'center', borderWidth: 1, borderColor: colors.borderInfo },
+  refineButtonText: { color: colors.info, fontWeight: '800', fontSize: 13 },
   // Barcode
   barcodeContainer: { marginBottom: 16 },
   manualBarcodeCard: { marginBottom: 12 },
