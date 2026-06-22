@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
   View,
-  StyleSheet,
+  Text as NativeText,
   ScrollView,
   TouchableOpacity,
   ActivityIndicator,
@@ -13,7 +13,7 @@ import { ScreenShell, SurfaceCard, Eyebrow, HeroTitle, BodyText, useBottomNavCon
 import { UiButton } from '../../components/ui-button';
 import MacrosCard from '../../components/macros-card';
 import AdherenceCard from '../../components/adherence-card';
-import { createThemedStyles, theme, useAppTheme } from '../../components/theme';
+import { createThemedStyles, useAppTheme } from '../../components/theme';
 import { apiClient } from '../../services/api';
 import {
   calorieTargetService,
@@ -59,12 +59,13 @@ const TARGET_FIELD_LABEL_KEYS: Record<CalorieTargetRequiredField, any> = {
 };
 
 function DeltaBadge({ value, unit, lowerIsBetter = false }: { value: number | null; unit: string; lowerIsBetter?: boolean }) {
+  const { colors: c } = useAppTheme();
+  if (value === null) return null;
   const numeric = toFiniteNumber(value);
   if (numeric === null) return null;
-  if (value === null) return null;
   const isPositive = numeric > 0;
   const isGood = lowerIsBetter ? !isPositive : isPositive;
-  const color = numeric === 0 ? theme.colors.textMuted : isGood ? theme.colors.accentMint : theme.colors.danger;
+  const color = numeric === 0 ? c.textMuted : isGood ? c.accentMint : c.danger;
   const arrow = value > 0 ? '▲' : value < 0 ? '▼' : '—';
   return (
     <Text style={[styles.deltaBadge, { color }]}>
@@ -127,7 +128,7 @@ function ProgressSummaryCard({ summary }: { summary?: BodyProgressSummary }) {
 }
 
 export default function BodyProgressScreen() {
-  useAppTheme();
+  const { colors } = useAppTheme();
   const { t } = useI18n();
   const bottomContentPadding = useBottomNavContentPadding();
   const [trend, setTrend] = useState<BodyProgressTrend | null>(null);
@@ -144,6 +145,12 @@ export default function BodyProgressScreen() {
   const [bodyFatPct, setBodyFatPct] = useState('');
   const [energyLevel, setEnergyLevel] = useState<1 | 2 | 3 | 4 | 5>(3);
   const [note, setNote] = useState('');
+
+  const [preview, setPreview] = useState<WeeklyAdaptiveResult | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [myTarget, setMyTarget] = useState<CalorieTargetResponse | null>(null);
+  const [targetMissingFields, setTargetMissingFields] = useState<CalorieTargetRequiredField[]>([]);
+  const [targetLoading, setTargetLoading] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
@@ -182,33 +189,7 @@ export default function BodyProgressScreen() {
     }
   }, []);
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  useEffect(() => {
-    fetchMyTarget();
-  }, []);
-
-  const [preview, setPreview] = useState<WeeklyAdaptiveResult | null>(null);
-  const [previewLoading, setPreviewLoading] = useState(false);
-  const [myTarget, setMyTarget] = useState<CalorieTargetResponse | null>(null);
-  const [targetMissingFields, setTargetMissingFields] = useState<CalorieTargetRequiredField[]>([]);
-  const [targetLoading, setTargetLoading] = useState(false);
-
-  const fetchPreview = async () => {
-    setPreviewLoading(true);
-    try {
-      const res = await calorieTargetService.getWeeklyAdjustmentPreview();
-      setPreview(res);
-    } catch (error) {
-      Alert.alert('screen.tabs.progress.alert.001', 'screen.tabs.progress.alert.002');
-    } finally {
-      setPreviewLoading(false);
-    }
-  };
-
-  const fetchMyTarget = async () => {
+  const fetchMyTarget = useCallback(async () => {
     setTargetLoading(true);
     try {
       const res = await calorieTargetService.getMyTarget();
@@ -219,10 +200,30 @@ export default function BodyProgressScreen() {
         setMyTarget(null);
         setTargetMissingFields(res.missing_fields);
       }
-    } catch (err) {
+    } catch {
       setTargetMissingFields([]);
     } finally {
       setTargetLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  useEffect(() => {
+    fetchMyTarget();
+  }, [fetchMyTarget]);
+
+  const fetchPreview = async () => {
+    setPreviewLoading(true);
+    try {
+      const res = await calorieTargetService.getWeeklyAdjustmentPreview();
+      setPreview(res);
+    } catch (error) {
+      Alert.alert('screen.tabs.progress.alert.001', 'screen.tabs.progress.alert.002');
+    } finally {
+      setPreviewLoading(false);
     }
   };
 
@@ -256,6 +257,7 @@ export default function BodyProgressScreen() {
   const onRefresh = () => {
     setRefreshing(true);
     loadData();
+    fetchMyTarget().catch(() => {});
   };
 
   const handleSave = async () => {
@@ -318,7 +320,7 @@ export default function BodyProgressScreen() {
     return (
       <ScreenShell>
         <View style={styles.center}>
-          <ActivityIndicator size="large" color={theme.colors.accentMint} />
+          <ActivityIndicator size="large" color={colors.accentMint} />
         </View>
       </ScreenShell>
     );
@@ -377,7 +379,7 @@ export default function BodyProgressScreen() {
             {trend.weight_change_kg !== null && (
               <Text style={styles.totalChange}>
                 {t('screen.tabs.progress.totalChange')}{' '}
-                <Text style={{ color: safeNumber(trend.weight_change_kg) < 0 ? theme.colors.accentMint : theme.colors.danger }}>
+                <Text style={{ color: safeNumber(trend.weight_change_kg) < 0 ? colors.accentMint : colors.danger }}>
                   {safeNumber(trend.weight_change_kg) > 0 ? '+' : ''}{formatDecimal(trend.weight_change_kg)} kg
                 </Text>
               </Text>
@@ -424,7 +426,7 @@ export default function BodyProgressScreen() {
               <View style={styles.behaviorPatternList}>
                 {healthScore.weekly_adherence.patterns.map((pattern) => (
                   <View key={pattern} style={styles.behaviorPatternChip}>
-                    <Ionicons name="analytics-outline" size={14} color={theme.colors.accentCyan} />
+                    <Ionicons name="analytics-outline" size={14} color={colors.accentCyan} />
                     <Text style={styles.behaviorPatternText}>{pattern}</Text>
                   </View>
                 ))}
@@ -442,11 +444,11 @@ export default function BodyProgressScreen() {
             {preview && (
               <View style={{ marginTop: 10 }}>
                 <Text style={styles.previewRow}>{t('screen.tabs.progress.preview.version', { version: preview.algorithm_version })}</Text>
-                <Text style={styles.previewRow}>Actual TDEE: {preview.actual_tdee ?? '—'} kcal</Text>
-                <Text style={styles.previewRow}>Clamp: {preview.clamp_reason ?? '—'}</Text>
+                <Text style={styles.previewRow}>{t('screen.tabs.progress.preview.tdee', { tdee: preview.actual_tdee ?? '—' })}</Text>
+                <Text style={styles.previewRow}>{t('screen.tabs.progress.preview.clamp', { reason: preview.clamp_reason ?? '—' })}</Text>
                 <Text style={styles.previewRow}>{t('screen.tabs.progress.preview.currentTarget', { target: preview.original_daily_target })}</Text>
                 <Text style={styles.previewRow}>{t('screen.tabs.progress.preview.suggestedTarget', { target: preview.adjusted_daily_target, percent: preview.adjustment_percentage })}</Text>
-                <Text style={[styles.previewRow, { marginTop: 6 }]}>{preview.recommendation}</Text>
+                <NativeText style={styles.previewRow}>{preview.recommendation}</NativeText>
                 <UiButton label="screen.tabs.progress.label.001" onPress={handleApplyAdjustment} loading={saving} style={{ marginTop: 8 }} />
               </View>
             )}
@@ -488,7 +490,7 @@ export default function BodyProgressScreen() {
                   onChangeText={setWeightKg}
                   keyboardType="decimal-pad"
                   placeholder="screen.tabs.progress.placeholder.001"
-                  placeholderTextColor={theme.colors.textMuted}
+                  placeholderTextColor={colors.textMuted}
                 />
               </View>
               <View style={styles.formField}>
@@ -499,7 +501,7 @@ export default function BodyProgressScreen() {
                   onChangeText={setWaistCm}
                   keyboardType="decimal-pad"
                   placeholder="screen.tabs.progress.placeholder.002"
-                  placeholderTextColor={theme.colors.textMuted}
+                  placeholderTextColor={colors.textMuted}
                 />
               </View>
             </View>
@@ -513,7 +515,7 @@ export default function BodyProgressScreen() {
                   onChangeText={setHipCm}
                   keyboardType="decimal-pad"
                   placeholder="screen.tabs.progress.placeholder.003"
-                  placeholderTextColor={theme.colors.textMuted}
+                  placeholderTextColor={colors.textMuted}
                 />
               </View>
               <View style={styles.formField}>
@@ -524,7 +526,7 @@ export default function BodyProgressScreen() {
                   onChangeText={setBodyFatPct}
                   keyboardType="decimal-pad"
                   placeholder="screen.tabs.progress.placeholder.004"
-                  placeholderTextColor={theme.colors.textMuted}
+                  placeholderTextColor={colors.textMuted}
                 />
               </View>
             </View>
@@ -548,7 +550,7 @@ export default function BodyProgressScreen() {
               value={note}
               onChangeText={setNote}
               placeholder="screen.tabs.progress.placeholder.005"
-              placeholderTextColor={theme.colors.textMuted}
+              placeholderTextColor={colors.textMuted}
               multiline
             />
 
@@ -578,8 +580,10 @@ export default function BodyProgressScreen() {
                     <TouchableOpacity
                       onPress={() => handleDeleteEntry(entry)}
                       style={styles.deleteButton}
+                      accessibilityRole="button"
+                      accessibilityLabel={t('screen.tabs.progress.delete.button')}
                     >
-                      <Ionicons name="trash-outline" size={16} color={theme.colors.danger} />
+                      <Ionicons name="trash-outline" size={16} color={colors.danger} />
                     </TouchableOpacity>
                   </View>
                 </View>
