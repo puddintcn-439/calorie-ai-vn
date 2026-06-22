@@ -1151,17 +1151,25 @@ export default function ProfileScreen() {
     ]);
   };
 
-  const handleChangeSubscriptionTier = async (tier: SubscriptionTier) => {
+  const handleChangeSubscriptionTier = (tier: SubscriptionTier) => {
     if (tier === subscription?.tier) {
       return;
     }
 
-    try {
-      await changeTier(tier);
-      Alert.alert('profile.subscription.updated', t('profile.subscription.updatedBody', { tier: SUBSCRIPTION_TIERS[tier].name }));
-    } catch (error: any) {
-      Alert.alert('profile.subscription.updateFailed', error?.response?.data?.message ?? error?.message ?? 'common.tryAgain');
+    if (tier !== 'free') {
+      router.push({
+        pathname: '/paywall',
+        params: { returnTo: '/profile', feature: tier },
+      } as never);
+      return;
     }
+
+    // Downgrade to free — call directly
+    changeTier(tier).then(() => {
+      Alert.alert('profile.subscription.updated', t('profile.subscription.updatedBody', { tier: SUBSCRIPTION_TIERS[tier].name }));
+    }).catch((error: any) => {
+      Alert.alert('profile.subscription.updateFailed', error?.response?.data?.message ?? error?.message ?? 'common.tryAgain');
+    });
   };
 
   if (isLoading) {
@@ -1901,7 +1909,7 @@ export default function ProfileScreen() {
                       isCurrentTier && styles.planOptionActive,
                       isCurrentTier && { borderColor: accent, backgroundColor: colors.surfaceInfo },
                     ]}
-                    onPress={() => void handleChangeSubscriptionTier(tier)}
+                    onPress={() => handleChangeSubscriptionTier(tier)}
                     disabled={isSubscriptionLoading}
                   >
                     <View style={styles.planOptionHeader}>
