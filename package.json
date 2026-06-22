@@ -17,6 +17,7 @@
     "health": "powershell -ExecutionPolicy Bypass -File ./scripts/health-check.ps1",
     "monitor:metrics": "node ./scripts/check-production-metrics.js",
     "dev:ports:clean": "powershell -ExecutionPolicy Bypass -File ./scripts/kill-dev-ports.ps1",
+    "dev:payos:tunnel": "powershell -ExecutionPolicy Bypass -File ./scripts/start-payos-dev-tunnel.ps1",
     "dev:backend:ready": "powershell -ExecutionPolicy Bypass -File ./scripts/start-backend-dev.ps1",
     "dev:mobile:web:ready": "powershell -ExecutionPolicy Bypass -File ./scripts/start-mobile-web.ps1",
     "db:bootstrap:smoke": "node ./scripts/bootstrap-smoke-db.js"

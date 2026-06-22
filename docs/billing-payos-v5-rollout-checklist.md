@@ -22,9 +22,32 @@ PAYOS_API_KEY=<from PayOS dashboard>
 PAYOS_CHECKSUM_KEY=<from PayOS dashboard>
 PAYOS_RETURN_URL=https://<backend-domain>/billing/return/payos
 PAYOS_CANCEL_URL=https://<backend-domain>/billing/cancel/payos
+PAYOS_WEB_RETURN_URL=https://<web-app-domain>/paywall?returnTo=%2Fprofile
+PAYOS_WEBHOOK_URL=https://<backend-domain>/billing/webhooks/payos
 ```
 
 Keep these values out of source control, logs, screenshots, and chat messages.
+
+Do not use a temporary `*.trycloudflare.com` Quick Tunnel hostname for these
+values. PayOS stores callback URLs on each payment link, so an expired tunnel
+leaves already-created links pointing at an NXDOMAIN host. Use a deployed
+domain or a named Cloudflare Tunnel for the webhook. Expo web checkouts send
+their current allowed app origin as the UX return/cancel URL and reconcile the
+authenticated order after returning; the webhook remains the primary payment
+notification.
+
+For local development, run this before starting/restarting the backend:
+
+```powershell
+npm run dev:payos:tunnel
+```
+
+The helper prefers an authenticated ngrok tunnel, updates only the ignored local
+`apps/backend/.env` webhook value, and leaves return/cancel URLs pointing to the
+app flow. `scripts/start-all.ps1` runs this automatically. Cloudflare Quick
+Tunnel is only a fallback because PayOS may reject temporary `trycloudflare`
+hosts during webhook validation. Production must use a named tunnel or deployed
+domain.
 
 ## 3. Database rollout
 

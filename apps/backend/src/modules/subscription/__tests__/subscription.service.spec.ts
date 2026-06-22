@@ -251,10 +251,12 @@ describe('SubscriptionService.cancelSubscription', () => {
             single: jest.fn().mockResolvedValue({ data: cancelled, error: null }),
           };
         }
-        return {
+        const chain = {
           update: jest.fn().mockReturnThis(),
-          eq: jest.fn().mockResolvedValue({ data: null, error: null }),
+          eq: jest.fn().mockReturnThis(),
+          is: jest.fn().mockResolvedValue({ data: null, error: null }),
         };
+        return chain;
       }),
     };
     const service = new SubscriptionService({ db } as unknown as SupabaseService);

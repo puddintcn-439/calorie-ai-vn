@@ -303,6 +303,43 @@ describe('BillingService', () => {
     });
   });
 
+  it('does not activate reconciliation when the same PayOS transaction is already being processed', async () => {
+    const orderCode = 900100;
+    const db = makeDb({
+      billing_invoices: {
+        data: [{
+          id: 'invoice-1',
+          user_id: 'user-1',
+          provider: 'payos',
+          provider_invoice_id: String(orderCode),
+          tier: 'pro',
+          status: 'open',
+          amount_vnd: 129000,
+          metadata: { interval: 'monthly' },
+        }],
+      },
+    }, { error: { code: '23505', message: 'duplicate key' } });
+    const service = makeService(db);
+    jest.spyOn(service as any, 'getPayosClient').mockReturnValue({
+      paymentRequests: {
+        get: jest.fn().mockResolvedValue({
+          id: 'plink-duplicate',
+          orderCode,
+          amount: 129000,
+          amountPaid: 129000,
+          status: 'PAID',
+          transactions: [{ reference: 'ref-duplicate', transactionDateTime: '2026-06-22T08:01:00.000Z' }],
+        }),
+      },
+    });
+
+    const result = await service.reconcilePayosCheckout({ userId: 'user-1', orderCode });
+
+    expect(result).toMatchObject({ status: 'PAID', processed: false, duplicate: true });
+    expect(db.state.billing_subscriptions ?? []).toHaveLength(0);
+    expect(db.state.billing_invoices[0]).toMatchObject({ status: 'open' });
+  });
+
   it('maps Stripe refund.created into billing_refunds', async () => {
     const db = makeDb({
       billing_customers: { data: [{ id: 'bc_1', provider: 'stripe', provider_customer_id: 'cus_1', user_id: 'user-1' }] },
@@ -576,6 +613,135 @@ describe('BillingService', () => {
     });
   });
 
+  it('uses a validated web app origin instead of a configured temporary callback', async () => {
+    const db = makeDb();
+    const service = makeService(db, {
+      PAYOS_RETURN_URL: 'https://expired.trycloudflare.com/billing/return/payos',
+      PAYOS_CANCEL_URL: 'https://expired.trycloudflare.com/billing/cancel/payos',
+    });
+    const payosMock = {
+      paymentRequests: {
+        create: jest.fn().mockResolvedValue({ checkoutUrl: 'https://pay.payos.vn/web/payment-link' }),
+      },
+    };
+    jest.spyOn(service as any, 'getPayosClient').mockReturnValue(payosMock);
+
+    await service.createPayosCheckout({
+      userId: 'user-1',
+      tier: 'pro',
+      interval: 'monthly',
+      returnUrl: 'http://localhost:19006/paywall?returnTo=%2Fprofile',
+      cancelUrl: 'http://localhost:19006/paywall?returnTo=%2Fprofile&cancel=true',
+      requestOrigin: 'http://localhost:19006',
+    });
+
+    expect(payosMock.paymentRequests.create).toHaveBeenCalledWith(expect.objectContaining({
+      returnUrl: 'http://localhost:19006/paywall?returnTo=%2Fprofile',
+      cancelUrl: 'http://localhost:19006/paywall?returnTo=%2Fprofile&cancel=true',
+    }));
+  });
+
+  it('voids the local invoice when PayOS checkout creation fails', async () => {
+    const db = makeDb();
+    const service = makeService(db, {
+      PAYOS_RETURN_URL: 'https://example.com/payos-return',
+      PAYOS_CANCEL_URL: 'https://example.com/payos-cancel',
+    });
+    jest.spyOn(service as any, 'getPayosClient').mockReturnValue({
+      paymentRequests: {
+        create: jest.fn().mockRejectedValue(new Error('provider unavailable with api key')),
+      },
+    });
+
+    await expect(service.createPayosCheckout({
+      userId: 'user-1',
+      tier: 'pro',
+      interval: 'monthly',
+    })).rejects.toMatchObject({
+      response: 'Unable to create PayOS checkout. Please try again.',
+      status: 502,
+    });
+
+    expect(db.state.billing_invoices[0]).toMatchObject({
+      status: 'void',
+      metadata: expect.objectContaining({ source: 'payos_checkout_failed' }),
+    });
+  });
+
+  it('rejects a PayOS app return URL from an unrelated origin before creating an invoice', async () => {
+    const db = makeDb();
+    const service = makeService(db);
+    jest.spyOn(service as any, 'getPayosClient').mockReturnValue({
+      paymentRequests: { create: jest.fn() },
+    });
+
+    await expect(service.createPayosCheckout({
+      userId: 'user-1',
+      tier: 'pro',
+      interval: 'monthly',
+      returnUrl: 'https://attacker.example/paywall',
+      cancelUrl: 'http://localhost:19006/paywall?cancel=true',
+      requestOrigin: 'http://localhost:19006',
+    })).rejects.toThrow(BadRequestException);
+
+    expect(db.state.billing_invoices).toBeUndefined();
+  });
+
+  it('reconciles a paid PayOS order for the authenticated owner when the webhook is unavailable', async () => {
+    const orderCode = 900099;
+    const db = makeDb({
+      billing_invoices: {
+        data: [{
+          id: 'invoice-1',
+          user_id: 'user-1',
+          provider: 'payos',
+          provider_invoice_id: String(orderCode),
+          tier: 'pro',
+          status: 'open',
+          amount_vnd: 129000,
+          metadata: { interval: 'monthly' },
+        }],
+      },
+    });
+    const service = makeService(db);
+    jest.spyOn(service as any, 'getPayosClient').mockReturnValue({
+      paymentRequests: {
+        get: jest.fn().mockResolvedValue({
+          id: 'plink-1',
+          orderCode,
+          amount: 129000,
+          amountPaid: 129000,
+          amountRemaining: 0,
+          status: 'PAID',
+          createdAt: '2026-06-22T08:00:00.000Z',
+          transactions: [{
+            reference: 'ref-1',
+            transactionDateTime: '2026-06-22T08:01:00.000Z',
+          }],
+          cancellationReason: null,
+          canceledAt: null,
+        }),
+      },
+    });
+
+    const result = await service.reconcilePayosCheckout({ userId: 'user-1', orderCode });
+
+    expect(result).toMatchObject({ status: 'PAID', processed: true });
+    expect(db.state.billing_invoices[0]).toMatchObject({ status: 'paid', tier: 'pro' });
+    expect(db.state.billing_subscriptions[0]).toMatchObject({
+      user_id: 'user-1',
+      provider: 'payos',
+      tier: 'pro',
+      status: 'active',
+      is_paid: true,
+    });
+    expect(db.state.billing_events[0]).toMatchObject({
+      provider_event_id: 'payos:plink-1:ref-1',
+      event_type: 'payos.payment.success',
+      status: 'processed',
+    });
+  });
+
   it('uses PayOS webhook verification when PayOS client exists', async () => {
     const orderCode = 900001;
     const payload = payosSuccessPayload(orderCode);
@@ -594,6 +760,86 @@ describe('BillingService', () => {
 
     expect(payosMock.webhooks.verify).toHaveBeenCalledWith(payload);
     expect(result).toMatchObject({ provider: 'payos', processed: true });
+  });
+
+  it('verifies the official PayOS webhook validation probe without activating a payment', async () => {
+    const db = makeDb();
+    const service = makeService(db);
+    const verifiedData = {
+      orderCode: 123,
+      amount: 3000,
+      description: 'VQRIO123',
+      code: '00',
+      desc: 'success',
+    };
+    const verify = jest.fn().mockResolvedValue(verifiedData);
+    jest.spyOn(service as any, 'getPayosClient').mockReturnValue({
+      webhooks: { verify },
+    });
+
+    const result = await service.handlePayosWebhook({
+      code: '00',
+      desc: 'success',
+      success: true,
+      data: {
+        orderCode: 123,
+        amount: 3000,
+        description: 'VQRIO123',
+      },
+      signature: 'payos-validation-signature',
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      provider: 'payos',
+      processed: false,
+      skipped_reason: 'payos_invoice_not_found',
+    });
+    expect(verify).toHaveBeenCalledTimes(1);
+    expect(db.state.billing_invoices ?? []).toHaveLength(0);
+    expect(db.state.billing_subscriptions ?? []).toHaveLength(0);
+  });
+
+  it('redacts payment signatures and bank account details before persistence', async () => {
+    const db = makeDb();
+    const service = makeService(db, { STRIPE_WEBHOOK_SECRET: 'secret-value' });
+    const payload = {
+      id: 'evt_redact',
+      type: 'customer.created',
+      signature: 'provider-signature',
+      data: {
+        accountNumber: '0123456789',
+        counterAccountName: 'Sensitive Name',
+      },
+    };
+
+    await service.handleStripeWebhook(payload, { 'x-webhook-secret': 'secret-value' });
+
+    expect(db.state.billing_events[0].raw_payload).toMatchObject({
+      signature: '[redacted]',
+      data: {
+        accountNumber: '[redacted]',
+        counterAccountName: '[redacted]',
+      },
+    });
+  });
+
+  it('rejects temporary tunnel URLs in production PayOS configuration', () => {
+    const service = makeService(makeDb(), {
+      NODE_ENV: 'production',
+      PAYOS_CLIENT_ID: 'client',
+      PAYOS_API_KEY: 'api',
+      PAYOS_CHECKSUM_KEY: 'checksum',
+      PAYOS_RETURN_URL: 'https://app.example.com/billing/return/payos',
+      PAYOS_CANCEL_URL: 'https://app.example.com/billing/cancel/payos',
+      PAYOS_WEBHOOK_URL: 'https://temporary.ngrok-free.dev/billing/webhooks/payos',
+      PAYOS_WEB_RETURN_URL: 'https://app.example.com/paywall',
+      ALLOWED_ORIGINS: 'https://app.example.com',
+    });
+
+    expect(() => service.onModuleInit()).toThrow(
+      'PAYOS_WEBHOOK_URL must not use a temporary tunnel hostname in production.',
+    );
   });
 
   it('rejects invalid PayOS webhook verification safely', async () => {

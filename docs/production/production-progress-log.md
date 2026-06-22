@@ -282,3 +282,33 @@ Use one new entry for each production readiness review or milestone.
 - Gate Status: NO-GO
 - Notes: Product and core backend behavior are materially more complete than the previous report. Remaining blockers are now mostly operational: CI correctness, deploy safety, monitoring, and native release evidence.
 
+## Review Entry
+- Timestamp: 2026-06-22T15:30:00Z
+- Scope: PayOS commercial payment flow
+- Reviewer: Codex
+- Previous Readiness %: Not separately scored
+- New Readiness %: 72%
+- Delta %: Baseline established
+
+### Completed Actions
+- Replaced temporary backend return dependency with validated app-origin returns and authenticated PayOS reconciliation.
+- Added shared PayOS transaction idempotency between webhook and reconciliation.
+- Added bounded PayOS timeouts/retries, checkout expiry, checkout failure cleanup, endpoint throttling, and sensitive payload redaction.
+- Added production startup validation that rejects missing, local, or temporary PayOS URLs.
+- Added CI production-secret checks and billing tests to the deployment smoke gate.
+- Automated local webhook tunnel refresh while keeping temporary tunnels forbidden in production.
+
+### New Risks Found
+- Production domain/TLS and live webhook configuration are not evidenced.
+- PayOS credentials exposed in the current local environment need rotation before commercial use.
+- Live billing schema, backup, and restore posture remain unverified.
+- No live small-value acceptance transaction or payment incident drill is recorded.
+- Refund, cancellation, invoice, and customer-support policy remains a business blocker.
+
+### Next Actions
+- Complete P0-01 through P0-05 in `payos-production-action-plan.md`.
+- Re-run this readiness review with production evidence attached.
+
+### Decision
+- Gate Status: CONDITIONAL NO-GO
+- Notes: Code-level payment safety is materially stronger, but commercial go-live still depends on infrastructure, credential rotation, live database verification, end-to-end acceptance, and business policy.

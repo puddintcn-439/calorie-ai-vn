@@ -2,6 +2,7 @@ import { ExecutionContext, INestApplication, ValidationPipe } from '@nestjs/comm
 import { Test } from '@nestjs/testing';
 import * as request from 'supertest';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
+import { ThrottlerGuard } from '@nestjs/throttler';
 import { BillingController } from '../billing.controller';
 import { BillingService } from '../billing.service';
 
@@ -10,6 +11,7 @@ describe('BillingController', () => {
   const billingService = {
     createStripeCheckoutSession: jest.fn(),
     createPayosCheckout: jest.fn(),
+    reconcilePayosCheckout: jest.fn(),
     handleStripeWebhook: jest.fn(),
     handlePayosWebhook: jest.fn(),
     handleAppStoreWebhook: jest.fn(),
@@ -33,6 +35,8 @@ describe('BillingController', () => {
           return true;
         },
       })
+      .overrideGuard(ThrottlerGuard)
+      .useValue({ canActivate: () => true })
       .compile();
 
     app = moduleRef.createNestApplication();
@@ -128,6 +132,58 @@ describe('BillingController', () => {
       email: 'user@example.com',
       tier: 'premium',
       interval: 'monthly',
+      returnUrl: undefined,
+      cancelUrl: undefined,
+      requestOrigin: undefined,
+    });
+  });
+
+  it('POST /billing/checkout/payos forwards the current app return URLs', async () => {
+    billingService.createPayosCheckout.mockResolvedValue({
+      ok: true,
+      provider: 'payos',
+      checkout_url: 'https://pay.payos.vn/web/payment-link',
+      order_code: 123456,
+      tier: 'pro',
+      interval: 'monthly',
+      amount_vnd: 129000,
+    });
+
+    await request(app.getHttpServer())
+      .post('/billing/checkout/payos')
+      .set('Origin', 'http://localhost:19006')
+      .send({
+        tier: 'pro',
+        interval: 'monthly',
+        return_url: 'http://localhost:19006/paywall?returnTo=%2Fprofile',
+        cancel_url: 'http://localhost:19006/paywall?returnTo=%2Fprofile&cancel=true',
+      })
+      .expect(201);
+
+    expect(billingService.createPayosCheckout).toHaveBeenCalledWith(expect.objectContaining({
+      returnUrl: 'http://localhost:19006/paywall?returnTo=%2Fprofile',
+      cancelUrl: 'http://localhost:19006/paywall?returnTo=%2Fprofile&cancel=true',
+      requestOrigin: 'http://localhost:19006',
+    }));
+  });
+
+  it('POST /billing/payos/reconcile passes the authenticated user and order code', async () => {
+    billingService.reconcilePayosCheckout.mockResolvedValue({
+      ok: true,
+      provider: 'payos',
+      order_code: 123456,
+      status: 'PAID',
+      processed: true,
+    });
+
+    await request(app.getHttpServer())
+      .post('/billing/payos/reconcile')
+      .send({ order_code: 123456 })
+      .expect(201);
+
+    expect(billingService.reconcilePayosCheckout).toHaveBeenCalledWith({
+      userId: 'user-1',
+      orderCode: 123456,
     });
   });
 
@@ -192,6 +248,8 @@ describe('BillingController', () => {
     })
       .overrideGuard(JwtAuthGuard)
       .useValue({ canActivate: () => false })
+      .overrideGuard(ThrottlerGuard)
+      .useValue({ canActivate: () => true })
       .compile();
 
     const unauthenticatedApp = moduleRef.createNestApplication();
@@ -250,29 +308,38 @@ describe('BillingController', () => {
 
   it('GET /billing/return/payos is UX-only and does not mark invoices paid', async () => {
     const res = await request(app.getHttpServer())
-      .get('/billing/return/payos')
-      .expect(200);
+      .get('/billing/return/payos?status=PAID&orderCode=123456')
+      .expect(302);
 
-    expect(res.body).toEqual({
-      ok: true,
-      provider: 'payos',
-      message: 'Payment status will be confirmed by webhook.',
-    });
+    expect(res.headers.location).toBe('http://localhost:19006/paywall?status=PAID&orderCode=123456');
     expect(billingService.handlePayosWebhook).not.toHaveBeenCalled();
     expect(billingService.getUserEntitlement).not.toHaveBeenCalled();
   });
 
   it('GET /billing/cancel/payos is UX-only and does not mark invoices paid', async () => {
     const res = await request(app.getHttpServer())
-      .get('/billing/cancel/payos')
-      .expect(200);
+      .get('/billing/cancel/payos?cancel=true')
+      .expect(302);
 
-    expect(res.body).toEqual({
-      ok: true,
-      provider: 'payos',
-      message: 'Payment status will be confirmed by webhook.',
-    });
+    expect(res.headers.location).toBe('http://localhost:19006/paywall?cancel=true');
     expect(billingService.handlePayosWebhook).not.toHaveBeenCalled();
     expect(billingService.getUserEntitlement).not.toHaveBeenCalled();
+  });
+
+  it('preserves the configured profile return target when appending PayOS query values', async () => {
+    const previous = process.env.PAYOS_WEB_RETURN_URL;
+    process.env.PAYOS_WEB_RETURN_URL = 'http://localhost:19006/paywall?returnTo=%2Fprofile';
+    try {
+      const res = await request(app.getHttpServer())
+        .get('/billing/return/payos?status=PAID&orderCode=123456')
+        .expect(302);
+
+      expect(res.headers.location).toBe(
+        'http://localhost:19006/paywall?returnTo=%2Fprofile&status=PAID&orderCode=123456',
+      );
+    } finally {
+      if (previous === undefined) delete process.env.PAYOS_WEB_RETURN_URL;
+      else process.env.PAYOS_WEB_RETURN_URL = previous;
+    }
   });
 });

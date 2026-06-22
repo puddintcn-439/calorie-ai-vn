@@ -122,15 +122,35 @@ export class BillingService implements OnModuleInit {
     @Optional() private readonly notificationsService?: NotificationsService,
   ) {}
 
-  async onModuleInit() {
+  onModuleInit() {
+    this.assertPayosProductionConfig();
     const webhookUrl = String(this.config.get<string>('PAYOS_WEBHOOK_URL') ?? '').trim();
     if (!webhookUrl) return;
+
+    // Nest lifecycle hooks run before app.listen() opens the HTTP port. PayOS
+    // validates the URL immediately, so awaiting confirmation here causes the
+    // validation request to receive 502/connection refused. Register shortly
+    // after startup without blocking the server from becoming reachable.
+    const timer = setTimeout(() => {
+      void this.registerPayosWebhook(webhookUrl);
+    }, 8000);
+    timer.unref?.();
+  }
+
+  private async registerPayosWebhook(webhookUrl: string, attempt = 1) {
     try {
       const payos = this.getPayosClient();
       if (!payos) return;
       await payos.webhooks.confirm(webhookUrl);
       this.logger.log(`PayOS webhook registered: ${webhookUrl}`);
     } catch (err: any) {
+      if (attempt < 3) {
+        const timer = setTimeout(() => {
+          void this.registerPayosWebhook(webhookUrl, attempt + 1);
+        }, attempt * 5000);
+        timer.unref?.();
+        return;
+      }
       this.logger.warn(`PayOS webhooks.confirm failed (non-fatal): ${err?.message ?? err}`);
     }
   }
@@ -316,6 +336,9 @@ export class BillingService implements OnModuleInit {
     email?: string | null;
     tier: PayosCheckoutTier;
     interval: PayosCheckoutInterval;
+    returnUrl?: string;
+    cancelUrl?: string;
+    requestOrigin?: string;
   }) {
     if (!['premium', 'pro'].includes(input.tier)) {
       throw new HttpException('Invalid PayOS checkout tier.', HttpStatus.BAD_REQUEST);
@@ -328,6 +351,8 @@ export class BillingService implements OnModuleInit {
     if (!payos && this.isProduction()) {
       throw new HttpException('PayOS is not configured.', HttpStatus.NOT_IMPLEMENTED);
     }
+    const cancelUrl = this.payosUrl('PAYOS_CANCEL_URL', Boolean(payos), input.cancelUrl, input.requestOrigin);
+    const returnUrl = this.payosUrl('PAYOS_RETURN_URL', Boolean(payos), input.returnUrl, input.requestOrigin);
 
     const customer = await this.getOrCreatePayosCustomerForUser({ userId: input.userId, email: input.email });
     const amount = this.payosAmountVnd(input.tier, input.interval);
@@ -372,13 +397,31 @@ export class BillingService implements OnModuleInit {
         quantity: 1,
         price: amount,
       }],
-      cancelUrl: this.payosUrl('PAYOS_CANCEL_URL', Boolean(payos)),
-      returnUrl: this.payosUrl('PAYOS_RETURN_URL', Boolean(payos)),
+      cancelUrl,
+      returnUrl,
+      expiredAt: Math.floor(Date.now() / 1000) + this.payosCheckoutExpirySeconds(),
     };
 
-    const checkoutUrl = payos
-      ? this.payosCheckoutUrl(await payos.paymentRequests.create(paymentData))
-      : this.createPayosMockCheckoutUrl(input.tier, input.interval, orderCode);
+    let checkoutUrl: string;
+    try {
+      checkoutUrl = payos
+        ? this.payosCheckoutUrl(await payos.paymentRequests.create(paymentData))
+        : this.createPayosMockCheckoutUrl(input.tier, input.interval, orderCode);
+    } catch {
+      await this.supabase.db
+        .from('billing_invoices')
+        .update({
+          status: 'void',
+          metadata: {
+            interval: input.interval,
+            source: 'payos_checkout_failed',
+          },
+          updated_at: new Date().toISOString(),
+        })
+        .eq('provider', 'payos')
+        .eq('provider_invoice_id', String(orderCode));
+      throw new HttpException('Unable to create PayOS checkout. Please try again.', HttpStatus.BAD_GATEWAY);
+    }
 
     return {
       ok: true,
@@ -388,6 +431,108 @@ export class BillingService implements OnModuleInit {
       tier: input.tier,
       interval: input.interval,
       amount_vnd: amount,
+    };
+  }
+
+  async reconcilePayosCheckout(input: { userId: string; orderCode: number }) {
+    const orderCode = this.normalizedPayosOrderCode(input.orderCode);
+    if (!orderCode) {
+      throw new BadRequestException('Invalid PayOS order code.');
+    }
+
+    const invoice = await this.findPayosInvoice(orderCode);
+    if (!invoice || String(invoice.user_id ?? '') !== input.userId) {
+      throw new HttpException('PayOS order was not found.', HttpStatus.NOT_FOUND);
+    }
+
+    if (String(invoice.status ?? '').toLowerCase() === 'paid') {
+      await this.syncUserSubscriptionFromBilling(input.userId);
+      return { ok: true, provider: 'payos', order_code: Number(orderCode), status: 'PAID', processed: false };
+    }
+
+    const payos = this.getPayosClient();
+    if (!payos) {
+      throw new HttpException('PayOS status check is not configured.', HttpStatus.SERVICE_UNAVAILABLE);
+    }
+
+    const payment = await payos.paymentRequests.get(Number(orderCode));
+    if (payment.status !== 'PAID') {
+      return {
+        ok: true,
+        provider: 'payos',
+        order_code: Number(orderCode),
+        status: payment.status,
+        processed: false,
+      };
+    }
+
+    const transaction = payment.transactions?.[0];
+    const verified = {
+      code: '00',
+      success: true,
+      data: {
+        orderCode: payment.orderCode,
+        amount: payment.amountPaid || payment.amount,
+        currency: 'VND',
+        reference: transaction?.reference ?? null,
+        transactionDateTime: transaction?.transactionDateTime ?? new Date().toISOString(),
+        paymentLinkId: payment.id,
+      },
+    };
+    const eventId = this.payosProviderEventId(
+      verified.data,
+      orderCode,
+      verified.code,
+    );
+    const event = await this.recordBillingEvent({
+      provider: 'payos',
+      providerEventId: eventId,
+      eventType: 'payos.payment.success',
+      rawPayload: this.safePayload(verified),
+    });
+    if (event.duplicate) {
+      return {
+        ok: true,
+        provider: 'payos',
+        order_code: Number(orderCode),
+        status: payment.status,
+        processed: false,
+        duplicate: true,
+      };
+    }
+
+    const validationError = this.payosSuccessValidationError(verified, invoice);
+    if (validationError) {
+      await this.updateBillingEventStatus('payos', eventId, {
+        status: 'ignored',
+        error_message: validationError,
+        billing_invoice_id: invoice.id ?? null,
+      });
+      throw new HttpException('PayOS payment could not be verified.', HttpStatus.UNPROCESSABLE_ENTITY);
+    }
+
+    const result = await this.activatePayosInvoice(invoice, orderCode, verified, {
+      orderCode: payment.orderCode,
+      status: payment.status,
+      amount: payment.amount,
+      amountPaid: payment.amountPaid,
+      paymentLinkId: payment.id,
+    }, 'payos_return_reconciliation');
+
+    await this.updateBillingEventStatus('payos', eventId, {
+      status: result.processed ? 'processed' : 'ignored',
+      processed_at: result.processed ? new Date().toISOString() : null,
+      error_message: result.skipped_reason ?? null,
+      billing_invoice_id: result.billing_invoice_id ?? invoice.id ?? null,
+      billing_subscription_id: result.billing_subscription_id ?? null,
+    });
+
+    return {
+      ok: true,
+      provider: 'payos',
+      order_code: Number(orderCode),
+      status: payment.status,
+      processed: result.processed,
     };
   }
 
@@ -1302,7 +1447,14 @@ export class BillingService implements OnModuleInit {
       this.payosClient = null;
       return null;
     }
-    this.payosClient = new PayOS({ clientId, apiKey, checksumKey });
+    this.payosClient = new PayOS({
+      clientId,
+      apiKey,
+      checksumKey,
+      timeout: this.payosRequestTimeoutMs(),
+      maxRetries: 1,
+      logLevel: this.isProduction() ? 'error' : 'warn',
+    });
     return this.payosClient;
   }
 
@@ -1396,9 +1548,23 @@ export class BillingService implements OnModuleInit {
     orderCode: string,
     verified: { data: Record<string, any> },
     originalPayload: any,
+    source = 'payos_webhook_success',
   ): Promise<StripeMappingResult> {
     const userId = String(invoice.user_id ?? '').trim();
     if (!userId) return { processed: false, skipped_reason: 'payos invoice is not linked to a user' };
+    if (String(invoice.status ?? '').toLowerCase() === 'paid') {
+      const sync = await this.syncUserSubscriptionFromBilling(userId);
+      return {
+        processed: false,
+        skipped_reason: 'payos invoice is already paid',
+        billing_invoice_id: invoice.id ?? null,
+        entitlement_sync: {
+          attempted: true,
+          synced: sync.synced,
+          ...(sync.skipped_reason ? { skipped_reason: sync.skipped_reason } : {}),
+        },
+      };
+    }
     const tier = this.normalizeTier(invoice.tier);
     if (!['premium', 'pro'].includes(tier)) return { processed: false, skipped_reason: 'payos invoice has invalid tier' };
     const interval = this.normalizePayosInterval(invoice.metadata?.interval ?? invoice.raw_payload?.interval);
@@ -1427,7 +1593,7 @@ export class BillingService implements OnModuleInit {
           interval,
           payos_reference: verified.data?.reference ?? null,
           payos_payment_link_id: verified.data?.paymentLinkId ?? null,
-          source: 'payos_webhook_success',
+          source,
         },
         raw_payload: this.safePayload(originalPayload),
         updated_at: new Date().toISOString(),
@@ -1451,7 +1617,7 @@ export class BillingService implements OnModuleInit {
         metadata: {
           orderCode,
           interval,
-          source: 'payos_webhook_success',
+          source,
         },
         updated_at: new Date().toISOString(),
       }, { onConflict: 'provider,provider_subscription_id' })
@@ -1560,6 +1726,14 @@ export class BillingService implements OnModuleInit {
     return 999000;
   }
 
+  private payosCheckoutExpirySeconds(): number {
+    const configuredMinutes = Number(this.config.get<string>('PAYOS_CHECKOUT_EXPIRY_MINUTES') ?? 30);
+    const minutes = Number.isFinite(configuredMinutes)
+      ? Math.min(120, Math.max(10, Math.round(configuredMinutes)))
+      : 30;
+    return minutes * 60;
+  }
+
   private payosCheckoutUrl(response: any): string {
     const checkoutUrl = response?.checkoutUrl
       ?? response?.checkout_url
@@ -1575,7 +1749,14 @@ export class BillingService implements OnModuleInit {
     return String(checkoutUrl);
   }
 
-  private payosUrl(key: 'PAYOS_RETURN_URL' | 'PAYOS_CANCEL_URL', requireConfigured = false): string {
+  private payosUrl(
+    key: 'PAYOS_RETURN_URL' | 'PAYOS_CANCEL_URL',
+    requireConfigured = false,
+    override?: string,
+    requestOrigin?: string,
+  ): string {
+    const validatedOverride = this.validatedPayosAppUrl(override, requestOrigin);
+    if (validatedOverride) return validatedOverride;
     const url = String(this.config.get<string>(key) ?? '').trim();
     if (url) return url;
     if (this.isProduction() || requireConfigured) {
@@ -1584,6 +1765,40 @@ export class BillingService implements OnModuleInit {
     return key === 'PAYOS_RETURN_URL'
       ? 'http://localhost:3000/billing/return/payos'
       : 'http://localhost:3000/billing/cancel/payos';
+  }
+
+  private validatedPayosAppUrl(value?: string, requestOrigin?: string): string | null {
+    const text = String(value ?? '').trim();
+    if (!text) return null;
+
+    let parsed: URL;
+    try {
+      parsed = new URL(text);
+    } catch {
+      throw new BadRequestException('Invalid PayOS app return URL.');
+    }
+    if (!['http:', 'https:'].includes(parsed.protocol)) {
+      throw new BadRequestException('Invalid PayOS app return URL.');
+    }
+    if (this.isProduction() && parsed.protocol !== 'https:') {
+      throw new BadRequestException('PayOS app return URL must use HTTPS in production.');
+    }
+
+    const allowedOrigins = new Set(
+      String(this.config.get<string>('ALLOWED_ORIGINS') ?? '')
+        .split(',')
+        .map((origin) => origin.trim())
+        .filter(Boolean),
+    );
+    const normalizedRequestOrigin = String(requestOrigin ?? '').trim();
+    if (!this.isProduction() && normalizedRequestOrigin) allowedOrigins.add(normalizedRequestOrigin);
+
+    if (!this.isProduction() && ['localhost', '127.0.0.1', '[::1]'].includes(parsed.hostname)) {
+      return parsed.toString();
+    }
+    if (allowedOrigins.has(parsed.origin)) return parsed.toString();
+
+    throw new BadRequestException('PayOS app return URL origin is not allowed.');
   }
 
   private createPayosMockCheckoutUrl(tier: PayosCheckoutTier, interval: PayosCheckoutInterval, orderCode: number): string {
@@ -1672,7 +1887,32 @@ export class BillingService implements OnModuleInit {
   }
 
   private safePayload(payload: any): Record<string, any> {
-    return payload && typeof payload === 'object' && !Array.isArray(payload) ? payload : { value: payload ?? null };
+    const sensitiveKeys = new Set([
+      'signature',
+      'accountnumber',
+      'counteraccountnumber',
+      'counteraccountname',
+      'virtualaccountnumber',
+      'virtualaccountname',
+      'buyeremail',
+      'buyerphone',
+      'buyeraddress',
+      'buyertaxcode',
+    ]);
+    const sanitize = (value: any): any => {
+      if (Array.isArray(value)) return value.map(sanitize);
+      if (!value || typeof value !== 'object') return value;
+      return Object.fromEntries(
+        Object.entries(value).map(([key, nested]) => [
+          key,
+          sensitiveKeys.has(key.toLowerCase()) ? '[redacted]' : sanitize(nested),
+        ]),
+      );
+    };
+    const sanitized = sanitize(payload);
+    return sanitized && typeof sanitized === 'object' && !Array.isArray(sanitized)
+      ? sanitized
+      : { value: sanitized ?? null };
   }
 
   private isDuplicateError(error: any): boolean {
@@ -1683,6 +1923,61 @@ export class BillingService implements OnModuleInit {
 
   private isProduction(): boolean {
     return process.env.NODE_ENV === 'production' || String(this.config.get<string>('NODE_ENV') ?? '').toLowerCase() === 'production';
+  }
+
+  private payosRequestTimeoutMs(): number {
+    const configured = Number(this.config.get<string>('PAYOS_TIMEOUT_MS') ?? 10000);
+    return Number.isFinite(configured) ? Math.min(30000, Math.max(3000, Math.round(configured))) : 10000;
+  }
+
+  private assertPayosProductionConfig() {
+    if (!this.isProduction()) return;
+    const required = [
+      'PAYOS_CLIENT_ID',
+      'PAYOS_API_KEY',
+      'PAYOS_CHECKSUM_KEY',
+      'PAYOS_RETURN_URL',
+      'PAYOS_CANCEL_URL',
+      'PAYOS_WEBHOOK_URL',
+      'PAYOS_WEB_RETURN_URL',
+      'ALLOWED_ORIGINS',
+    ];
+    const missing = required.filter((key) => !String(this.config.get<string>(key) ?? '').trim());
+    if (missing.length > 0) {
+      throw new Error(`Missing production PayOS configuration: ${missing.join(', ')}`);
+    }
+
+    for (const key of ['PAYOS_RETURN_URL', 'PAYOS_CANCEL_URL', 'PAYOS_WEBHOOK_URL', 'PAYOS_WEB_RETURN_URL']) {
+      const value = String(this.config.get<string>(key) ?? '').trim();
+      let parsed: URL;
+      try {
+        parsed = new URL(value);
+      } catch {
+        throw new Error(`${key} must be a valid HTTPS URL in production.`);
+      }
+      if (parsed.protocol !== 'https:' || ['localhost', '127.0.0.1', '[::1]'].includes(parsed.hostname)) {
+        throw new Error(`${key} must be a public HTTPS URL in production.`);
+      }
+      if (parsed.hostname.endsWith('.trycloudflare.com') || parsed.hostname.endsWith('.ngrok-free.dev')) {
+        throw new Error(`${key} must not use a temporary tunnel hostname in production.`);
+      }
+    }
+
+    const origins = String(this.config.get<string>('ALLOWED_ORIGINS') ?? '')
+      .split(',')
+      .map((origin) => origin.trim())
+      .filter(Boolean);
+    for (const origin of origins) {
+      let parsed: URL;
+      try {
+        parsed = new URL(origin);
+      } catch {
+        throw new Error('ALLOWED_ORIGINS must contain valid HTTPS origins in production.');
+      }
+      if (parsed.protocol !== 'https:' || parsed.origin !== origin) {
+        throw new Error('ALLOWED_ORIGINS must contain valid HTTPS origins in production.');
+      }
+    }
   }
 
   private async fetchPaidInvoices(sinceIso: string): Promise<BillingInvoiceRow[]> {

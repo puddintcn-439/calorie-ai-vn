@@ -89,7 +89,7 @@ jobs:
         run: npm ci
 
       - name: Run pre-deploy smoke suite
-        run: npm run test --workspace=backend -- calorie-target food recommendation health log --runInBand
+        run: npm run test --workspace=backend -- calorie-target food recommendation health log billing --runInBand
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/calorie_ai_test
           NODE_ENV: test

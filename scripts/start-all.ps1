@@ -45,6 +45,14 @@ function Stop-PortProcesses {
 
 Stop-PortProcesses -PortList $ports.Values
 
+if (-not $NoOpenWindows) {
+    Write-Host 'Starting a fresh PayOS development webhook tunnel...'
+    & (Join-Path $PSScriptRoot 'start-payos-dev-tunnel.ps1')
+    if ($LASTEXITCODE -ne 0) {
+        Write-Warning 'PayOS webhook tunnel could not be started. Browser return reconciliation will remain available.'
+    }
+}
+
 function Start-DevWindow {
     param([string]$Path, [string]$Cmd)
     if($NoOpenWindows) {
@@ -56,7 +64,7 @@ function Start-DevWindow {
 }
 
 Start-DevWindow -Path $backend -Cmd "npm run dev"
-Start-DevWindow -Path $mobile -Cmd "npm run dev"
+Start-DevWindow -Path $mobile -Cmd "npm run dev:web"
 
 # wait briefly for ports to come up (best-effort)
 $checkPorts = @($ports.backend,$ports.metro,$ports.expo)
