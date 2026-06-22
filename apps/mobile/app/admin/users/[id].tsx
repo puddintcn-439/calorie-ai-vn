@@ -67,7 +67,7 @@ function hasBillingData(detail: AdminUserDetail) {
   );
 }
 
-type AdminAction = 'grant' | 'revoke' | 'resetDaily' | 'resetMonthly';
+type AdminAction = 'setTier' | 'resetDaily' | 'resetMonthly';
 
 export default function AdminUserDetailScreen() {
   const { colors } = useAppTheme();
@@ -80,7 +80,7 @@ export default function AdminUserDetailScreen() {
   const [actionLoading, setActionLoading] = useState<AdminAction | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
-  const [grantTier, setGrantTier] = useState<'premium' | 'pro'>('premium');
+  const [targetTier, setTargetTier] = useState<'free' | 'premium' | 'pro'>('premium');
 
   const load = useCallback(async () => {
     if (!userId) {
@@ -115,12 +115,10 @@ export default function AdminUserDetailScreen() {
       setActionLoading(action);
       setActionError(null);
       setActionSuccess(null);
-      if (action === 'grant') {
-        await adminService.grantPremium(userId, reason, grantTier);
-        setActionSuccess(`${grantTier === 'pro' ? 'Pro' : 'Premium'} granted and audit log written.`);
-      } else if (action === 'revoke') {
-        await adminService.revokePremium(userId, reason);
-        setActionSuccess('Premium revoked and audit log written.');
+      if (action === 'setTier') {
+        await adminService.setTier(userId, reason, targetTier);
+        const tierLabel = targetTier === 'pro' ? 'Pro' : targetTier === 'premium' ? 'Premium' : 'Free';
+        setActionSuccess(`Tier set to ${tierLabel} and audit log written.`);
       } else if (action === 'resetDaily') {
         const result = await adminService.resetAiQuota(userId, reason, 'daily');
         setActionSuccess(`Daily AI quota reset. +${n(result.credits_delta)} credits until ${date(result.expires_at)}.`);
@@ -135,7 +133,7 @@ export default function AdminUserDetailScreen() {
     } finally {
       setActionLoading(null);
     }
-  }, [actionReason, grantTier, load, userId]);
+  }, [actionReason, targetTier, load, userId]);
 
   const quota: any = detail?.ai_quota ?? null;
   const subscriptionTier = String(detail?.subscription?.tier ?? 'free');
@@ -197,19 +195,38 @@ export default function AdminUserDetailScreen() {
                 />
                 {actionError ? <Text style={[styles.actionError, { color: colors.danger }]}>{actionError}</Text> : null}
                 {actionSuccess ? <Text style={[styles.actionSuccess, { color: colors.accentMint }]}>{actionSuccess}</Text> : null}
+                <Text style={[adminStyles.muted, { marginTop: 4 }]}>Chọn gói mục tiêu:</Text>
                 <View style={styles.tierRow}>
-                  {(['premium', 'pro'] as const).map((t) => (
-                    <TouchableOpacity key={t} style={[styles.tierChip, grantTier === t && styles.tierChipActive]} onPress={() => setGrantTier(t)}>
-                      <Text style={[styles.tierChipText, grantTier === t && styles.tierChipTextActive]}>{t === 'pro' ? 'Pro' : 'Premium'}</Text>
-                    </TouchableOpacity>
-                  ))}
+                  {(['free', 'premium', 'pro'] as const).map((t) => {
+                    const label = t === 'pro' ? 'Pro' : t === 'premium' ? 'Premium' : 'Free';
+                    const isActive = targetTier === t;
+                    const chipStyle = t === 'free'
+                      ? [styles.tierChip, styles.tierChipFree, isActive && styles.tierChipFreeActive]
+                      : [styles.tierChip, isActive && styles.tierChipActive];
+                    const textStyle = t === 'free'
+                      ? [styles.tierChipText, isActive && styles.tierChipFreeTextActive]
+                      : [styles.tierChipText, isActive && styles.tierChipTextActive];
+                    return (
+                      <TouchableOpacity key={t} style={chipStyle} onPress={() => setTargetTier(t)}>
+                        <Text style={textStyle}>{label}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
                 </View>
                 <View style={styles.actionRow}>
-                  <TouchableOpacity disabled={Boolean(actionLoading)} style={[adminStyles.primaryButton, actionLoading && styles.disabledButton]} onPress={() => runAdminAction('grant')}>
-                    <Text style={adminStyles.primaryButtonText}>{actionLoading === 'grant' ? 'Granting...' : `Grant ${grantTier === 'pro' ? 'Pro' : 'Premium'}`}</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity disabled={Boolean(actionLoading)} style={[styles.dangerButton, actionLoading && styles.disabledButton]} onPress={() => runAdminAction('revoke')}>
-                    <Text style={adminStyles.dangerText}>{actionLoading === 'revoke' ? 'Revoking...' : 'Revoke Premium'}</Text>
+                  <TouchableOpacity
+                    disabled={Boolean(actionLoading)}
+                    style={[
+                      targetTier === 'free' ? styles.dangerButton : adminStyles.primaryButton,
+                      actionLoading && styles.disabledButton,
+                    ]}
+                    onPress={() => runAdminAction('setTier')}
+                  >
+                    <Text style={targetTier === 'free' ? adminStyles.dangerText : adminStyles.primaryButtonText}>
+                      {actionLoading === 'setTier'
+                        ? 'Đang cập nhật...'
+                        : `Set ${targetTier === 'pro' ? 'Pro' : targetTier === 'premium' ? 'Premium' : 'Free'}`}
+                    </Text>
                   </TouchableOpacity>
                   <TouchableOpacity disabled={Boolean(actionLoading)} style={[styles.quotaButton, actionLoading && styles.disabledButton]} onPress={() => runAdminAction('resetDaily')}>
                     <Text style={styles.quotaText}>{actionLoading === 'resetDaily' ? 'Resetting...' : 'Reset Daily Quota'}</Text>
@@ -316,6 +333,9 @@ const styles = StyleSheet.create({
   tierChipActive: { backgroundColor: adminChrome.accent, borderColor: adminChrome.accent },
   tierChipText: { color: adminChrome.textSoft, fontSize: 13, fontWeight: '700' },
   tierChipTextActive: { color: '#ffffff' },
+  tierChipFree: { borderColor: '#666' },
+  tierChipFreeActive: { backgroundColor: '#555', borderColor: '#555' },
+  tierChipFreeTextActive: { color: '#ffffff' },
   actionRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   dangerButton: { borderRadius: 8, borderWidth: 1, borderColor: adminChrome.rose, backgroundColor: adminChrome.dangerSoft, paddingHorizontal: 16, paddingVertical: 11 },
   quotaButton: { borderRadius: 8, borderWidth: 1, borderColor: adminChrome.blue, backgroundColor: '#eff6ff', paddingHorizontal: 16, paddingVertical: 11 },

@@ -38,6 +38,12 @@ class AdminGrantPremiumDto extends AdminActionReasonDto {
   tier?: 'premium' | 'pro';
 }
 
+class AdminSetTierDto extends AdminActionReasonDto {
+  @IsString()
+  @IsIn(['free', 'premium', 'pro'])
+  tier!: 'free' | 'premium' | 'pro';
+}
+
 class AdminAuditLogQueryDto {
   @IsOptional()
   @IsString()
@@ -252,6 +258,15 @@ export class AdminController {
   @ApiBody({ schema: { type: 'object', required: ['reason'], properties: { reason: { type: 'string', minLength: 5, example: 'User requested downgrade' } } } })
   revokePremium(@Request() req: any, @Param('id') userId: string, @Body() body: AdminActionReasonDto) {
     return this.adminService.revokePremium(assertUuid(userId), getAdminActor(req), body.reason);
+  }
+
+  @Post('users/:id/set-tier')
+  @AdminRoles('admin')
+  @ApiOperation({ summary: 'Set subscription tier (free/premium/pro) for a user and write admin audit log' })
+  @ApiParam({ name: 'id', description: 'User UUID' })
+  @ApiBody({ schema: { type: 'object', required: ['reason', 'tier'], properties: { reason: { type: 'string', minLength: 5 }, tier: { type: 'string', enum: ['free', 'premium', 'pro'] } } } })
+  setTier(@Request() req: any, @Param('id') userId: string, @Body() body: AdminSetTierDto) {
+    return this.adminService.setTier(assertUuid(userId), getAdminActor(req), body.reason, body.tier);
   }
 
   @Post('users/:id/reset-ai-quota')

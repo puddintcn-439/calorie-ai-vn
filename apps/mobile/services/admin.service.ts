@@ -157,6 +157,11 @@ export const adminService = {
     return data;
   },
 
+  async setTier(userId: string, reason: string, tier: 'free' | 'premium' | 'pro'): Promise<AdminPremiumActionResponse> {
+    const { data } = await apiClient.post(`/admin/users/${encodeURIComponent(userId)}/set-tier`, { reason, tier });
+    return data;
+  },
+
   async resetAiQuota(userId: string, reason: string, scope: 'daily' | 'monthly' = 'daily'): Promise<AdminResetAiQuotaResponse> {
     const { data } = await apiClient.post(`/admin/users/${encodeURIComponent(userId)}/reset-ai-quota`, { reason, scope });
     return data;
