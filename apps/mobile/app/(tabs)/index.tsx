@@ -1328,15 +1328,15 @@ export default function DashboardScreen() {
     router.push('/log' as never);
   };
 
-  // Header date label
-  const VI_DAYS = ['Chá»§ Nháº­t', 'Thá»© Hai', 'Thá»© Ba', 'Thá»© TÆ°', 'Thá»© NÄƒm', 'Thá»© SÃ¡u', 'Thá»© Báº£y'];
-  const EN_DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-  const todayDateObj = new Date();
-  const headerDateLabel = locale === 'vi'
-    ? `${VI_DAYS[todayDateObj.getDay()]} Â· ${todayDateObj.getDate()} Th${todayDateObj.getMonth() + 1}`
-    : `${EN_DAYS[todayDateObj.getDay()]} Â· ${todayDateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
 
-  // User's first name (last word of full_name, which is Vietnamese first name)
+  // Header date: use Intl to avoid hardcoded locale strings in source
+  const todayDateObj = new Date();
+  const intlLocale = locale === 'vi' ? 'vi-VN' : 'en-US';
+  const headerDateLabel = new Intl.DateTimeFormat(intlLocale, {
+    weekday: 'long', day: 'numeric', month: 'numeric',
+  }).format(todayDateObj);
+
+  // User first name (last word of full_name = Vietnamese given name)
   const firstName = profileMeta?.full_name?.trim().split(/\s+/).pop() ?? '';
 
   // Macro targets derived from calorie target
@@ -1344,36 +1344,50 @@ export default function DashboardScreen() {
   const carbsTargetG = Math.round((target * 0.5) / 4);
   const fatTargetG = Math.round((target * 0.25) / 9);
 
-  // Active preset from user's saved goal plan direction
+  // Active preset from user saved goal plan direction
   const activeGoalPreset: 'lose' | 'maintain' | 'gain' =
     profileMeta?.goal_plan?.direction === 'loss' ? 'lose' :
     profileMeta?.goal_plan?.direction === 'gain' ? 'gain' : 'maintain';
 
   return (
     <ScreenShell contentStyle={styles.screen}>
+
       {/* 1. Header */}
       <View style={styles.headerRow}>
-        <View>
+        <View style={styles.headerLeft}>
           <Text style={[styles.headerDate, { color: colors.accentCyan }]}>{headerDateLabel}</Text>
           <Text style={[styles.headerGreeting, { color: colors.text }]}>
-            {firstName ? t('screen.tabs.index.hifi.header.greeting' as any, { name: firstName }) : t('screen.tabs.index.hero.title')}
+            {firstName
+              ? t('screen.tabs.index.hifi.header.greeting' as any, { name: firstName })
+              : t('screen.tabs.index.hero.title')}
           </Text>
         </View>
-        <TouchableOpacity style={[styles.streakPill, { backgroundColor: colors.surface, borderColor: colors.borderSubtle }]} onPress={() => router.push('/achievements' as never)}>
-          <Text style={[styles.streakText, { color: colors.text }]}>ðŸ”¥ {displayStreak}</Text>
+        <TouchableOpacity
+          style={[styles.streakPill, { backgroundColor: colors.surface, borderColor: colors.borderSubtle }]}
+          onPress={() => router.push('/achievements' as never)}
+        >
+          <Ionicons name="flame" size={13} color={colors.accentAmber} />
+          <Text style={[styles.streakText, { color: colors.text }]}> {displayStreak}</Text>
         </TouchableOpacity>
       </View>
 
-      {/* 2. Safety banner */}
+      {/* 2. Safety banner — only when profile incomplete or has medical flags */}
       {safetyCard && !bannerDismissed && (
         <View style={[
           styles.safetyBanner,
-          { borderColor: safetyCard.tone === 'review' ? colors.borderWarning : colors.borderInfo, backgroundColor: colors.surfaceWarning },
+          {
+            borderColor: safetyCard.tone === 'review' ? colors.borderWarning : colors.borderInfo,
+            backgroundColor: safetyCard.tone === 'review' ? colors.surfaceWarning : colors.surfaceInfo,
+          },
         ]}>
-          <Text style={styles.bannerIcon}>âš ï¸</Text>
+          <Ionicons
+            name={safetyCard.tone === 'review' ? 'medical' : 'shield-checkmark-outline'}
+            size={18}
+            color={safetyCard.tone === 'review' ? colors.accentAmber : colors.accentCyan}
+          />
           <View style={styles.bannerTextCol}>
             <Text style={[styles.bannerTitle, { color: colors.text }]}>{safetyCard.title}</Text>
-            <Text style={[styles.bannerSubtitle, { color: colors.accentAmber }]}>{safetyCard.body}</Text>
+            <Text style={[styles.bannerSubtitle, { color: colors.textMuted }]}>{safetyCard.body}</Text>
           </View>
           <TouchableOpacity
             style={[styles.bannerButton, { backgroundColor: colors.accentAmber }]}
@@ -1384,7 +1398,7 @@ export default function DashboardScreen() {
         </View>
       )}
 
-      {/* 3. Hero calorie ring card */}
+      {/* 3. Hero calorie ring */}
       <SurfaceCard revealDelay={40} style={[styles.heroCard, { padding: 22 }]}>
         <CaloriesRingHero consumed={consumed} burned={burned} target={target} />
       </SurfaceCard>
@@ -1398,13 +1412,15 @@ export default function DashboardScreen() {
               key={preset}
               style={[
                 styles.presetChip,
-                active ? styles.presetChipActive : { backgroundColor: colors.surface, borderColor: colors.borderSubtle },
+                active
+                  ? [styles.presetChipActive, { backgroundColor: colors.surfaceAlt, borderColor: colors.surfaceAlt }]
+                  : { backgroundColor: colors.surface, borderColor: colors.borderSubtle },
                 isApplyingTarget && styles.disabledButton,
               ]}
               onPress={() => { void applyGoalPreset(preset); }}
               disabled={isApplyingTarget}
             >
-              <Text style={[styles.presetChipText, { color: active ? colors.surfaceLifted : colors.textSoft }]}>
+              <Text style={[styles.presetChipText, { color: active ? colors.accentMint : colors.textSoft }]}>
                 {t(`screen.tabs.index.hifi.preset.${preset}` as any)}
               </Text>
             </TouchableOpacity>
@@ -1414,23 +1430,56 @@ export default function DashboardScreen() {
 
       {/* 5. Macro bars */}
       <View style={styles.macroBarRow}>
-        <MacroBarCard label={t('screen.tabs.index.hifi.macro.protein' as any)} eaten={protein} goal={proteinTargetG} color={colors.accentCoral} />
-        <MacroBarCard label={t('screen.tabs.index.hifi.macro.carbs' as any)} eaten={carbs} goal={carbsTargetG} color={colors.accentLeaf} />
-        <MacroBarCard label={t('screen.tabs.index.hifi.macro.fat' as any)} eaten={fat} goal={fatTargetG} color={colors.accentAmber} />
+        <MacroBarCard
+          label={t('screen.tabs.index.hifi.macro.protein' as any)}
+          eaten={protein} goal={proteinTargetG} color={colors.accentCoral}
+        />
+        <MacroBarCard
+          label={t('screen.tabs.index.hifi.macro.carbs' as any)}
+          eaten={carbs} goal={carbsTargetG} color={colors.accentLeaf}
+        />
+        <MacroBarCard
+          label={t('screen.tabs.index.hifi.macro.fat' as any)}
+          eaten={fat} goal={fatTargetG} color={colors.accentAmber}
+        />
       </View>
 
-      {/* 6. Nutrition quality */}
+      {/* 6. Nutrition quality card */}
       {qualityCoverageItems > 0 && (
         <SurfaceCard revealDelay={120} style={[styles.qualityCard, { borderRadius: 22 }]}>
           <View style={styles.qualityCardHeader}>
-            <Text style={[styles.qualityCardTitle, { color: colors.text }]}>{t('screen.tabs.index.hifi.quality.title' as any)}</Text>
-            <Text style={[styles.qualityCardSub, { color: colors.textDisabled }]}>{t('screen.tabs.index.hifi.quality.today' as any)}</Text>
+            <Text style={[styles.qualityCardTitle, { color: colors.text }]}>
+              {t('screen.tabs.index.hifi.quality.title' as any)}
+            </Text>
+            <Text style={[styles.qualityCardSub, { color: colors.textDisabled }]}>
+              {t('screen.tabs.index.hifi.quality.today' as any)}
+            </Text>
           </View>
           <View style={styles.qualityGrid}>
-            <QualityGridCell label={t('screen.tabs.index.hifi.quality.fiber' as any)} value={`${formatNumber(fiber)}g`} threshold={`â‰¥ ${qualityTargets.fiber_g_min}g`} tone="good" />
-            <QualityGridCell label={t('screen.tabs.index.hifi.quality.sodium' as any)} value={formatNumber(sodium)} threshold={`< ${formatNumber(qualityTargets.sodium_mg_max)}mg`} tone="limit" />
-            <QualityGridCell label={t('screen.tabs.index.hifi.quality.sugar' as any)} value={`${formatNumber(sugar)}g`} threshold={`< ${qualityTargets.sugar_g_max}g`} tone="limit" />
-            <QualityGridCell label={t('screen.tabs.index.hifi.quality.satFat' as any)} value={`${formatNumber(saturatedFat)}g`} threshold={`< ${qualityTargets.saturated_fat_g_max}g`} tone="limit" />
+            <QualityGridCell
+              label={t('screen.tabs.index.hifi.quality.fiber' as any)}
+              value={`${formatNumber(fiber)}g`}
+              threshold={`>= ${qualityTargets.fiber_g_min}g`}
+              tone="good"
+            />
+            <QualityGridCell
+              label={t('screen.tabs.index.hifi.quality.sodium' as any)}
+              value={`${formatNumber(sodium)}mg`}
+              threshold={`< ${formatNumber(qualityTargets.sodium_mg_max)}mg`}
+              tone="limit"
+            />
+            <QualityGridCell
+              label={t('screen.tabs.index.hifi.quality.sugar' as any)}
+              value={`${formatNumber(sugar)}g`}
+              threshold={`< ${qualityTargets.sugar_g_max}g`}
+              tone="limit"
+            />
+            <QualityGridCell
+              label={t('screen.tabs.index.hifi.quality.satFat' as any)}
+              value={`${formatNumber(saturatedFat)}g`}
+              threshold={`< ${qualityTargets.saturated_fat_g_max}g`}
+              tone="limit"
+            />
           </View>
         </SurfaceCard>
       )}
@@ -1448,32 +1497,56 @@ export default function DashboardScreen() {
 
       {/* 8. Meals today */}
       <View style={styles.sectionHeader}>
-        <Text style={[styles.sectionTitle, { color: colors.text }]}>{t('screen.tabs.index.hifi.meals.title' as any)}</Text>
+        <Text style={[styles.sectionTitle, { color: colors.text }]}>
+          {t('screen.tabs.index.hifi.meals.title' as any)}
+        </Text>
         <TouchableOpacity onPress={() => router.push('/log' as never)}>
-          <Text style={[styles.sectionLink, { color: colors.accentCyan }]}>{t('screen.tabs.index.hifi.meals.viewLog' as any)}</Text>
+          <Text style={[styles.sectionLink, { color: colors.accentCyan }]}>
+            {t('screen.tabs.index.hifi.meals.viewLog' as any)}
+          </Text>
         </TouchableOpacity>
       </View>
       {logs.length > 0 ? (
         <SurfaceCard revealDelay={180} style={[styles.mealListCard, { borderRadius: 20 }]}>
           {logs.slice(0, 5).map((log, idx) => (
-            <MealListRow key={(log as any).id ?? idx} log={log} isLast={idx === Math.min(logs.length, 5) - 1} />
+            <MealListRow
+              key={(log as any).id ?? idx}
+              log={log}
+              isLast={idx === Math.min(logs.length, 5) - 1}
+            />
           ))}
         </SurfaceCard>
       ) : (
         <EmptyState
           imageSource={todayHeroIllustration}
-          icon="ðŸš"
+          icon="restaurant-outline"
           title="screen.tabs.index.title.001"
           description="screen.tabs.index.description.001"
         />
       )}
 
-      {/* 9. Shortcuts */}
+      {/* 9. Shortcut tiles */}
       <View style={styles.shortcutGrid}>
-        <ShortcutTile emoji="ðŸ“ˆ" labelKey={'screen.tabs.index.hifi.shortcut.progress' as any} onPress={() => router.push('/progress' as never)} />
-        <ShortcutTile emoji="ðŸ”" labelKey={'screen.tabs.index.hifi.shortcut.insights' as any} onPress={() => router.push('/insights' as never)} />
-        <ShortcutTile emoji="ðŸ†" labelKey={'screen.tabs.index.hifi.shortcut.achievements' as any} onPress={() => router.push('/achievements' as never)} />
-        <ShortcutTile emoji="â¤ï¸" labelKey={'screen.tabs.index.hifi.shortcut.health' as any} onPress={() => router.push('/progress' as never)} />
+        <ShortcutTile
+          iconName="trending-up-outline"
+          labelKey={'screen.tabs.index.hifi.shortcut.progress' as any}
+          onPress={() => router.push('/progress' as never)}
+        />
+        <ShortcutTile
+          iconName="search-outline"
+          labelKey={'screen.tabs.index.hifi.shortcut.insights' as any}
+          onPress={() => router.push('/insights' as never)}
+        />
+        <ShortcutTile
+          iconName="trophy-outline"
+          labelKey={'screen.tabs.index.hifi.shortcut.achievements' as any}
+          onPress={() => router.push('/achievements' as never)}
+        />
+        <ShortcutTile
+          iconName="heart-outline"
+          labelKey={'screen.tabs.index.hifi.shortcut.health' as any}
+          onPress={() => router.push('/progress' as never)}
+        />
       </View>
 
       <RewardToast reward={reward} onHide={() => setReward(null)} />
@@ -1481,13 +1554,21 @@ export default function DashboardScreen() {
   );
 }
 
-// â”€â”€â”€ Sub-components â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// --- Sub-components ---
 
 const RING_GRAD_START = '#7cc04f';
 const RING_GRAD_END = '#4f9b6e';
 const NEXT_STEP_GRAD: [string, string] = ['#1d291f', '#27331f'];
 
-function CaloriesRingHero({ consumed, burned, target }: { consumed: number; burned: number; target: number }) {
+function CaloriesRingHero({
+  consumed,
+  burned,
+  target,
+}: {
+  consumed: number;
+  burned: number;
+  target: number;
+}) {
   const { colors } = useAppTheme();
   const { t } = useI18n();
   const safeConsumed = safeNumber(consumed);
@@ -1500,6 +1581,7 @@ function CaloriesRingHero({ consumed, burned, target }: { consumed: number; burn
   const STROKE = 13;
   const RADIUS = 56;
   const CIRC = 2 * Math.PI * RADIUS;
+
   return (
     <View style={styles.ringHeroRow}>
       <View style={{ width: SIZE, height: SIZE }}>
@@ -1510,7 +1592,10 @@ function CaloriesRingHero({ consumed, burned, target }: { consumed: number; burn
               <Stop offset="1" stopColor={RING_GRAD_END} />
             </SvgLinearGradient>
           </Defs>
-          <Circle cx={SIZE / 2} cy={SIZE / 2} r={RADIUS} stroke={colors.progressBg} strokeWidth={STROKE} fill="none" />
+          <Circle
+            cx={SIZE / 2} cy={SIZE / 2} r={RADIUS}
+            stroke={colors.progressBg} strokeWidth={STROKE} fill="none"
+          />
           <Circle
             cx={SIZE / 2} cy={SIZE / 2} r={RADIUS}
             stroke="url(#ringGrad)" strokeWidth={STROKE} fill="none"
@@ -1521,27 +1606,59 @@ function CaloriesRingHero({ consumed, burned, target }: { consumed: number; burn
           />
         </Svg>
         <View style={styles.ringHeroCenter}>
-          <Text style={[styles.ringHeroValue, { color: colors.text }]}>{formatNumber(remaining)}</Text>
+          <Text style={[styles.ringHeroValue, { color: colors.text }]}>
+            {formatNumber(remaining)}
+          </Text>
           <Text style={[styles.ringHeroLabel, { color: colors.textMuted }]}>
             {t('screen.tabs.index.hifi.ring.remainingOf' as any, { target: formatNumber(safeTarget) })}
           </Text>
         </View>
       </View>
       <View style={styles.ringHeroMetrics}>
-        <HeroMetricRow icon="ðŸ½ï¸" label={t('screen.tabs.index.hifi.ring.eaten' as any)} value={formatNumber(safeConsumed)} bg={colors.surfaceSuccess} />
-        <HeroMetricRow icon="ðŸƒ" label={t('screen.tabs.index.hifi.ring.activity' as any)} value={`+${formatNumber(safeBurned)}`} bg={colors.surfaceInfo} />
-        <HeroMetricRow icon="âš–ï¸" label={t('screen.tabs.index.hifi.ring.net' as any)} value={formatNumber(net)} bg={colors.surfaceWarm} />
+        <HeroMetricRow
+          iconName="restaurant-outline"
+          label={t('screen.tabs.index.hifi.ring.eaten' as any)}
+          value={formatNumber(safeConsumed)}
+          bg={colors.surfaceSuccess}
+          iconColor={colors.accentLeaf}
+        />
+        <HeroMetricRow
+          iconName="walk-outline"
+          label={t('screen.tabs.index.hifi.ring.activity' as any)}
+          value={`+${formatNumber(safeBurned)}`}
+          bg={colors.surfaceInfo}
+          iconColor={colors.accentCyan}
+        />
+        <HeroMetricRow
+          iconName="scale-outline"
+          label={t('screen.tabs.index.hifi.ring.net' as any)}
+          value={formatNumber(net)}
+          bg={colors.surfaceWarm}
+          iconColor={colors.accentAmber}
+        />
       </View>
     </View>
   );
 }
 
-function HeroMetricRow({ icon, label, value, bg }: { icon: string; label: string; value: string; bg: string }) {
+function HeroMetricRow({
+  iconName,
+  label,
+  value,
+  bg,
+  iconColor,
+}: {
+  iconName: keyof typeof Ionicons.glyphMap;
+  label: string;
+  value: string;
+  bg: string;
+  iconColor: string;
+}) {
   const { colors } = useAppTheme();
   return (
     <View style={styles.heroMetric}>
-      <View style={[styles.heroMetricIcon, { backgroundColor: bg }]}>
-        <Text style={styles.heroMetricEmoji}>{icon}</Text>
+      <View style={[styles.heroMetricIconBox, { backgroundColor: bg }]}>
+        <Ionicons name={iconName} size={16} color={iconColor} />
       </View>
       <View>
         <Text style={[styles.heroMetricLabel, { color: colors.textMuted }]}>{label}</Text>
@@ -1551,14 +1668,25 @@ function HeroMetricRow({ icon, label, value, bg }: { icon: string; label: string
   );
 }
 
-function MacroBarCard({ label, eaten, goal, color }: { label: string; eaten: number; goal: number; color: string }) {
+function MacroBarCard({
+  label,
+  eaten,
+  goal,
+  color,
+}: {
+  label: string;
+  eaten: number;
+  goal: number;
+  color: string;
+}) {
   const { colors } = useAppTheme();
   const pct = clampProgress(safeNumber(eaten) / Math.max(safePositiveNumber(goal, 1), 1));
   return (
     <View style={[styles.macroBarCard, { backgroundColor: colors.surface, borderColor: colors.borderSubtle }]}>
       <Text style={[styles.macroBarLabel, { color: colors.textMuted }]}>{label}</Text>
       <Text style={[styles.macroBarValue, { color: colors.text }]}>
-        {formatNumber(eaten)}<Text style={[styles.macroBarGoal, { color: colors.textDisabled }]}>/{goal}g</Text>
+        {formatNumber(eaten)}
+        <Text style={[styles.macroBarGoal, { color: colors.textDisabled }]}>/{goal}g</Text>
       </Text>
       <View style={[styles.macroBarTrack, { backgroundColor: colors.progressBg }]}>
         <View style={[styles.macroBarFill, { width: `${Math.round(pct * 100)}%` as any, backgroundColor: color }]} />
@@ -1567,20 +1695,44 @@ function MacroBarCard({ label, eaten, goal, color }: { label: string; eaten: num
   );
 }
 
-function QualityGridCell({ label, value, threshold, tone }: { label: string; value: string; threshold: string; tone: 'good' | 'limit' }) {
+function QualityGridCell({
+  label,
+  value,
+  threshold,
+  tone,
+}: {
+  label: string;
+  value: string;
+  threshold: string;
+  tone: 'good' | 'limit';
+}) {
   const { colors } = useAppTheme();
   return (
     <View style={[
       styles.qualityCell,
-      { backgroundColor: tone === 'good' ? colors.surfaceSuccess : colors.surfaceInfo, borderColor: tone === 'good' ? colors.borderSuccess : colors.borderInfo },
+      {
+        backgroundColor: tone === 'good' ? colors.surfaceSuccess : colors.surfaceInfo,
+        borderColor: tone === 'good' ? colors.borderSuccess : colors.borderInfo,
+      },
     ]}>
       <Text style={[styles.qualityCellLabel, { color: colors.textMuted }]}>{label}</Text>
       <Text style={[styles.qualityCellValue, { color: colors.text }]}>
-        {value}{' '}<Text style={[styles.qualityCellThreshold, { color: tone === 'good' ? colors.accentLeaf : colors.textMuted }]}>{threshold}</Text>
+        {value}{' '}
+        <Text style={[styles.qualityCellThreshold, { color: tone === 'good' ? colors.accentLeaf : colors.textMuted }]}>
+          {threshold}
+        </Text>
       </Text>
     </View>
   );
 }
+
+const NEXT_STEP_ICON_MAP: Record<string, keyof typeof Ionicons.glyphMap> = {
+  profile: 'shield-checkmark-outline',
+  scan: 'camera-outline',
+  movement: 'walk-outline',
+  nudge: 'bulb-outline',
+  log: 'checkmark-circle-outline',
+};
 
 function NextStepDarkCard({
   kind,
@@ -1600,93 +1752,171 @@ function NextStepDarkCard({
   onPress: () => void;
 }) {
   const { t } = useI18n();
-  const ICON_MAP: Record<string, string> = { profile: 'âš ï¸', scan: 'ðŸ“·', movement: 'ðŸƒ', nudge: 'ðŸ’¡', log: 'âœ…' };
-  const icon = ICON_MAP[kind] ?? 'ðŸ’¡';
+  const iconName = NEXT_STEP_ICON_MAP[kind] ?? 'bulb-outline';
   const isDone = kind === 'movement' && completed;
   const isDisabled = kind === 'movement' && (isLogging || completed);
+
   return (
-    <LinearGradient colors={NEXT_STEP_GRAD} start={{ x: 0.3, y: 0 }} end={{ x: 1, y: 1 }} style={styles.nextStepCard}>
+    <LinearGradient
+      colors={NEXT_STEP_GRAD}
+      start={{ x: 0.3, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={styles.nextStepCard}
+    >
       <View style={styles.nextStepRow}>
         <View style={styles.nextStepIconWrap}>
-          <Text style={styles.nextStepEmoji}>{icon}</Text>
+          <Ionicons name={iconName} size={20} color="#b9df78" />
         </View>
         <View style={styles.nextStepCopy}>
-          <Text style={styles.nextStepEyebrow}>{t('screen.tabs.index.hifi.nextstep.eyebrow' as any)}</Text>
+          <Text style={styles.nextStepEyebrow}>
+            {t('screen.tabs.index.hifi.nextstep.eyebrow' as any)}
+          </Text>
           <Text style={styles.nextStepTitle}>{title}</Text>
           <Text style={styles.nextStepBody}>{body}</Text>
         </View>
       </View>
       <TouchableOpacity
-        style={[styles.nextStepButton, isDone && styles.nextStepButtonDone, isDisabled && styles.disabledButton]}
+        style={[
+          styles.nextStepButton,
+          isDone && styles.nextStepButtonDone,
+          isDisabled && styles.disabledButton,
+        ]}
         onPress={onPress}
         disabled={isDisabled}
       >
         <Text style={[styles.nextStepButtonText, isDone && styles.nextStepButtonTextDone]}>
-          {isDone ? t('screen.tabs.index.hifi.nextstep.done' as any) : primaryLabel}
+          {isDone
+            ? t('screen.tabs.index.hifi.nextstep.done' as any)
+            : primaryLabel}
         </Text>
       </TouchableOpacity>
     </LinearGradient>
   );
 }
 
+const MEAL_ICON_MAP: Record<MealType, keyof typeof Ionicons.glyphMap> = {
+  breakfast: 'sunny-outline',
+  lunch: 'partly-sunny-outline',
+  dinner: 'moon-outline',
+  snack: 'cafe-outline',
+};
+
 function MealListRow({ log, isLast }: { log: FoodLog; isLast: boolean }) {
   const { colors } = useAppTheme();
   const { t } = useI18n();
   const name = (log as any).name_vi ?? log.name;
   const mealLabel = t(MEAL_LABEL_KEYS[log.meal_type]);
-  const kcal = safeNumber((log as any).calories);
+  const kcal = safeNumber((log as any).calories ?? (log as any).total_calories ?? 0);
   const isAi = !!(log as any).ai_scan_id;
-  const MEAL_EMOJI: Record<MealType, string> = { breakfast: 'ðŸŒ…', lunch: 'â˜€ï¸', dinner: 'ðŸŒ™', snack: 'ðŸŽ' };
+
   const MEAL_BG: Record<MealType, string> = {
     breakfast: colors.surfaceSuccess,
     lunch: colors.surfaceInfo,
     dinner: colors.surfaceWarning,
     snack: colors.surfaceMuted,
   };
+  const MEAL_ICON_COLOR: Record<MealType, string> = {
+    breakfast: colors.accentLeaf,
+    lunch: colors.accentCyan,
+    dinner: colors.accentAmber,
+    snack: colors.textMuted,
+  };
+
   return (
     <View style={[styles.mealRow, !isLast && { borderBottomWidth: 1, borderBottomColor: colors.borderSubtle }]}>
-      <View style={[styles.mealRowIcon, { backgroundColor: MEAL_BG[log.meal_type] }]}>
-        <Text style={styles.mealRowEmoji}>{MEAL_EMOJI[log.meal_type]}</Text>
+      <View style={[styles.mealRowIconBox, { backgroundColor: MEAL_BG[log.meal_type] }]}>
+        <Ionicons
+          name={MEAL_ICON_MAP[log.meal_type]}
+          size={18}
+          color={MEAL_ICON_COLOR[log.meal_type]}
+        />
       </View>
       <View style={styles.mealRowCopy}>
         <Text style={[styles.mealRowName, { color: colors.text }]} numberOfLines={1}>{name}</Text>
-        <Text style={[styles.mealRowMeta, { color: colors.textMuted }]}>{mealLabel} Â· {formatNumber(kcal)} kcal</Text>
+        <Text style={[styles.mealRowMeta, { color: colors.textMuted }]}>
+          {mealLabel} - {formatNumber(kcal)} kcal
+        </Text>
       </View>
       {isAi && (
         <View style={[styles.aiBadge, { backgroundColor: colors.surfaceSuccess, borderColor: colors.borderSuccess }]}>
-          <Text style={[styles.aiBadgeText, { color: colors.accentLeaf }]}>{t('screen.tabs.index.hifi.meals.aiBadge' as any)}</Text>
+          <Text style={[styles.aiBadgeText, { color: colors.accentLeaf }]}>
+            {t('screen.tabs.index.hifi.meals.aiBadge' as any)}
+          </Text>
         </View>
       )}
     </View>
   );
 }
 
-function ShortcutTile({ emoji, labelKey, onPress }: { emoji: string; labelKey: any; onPress: () => void }) {
+function ShortcutTile({
+  iconName,
+  labelKey,
+  onPress,
+}: {
+  iconName: keyof typeof Ionicons.glyphMap;
+  labelKey: any;
+  onPress: () => void;
+}) {
   const { colors } = useAppTheme();
   const { t } = useI18n();
   return (
-    <TouchableOpacity style={[styles.shortcutTile, { backgroundColor: colors.surface, borderColor: colors.borderSubtle }]} onPress={onPress}>
-      <Text style={styles.shortcutEmoji}>{emoji}</Text>
+    <TouchableOpacity
+      style={[styles.shortcutTile, { backgroundColor: colors.surface, borderColor: colors.borderSubtle }]}
+      onPress={onPress}
+    >
+      <Ionicons name={iconName} size={20} color={colors.accentCyan} />
       <Text style={[styles.shortcutLabel, { color: colors.textSoft }]}>{t(labelKey)}</Text>
     </TouchableOpacity>
   );
 }
 
-// â”€â”€â”€ Styles â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// --- Styles ---
 
-const styles = createThemedStyles((colors, radii) => ({
+const styles = createThemedStyles((colors) => ({
   screen: { paddingBottom: 28 },
 
   // Header
-  headerRow: { flexDirection: 'row' as const, alignItems: 'flex-start' as const, justifyContent: 'space-between' as const, gap: 12, marginBottom: 14 },
-  headerDate: { fontSize: 12, fontWeight: '700' as const, letterSpacing: 1, textTransform: 'uppercase' as const },
-  headerGreeting: { fontSize: 25, fontWeight: '800' as const, letterSpacing: -0.5, marginTop: 3 },
-  streakPill: { flexDirection: 'row' as const, alignItems: 'center' as const, borderRadius: 20, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 6 },
+  headerRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'flex-start' as const,
+    justifyContent: 'space-between' as const,
+    gap: 12,
+    marginBottom: 14,
+  },
+  headerLeft: { flex: 1 },
+  headerDate: {
+    fontSize: 12,
+    fontWeight: '700' as const,
+    letterSpacing: 1,
+    textTransform: 'uppercase' as const,
+  },
+  headerGreeting: {
+    fontSize: 25,
+    fontWeight: '800' as const,
+    letterSpacing: -0.5,
+    marginTop: 3,
+  },
+  streakPill: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    borderRadius: 20,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    gap: 4,
+  },
   streakText: { fontSize: 14, fontWeight: '800' as const },
 
   // Safety banner
-  safetyBanner: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 11, borderRadius: 18, borderWidth: 1, padding: 12, marginBottom: 14 },
-  bannerIcon: { fontSize: 17 },
+  safetyBanner: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 11,
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 12,
+    marginBottom: 14,
+  },
   bannerTextCol: { flex: 1 },
   bannerTitle: { fontSize: 12.5, fontWeight: '700' as const },
   bannerSubtitle: { fontSize: 11, marginTop: 1 },
@@ -1697,22 +1927,64 @@ const styles = createThemedStyles((colors, radii) => ({
   heroCard: { marginBottom: 12, borderRadius: 28 },
 
   // Ring hero
-  ringHeroRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 20 },
-  ringHeroCenter: { position: 'absolute' as const, top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center' as const, justifyContent: 'center' as const },
-  ringHeroValue: { fontSize: 29, fontWeight: '800' as const, letterSpacing: -1, lineHeight: 32 },
-  ringHeroLabel: { fontSize: 11, fontWeight: '600' as const, marginTop: 2, textAlign: 'center' as const },
+  ringHeroRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 20,
+  },
+  ringHeroCenter: {
+    position: 'absolute' as const,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  ringHeroValue: {
+    fontSize: 29,
+    fontWeight: '800' as const,
+    letterSpacing: -1,
+    lineHeight: 32,
+  },
+  ringHeroLabel: {
+    fontSize: 11,
+    fontWeight: '600' as const,
+    marginTop: 2,
+    textAlign: 'center' as const,
+  },
   ringHeroMetrics: { flex: 1, gap: 11 },
-  heroMetric: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 10 },
-  heroMetricIcon: { width: 34, height: 34, borderRadius: 12, alignItems: 'center' as const, justifyContent: 'center' as const },
-  heroMetricEmoji: { fontSize: 16 },
+  heroMetric: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 10,
+  },
+  heroMetricIconBox: {
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
   heroMetricLabel: { fontSize: 11, fontWeight: '600' as const },
   heroMetricValue: { fontSize: 16, fontWeight: '800' as const },
 
   // Preset chips
   presetRow: { flexDirection: 'row' as const, gap: 8, marginBottom: 12 },
-  presetChip: { flex: 1, borderRadius: 14, borderWidth: 1, paddingVertical: 9, paddingHorizontal: 4, alignItems: 'center' as const },
-  presetChipActive: { backgroundColor: colors.surfaceAlt, borderColor: colors.surfaceAlt },
-  presetChipText: { fontSize: 12.5, fontWeight: '800' as const, textAlign: 'center' as const },
+  presetChip: {
+    flex: 1,
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingVertical: 9,
+    paddingHorizontal: 4,
+    alignItems: 'center' as const,
+  },
+  presetChipActive: {},
+  presetChipText: {
+    fontSize: 12.5,
+    fontWeight: '800' as const,
+    textAlign: 'center' as const,
+  },
 
   // Macro bars
   macroBarRow: { flexDirection: 'row' as const, gap: 10, marginBottom: 12 },
@@ -1725,11 +1997,23 @@ const styles = createThemedStyles((colors, radii) => ({
 
   // Nutrition quality
   qualityCard: { marginBottom: 12 },
-  qualityCardHeader: { flexDirection: 'row' as const, justifyContent: 'space-between' as const, alignItems: 'center' as const, marginBottom: 12 },
+  qualityCardHeader: {
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'center' as const,
+    marginBottom: 12,
+  },
   qualityCardTitle: { fontSize: 13, fontWeight: '800' as const },
   qualityCardSub: { fontSize: 11 },
   qualityGrid: { flexDirection: 'row' as const, flexWrap: 'wrap' as const, gap: 8 },
-  qualityCell: { flex: 1, minWidth: '46%' as any, borderRadius: 12, borderWidth: 1, paddingHorizontal: 11, paddingVertical: 9 },
+  qualityCell: {
+    flex: 1,
+    minWidth: '46%' as any,
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 11,
+    paddingVertical: 9,
+  },
   qualityCellLabel: { fontSize: 10.5, fontWeight: '700' as const },
   qualityCellValue: { fontSize: 13, fontWeight: '800' as const, marginTop: 2 },
   qualityCellThreshold: { fontSize: 10, fontWeight: '700' as const },
@@ -1740,43 +2024,113 @@ const styles = createThemedStyles((colors, radii) => ({
     padding: 18,
     marginBottom: 12,
     ...(Platform.OS === 'web'
-      ? { boxShadow: '0 18px 38px rgba(20,32,24,.22)' } as any
-      : { shadowColor: '#142018', shadowOpacity: 0.22, shadowRadius: 19, shadowOffset: { width: 0, height: 9 }, elevation: 8 }),
+      ? ({ boxShadow: '0 18px 38px rgba(20,32,24,.22)' } as any)
+      : {
+          shadowColor: '#142018',
+          shadowOpacity: 0.22,
+          shadowRadius: 19,
+          shadowOffset: { width: 0, height: 9 },
+          elevation: 8,
+        }),
   },
-  nextStepRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 14, marginBottom: 14 },
-  nextStepIconWrap: { width: 42, height: 42, borderRadius: 14, backgroundColor: 'rgba(185,223,120,.18)', alignItems: 'center' as const, justifyContent: 'center' as const },
-  nextStepEmoji: { fontSize: 20 },
+  nextStepRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 14,
+    marginBottom: 14,
+  },
+  nextStepIconWrap: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    backgroundColor: 'rgba(185,223,120,.18)',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
   nextStepCopy: { flex: 1 },
-  nextStepEyebrow: { fontSize: 11, fontWeight: '700' as const, letterSpacing: 0.5, textTransform: 'uppercase' as const, color: '#b9df78' },
-  nextStepTitle: { fontSize: 13.5, fontWeight: '600' as const, color: '#f3f5ee', marginTop: 3, lineHeight: 19 },
+  nextStepEyebrow: {
+    fontSize: 11,
+    fontWeight: '700' as const,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase' as const,
+    color: '#b9df78',
+  },
+  nextStepTitle: {
+    fontSize: 13.5,
+    fontWeight: '600' as const,
+    color: '#f3f5ee',
+    marginTop: 3,
+    lineHeight: 19,
+  },
   nextStepBody: { fontSize: 12, color: '#c5cec3', marginTop: 2, lineHeight: 17 },
-  nextStepButton: { height: 42, borderRadius: 14, backgroundColor: '#b9df78', alignItems: 'center' as const, justifyContent: 'center' as const },
+  nextStepButton: {
+    height: 42,
+    borderRadius: 14,
+    backgroundColor: '#b9df78',
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
   nextStepButtonDone: { backgroundColor: 'rgba(185,223,120,.18)' },
-  nextStepButtonText: { fontSize: 13.5, fontWeight: '800' as const, color: '#16200f' },
+  nextStepButtonText: {
+    fontSize: 13.5,
+    fontWeight: '800' as const,
+    color: '#16200f',
+  },
   nextStepButtonTextDone: { color: '#b9df78' },
 
   // Section header
-  sectionHeader: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'space-between' as const, marginBottom: 10, marginTop: 4 },
+  sectionHeader: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    marginBottom: 10,
+    marginTop: 4,
+  },
   sectionTitle: { fontSize: 13, fontWeight: '800' as const },
   sectionLink: { fontSize: 12, fontWeight: '700' as const },
 
-  // Meal list card
+  // Meal list
   mealListCard: { padding: 6, marginBottom: 14 },
-  mealRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 12, padding: 10 },
-  mealRowIcon: { width: 40, height: 40, borderRadius: 13, alignItems: 'center' as const, justifyContent: 'center' as const },
-  mealRowEmoji: { fontSize: 19 },
+  mealRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 12,
+    padding: 10,
+  },
+  mealRowIconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: 13,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
   mealRowCopy: { flex: 1, minWidth: 0 },
   mealRowName: { fontSize: 13.5, fontWeight: '700' as const },
   mealRowMeta: { fontSize: 11, marginTop: 1 },
-  aiBadge: { borderRadius: 8, borderWidth: 1, paddingHorizontal: 7, paddingVertical: 3 },
+  aiBadge: {
+    borderRadius: 8,
+    borderWidth: 1,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+  },
   aiBadgeText: { fontSize: 10, fontWeight: '800' as const },
 
   // Shortcuts
   shortcutGrid: { flexDirection: 'row' as const, gap: 9, marginBottom: 8 },
-  shortcutTile: { flex: 1, borderRadius: 16, borderWidth: 1, paddingVertical: 12, paddingHorizontal: 6, alignItems: 'center' as const },
-  shortcutEmoji: { fontSize: 19 },
-  shortcutLabel: { fontSize: 10.5, fontWeight: '700' as const, marginTop: 3, textAlign: 'center' as const },
+  shortcutTile: {
+    flex: 1,
+    borderRadius: 16,
+    borderWidth: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 6,
+    alignItems: 'center' as const,
+    gap: 4,
+  },
+  shortcutLabel: {
+    fontSize: 10.5,
+    fontWeight: '700' as const,
+    textAlign: 'center' as const,
+  },
 
   disabledButton: { opacity: 0.6 },
 }));
-
