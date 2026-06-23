@@ -75,7 +75,7 @@ export function ScreenShell({
   }, [fade, translate]);
 
   const content = (
-    <Animated.View style={[styles.inner, isDesktop && styles.innerDesktop, contentStyle, { opacity: fade, transform: [{ translateY: translate }] }]}>
+    <Animated.View style={[styles.inner, !scroll && styles.innerFlex, isDesktop && styles.innerDesktop, contentStyle, { opacity: fade, transform: [{ translateY: translate }] }]}>
       {children}
     </Animated.View>
   );
@@ -416,6 +416,9 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 1120,
     alignSelf: 'center',
+  },
+  innerFlex: {
+    flex: 1,
   },
   innerDesktop: {
     paddingHorizontal: 8,
