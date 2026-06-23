@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react';
 import {
   Animated,
+  Platform,
   StyleSheet,
   TextInputProps,
   View,
@@ -65,7 +66,7 @@ export function UiInput({ label, containerStyle, error, style, ...rest }: UiInpu
       >
         <TextInput
           {...rest}
-          style={[styles.input, { color: colors.text }, style]}
+          style={[styles.input, { color: colors.text }, Platform.OS === 'web' && ({ outlineWidth: 0 } as any), style]}
           placeholder={typeof rest.placeholder === 'string' ? tx(rest.placeholder) : rest.placeholder}
           placeholderTextColor={colors.textMuted}
           onFocus={handleFocus}

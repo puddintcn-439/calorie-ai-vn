@@ -93,6 +93,7 @@ export function UiButton({
     { borderRadius: radii.lg },
     variantStyle[variant],
     (disabled || loading) && styles.disabled,
+    Platform.OS === 'web' && ({ outlineWidth: 0 } as any),
     style,
   ];
 
