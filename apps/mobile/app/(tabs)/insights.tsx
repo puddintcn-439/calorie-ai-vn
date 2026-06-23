@@ -68,7 +68,7 @@ export default function InsightsScreen() {
 
   return (
     <ScreenShell scroll={false} reserveBottomNav={false}>
-      <ScrollView contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomContentPadding }]}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomContentPadding }]}>
         <Eyebrow>screen.tabs.insights.eyebrow</Eyebrow>
         <HeroTitle>screen.tabs.insights.title</HeroTitle>
         <BodyText style={styles.periodText}>{data.period}</BodyText>
