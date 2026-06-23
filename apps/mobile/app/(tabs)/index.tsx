@@ -1484,6 +1484,29 @@ export default function DashboardScreen() {
         </SurfaceCard>
       )}
 
+      {/* 6.5 Today's plan — roadmap tick-box list */}
+      {hasRoadmapPlan && (
+        <SurfaceCard revealDelay={130} style={{ borderRadius: 20 }}>
+          <View style={styles.roadmapHeader}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>
+              {t('screen.tabs.index.plan.title')}
+            </Text>
+            <Text style={[styles.roadmapCounter, { color: colors.textMuted }]}>
+              {remainingRoadmapItems.length}/{activeRoadmapItems.length}
+            </Text>
+          </View>
+          {visibleRoadmapItems.map((item, idx) => (
+            <RoadmapRow
+              key={item.id}
+              item={item}
+              isLast={idx === visibleRoadmapItems.length - 1}
+              updating={updatingRoadmapId === item.id}
+              onToggle={() => { void toggleRoadmapItem(item); }}
+            />
+          ))}
+        </SurfaceCard>
+      )}
+
       {/* 7. Next step dark card */}
       <NextStepDarkCard
         kind={nextAction.kind}
@@ -1522,6 +1545,19 @@ export default function DashboardScreen() {
           icon="restaurant-outline"
           title="screen.tabs.index.title.001"
           description="screen.tabs.index.description.001"
+        />
+      )}
+
+      {/* 9a. Coach bridge — compact */}
+      <CompactCoachCard bridge={coachBridge} />
+
+      {/* 9b. Health score — compact, only when backend data available */}
+      {healthScore && (
+        <CompactHealthScoreCard
+          score={healthScore}
+          breakdown={healthScoreBreakdown.slice(0, 3)}
+          trendText={healthTrendText}
+          trendTone={healthTrendTone}
         />
       )}
 
@@ -1870,6 +1906,153 @@ function ShortcutTile({
   );
 }
 
+function RoadmapRow({
+  item,
+  isLast,
+  updating,
+  onToggle,
+}: {
+  item: DailyRoadmapItem;
+  isLast: boolean;
+  updating: boolean;
+  onToggle: () => void;
+}) {
+  const { colors } = useAppTheme();
+  const { t } = useI18n();
+  return (
+    <TouchableOpacity
+      style={[styles.roadmapRow, !isLast && { borderBottomWidth: 1, borderBottomColor: colors.borderSubtle }]}
+      onPress={onToggle}
+      disabled={updating}
+      activeOpacity={0.7}
+    >
+      <Ionicons
+        name={item.is_completed ? 'checkmark-circle' : 'ellipse-outline'}
+        size={22}
+        color={item.is_completed ? colors.accentLeaf : colors.borderStrong}
+      />
+      <View style={styles.roadmapRowCopy}>
+        <Text
+          style={[
+            styles.roadmapRowTitle,
+            { color: item.is_completed ? colors.textMuted : colors.text },
+            item.is_completed && { textDecorationLine: 'line-through' as const },
+          ]}
+          numberOfLines={1}
+        >
+          {item.task_title}
+        </Text>
+        {(item.duration_min || item.estimated_kcal) ? (
+          <Text style={[styles.roadmapRowMeta, { color: colors.textDisabled }]}>
+            {t('screen.tabs.index.plan.roadmapMeta', {
+              minutes: item.duration_min ?? 0,
+              kcal: formatNumber(item.estimated_kcal ?? 0),
+            })}
+          </Text>
+        ) : null}
+      </View>
+      <Text style={[styles.roadmapRowAction, { color: item.is_completed ? colors.accentLeaf : colors.textMuted }]}>
+        {item.is_completed
+          ? t('screen.tabs.index.plan.done')
+          : updating ? '...' : t('screen.tabs.index.plan.markDone')}
+      </Text>
+    </TouchableOpacity>
+  );
+}
+
+function CompactCoachCard({ bridge }: { bridge: TodayCoachBridge }) {
+  const { colors } = useAppTheme();
+  const { t } = useI18n();
+  const TONE_BG: Record<TodayCoachBridge['tone'], string> = {
+    good: colors.surfaceSuccess,
+    warn: colors.surfaceWarning,
+    info: colors.surfaceInfo,
+  };
+  const TONE_ICON_COLOR: Record<TodayCoachBridge['tone'], string> = {
+    good: colors.accentLeaf,
+    warn: colors.accentAmber,
+    info: colors.accentCyan,
+  };
+  return (
+    <SurfaceCard revealDelay={200} style={{ borderRadius: 20 }}>
+      <View style={styles.coachRow}>
+        <View style={[styles.coachIconBox, { backgroundColor: TONE_BG[bridge.tone] }]}>
+          <Ionicons name="chatbubble-ellipses-outline" size={18} color={TONE_ICON_COLOR[bridge.tone]} />
+        </View>
+        <View style={styles.coachCopy}>
+          <Text style={[styles.coachEyebrow, { color: colors.accentCyan }]}>
+            {t('screen.tabs.index.coach.eyebrow')}
+          </Text>
+          <Text style={[styles.coachTitle, { color: colors.text }]} numberOfLines={1}>
+            {bridge.title}
+          </Text>
+          <Text style={[styles.coachBody, { color: colors.textMuted }]} numberOfLines={2}>
+            {bridge.body}
+          </Text>
+        </View>
+        <TouchableOpacity
+          style={[styles.coachButton, { backgroundColor: colors.accentPrimary }]}
+          onPress={() => router.push('/coach' as never)}
+        >
+          <Ionicons name="arrow-forward" size={16} color={colors.textOnAccent} />
+        </TouchableOpacity>
+      </View>
+    </SurfaceCard>
+  );
+}
+
+function CompactHealthScoreCard({
+  score,
+  breakdown,
+  trendText,
+  trendTone,
+}: {
+  score: NonNullable<ReturnType<typeof useAppTheme> extends never ? never : any>;
+  breakdown: { key: string; label: string; value: number }[];
+  trendText: string;
+  trendTone: 'good' | 'warn' | 'neutral';
+}) {
+  const { colors } = useAppTheme();
+  const { t } = useI18n();
+  const TREND_COLOR: Record<string, string> = {
+    good: colors.accentLeaf,
+    warn: colors.accentCoral,
+    neutral: colors.textMuted,
+  };
+  const overall = safeNumber(score.overall);
+  return (
+    <SurfaceCard revealDelay={220} style={{ borderRadius: 20 }}>
+      <View style={styles.healthRow}>
+        <View style={styles.healthScoreCircle}>
+          <Text style={[styles.healthScoreValue, { color: colors.text }]}>{formatNumber(overall)}</Text>
+          <Text style={[styles.healthScoreMax, { color: colors.textDisabled }]}>/100</Text>
+        </View>
+        <View style={styles.healthRight}>
+          <Text style={[styles.healthEyebrow, { color: colors.accentCyan }]}>
+            {t('screen.tabs.index.health.eyebrow')}
+          </Text>
+          <Text style={[styles.healthTrend, { color: TREND_COLOR[trendTone] }]} numberOfLines={1}>
+            {trendText}
+          </Text>
+          <View style={styles.healthBarsRow}>
+            {breakdown.map((item) => (
+              <View key={item.key} style={styles.healthBarCol}>
+                <View style={[styles.healthBarTrack, { backgroundColor: colors.progressBg }]}>
+                  <View style={[
+                    styles.healthBarFill,
+                    { width: `${Math.round(clampProgress(item.value / 100) * 100)}%` as any, backgroundColor: colors.accentLeaf },
+                  ]} />
+                </View>
+                <Text style={[styles.healthBarLabel, { color: colors.textDisabled }]}>{item.label}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+      </View>
+    </SurfaceCard>
+  );
+}
+
 // --- Styles ---
 
 const styles = createThemedStyles((colors) => ({
@@ -2133,4 +2316,76 @@ const styles = createThemedStyles((colors) => ({
   },
 
   disabledButton: { opacity: 0.6 },
+
+  // Roadmap plan
+  roadmapHeader: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    marginBottom: 10,
+  },
+  roadmapCounter: { fontSize: 12, fontWeight: '700' as const },
+  roadmapRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 12,
+    paddingVertical: 11,
+  },
+  roadmapRowCopy: { flex: 1, minWidth: 0 },
+  roadmapRowTitle: { fontSize: 13.5, fontWeight: '700' as const },
+  roadmapRowMeta: { fontSize: 11, marginTop: 2 },
+  roadmapRowAction: { fontSize: 11.5, fontWeight: '700' as const },
+
+  // Compact coach card
+  coachRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 12,
+  },
+  coachIconBox: {
+    width: 38,
+    height: 38,
+    borderRadius: 13,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    flexShrink: 0,
+  },
+  coachCopy: { flex: 1, minWidth: 0 },
+  coachEyebrow: { fontSize: 10, fontWeight: '700' as const, letterSpacing: 0.5, textTransform: 'uppercase' as const },
+  coachTitle: { fontSize: 13, fontWeight: '800' as const, marginTop: 1 },
+  coachBody: { fontSize: 11.5, marginTop: 2, lineHeight: 16 },
+  coachButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    flexShrink: 0,
+  },
+
+  // Compact health score card
+  healthRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 16,
+  },
+  healthScoreCircle: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: colors.surfaceSuccess,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    flexShrink: 0,
+  },
+  healthScoreValue: { fontSize: 22, fontWeight: '900' as const, lineHeight: 26 },
+  healthScoreMax: { fontSize: 10, fontWeight: '600' as const },
+  healthRight: { flex: 1, minWidth: 0 },
+  healthEyebrow: { fontSize: 10, fontWeight: '700' as const, letterSpacing: 0.5, textTransform: 'uppercase' as const },
+  healthTrend: { fontSize: 11.5, fontWeight: '600' as const, marginTop: 2 },
+  healthBarsRow: { flexDirection: 'row' as const, gap: 8, marginTop: 8 },
+  healthBarCol: { flex: 1 },
+  healthBarTrack: { height: 5, borderRadius: 3, overflow: 'hidden' as const },
+  healthBarFill: { height: '100%' as any, borderRadius: 3 },
+  healthBarLabel: { fontSize: 9.5, fontWeight: '600' as const, marginTop: 3, textAlign: 'center' as const },
 }));
