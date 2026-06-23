@@ -190,9 +190,10 @@ export class BillingController {
 
   private payosWebReturnUrl(query: Record<string, string>) {
     const base = process.env.PAYOS_WEB_RETURN_URL || 'http://localhost:19006/paywall';
-    const url = new URL(base);
-    Object.entries(query).forEach(([key, value]) => url.searchParams.set(key, value));
-    return url.toString();
+    // Use string concat so custom schemes (calorieai://) are supported alongside http(s)
+    const queryString = new URLSearchParams(query).toString();
+    if (!queryString) return base;
+    return base.includes('?') ? `${base}&${queryString}` : `${base}?${queryString}`;
   }
 
   @Post('webhooks/app-store')
