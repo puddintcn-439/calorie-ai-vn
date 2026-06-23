@@ -167,6 +167,7 @@ function buildDailyFocusItems(args: {
   sodiumMg: number;
   sugarG: number;
   activityMinutes: number;
+  movementTargetMinutes: number;
   qualityCoverageItems: number;
   qualityTargets: ReturnType<typeof buildNutritionTargets>;
   goal?: UserGoal;
@@ -182,6 +183,7 @@ function buildDailyFocusItems(args: {
   const sodiumMg = safeNumber(args.sodiumMg);
   const sugarG = safeNumber(args.sugarG);
   const activityMinutes = safeNumber(args.activityMinutes);
+  const movementTargetMinutes = safePositiveNumber(args.movementTargetMinutes, 25);
   const qualityCoverageItems = safeNumber(args.qualityCoverageItems);
   const netKcal = Math.max(0, consumedKcal - burnedKcal);
   const remaining = targetKcal - netKcal;
@@ -220,15 +222,18 @@ function buildDailyFocusItems(args: {
     },
   ];
 
-  if (activityMinutes < 25) {
+  if (activityMinutes < movementTargetMinutes) {
     items.push({
       key: 'movement',
       label: tr('screen.tabs.index.focus.movement.label', locale),
-      value: tr('screen.tabs.index.focus.movement.value', locale, { minutes: formatNumber(activityMinutes) }),
+      value: tr('screen.tabs.index.focus.movement.value', locale, {
+        minutes: formatNumber(activityMinutes),
+        target: formatNumber(movementTargetMinutes),
+      }),
       hint: tr('screen.tabs.index.focus.movement.hint', locale),
       icon: 'walk-outline',
       tone: 'info',
-      progress: clampProgress(activityMinutes / 25),
+      progress: clampProgress(activityMinutes / movementTargetMinutes),
     });
   } else if (qualityCoverageItems > 0 && sodiumMg > args.qualityTargets.sodium_mg_max) {
     items.push({
@@ -579,6 +584,7 @@ type MovementPlan = {
   duration_min: number;
   estimated_kcal: number;
   daily_minutes_target: number;
+  target_guidance: string;
   tone: 'normal' | 'caution' | 'surplus' | 'fuel';
 };
 
@@ -594,28 +600,53 @@ function estimateDurationForBurn(activityType: ActivityType, targetKcal: number,
   return Math.max(10, Math.min(60, roundedToFive));
 }
 
-function pickPreferredActivity(
-  preferences: PreferredActivity[],
+function buildDailyMovementRecommendation(
+  activityLevel: User['activity_level'],
   effectiveGoal: UserGoal,
-  overTarget: number,
-): PreferredActivity | null {
-  if (preferences.length === 0) return null;
+  caution: boolean,
+  locale: Locale,
+) {
+  if (caution) {
+    return {
+      minutes: 15,
+      guidance: tr('screen.tabs.index.movement.guidance.caution', locale, { minutes: 15 }),
+    };
+  }
 
-  const byType = (types: ActivityType[]) => preferences.find((item) => types.includes(item.activity_type as ActivityType));
+  const baseMinutesByLevel: Record<NonNullable<User['activity_level']>, number> = {
+    sedentary: 20,
+    light: 25,
+    moderate: 30,
+    active: 35,
+    very_active: 40,
+  };
+  const baseMinutes = baseMinutesByLevel[activityLevel ?? 'light'];
 
-  if (overTarget > 75) {
-    return [...preferences].sort((a, b) => (ACTIVITY_MET[b.activity_type as ActivityType] ?? 5) - (ACTIVITY_MET[a.activity_type as ActivityType] ?? 5))[0];
+  if (effectiveGoal === 'lose_weight') {
+    const minutes = Math.min(45, baseMinutes + 5);
+    return {
+      minutes,
+      guidance: tr('screen.tabs.index.movement.guidance.loss', locale, { minutes }),
+    };
   }
 
   if (effectiveGoal === 'gain_muscle') {
-    return byType(['gym']) ?? byType(['yoga', 'swimming']) ?? preferences[0];
+    const minutes = Math.max(30, baseMinutes);
+    return {
+      minutes,
+      guidance: tr('screen.tabs.index.movement.guidance.gain', locale, { minutes }),
+    };
   }
 
-  if (effectiveGoal === 'lose_weight') {
-    return byType(['walking', 'running', 'cycling', 'swimming']) ?? preferences[0];
-  }
+  return {
+    minutes: baseMinutes,
+    guidance: tr('screen.tabs.index.movement.guidance.maintain', locale, { minutes: baseMinutes }),
+  };
+}
 
-  return byType(['walking', 'yoga', 'gym']) ?? preferences[0];
+function pickPreferredActivity(preferences: PreferredActivity[]): PreferredActivity | null {
+  if (preferences.length === 0) return null;
+  return preferences[0];
 }
 
 function buildMovementPlan(
@@ -641,18 +672,19 @@ function buildMovementPlan(
     : planDirection === 'gain'
       ? 'gain_muscle'
       : goal;
+  const dailyRecommendation = buildDailyMovementRecommendation(activityLevel, effectiveGoal, caution, locale);
   const safeCompletedMin = safeNumber(completedMin);
   const safeConsumedKcal = safeNumber(consumedKcal);
   const safeBurnedKcal = safeNumber(burnedKcal);
   const safeTargetKcal = safePositiveNumber(targetKcal, 1800);
-  const remainingToBase = Math.max(0, 25 - safeCompletedMin);
+  const remainingToBase = Math.max(0, dailyRecommendation.minutes - safeCompletedMin);
   const netKcal = safeConsumedKcal - safeBurnedKcal;
   const gapToTarget = safeTargetKcal - netKcal;
   const overTarget = Math.max(0, -gapToTarget);
   const surplusBurnTarget = overTarget > 75
     ? Math.min(overTarget, effectiveGoal === 'lose_weight' ? 320 : 220)
     : 0;
-  const preferredActivity = pickPreferredActivity(preferences, effectiveGoal, overTarget);
+  const preferredActivity = pickPreferredActivity(preferences);
 
   let activityType: ActivityType = 'walking';
   let durationMin = remainingToBase > 0 ? Math.max(15, Math.min(30, remainingToBase)) : 15;
@@ -739,7 +771,8 @@ function buildMovementPlan(
     activity_type: activityType,
     duration_min: durationMin,
     estimated_kcal: estimateExerciseCalories(activityType, durationMin, weightKg),
-    daily_minutes_target: 25,
+    daily_minutes_target: dailyRecommendation.minutes,
+    target_guidance: dailyRecommendation.guidance,
     tone,
   };
 }
@@ -840,9 +873,24 @@ export default function DashboardScreen() {
   const burned = activityLogs.reduce((sum, item) => sum + safeNumber(item.calories_burned), 0);
   const activityMinutes = activityLogs.reduce((sum, item) => sum + safeNumber(item.duration_min), 0);
   const target = safePositiveNumber(dailyLog?.target_calories, 1800);
+  const completedActivityPreferenceIds = useMemo(() => {
+    const ids = new Set<string>();
+    activityLogs.forEach((log) => {
+      const match = (log.notes ?? '').match(/^ROADMAP_TASK:([^|]+)\|/);
+      if (match?.[1]) ids.add(match[1]);
+    });
+    return ids;
+  }, [activityLogs]);
+  const movementPreferences = useMemo(() => {
+    const activePreferences = activityPreferences
+      .filter((item) => item.is_active !== false)
+      .sort((a, b) => a.sort_order - b.sort_order);
+    const pendingPreferences = activePreferences.filter((item) => !completedActivityPreferenceIds.has(item.id));
+    return pendingPreferences.length > 0 ? pendingPreferences : activePreferences;
+  }, [activityPreferences, completedActivityPreferenceIds]);
   const movementPlan = useMemo(
-    () => buildMovementPlan(profileMeta, activityPreferences, activityMinutes, consumed, burned, target, locale),
-    [activityMinutes, activityPreferences, burned, consumed, locale, profileMeta, target],
+    () => buildMovementPlan(profileMeta, movementPreferences, activityMinutes, consumed, burned, target, locale),
+    [activityMinutes, burned, consumed, locale, movementPreferences, profileMeta, target],
   );
   const movementPlanCompleted = useMemo(() => {
     if (!movementPlan) return false;
@@ -874,6 +922,7 @@ export default function DashboardScreen() {
     sodiumMg: sodium,
     sugarG: sugar,
     activityMinutes,
+    movementTargetMinutes: movementPlan?.daily_minutes_target ?? 25,
     qualityCoverageItems,
     qualityTargets,
     goal: profileMeta?.goal,
@@ -886,6 +935,7 @@ export default function DashboardScreen() {
     consumed,
     fiber,
     locale,
+    movementPlan?.daily_minutes_target,
     profileMeta?.goal,
     profileMeta?.goal_plan?.direction,
     profileMeta?.weight_kg,
@@ -1736,6 +1786,7 @@ export default function DashboardScreen() {
 
             <Text style={styles.movementCalorieStatus}>{movementPlan.calorie_status}</Text>
             <Text style={styles.movementPlanDetail}>{movementPlan.detail}</Text>
+            <Text style={styles.movementTargetGuidance}>{movementPlan.target_guidance}</Text>
 
             <View style={styles.movementProgressHeader}>
               <Text style={styles.movementProgressLabel} i18nKey="screen.tabs.index.text.015" />
@@ -3058,6 +3109,12 @@ const styles = createThemedStyles((colors, radii) => ({
     color: colors.textSoft,
     fontSize: 12,
     lineHeight: 19,
+  },
+  movementTargetGuidance: {
+    color: colors.text,
+    fontSize: 12,
+    lineHeight: 19,
+    fontWeight: '700',
   },
   movementPlanMeta: {
     color: colors.textMuted,
