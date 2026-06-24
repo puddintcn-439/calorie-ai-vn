@@ -1,4 +1,4 @@
-﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Image,
   Platform,
@@ -37,7 +37,6 @@ import { useInsightsStore } from '../../store/insights.store';
 import { apiClient } from '../../services/api';
 import { estimateExerciseCalories } from '../../services/exercise.service';
 import { formatNumberVi, safeNumber, safePositiveNumber, toFiniteNumber } from '../../services/number-format';
-import { AnimatedIonicon } from '../../components/animated-icon';
 import { RewardToast, RewardToastData } from '../../components/reward-toast';
 import { Text } from '../../components/i18n-text';
 import { Alert } from '../../components/i18n-alert';
@@ -780,7 +779,7 @@ function buildMovementPlan(
 }
 
 export default function DashboardScreen() {
-  const { colors } = useAppTheme();
+  const { colors, mode } = useAppTheme();
   const shownInterventionKeysRef = useRef<Set<string>>(new Set());
   const forecastSnapshotKeysRef = useRef<Set<string>>(new Set());
   const { locale, t } = useI18n();
@@ -1348,6 +1347,8 @@ export default function DashboardScreen() {
   const activeGoalPreset: 'lose' | 'maintain' | 'gain' =
     profileMeta?.goal_plan?.direction === 'loss' ? 'lose' :
     profileMeta?.goal_plan?.direction === 'gain' ? 'gain' : 'maintain';
+  const activePresetBg = mode === 'light' ? colors.text : colors.accentMint;
+  const activePresetText = mode === 'light' ? colors.surface : colors.textOnAccent;
 
   return (
     <ScreenShell contentStyle={styles.screen}>
@@ -1399,7 +1400,7 @@ export default function DashboardScreen() {
       )}
 
       {/* 3. Hero calorie ring */}
-      <SurfaceCard revealDelay={40} style={[styles.heroCard, { padding: 22 }]}>
+      <SurfaceCard revealDelay={40} style={[styles.heroCard, { padding: 26 }]}>
         <CaloriesRingHero consumed={consumed} burned={burned} target={target} />
       </SurfaceCard>
 
@@ -1413,14 +1414,14 @@ export default function DashboardScreen() {
               style={[
                 styles.presetChip,
                 active
-                  ? [styles.presetChipActive, { backgroundColor: colors.surfaceAlt, borderColor: colors.surfaceAlt }]
+                  ? [styles.presetChipActive, { backgroundColor: activePresetBg, borderColor: activePresetBg }]
                   : { backgroundColor: colors.surface, borderColor: colors.borderSubtle },
                 isApplyingTarget && styles.disabledButton,
               ]}
               onPress={() => { void applyGoalPreset(preset); }}
               disabled={isApplyingTarget}
             >
-              <Text style={[styles.presetChipText, { color: active ? colors.accentMint : colors.textSoft }]}>
+              <Text style={[styles.presetChipText, { color: active ? activePresetText : colors.textSoft }]}>
                 {t(`screen.tabs.index.hifi.preset.${preset}` as any)}
               </Text>
             </TouchableOpacity>
@@ -1548,40 +1549,47 @@ export default function DashboardScreen() {
         />
       )}
 
-      {/* 9a. Coach bridge — compact */}
-      <CompactCoachCard bridge={coachBridge} />
-
-      {/* 9b. Health score — compact, only when backend data available */}
-      {healthScore && (
-        <CompactHealthScoreCard
-          score={healthScore}
-          breakdown={healthScoreBreakdown.slice(0, 3)}
-          trendText={healthTrendText}
-          trendTone={healthTrendTone}
-        />
-      )}
+      {/* 9a. Support panel — compact coach + health */}
+      <SurfaceCard revealDelay={200} style={[styles.supportPanel, { borderRadius: 20 }]}>
+        <CompactCoachCard bridge={coachBridge} />
+        {healthScore && (
+          <>
+            <View style={[styles.supportDivider, { backgroundColor: colors.borderSubtle }]} />
+            <CompactHealthScoreCard
+              score={healthScore}
+              breakdown={healthScoreBreakdown.slice(0, 3)}
+              trendText={healthTrendText}
+              trendTone={healthTrendTone}
+            />
+          </>
+        )}
+      </SurfaceCard>
 
       {/* 9. Shortcut tiles */}
       <View style={styles.shortcutGrid}>
         <ShortcutTile
           iconName="trending-up-outline"
+          tone="progress"
           labelKey={'screen.tabs.index.hifi.shortcut.progress' as any}
           onPress={() => router.push('/progress' as never)}
         />
         <ShortcutTile
           iconName="search-outline"
+          tone="insights"
           labelKey={'screen.tabs.index.hifi.shortcut.insights' as any}
           onPress={() => router.push('/insights' as never)}
         />
         <ShortcutTile
           iconName="trophy-outline"
+          tone="achievement"
           labelKey={'screen.tabs.index.hifi.shortcut.achievements' as any}
           onPress={() => router.push('/achievements' as never)}
         />
         <ShortcutTile
           iconName="heart-outline"
+          tone="health"
           labelKey={'screen.tabs.index.hifi.shortcut.health' as any}
-          onPress={() => router.push('/progress' as never)}
+          onPress={() => router.push('/health-sync' as never)}
         />
       </View>
 
@@ -1594,7 +1602,6 @@ export default function DashboardScreen() {
 
 const RING_GRAD_START = '#7cc04f';
 const RING_GRAD_END = '#4f9b6e';
-const NEXT_STEP_GRAD: [string, string] = ['#1d291f', '#27331f'];
 
 function CaloriesRingHero({
   consumed,
@@ -1652,25 +1659,25 @@ function CaloriesRingHero({
       </View>
       <View style={styles.ringHeroMetrics}>
         <HeroMetricRow
-          iconName="restaurant-outline"
+          iconType="intake"
           label={t('screen.tabs.index.hifi.ring.eaten' as any)}
           value={formatNumber(safeConsumed)}
           bg={colors.surfaceSuccess}
           iconColor={colors.accentLeaf}
         />
         <HeroMetricRow
-          iconName="walk-outline"
+          iconType="activity"
           label={t('screen.tabs.index.hifi.ring.activity' as any)}
           value={`+${formatNumber(safeBurned)}`}
           bg={colors.surfaceInfo}
           iconColor={colors.accentCyan}
         />
         <HeroMetricRow
-          iconName="scale-outline"
+          iconType="net"
           label={t('screen.tabs.index.hifi.ring.net' as any)}
           value={formatNumber(net)}
           bg={colors.surfaceWarm}
-          iconColor={colors.accentAmber}
+          iconColor={colors.textSoft}
         />
       </View>
     </View>
@@ -1678,13 +1685,13 @@ function CaloriesRingHero({
 }
 
 function HeroMetricRow({
-  iconName,
+  iconType,
   label,
   value,
   bg,
   iconColor,
 }: {
-  iconName: keyof typeof Ionicons.glyphMap;
+  iconType: 'intake' | 'activity' | 'net';
   label: string;
   value: string;
   bg: string;
@@ -1694,7 +1701,7 @@ function HeroMetricRow({
   return (
     <View style={styles.heroMetric}>
       <View style={[styles.heroMetricIconBox, { backgroundColor: bg }]}>
-        <Ionicons name={iconName} size={16} color={iconColor} />
+        <HeroMetricIcon type={iconType} color={iconColor} />
       </View>
       <View>
         <Text style={[styles.heroMetricLabel, { color: colors.textMuted }]}>{label}</Text>
@@ -1702,6 +1709,12 @@ function HeroMetricRow({
       </View>
     </View>
   );
+}
+
+function HeroMetricIcon({ type, color }: { type: 'intake' | 'activity' | 'net'; color: string }) {
+  const iconName: keyof typeof Ionicons.glyphMap =
+    type === 'intake' ? 'restaurant-outline' : type === 'activity' ? 'walk-outline' : 'scale-outline';
+  return <Ionicons name={iconName} size={19} color={color} />;
 }
 
 function MacroBarCard({
@@ -1767,7 +1780,7 @@ const NEXT_STEP_ICON_MAP: Record<string, keyof typeof Ionicons.glyphMap> = {
   scan: 'camera-outline',
   movement: 'walk-outline',
   nudge: 'bulb-outline',
-  log: 'checkmark-circle-outline',
+  log: 'checkmark-circle',
 };
 
 function NextStepDarkCard({
@@ -1787,40 +1800,47 @@ function NextStepDarkCard({
   completed: boolean;
   onPress: () => void;
 }) {
+  const { colors, mode } = useAppTheme();
   const { t } = useI18n();
   const iconName = NEXT_STEP_ICON_MAP[kind] ?? 'bulb-outline';
   const isDone = kind === 'movement' && completed;
   const isDisabled = kind === 'movement' && (isLogging || completed);
+  const cardGradient: [string, string] = mode === 'dark'
+    ? [colors.surfaceAlt, colors.surfacePressed]
+    : [colors.text, colors.accentCyan];
+  const secondaryText = mode === 'dark' ? colors.textSoft : colors.surfaceMuted;
 
   return (
     <LinearGradient
-      colors={NEXT_STEP_GRAD}
+      colors={cardGradient}
       start={{ x: 0.3, y: 0 }}
       end={{ x: 1, y: 1 }}
       style={styles.nextStepCard}
     >
       <View style={styles.nextStepRow}>
-        <View style={styles.nextStepIconWrap}>
-          <Ionicons name={iconName} size={20} color="#b9df78" />
+        <View style={[styles.nextStepIconWrap, { backgroundColor: mode === 'dark' ? colors.surfaceSuccess : colors.surfaceAlt }]}>
+          <Ionicons name={iconName} size={20} color={colors.accentMint} />
         </View>
         <View style={styles.nextStepCopy}>
-          <Text style={styles.nextStepEyebrow}>
+          <Text style={[styles.nextStepEyebrow, { color: colors.accentMint }]}>
             {t('screen.tabs.index.hifi.nextstep.eyebrow' as any)}
           </Text>
-          <Text style={styles.nextStepTitle}>{title}</Text>
-          <Text style={styles.nextStepBody}>{body}</Text>
+          <Text style={[styles.nextStepTitle, { color: mode === 'dark' ? colors.text : colors.surface }]}>{title}</Text>
+          <Text style={[styles.nextStepBody, { color: secondaryText }]}>{body}</Text>
         </View>
       </View>
       <TouchableOpacity
         style={[
           styles.nextStepButton,
+          { backgroundColor: colors.accentMint },
           isDone && styles.nextStepButtonDone,
+          isDone && { backgroundColor: mode === 'dark' ? colors.surfaceSuccess : colors.surfaceAlt },
           isDisabled && styles.disabledButton,
         ]}
         onPress={onPress}
         disabled={isDisabled}
       >
-        <Text style={[styles.nextStepButtonText, isDone && styles.nextStepButtonTextDone]}>
+        <Text style={[styles.nextStepButtonText, { color: colors.textOnAccent }, isDone && { color: colors.accentMint }]}>
           {isDone
             ? t('screen.tabs.index.hifi.nextstep.done' as any)
             : primaryLabel}
@@ -1852,10 +1872,10 @@ function MealListRow({ log, isLast }: { log: FoodLog; isLast: boolean }) {
     snack: colors.surfaceMuted,
   };
   const MEAL_ICON_COLOR: Record<MealType, string> = {
-    breakfast: colors.accentLeaf,
-    lunch: colors.accentCyan,
-    dinner: colors.accentAmber,
-    snack: colors.textMuted,
+    breakfast: colors.accentAmber,
+    lunch: colors.accentAmber,
+    dinner: colors.accentCyan,
+    snack: colors.textSoft,
   };
 
   return (
@@ -1875,6 +1895,7 @@ function MealListRow({ log, isLast }: { log: FoodLog; isLast: boolean }) {
       </View>
       {isAi && (
         <View style={[styles.aiBadge, { backgroundColor: colors.surfaceSuccess, borderColor: colors.borderSuccess }]}>
+          <Ionicons name="sparkles-outline" size={10} color={colors.accentLeaf} />
           <Text style={[styles.aiBadgeText, { color: colors.accentLeaf }]}>
             {t('screen.tabs.index.hifi.meals.aiBadge' as any)}
           </Text>
@@ -1886,21 +1907,33 @@ function MealListRow({ log, isLast }: { log: FoodLog; isLast: boolean }) {
 
 function ShortcutTile({
   iconName,
+  tone,
   labelKey,
   onPress,
 }: {
   iconName: keyof typeof Ionicons.glyphMap;
+  tone: 'progress' | 'insights' | 'achievement' | 'health';
   labelKey: any;
   onPress: () => void;
 }) {
   const { colors } = useAppTheme();
   const { t } = useI18n();
+  const toneMap: Record<typeof tone, { bg: string; icon: string }> = {
+    progress: { bg: colors.surfaceSuccess, icon: colors.accentLeaf },
+    insights: { bg: colors.surfaceInfo, icon: colors.accentCyan },
+    achievement: { bg: colors.surfaceWarning, icon: colors.accentAmber },
+    health: { bg: colors.surfaceSuccess, icon: colors.accentLeaf },
+  };
+  const toneStyle = toneMap[tone];
   return (
     <TouchableOpacity
       style={[styles.shortcutTile, { backgroundColor: colors.surface, borderColor: colors.borderSubtle }]}
       onPress={onPress}
+      activeOpacity={0.78}
     >
-      <Ionicons name={iconName} size={20} color={colors.accentCyan} />
+      <View style={[styles.shortcutIconBubble, { backgroundColor: toneStyle.bg }]}>
+        <Ionicons name={iconName} size={18} color={toneStyle.icon} />
+      </View>
       <Text style={[styles.shortcutLabel, { color: colors.textSoft }]}>{t(labelKey)}</Text>
     </TouchableOpacity>
   );
@@ -1974,30 +2007,28 @@ function CompactCoachCard({ bridge }: { bridge: TodayCoachBridge }) {
     info: colors.accentCyan,
   };
   return (
-    <SurfaceCard revealDelay={200} style={{ borderRadius: 20 }}>
-      <View style={styles.coachRow}>
-        <View style={[styles.coachIconBox, { backgroundColor: TONE_BG[bridge.tone] }]}>
-          <Ionicons name="chatbubble-ellipses-outline" size={18} color={TONE_ICON_COLOR[bridge.tone]} />
-        </View>
-        <View style={styles.coachCopy}>
-          <Text style={[styles.coachEyebrow, { color: colors.accentCyan }]}>
-            {t('screen.tabs.index.coach.eyebrow')}
-          </Text>
-          <Text style={[styles.coachTitle, { color: colors.text }]} numberOfLines={1}>
-            {bridge.title}
-          </Text>
-          <Text style={[styles.coachBody, { color: colors.textMuted }]} numberOfLines={2}>
-            {bridge.body}
-          </Text>
-        </View>
-        <TouchableOpacity
-          style={[styles.coachButton, { backgroundColor: colors.accentPrimary }]}
-          onPress={() => router.push('/coach' as never)}
-        >
-          <Ionicons name="arrow-forward" size={16} color={colors.textOnAccent} />
-        </TouchableOpacity>
+    <View style={styles.coachRow}>
+      <View style={[styles.coachIconBox, { backgroundColor: TONE_BG[bridge.tone] }]}>
+        <Ionicons name="chatbubble-ellipses-outline" size={18} color={TONE_ICON_COLOR[bridge.tone]} />
       </View>
-    </SurfaceCard>
+      <View style={styles.coachCopy}>
+        <Text style={[styles.coachEyebrow, { color: colors.accentCyan }]}>
+          {t('screen.tabs.index.coach.eyebrow')}
+        </Text>
+        <Text style={[styles.coachTitle, { color: colors.text }]} numberOfLines={1}>
+          {bridge.title}
+        </Text>
+        <Text style={[styles.coachBody, { color: colors.textMuted }]} numberOfLines={2}>
+          {bridge.body}
+        </Text>
+      </View>
+      <TouchableOpacity
+        style={[styles.coachButton, { backgroundColor: colors.accentPrimary }]}
+        onPress={() => router.push('/coach' as never)}
+      >
+        <Ionicons name="arrow-forward" size={16} color={colors.textOnAccent} />
+      </TouchableOpacity>
+    </View>
   );
 }
 
@@ -2021,35 +2052,33 @@ function CompactHealthScoreCard({
   };
   const overall = safeNumber(score.overall);
   return (
-    <SurfaceCard revealDelay={220} style={{ borderRadius: 20 }}>
-      <View style={styles.healthRow}>
-        <View style={styles.healthScoreCircle}>
-          <Text style={[styles.healthScoreValue, { color: colors.text }]}>{formatNumber(overall)}</Text>
-          <Text style={[styles.healthScoreMax, { color: colors.textDisabled }]}>/100</Text>
-        </View>
-        <View style={styles.healthRight}>
-          <Text style={[styles.healthEyebrow, { color: colors.accentCyan }]}>
-            {t('screen.tabs.index.health.eyebrow')}
-          </Text>
-          <Text style={[styles.healthTrend, { color: TREND_COLOR[trendTone] }]} numberOfLines={1}>
-            {trendText}
-          </Text>
-          <View style={styles.healthBarsRow}>
-            {breakdown.map((item) => (
-              <View key={item.key} style={styles.healthBarCol}>
-                <View style={[styles.healthBarTrack, { backgroundColor: colors.progressBg }]}>
-                  <View style={[
-                    styles.healthBarFill,
-                    { width: `${Math.round(clampProgress(item.value / 100) * 100)}%` as any, backgroundColor: colors.accentLeaf },
-                  ]} />
-                </View>
-                <Text style={[styles.healthBarLabel, { color: colors.textDisabled }]}>{item.label}</Text>
+    <View style={styles.healthRow}>
+      <View style={styles.healthScoreCircle}>
+        <Text style={[styles.healthScoreValue, { color: colors.text }]}>{formatNumber(overall)}</Text>
+        <Text style={[styles.healthScoreMax, { color: colors.textDisabled }]}>/100</Text>
+      </View>
+      <View style={styles.healthRight}>
+        <Text style={[styles.healthEyebrow, { color: colors.accentCyan }]}>
+          {t('screen.tabs.index.health.eyebrow')}
+        </Text>
+        <Text style={[styles.healthTrend, { color: TREND_COLOR[trendTone] }]} numberOfLines={1}>
+          {trendText}
+        </Text>
+        <View style={styles.healthBarsRow}>
+          {breakdown.map((item) => (
+            <View key={item.key} style={styles.healthBarCol}>
+              <View style={[styles.healthBarTrack, { backgroundColor: colors.progressBg }]}>
+                <View style={[
+                  styles.healthBarFill,
+                  { width: `${Math.round(clampProgress(item.value / 100) * 100)}%` as any, backgroundColor: colors.accentLeaf },
+                ]} />
               </View>
-            ))}
-          </View>
+              <Text style={[styles.healthBarLabel, { color: colors.textDisabled }]}>{item.label}</Text>
+            </View>
+          ))}
         </View>
       </View>
-    </SurfaceCard>
+    </View>
   );
 }
 
@@ -2107,13 +2136,14 @@ const styles = createThemedStyles((colors) => ({
   bannerButtonText: { fontSize: 12, fontWeight: '800' as const },
 
   // Hero card
-  heroCard: { marginBottom: 12, borderRadius: 28 },
+  heroCard: { marginBottom: 16, borderRadius: 28 },
 
   // Ring hero
   ringHeroRow: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    gap: 20,
+    justifyContent: 'space-between' as const,
+    gap: 24,
   },
   ringHeroCenter: {
     position: 'absolute' as const,
@@ -2136,29 +2166,29 @@ const styles = createThemedStyles((colors) => ({
     marginTop: 2,
     textAlign: 'center' as const,
   },
-  ringHeroMetrics: { flex: 1, gap: 11 },
+  ringHeroMetrics: { flex: 1, gap: 13 },
   heroMetric: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     gap: 10,
   },
   heroMetricIconBox: {
-    width: 34,
-    height: 34,
-    borderRadius: 12,
+    width: 38,
+    height: 38,
+    borderRadius: 13,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
-  heroMetricLabel: { fontSize: 11, fontWeight: '600' as const },
-  heroMetricValue: { fontSize: 16, fontWeight: '800' as const },
+  heroMetricLabel: { fontSize: 12, fontWeight: '600' as const },
+  heroMetricValue: { fontSize: 18, fontWeight: '800' as const, lineHeight: 22 },
 
   // Preset chips
-  presetRow: { flexDirection: 'row' as const, gap: 8, marginBottom: 12 },
+  presetRow: { flexDirection: 'row' as const, gap: 10, marginBottom: 18 },
   presetChip: {
     flex: 1,
-    borderRadius: 14,
+    borderRadius: 16,
     borderWidth: 1,
-    paddingVertical: 9,
+    paddingVertical: 12,
     paddingHorizontal: 4,
     alignItems: 'center' as const,
   },
@@ -2170,10 +2200,10 @@ const styles = createThemedStyles((colors) => ({
   },
 
   // Macro bars
-  macroBarRow: { flexDirection: 'row' as const, gap: 10, marginBottom: 12 },
-  macroBarCard: { flex: 1, borderRadius: 20, borderWidth: 1, padding: 13 },
-  macroBarLabel: { fontSize: 11, fontWeight: '700' as const },
-  macroBarValue: { fontSize: 17, fontWeight: '800' as const, marginVertical: 3 },
+  macroBarRow: { flexDirection: 'row' as const, gap: 12, marginBottom: 16 },
+  macroBarCard: { flex: 1, borderRadius: 20, borderWidth: 1, padding: 16, minHeight: 96 },
+  macroBarLabel: { fontSize: 12, fontWeight: '700' as const },
+  macroBarValue: { fontSize: 22, fontWeight: '800' as const, marginTop: 4, marginBottom: 8, lineHeight: 26 },
   macroBarGoal: { fontSize: 11, fontWeight: '600' as const },
   macroBarTrack: { height: 6, borderRadius: 3, overflow: 'hidden' as const },
   macroBarFill: { height: '100%' as any, borderRadius: 3 },
@@ -2207,9 +2237,9 @@ const styles = createThemedStyles((colors) => ({
     padding: 18,
     marginBottom: 12,
     ...(Platform.OS === 'web'
-      ? ({ boxShadow: '0 18px 38px rgba(20,32,24,.22)' } as any)
+      ? ({ boxShadow: `0 18px 38px ${colors.shadow}38` } as any)
       : {
-          shadowColor: '#142018',
+          shadowColor: colors.shadow,
           shadowOpacity: 0.22,
           shadowRadius: 19,
           shadowOffset: { width: 0, height: 9 },
@@ -2226,7 +2256,7 @@ const styles = createThemedStyles((colors) => ({
     width: 42,
     height: 42,
     borderRadius: 14,
-    backgroundColor: 'rgba(185,223,120,.18)',
+    backgroundColor: colors.surfaceAlt,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
@@ -2236,30 +2266,30 @@ const styles = createThemedStyles((colors) => ({
     fontWeight: '700' as const,
     letterSpacing: 0.5,
     textTransform: 'uppercase' as const,
-    color: '#b9df78',
+    color: colors.accentMint,
   },
   nextStepTitle: {
     fontSize: 13.5,
     fontWeight: '600' as const,
-    color: '#f3f5ee',
+    color: colors.text,
     marginTop: 3,
     lineHeight: 19,
   },
-  nextStepBody: { fontSize: 12, color: '#c5cec3', marginTop: 2, lineHeight: 17 },
+  nextStepBody: { fontSize: 12, color: colors.textSoft, marginTop: 2, lineHeight: 17 },
   nextStepButton: {
     height: 42,
     borderRadius: 14,
-    backgroundColor: '#b9df78',
+    backgroundColor: colors.accentMint,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
   },
-  nextStepButtonDone: { backgroundColor: 'rgba(185,223,120,.18)' },
+  nextStepButtonDone: {},
   nextStepButtonText: {
     fontSize: 13.5,
     fontWeight: '800' as const,
-    color: '#16200f',
+    color: colors.textOnAccent,
   },
-  nextStepButtonTextDone: { color: '#b9df78' },
+  nextStepButtonTextDone: {},
 
   // Section header
   sectionHeader: {
@@ -2291,6 +2321,9 @@ const styles = createThemedStyles((colors) => ({
   mealRowName: { fontSize: 13.5, fontWeight: '700' as const },
   mealRowMeta: { fontSize: 11, marginTop: 1 },
   aiBadge: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 3,
     borderRadius: 8,
     borderWidth: 1,
     paddingHorizontal: 7,
@@ -2304,10 +2337,18 @@ const styles = createThemedStyles((colors) => ({
     flex: 1,
     borderRadius: 16,
     borderWidth: 1,
-    paddingVertical: 12,
+    paddingTop: 11,
+    paddingBottom: 10,
     paddingHorizontal: 6,
     alignItems: 'center' as const,
-    gap: 4,
+    gap: 6,
+  },
+  shortcutIconBubble: {
+    width: 30,
+    height: 30,
+    borderRadius: 12,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
   shortcutLabel: {
     fontSize: 10.5,
@@ -2316,6 +2357,15 @@ const styles = createThemedStyles((colors) => ({
   },
 
   disabledButton: { opacity: 0.6 },
+
+  supportPanel: {
+    marginTop: 16,
+    marginBottom: 12,
+  },
+  supportDivider: {
+    height: 1,
+    marginVertical: 14,
+  },
 
   // Roadmap plan
   roadmapHeader: {
