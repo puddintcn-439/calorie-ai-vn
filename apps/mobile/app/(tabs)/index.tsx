@@ -1,13 +1,15 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Image,
+  Platform,
   TouchableOpacity,
   useWindowDimensions,
   View
 } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import Svg, { Circle } from 'react-native-svg';
+import Svg, { Circle, Defs, LinearGradient as SvgLinearGradient, Stop } from 'react-native-svg';
+import { LinearGradient } from 'expo-linear-gradient';
 import {
   ACTIVITY_MET,
   ActivityLog,
@@ -35,7 +37,6 @@ import { useInsightsStore } from '../../store/insights.store';
 import { apiClient } from '../../services/api';
 import { estimateExerciseCalories } from '../../services/exercise.service';
 import { formatNumberVi, safeNumber, safePositiveNumber, toFiniteNumber } from '../../services/number-format';
-import { AnimatedIonicon } from '../../components/animated-icon';
 import { RewardToast, RewardToastData } from '../../components/reward-toast';
 import { Text } from '../../components/i18n-text';
 import { Alert } from '../../components/i18n-alert';
@@ -451,7 +452,7 @@ function formatQuickGoalLabel(option: QuickGoalOption, locale: Locale) {
   return tr(option.labelKey, locale);
 }
 
-type DashboardProfileMeta = Pick<User, 'age' | 'gender' | 'height_cm' | 'weight_kg' | 'health_flags' | 'activity_level' | 'goal_plan' | 'daily_calorie_target' | 'goal'>;
+type DashboardProfileMeta = Pick<User, 'age' | 'gender' | 'height_cm' | 'weight_kg' | 'health_flags' | 'activity_level' | 'goal_plan' | 'daily_calorie_target' | 'goal' | 'full_name'>;
 
 function goalFromQuickOption(type: QuickGoalOption['type']): UserGoal {
   if (type === 'loss') return 'lose_weight';
@@ -778,7 +779,7 @@ function buildMovementPlan(
 }
 
 export default function DashboardScreen() {
-  const { colors } = useAppTheme();
+  const { colors, mode } = useAppTheme();
   const shownInterventionKeysRef = useRef<Set<string>>(new Set());
   const forecastSnapshotKeysRef = useRef<Set<string>>(new Set());
   const { locale, t } = useI18n();
@@ -808,6 +809,7 @@ export default function DashboardScreen() {
   const [reward, setReward] = useState<RewardToastData | null>(null);
   const [reminderEffectiveness, setReminderEffectiveness] = useState<ReminderEffectivenessSummary | null>(null);
   const [behaviorMemory, setBehaviorMemory] = useState<BehaviorMemory | null>(null);
+  const [bannerDismissed, setBannerDismissed] = useState(false);
 
   const fetchProfileMeta = useCallback(async () => {
     const res = await apiClient.get<User>('/user/profile');
@@ -821,6 +823,7 @@ export default function DashboardScreen() {
       goal_plan: res.data.goal_plan,
       daily_calorie_target: res.data.daily_calorie_target,
       goal: res.data.goal,
+      full_name: res.data.full_name,
     });
   }, []);
 
@@ -856,6 +859,7 @@ export default function DashboardScreen() {
         goal_plan: todaySummary.profile.goal_plan,
         daily_calorie_target: todaySummary.profile.daily_calorie_target,
         goal: todaySummary.profile.goal,
+        full_name: (todaySummary.profile as any).full_name,
       });
     }
   }, [todaySummary?.profile]);
@@ -1183,6 +1187,44 @@ export default function DashboardScreen() {
     }
   }
 
+  const GOAL_PRESET_KEYS: Record<'lose' | 'maintain' | 'gain', string> = {
+    lose: 'loss_0.5',
+    maintain: 'maintain',
+    gain: 'gain_0.25',
+  };
+
+  async function applyGoalPreset(preset: 'lose' | 'maintain' | 'gain') {
+    const option = QUICK_GOAL_OPTIONS.find((o) => o.key === GOAL_PRESET_KEYS[preset]) ?? QUICK_GOAL_OPTIONS[3];
+    setIsApplyingTarget(true);
+    try {
+      const res = await apiClient.patch<User>('/user/profile', {
+        goal: goalFromQuickOption(option.type),
+        goal_plan: buildQuickGoalPlan(option),
+      });
+      setProfileMeta({
+        age: res.data.age,
+        gender: res.data.gender,
+        height_cm: res.data.height_cm,
+        weight_kg: res.data.weight_kg,
+        health_flags: res.data.health_flags,
+        activity_level: res.data.activity_level,
+        goal_plan: res.data.goal_plan,
+        daily_calorie_target: res.data.daily_calorie_target,
+        goal: res.data.goal,
+        full_name: res.data.full_name,
+      });
+      await Promise.all([
+        fetchDailyLog(),
+        fetchRecommendations().catch(() => {}),
+        fetchWeeklyInsights().catch(() => {}),
+      ]);
+    } catch {
+      // silently fail â€” ring stays at current target
+    } finally {
+      setIsApplyingTarget(false);
+    }
+  }
+
   const movementProgressPct = movementPlan
     ? clampProgress(activityMinutes / Math.max(safeNumber(movementPlan.daily_minutes_target), 1)) * 100
     : 0;
@@ -1285,2267 +1327,1115 @@ export default function DashboardScreen() {
     router.push('/log' as never);
   };
 
+
+  // Header date: use Intl to avoid hardcoded locale strings in source
+  const todayDateObj = new Date();
+  const intlLocale = locale === 'vi' ? 'vi-VN' : 'en-US';
+  const headerDateLabel = new Intl.DateTimeFormat(intlLocale, {
+    weekday: 'long', day: 'numeric', month: 'numeric',
+  }).format(todayDateObj);
+
+  // User first name (last word of full_name = Vietnamese given name)
+  const firstName = profileMeta?.full_name?.trim().split(/\s+/).pop() ?? '';
+
+  // Macro targets derived from calorie target
+  const proteinTargetG = buildProteinTarget(profileMeta?.goal, profileMeta?.goal_plan?.direction, profileMeta?.weight_kg);
+  const carbsTargetG = Math.round((target * 0.5) / 4);
+  const fatTargetG = Math.round((target * 0.25) / 9);
+
+  // Active preset from user saved goal plan direction
+  const activeGoalPreset: 'lose' | 'maintain' | 'gain' =
+    profileMeta?.goal_plan?.direction === 'loss' ? 'lose' :
+    profileMeta?.goal_plan?.direction === 'gain' ? 'gain' : 'maintain';
+  const activePresetBg = mode === 'light' ? colors.text : colors.accentMint;
+  const activePresetText = mode === 'light' ? colors.surface : colors.textOnAccent;
+
   return (
-    <ScreenShell contentStyle={[styles.screen, isCompact && styles.screenCompact]}>
-      <View style={[styles.headerRow, isCompact && styles.headerRowCompact]}>
-        <View style={styles.headerCopy}>
-          <Eyebrow>{t('screen.tabs.index.hero.eyebrow')}</Eyebrow>
-          <Text style={[styles.dashboardTitle, isCompact && styles.dashboardTitleCompact]}>
-            {t('screen.tabs.index.hero.title')}
+    <ScreenShell contentStyle={styles.screen}>
+
+      {/* 1. Header */}
+      <View style={styles.headerRow}>
+        <View style={styles.headerLeft}>
+          <Text style={[styles.headerDate, { color: colors.accentCyan }]}>{headerDateLabel}</Text>
+          <Text style={[styles.headerGreeting, { color: colors.text }]}>
+            {firstName
+              ? t('screen.tabs.index.hifi.header.greeting' as any, { name: firstName })
+              : t('screen.tabs.index.hero.title')}
           </Text>
-          <BodyText style={[styles.heroBody, isCompact && styles.heroBodyCompact]}>
-            {t('screen.tabs.index.hero.body')}
-          </BodyText>
         </View>
-        <TouchableOpacity style={[styles.streakPill, isCompact && styles.streakPillCompact]} onPress={() => router.push('/achievements' as never)}>
-          <AnimatedIonicon name="flame" size={16} color={colors.accentAmber} motion="pulse" />
-          <Text style={styles.streakText}>
-            {t('screen.tabs.index.streak.days', { days: formatNumber(displayStreak) })}
-          </Text>
+        <TouchableOpacity
+          style={[styles.streakPill, { backgroundColor: colors.surface, borderColor: colors.borderSubtle }]}
+          onPress={() => router.push('/achievements' as never)}
+        >
+          <Ionicons name="flame" size={13} color={colors.accentAmber} />
+          <Text style={[styles.streakText, { color: colors.text }]}> {displayStreak}</Text>
         </TouchableOpacity>
       </View>
 
-      <SurfaceCard revealDelay={70} style={[
-        styles.nextActionCard,
-        isCompact && styles.nextActionCardCompact,
-        nextAction.tone === 'good' && styles.nextActionCardGood,
-        nextAction.tone === 'warn' && styles.nextActionCardWarn,
-      ]}>
-        <View style={[styles.nextActionIconWrap, isCompact && styles.nextActionIconWrapCompact]}>
+      {/* 2. Safety banner — only when profile incomplete or has medical flags */}
+      {safetyCard && !bannerDismissed && (
+        <View style={[
+          styles.safetyBanner,
+          {
+            borderColor: safetyCard.tone === 'review' ? colors.borderWarning : colors.borderInfo,
+            backgroundColor: safetyCard.tone === 'review' ? colors.surfaceWarning : colors.surfaceInfo,
+          },
+        ]}>
           <Ionicons
-            name={nextAction.icon}
-            size={20}
-            color={nextAction.tone === 'warn' ? colors.accentAmber : colors.accentMint}
+            name={safetyCard.tone === 'review' ? 'medical' : 'shield-checkmark-outline'}
+            size={18}
+            color={safetyCard.tone === 'review' ? colors.accentAmber : colors.accentCyan}
           />
-        </View>
-        <View style={[styles.nextActionCopy, isCompact && styles.nextActionCopyCompact]}>
-          <Text style={styles.nextActionLabel}>{nextAction.label}</Text>
-          <Text style={[styles.nextActionTitle, isCompact && styles.nextActionTitleCompact]}>{nextAction.title}</Text>
-          <Text style={[styles.nextActionBody, isCompact && styles.nextActionBodyCompact]}>{nextAction.body}</Text>
-        </View>
-        <TouchableOpacity
-          style={[styles.nextActionButton, isCompact && styles.nextActionButtonCompact, nextAction.kind === 'movement' && (isLoggingMovement || movementPlanCompleted) && styles.disabledButton]}
-          onPress={handleNextActionPress}
-          disabled={nextAction.kind === 'movement' && (isLoggingMovement || movementPlanCompleted)}
-        >
-          <Text style={styles.nextActionButtonText}>{nextAction.primaryLabel}</Text>
-        </TouchableOpacity>
-      </SurfaceCard>
-
-      <SurfaceCard revealDelay={130} style={[
-        styles.coachBridgeCard,
-        coachBridge.tone === 'good' && styles.coachBridgeGood,
-        coachBridge.tone === 'warn' && styles.coachBridgeWarn,
-      ]}>
-        <View style={styles.coachBridgeCopy}>
-          <View style={styles.coachBridgeHeader}>
-            <Text style={styles.coachBridgeEyebrow}>{t('screen.tabs.index.coach.eyebrow')}</Text>
-            <Text style={[
-              styles.coachBridgeStatus,
-              coachBridge.tone === 'warn' && styles.coachBridgeStatusWarn,
-            ]}>
-              {coachBridge.status}
-            </Text>
-          </View>
-          <Text style={styles.coachBridgeTitle}>{coachBridge.title}</Text>
-          <Text style={styles.coachBridgeBody}>{coachBridge.body}</Text>
-        </View>
-        <TouchableOpacity style={styles.coachBridgeButton} onPress={() => router.push('/coach' as never)}>
-          <Text style={styles.coachBridgeButtonText}>{t('screen.tabs.index.coach.open')}</Text>
-        </TouchableOpacity>
-      </SurfaceCard>
-
-      {healthScore ? (
-        <SurfaceCard revealDelay={190} style={styles.healthScoreCard}>
-          <View style={styles.healthScoreHeader}>
-            <View style={styles.healthScoreCopy}>
-              <Text style={styles.healthScoreEyebrow} i18nKey="screen.tabs.index.health.eyebrow" />
-              <Text style={styles.healthScoreTitle} i18nKey="screen.tabs.index.health.title" />
-              <Text style={styles.healthScoreBody}>
-                {t(`screen.tabs.index.health.label.${healthScore.label}` as any)}
-              </Text>
-            </View>
-            <View style={styles.healthScoreBadge}>
-              <Text style={styles.healthScoreValue}>{formatNumber(healthScore.overall)}</Text>
-              <Text style={styles.healthScoreUnit}>/100</Text>
-            </View>
-          </View>
-          <View style={styles.healthTrendRow}>
-            <View style={[
-              styles.healthTrendPill,
-              healthTrendTone === 'good' && styles.healthTrendPillGood,
-              healthTrendTone === 'warn' && styles.healthTrendPillWarn,
-            ]}>
-              <Ionicons
-                name={healthTrendTone === 'good' ? 'trending-up' : healthTrendTone === 'warn' ? 'trending-down' : 'remove'}
-                size={14}
-                color={healthTrendTone === 'warn' ? colors.accentAmber : colors.accentMint}
-              />
-              <Text style={[
-                styles.healthTrendText,
-                healthTrendTone === 'warn' && styles.healthTrendTextWarn,
-              ]}>
-                {healthTrendText}
-              </Text>
-            </View>
-            <Text style={styles.healthAdherenceText}>{healthAdherenceText}</Text>
-          </View>
-          <View style={styles.healthScoreBreakdown}>
-            {healthScoreBreakdown.map((item) => (
-              <View key={item.key} style={styles.healthScoreMetric}>
-                <View style={styles.healthScoreMetricHeader}>
-                  <Text style={styles.healthScoreMetricLabel}>{item.label}</Text>
-                  <Text style={styles.healthScoreMetricValue}>{formatNumber(item.value)}</Text>
-                </View>
-                <View style={styles.healthScoreTrack}>
-                  <View style={[styles.healthScoreFill, { width: `${Math.max(0, Math.min(100, item.value))}%` as any }]} />
-                </View>
-              </View>
-            ))}
-          </View>
-          {healthScore.signals.length > 0 ? (
-            <View style={styles.healthSignalList}>
-              {healthScore.signals.slice(0, 2).map((signal) => (
-                <View key={signal} style={styles.healthSignalChip}>
-                  <Ionicons name="sparkles" size={13} color={colors.accentCyan} />
-                  <Text style={styles.healthSignalText}>{signal}</Text>
-                </View>
-              ))}
-            </View>
-          ) : null}
-          <TouchableOpacity
-            style={styles.healthScoreAction}
-            onPress={() => {
-              if (healthScore.next_action === 'log_meal') router.push('/scan' as never);
-              else if (healthScore.next_action === 'move' || healthScore.next_action === 'complete_plan') router.push('/log' as never);
-              else router.push('/coach' as never);
-            }}
-          >
-            <Text style={styles.healthScoreActionText}>
-              {t(`screen.tabs.index.health.action.${healthScore.next_action}` as any)}
-            </Text>
-            <Ionicons name="chevron-forward" size={15} color={colors.textOnAccent} />
-          </TouchableOpacity>
-        </SurfaceCard>
-      ) : null}
-
-      {successForecast ? (
-        <SurfaceCard style={[
-          styles.successForecastCard,
-          successForecastToneValue === 'good' && styles.successForecastCardGood,
-          successForecastToneValue === 'warn' && styles.successForecastCardWarn,
-        ]}>
-          <View style={styles.successForecastHeader}>
-            <View style={styles.successForecastCopy}>
-              <Text style={styles.successForecastEyebrow}>{t('screen.tabs.index.success.eyebrow')}</Text>
-              <Text style={styles.successForecastTitle}>{t(`screen.tabs.index.success.label.${successForecast.label}` as any)}</Text>
-              <Text style={styles.successForecastBody}>{successForecast.recovery_plan.title}</Text>
-            </View>
-            <View style={styles.successForecastBadge}>
-              <Text style={[
-                styles.successForecastValue,
-                successForecastToneValue === 'warn' && styles.successForecastValueWarn,
-              ]}>
-                {formatNumber(successForecast.score)}
-              </Text>
-              <Text style={styles.successForecastUnit}>%</Text>
-            </View>
-          </View>
-          <View style={styles.successForecastDriverGrid}>
-            {Object.entries(successForecast.drivers).map(([key, value]) => (
-              <View key={key} style={styles.successForecastDriver}>
-                <Text style={styles.successForecastDriverLabel}>
-                  {t(`screen.tabs.index.success.driver.${key}` as any)}
-                </Text>
-                <Text style={styles.successForecastDriverValue}>{formatNumber(value)}</Text>
-              </View>
-            ))}
-          </View>
-          <View style={styles.successForecastSteps}>
-            {successForecast.recovery_plan.steps.map((step) => (
-              <View key={step} style={styles.successForecastStep}>
-                <Ionicons name="checkmark-circle" size={14} color={colors.accentMint} />
-                <Text style={styles.successForecastStepText}>{step}</Text>
-              </View>
-            ))}
+          <View style={styles.bannerTextCol}>
+            <Text style={[styles.bannerTitle, { color: colors.text }]}>{safetyCard.title}</Text>
+            <Text style={[styles.bannerSubtitle, { color: colors.textMuted }]}>{safetyCard.body}</Text>
           </View>
           <TouchableOpacity
-            style={[
-              styles.successForecastAction,
-              successForecastToneValue === 'warn' && styles.successForecastActionWarn,
-            ]}
-            onPress={() => {
-              if (successForecast.recovery_plan.primary_action === 'adjust_reminders') router.push('/profile' as never);
-              else if (successForecast.recovery_plan.primary_action === 'log_meal') router.push('/scan' as never);
-              else if (successForecast.recovery_plan.primary_action === 'move' || successForecast.recovery_plan.primary_action === 'complete_plan') router.push('/log' as never);
-              else router.push('/coach' as never);
-            }}
+            style={[styles.bannerButton, { backgroundColor: colors.accentAmber }]}
+            onPress={() => { setBannerDismissed(true); router.push('/profile' as never); }}
           >
-            <Text style={styles.successForecastActionText}>
-              {successForecastActionLabel(successForecast.recovery_plan.primary_action, locale)}
-            </Text>
-            <Ionicons name="chevron-forward" size={15} color={colors.textOnAccent} />
-          </TouchableOpacity>
-        </SurfaceCard>
-      ) : null}
-
-      {dynamicIntervention?.should_surface ? (
-        <SurfaceCard style={[
-          styles.dynamicInterventionCard,
-          dynamicInterventionToneValue === 'good' && styles.dynamicInterventionCardGood,
-          dynamicInterventionToneValue === 'warn' && styles.dynamicInterventionCardWarn,
-        ]}>
-          <View style={styles.dynamicInterventionHeader}>
-            <View style={styles.dynamicInterventionIcon}>
-              <Ionicons
-                name={dynamicIntervention.priority === 'critical' ? 'alert-circle' : dynamicIntervention.priority === 'high' ? 'pulse' : 'sparkles'}
-                size={18}
-                color={dynamicInterventionToneValue === 'warn' ? colors.accentAmber : colors.accentMint}
-              />
-            </View>
-            <View style={styles.dynamicInterventionCopy}>
-              <Text style={styles.dynamicInterventionEyebrow}>INTERVENTION</Text>
-              <Text style={styles.dynamicInterventionTitle}>{dynamicIntervention.title}</Text>
-              <Text style={styles.dynamicInterventionBody}>{dynamicIntervention.body}</Text>
-            </View>
-          </View>
-          {dynamicIntervention.recovery_steps.length > 0 ? (
-            <View style={styles.dynamicInterventionSteps}>
-              {dynamicIntervention.recovery_steps.map((step) => (
-                <View key={step} style={styles.dynamicInterventionStep}>
-                  <Ionicons name="arrow-forward-circle" size={14} color={colors.accentCyan} />
-                  <Text style={styles.dynamicInterventionStepText}>{step}</Text>
-                </View>
-              ))}
-            </View>
-          ) : null}
-          <TouchableOpacity
-            style={[
-              styles.dynamicInterventionAction,
-              dynamicInterventionToneValue === 'warn' && styles.dynamicInterventionActionWarn,
-            ]}
-            onPress={() => {
-              void recordInterventionEvent({
-                ...buildInterventionEvent(dynamicIntervention, 'acted', 'today', { action_label: dynamicIntervention.action_label }),
-                forecast_score: successForecast?.score,
-              });
-              if (dynamicIntervention.primary_action === 'adjust_reminders') router.push('/profile' as never);
-              else if (dynamicIntervention.primary_action === 'log_meal') router.push('/scan' as never);
-              else if (dynamicIntervention.primary_action === 'move' || dynamicIntervention.primary_action === 'complete_plan') router.push('/log' as never);
-              else router.push('/coach' as never);
-            }}
-          >
-            <Text style={styles.dynamicInterventionActionText}>{dynamicIntervention.action_label}</Text>
-            <Ionicons name="chevron-forward" size={15} color={colors.textOnAccent} />
-          </TouchableOpacity>
-        </SurfaceCard>
-      ) : null}
-
-      <View style={[styles.actionGrid, isCompact && styles.actionGridCompact]}>
-        <TouchableOpacity style={[styles.primaryAction, isCompact && styles.primaryActionCompact]} onPress={() => router.push('/scan' as never)}>
-          <AnimatedIonicon name="camera" size={20} color={colors.textOnAccent} motion="pulse" />
-          <Text style={styles.primaryActionText} i18nKey="screen.tabs.index.text.002" />
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.secondaryAction, isCompact && styles.secondaryActionCompact]}
-          onPress={() => router.push({ pathname: '/scan', params: { mode: 'text' } } as never)}
-          accessibilityRole="button"
-          accessibilityLabel={t('screen.tabs.index.text.003')}
-          accessibilityHint={t('screen.tabs.index.text.003.hint')}
-          testID="dashboard-text-entry-button"
-        >
-          <AnimatedIonicon name="create-outline" size={18} color={colors.accentMint} motion="float" />
-          <View style={styles.secondaryActionCopy}>
-            <Text style={styles.secondaryActionText} i18nKey="screen.tabs.index.text.003" />
-            <Text style={styles.secondaryActionHint} i18nKey="screen.tabs.index.text.003.hint" />
-          </View>
-        </TouchableOpacity>
-      </View>
-
-      <SurfaceCard style={styles.todayPlanCard}>
-        <View style={styles.todayPlanHeader}>
-          <View style={styles.todayPlanCopy}>
-            <Text style={styles.todayPlanEyebrow}>PLAN</Text>
-            <Text style={styles.todayPlanTitle} i18nKey="screen.tabs.index.plan.title" />
-            <Text style={styles.todayPlanBody}>{todayPlanBody}</Text>
-            {todaySummaryHasPartialError ? (
-              <Text style={styles.todayPlanWarning}>{t('screen.tabs.index.plan.partial')}</Text>
-            ) : null}
-            <Text style={styles.todayPlanGoal}>{t('screen.tabs.index.plan.goal', { goal: planGoalDescription })}</Text>
-          </View>
-          <View style={styles.todayPlanMetric}>
-            <Text style={[styles.todayPlanMetricValue, planRemaining < 0 && styles.todayPlanMetricOver]}>
-              {formatNumber(todayPlanMetricValue)}
-            </Text>
-            <Text style={styles.todayPlanMetricLabel}>{todayPlanMetricLabel}</Text>
-          </View>
-        </View>
-        {visibleRoadmapItems.length > 0 && (
-          <View style={styles.todayPlanRoadmapList}>
-            {visibleRoadmapItems.map((item) => (
-              <TouchableOpacity
-                key={item.id}
-                style={[styles.todayPlanRoadmapItem, item.is_completed && styles.todayPlanRoadmapItemDone]}
-                onPress={() => toggleRoadmapItem(item)}
-                disabled={updatingRoadmapId === item.id}
-              >
-                <Ionicons
-                  name={item.is_completed ? 'checkmark-circle' : 'ellipse-outline'}
-                  size={18}
-                  color={item.is_completed ? colors.accentMint : colors.textMuted}
-                />
-                <View style={styles.todayPlanRoadmapCopy}>
-                  <Text style={styles.todayPlanRoadmapTitle}>{item.task_title}</Text>
-                  <Text style={styles.todayPlanRoadmapMeta}>
-                    {t('screen.tabs.index.plan.roadmapMeta', {
-                      minutes: item.duration_min,
-                      kcal: formatNumber(item.estimated_kcal),
-                    })}
-                  </Text>
-                </View>
-                <Text style={styles.todayPlanRoadmapAction}>
-                  {item.is_completed ? t('screen.tabs.index.plan.done') : t('screen.tabs.index.plan.markDone')}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        )}
-        <View style={styles.todayPlanActions}>
-          <TouchableOpacity style={styles.todayPlanPrimary} onPress={() => router.push('/log' as never)}>
-            <Text style={styles.todayPlanPrimaryText} i18nKey="screen.tabs.index.plan.action" />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.todayPlanSecondary} onPress={() => router.push('/coach' as never)}>
-            <Text style={styles.todayPlanSecondaryText}>{t('screen.tabs.index.coach.open')}</Text>
+            <Text style={[styles.bannerButtonText, { color: colors.textOnAccent }]}>{safetyCard.action}</Text>
           </TouchableOpacity>
         </View>
+      )}
+
+      {/* 3. Hero calorie ring */}
+      <SurfaceCard revealDelay={40} style={[styles.heroCard, { padding: 26 }]}>
+        <CaloriesRingHero consumed={consumed} burned={burned} target={target} />
       </SurfaceCard>
 
-      <SurfaceCard style={[styles.cockpitCard, isCompact && styles.cockpitCardCompact]}>
-        <View style={[styles.cockpitMain, isCompact && styles.cockpitMainCompact]}>
-          <CaloriesRing consumed={consumed} burned={burned} target={target} compact={isCompact} />
-          <View style={[styles.cockpitSide, isCompact && styles.cockpitSideCompact]}>
-            <View style={[styles.targetRow, isCompact && styles.targetRowCompact]}>
-              <Text style={styles.targetLabel} i18nKey="screen.tabs.index.text.004" />
-              <Text style={[styles.targetValue, isCompact && styles.targetValueCompact]}>{formatNumber(target)} kcal</Text>
-            </View>
-            <View style={[styles.targetRow, isCompact && styles.targetRowCompact]}>
-              <Text style={styles.targetLabel} i18nKey="screen.tabs.index.text.005" />
-              <Text style={[styles.targetValue, isCompact && styles.targetValueCompact]}>{formatNumber(consumed)}</Text>
-            </View>
-            <View style={[styles.targetRow, isCompact && styles.targetRowCompact]}>
-              <Text style={styles.targetLabel} i18nKey="screen.tabs.index.text.006" />
-              <Text style={[styles.targetValueBurned, isCompact && styles.targetValueCompact]}>-{formatNumber(burned)}</Text>
-            </View>
-          </View>
-        </View>
-
-        <View style={[styles.macroRow, isCompact && styles.macroRowCompact]}>
-          <MacroPill label="screen.tabs.index.label.001" value={`${formatNumber(protein)}g`} color={colors.accentCoral} />
-          <MacroPill label="screen.tabs.index.label.002" value={`${formatNumber(carbs)}g`} color={colors.accentCyan} />
-          <MacroPill label="screen.tabs.index.label.003" value={`${formatNumber(fat)}g`} color={colors.accentAmber} />
-        </View>
-
-        <View style={styles.focusStrip}>
-          {dailyFocusItems.map((item) => (
-            <DailyFocusPill key={item.key} item={item} />
-          ))}
-        </View>
-
-        <View style={styles.qualityRow}>
-          <QualityPill label="screen.tabs.index.label.004" value={`${formatNumber(fiber)} / ${qualityTargets.fiber_g_min}g`} active={qualityCoverageItems > 0} />
-          <QualityPill label="screen.tabs.index.label.005" value={`${formatNumber(sodium)} / ${qualityTargets.sodium_mg_max}mg`} active={qualityCoverageItems > 0} over={sodium > qualityTargets.sodium_mg_max} />
-          <QualityPill label="screen.tabs.index.label.006" value={`${formatNumber(sugar)} / ${qualityTargets.sugar_g_max}g`} active={qualityCoverageItems > 0} over={sugar > qualityTargets.sugar_g_max} />
-          <QualityPill label="screen.tabs.index.label.007" value={`${formatNumber(saturatedFat)} / ${qualityTargets.saturated_fat_g_max}g`} active={qualityCoverageItems > 0} over={saturatedFat > qualityTargets.saturated_fat_g_max} />
-        </View>
-        {qualityCoverageItems === 0 && (
-          <Text style={styles.qualityCoverageNote} i18nKey="screen.tabs.index.text.007" />
-        )}
-      </SurfaceCard>
-
-      <SurfaceCard style={styles.goalPlanCard}>
-        <View style={styles.goalPlanHeader}>
-          <View style={styles.goalPlanHeaderCopy}>
-            <Text style={styles.goalPlanEyebrow} i18nKey="screen.tabs.index.text.008" />
-            <Text style={styles.goalPlanTitle}>
-              {t('screen.tabs.index.goal.todayTarget', { kcal: formatNumber(target) })}
-            </Text>
-          </View>
-          {activeGoalPlan?.safety_status && (
-            <View style={[
-              styles.goalPlanStatusPill,
-              activeGoalPlan.safety_status !== 'ok' && styles.goalPlanStatusPillWarn,
-            ]}>
-              <Text style={[
-                styles.goalPlanStatusText,
-                activeGoalPlan.safety_status !== 'ok' && styles.goalPlanStatusTextWarn,
-              ]}>
-                {statusLabel(activeGoalPlan.safety_status, locale)}
+      {/* 4. Preset goal chips */}
+      <View style={styles.presetRow}>
+        {(['lose', 'maintain', 'gain'] as const).map((preset) => {
+          const active = activeGoalPreset === preset;
+          return (
+            <TouchableOpacity
+              key={preset}
+              style={[
+                styles.presetChip,
+                active
+                  ? [styles.presetChipActive, { backgroundColor: activePresetBg, borderColor: activePresetBg }]
+                  : { backgroundColor: colors.surface, borderColor: colors.borderSubtle },
+                isApplyingTarget && styles.disabledButton,
+              ]}
+              onPress={() => { void applyGoalPreset(preset); }}
+              disabled={isApplyingTarget}
+            >
+              <Text style={[styles.presetChipText, { color: active ? activePresetText : colors.textSoft }]}>
+                {t(`screen.tabs.index.hifi.preset.${preset}` as any)}
               </Text>
-            </View>
-          )}
-        </View>
-
-        {profileMeta ? (
-          <>
-            {activeGoalPlan?.computed_daily_calorie_target ? (
-              <View style={styles.activeGoalPlanBox}>
-                <Text style={styles.activeGoalPlanTitle}>{describeGoalPlan(activeGoalPlan, locale)}</Text>
-                <Text style={styles.activeGoalPlanMeta}>
-                  {t('screen.tabs.index.goal.usingTarget', { kcal: formatNumber(activeGoalPlan.computed_daily_calorie_target) })}
-                  {activeGoalPlan.weekly_rate_kg ? t('screen.tabs.index.goal.weeklyRate', { rate: activeGoalPlan.weekly_rate_kg }) : ''}
-                </Text>
-                {!!activeGoalPlan.warnings?.length && (
-                  <Text style={styles.activeGoalPlanWarning}>{activeGoalPlan.warnings[0]}</Text>
-                )}
-              </View>
-            ) : (
-              <Text style={styles.goalPlanBody} i18nKey="screen.tabs.index.text.009" />
-            )}
-
-            <Text style={styles.goalPlanSubhead} i18nKey="screen.tabs.index.text.010" />
-            <View style={styles.goalOptionsRow}>
-              {QUICK_GOAL_OPTIONS.map((opt) => {
-                const selected = selectedGoal === opt.key;
-                return (
-                  <TouchableOpacity
-                    key={opt.key}
-                    onPress={() => setSelectedGoal(opt.key)}
-                    style={[styles.goalOption, selected && styles.goalOptionSelected]}
-                  >
-                    <Text style={[styles.goalOptionText, selected && styles.goalOptionTextSelected]}>{formatQuickGoalLabel(opt, locale)}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-
-            <View style={styles.goalPlanPreview}>
-              <View style={styles.goalPlanPreviewCopy}>
-                <Text style={styles.goalPlanPreviewTitle}>
-                  {t('screen.tabs.index.goal.readyToSave', { plan: describeGoalPlan(selectedGoalPlan, locale) })}
-                </Text>
-                <Text style={styles.goalPlanPreviewText}>
-                  {selectedGoalOption.type === 'maintain'
-                    ? t('screen.tabs.index.goal.maintainPreview')
-                    : t('screen.tabs.index.goal.deltaPreview', {
-                      sign: selectedGoalOption.type === 'loss' ? '-' : '+',
-                      kcal: formatNumber(selectedDailyDelta),
-                    })}
-                </Text>
-              </View>
-              <TouchableOpacity style={[styles.applyButton, isApplyingTarget && styles.disabledButton]} onPress={applySelectedTarget} disabled={isApplyingTarget}>
-                <Text style={styles.applyButtonText}>{isApplyingTarget ? t('common.saving') : t('common.save')}</Text>
-              </TouchableOpacity>
-            </View>
-
-            <Text style={styles.goalPlanFootnote} i18nKey="screen.tabs.index.text.011" />
-          </>
-        ) : (
-          <Text style={styles.goalPlanBody} i18nKey="screen.tabs.index.text.012" />
-        )}
-      </SurfaceCard>
-
-      <SurfaceCard style={[
-        styles.movementCard,
-        movementPlan?.tone === 'caution' && styles.movementCardCaution,
-        movementPlan?.tone === 'surplus' && styles.movementCardSurplus,
-        movementPlan?.tone === 'fuel' && styles.movementCardFuel,
-      ]}>
-        <View style={styles.movementHeader}>
-          <View style={styles.movementTitleWrap}>
-            <AnimatedIonicon
-              name="walk-outline"
-              size={18}
-              color={movementPlan?.tone === 'caution' || movementPlan?.tone === 'surplus' ? colors.accentAmber : colors.accentMint}
-              motion="float"
-            />
-            <Text style={styles.movementTitle} i18nKey="screen.tabs.index.text.013" />
-          </View>
-          {movementPlan && (
-            <View style={styles.movementSourcePill}>
-              <Text style={styles.movementSourceText}>{movementSourceLabel}</Text>
-            </View>
-          )}
-        </View>
-
-        {movementPlan ? (
-          <>
-            <View style={styles.movementNextAction}>
-              <Text style={styles.movementActionLabel} i18nKey="screen.tabs.index.text.014" />
-              <Text style={styles.movementPlanTitle}>{movementPlan.title}</Text>
-              <View style={styles.movementMetaRow}>
-                <View style={styles.movementMetaPill}>
-                  <Ionicons name="time-outline" size={13} color={colors.accentMint} />
-                  <Text style={styles.movementMetaText}>{movementPlan.duration_min} {t('screen.tabs.index.unit.minutes')}</Text>
-                </View>
-                <View style={styles.movementMetaPill}>
-                  <Ionicons name="flame-outline" size={13} color={colors.accentAmber} />
-                  <Text style={styles.movementMetaText}>~{formatNumber(movementPlan.estimated_kcal)} kcal</Text>
-                </View>
-              </View>
-            </View>
-
-            <Text style={styles.movementCalorieStatus}>{movementPlan.calorie_status}</Text>
-            <Text style={styles.movementPlanDetail}>{movementPlan.detail}</Text>
-            <Text style={styles.movementTargetGuidance}>{movementPlan.target_guidance}</Text>
-
-            <View style={styles.movementProgressHeader}>
-              <Text style={styles.movementProgressLabel} i18nKey="screen.tabs.index.text.015" />
-              <Text style={styles.movementMetric}>
-                {formatNumber(activityMinutes)}/{formatNumber(movementPlan.daily_minutes_target)} {t('screen.tabs.index.unit.minutes')}
-              </Text>
-            </View>
-            <View style={styles.movementProgressBar}>
-              <View style={[styles.movementProgressFill, { width: `${movementProgressPct}%` as any }]} />
-            </View>
-
-            <View style={styles.movementActionRow}>
-              <TouchableOpacity
-                style={[styles.movementLogButton, (isLoggingMovement || movementPlanCompleted) && styles.disabledButton]}
-                onPress={logMovementPlan}
-                disabled={isLoggingMovement || movementPlanCompleted}
-              >
-                <AnimatedIonicon name="checkmark" size={16} color={colors.textOnAccent} motion="pulse" active={!movementPlanCompleted} />
-                <Text style={styles.movementLogText}>{movementButtonLabel}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.movementSecondaryButton} onPress={() => router.push('/profile' as never)}>
-                <Ionicons name="options-outline" size={15} color={colors.accentMint} />
-                <Text style={styles.movementSecondaryText} i18nKey="screen.tabs.index.text.016" />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.movementSecondaryButton} onPress={() => router.push('/log' as never)}>
-                <Ionicons name="create-outline" size={15} color={colors.accentMint} />
-                <Text style={styles.movementSecondaryText} i18nKey="screen.tabs.index.text.003" />
-              </TouchableOpacity>
-            </View>
-          </>
-        ) : (
-          <View style={styles.movementBodyRow}>
-            <Text style={styles.movementPlanDetail} i18nKey="screen.tabs.index.text.017" />
-            <TouchableOpacity style={styles.movementLogButton} onPress={() => router.push('/profile' as never)}>
-              <Text style={styles.movementLogText} i18nKey="screen.tabs.index.text.018" />
             </TouchableOpacity>
-          </View>
-        )}
-      </SurfaceCard>
+          );
+        })}
+      </View>
 
-      {safetyCard && nextAction.kind !== 'profile' && (
-        <SurfaceCard style={[styles.safetySetupCard, safetyCard.tone === 'review' && styles.medicalReviewCard]}>
-          <View style={styles.safetySetupHeader}>
-            <Ionicons
-              name={safetyCard.icon}
-              size={18}
-              color={safetyCard.tone === 'review' ? colors.accentAmber : colors.accentMint}
-            />
-            <Text style={styles.safetySetupTitle}>{safetyCard.title}</Text>
+      {/* 5. Macro bars */}
+      <View style={styles.macroBarRow}>
+        <MacroBarCard
+          label={t('screen.tabs.index.hifi.macro.protein' as any)}
+          eaten={protein} goal={proteinTargetG} color={colors.accentCoral}
+        />
+        <MacroBarCard
+          label={t('screen.tabs.index.hifi.macro.carbs' as any)}
+          eaten={carbs} goal={carbsTargetG} color={colors.accentLeaf}
+        />
+        <MacroBarCard
+          label={t('screen.tabs.index.hifi.macro.fat' as any)}
+          eaten={fat} goal={fatTargetG} color={colors.accentAmber}
+        />
+      </View>
+
+      {/* 6. Nutrition quality card */}
+      {qualityCoverageItems > 0 && (
+        <SurfaceCard revealDelay={120} style={[styles.qualityCard, { borderRadius: 22 }]}>
+          <View style={styles.qualityCardHeader}>
+            <Text style={[styles.qualityCardTitle, { color: colors.text }]}>
+              {t('screen.tabs.index.hifi.quality.title' as any)}
+            </Text>
+            <Text style={[styles.qualityCardSub, { color: colors.textDisabled }]}>
+              {t('screen.tabs.index.hifi.quality.today' as any)}
+            </Text>
           </View>
-          <Text style={styles.safetySetupBody}>{safetyCard.body}</Text>
-          <TouchableOpacity style={styles.safetySetupButton} onPress={() => router.push('/profile' as never)}>
-            <Text style={styles.safetySetupButtonText}>{safetyCard.action}</Text>
-            <Ionicons name="chevron-forward" size={15} color={colors.textOnAccent} />
-          </TouchableOpacity>
+          <View style={styles.qualityGrid}>
+            <QualityGridCell
+              label={t('screen.tabs.index.hifi.quality.fiber' as any)}
+              value={`${formatNumber(fiber)}g`}
+              threshold={`>= ${qualityTargets.fiber_g_min}g`}
+              tone="good"
+            />
+            <QualityGridCell
+              label={t('screen.tabs.index.hifi.quality.sodium' as any)}
+              value={`${formatNumber(sodium)}mg`}
+              threshold={`< ${formatNumber(qualityTargets.sodium_mg_max)}mg`}
+              tone="limit"
+            />
+            <QualityGridCell
+              label={t('screen.tabs.index.hifi.quality.sugar' as any)}
+              value={`${formatNumber(sugar)}g`}
+              threshold={`< ${qualityTargets.sugar_g_max}g`}
+              tone="limit"
+            />
+            <QualityGridCell
+              label={t('screen.tabs.index.hifi.quality.satFat' as any)}
+              value={`${formatNumber(saturatedFat)}g`}
+              threshold={`< ${qualityTargets.saturated_fat_g_max}g`}
+              tone="limit"
+            />
+          </View>
         </SurfaceCard>
       )}
 
-      {visibleNudges.length > 0 && (
-      <View style={styles.nudgeRow}>
-        {visibleNudges.map((nudge) => (
-          <View key={nudge.title} style={[styles.nudgeChip, styles[`${nudge.tone}Nudge`]]}>
-            <Ionicons name={nudge.icon} size={16} color={nudge.tone === 'warn' ? colors.accentAmber : colors.accentMint} />
-            <View style={styles.nudgeCopy}>
-              <Text style={styles.nudgeTitle}>{nudge.title}</Text>
-              <Text style={styles.nudgeBody}>{nudge.body}</Text>
-            </View>
+      {/* 6.5 Today's plan — roadmap tick-box list */}
+      {hasRoadmapPlan && (
+        <SurfaceCard revealDelay={130} style={{ borderRadius: 20 }}>
+          <View style={styles.roadmapHeader}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>
+              {t('screen.tabs.index.plan.title')}
+            </Text>
+            <Text style={[styles.roadmapCounter, { color: colors.textMuted }]}>
+              {remainingRoadmapItems.length}/{activeRoadmapItems.length}
+            </Text>
           </View>
-        ))}
-      </View>
+          {visibleRoadmapItems.map((item, idx) => (
+            <RoadmapRow
+              key={item.id}
+              item={item}
+              isLast={idx === visibleRoadmapItems.length - 1}
+              updating={updatingRoadmapId === item.id}
+              onToggle={() => { void toggleRoadmapItem(item); }}
+            />
+          ))}
+        </SurfaceCard>
       )}
 
+      {/* 7. Next step dark card */}
+      <NextStepDarkCard
+        kind={nextAction.kind}
+        title={nextAction.title}
+        body={nextAction.body}
+        primaryLabel={nextAction.primaryLabel}
+        isLogging={isLoggingMovement}
+        completed={movementPlanCompleted}
+        onPress={handleNextActionPress}
+      />
+
+      {/* 8. Meals today */}
       <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle} i18nKey="screen.tabs.index.text.019" />
+        <Text style={[styles.sectionTitle, { color: colors.text }]}>
+          {t('screen.tabs.index.hifi.meals.title' as any)}
+        </Text>
         <TouchableOpacity onPress={() => router.push('/log' as never)}>
-          <Text style={styles.sectionLink} i18nKey="screen.tabs.index.text.020" />
+          <Text style={[styles.sectionLink, { color: colors.accentCyan }]}>
+            {t('screen.tabs.index.hifi.meals.viewLog' as any)}
+          </Text>
         </TouchableOpacity>
       </View>
-
-      {latestMeals.length > 0 ? (
-        <View style={styles.mealList}>
-          {MEAL_ORDER.map((meal) => {
-            const mealLogs = logsByMeal[meal];
-            const mealCalories = mealLogs.reduce((sum, log) => sum + safeNumber(log.calories), 0);
-            return (
-              <SurfaceCard key={meal} style={styles.mealCard}>
-                <Image source={mealIllustration} style={styles.mealImage} resizeMode="cover" />
-                <View style={styles.mealContent}>
-                  <View style={styles.mealTopRow}>
-                    <View>
-                      <Text style={styles.mealName}>{t(MEAL_LABEL_KEYS[meal])}</Text>
-                      <Text style={styles.mealHint}>{t(MEAL_HINT_KEYS[meal])}</Text>
-                    </View>
-                    <Text style={styles.mealCalories}>{formatNumber(mealCalories)} kcal</Text>
-                  </View>
-                  {mealLogs.length > 0 ? (
-                    <Text style={styles.mealItems} numberOfLines={2}>
-                      {mealLogs.map((log) => log.name_vi ?? log.name).join(', ')}
-                    </Text>
-                  ) : (
-                    <Text style={styles.mealItemsMuted} i18nKey="screen.tabs.index.text.021" />
-                  )}
-                </View>
-              </SurfaceCard>
-            );
-          })}
-        </View>
+      {logs.length > 0 ? (
+        <SurfaceCard revealDelay={180} style={[styles.mealListCard, { borderRadius: 20 }]}>
+          {logs.slice(0, 5).map((log, idx) => (
+            <MealListRow
+              key={(log as any).id ?? idx}
+              log={log}
+              isLast={idx === Math.min(logs.length, 5) - 1}
+            />
+          ))}
+        </SurfaceCard>
       ) : (
         <EmptyState
           imageSource={todayHeroIllustration}
-          icon="🍚"
+          icon="restaurant-outline"
           title="screen.tabs.index.title.001"
           description="screen.tabs.index.description.001"
         />
       )}
 
-      <View style={styles.quickLinks}>
-        <QuickLink icon="body" label="screen.tabs.index.label.008" onPress={() => router.push('/progress' as never)} />
-        <QuickLink icon="stats-chart" label="screen.tabs.index.label.009" onPress={() => router.push('/insights' as never)} />
-        <QuickLink icon="ribbon" label="screen.tabs.index.label.010" onPress={() => router.push('/achievements' as never)} />
+      {/* 9a. Support panel — compact coach + health */}
+      <SurfaceCard revealDelay={200} style={[styles.supportPanel, { borderRadius: 20 }]}>
+        <CompactCoachCard bridge={coachBridge} />
+        {healthScore && (
+          <>
+            <View style={[styles.supportDivider, { backgroundColor: colors.borderSubtle }]} />
+            <CompactHealthScoreCard
+              score={healthScore}
+              breakdown={healthScoreBreakdown.slice(0, 3)}
+              trendText={healthTrendText}
+              trendTone={healthTrendTone}
+            />
+          </>
+        )}
+      </SurfaceCard>
+
+      {/* 9. Shortcut tiles */}
+      <View style={styles.shortcutGrid}>
+        <ShortcutTile
+          iconName="trending-up-outline"
+          tone="progress"
+          labelKey={'screen.tabs.index.hifi.shortcut.progress' as any}
+          onPress={() => router.push('/progress' as never)}
+        />
+        <ShortcutTile
+          iconName="search-outline"
+          tone="insights"
+          labelKey={'screen.tabs.index.hifi.shortcut.insights' as any}
+          onPress={() => router.push('/insights' as never)}
+        />
+        <ShortcutTile
+          iconName="trophy-outline"
+          tone="achievement"
+          labelKey={'screen.tabs.index.hifi.shortcut.achievements' as any}
+          onPress={() => router.push('/achievements' as never)}
+        />
+        <ShortcutTile
+          iconName="heart-outline"
+          tone="health"
+          labelKey={'screen.tabs.index.hifi.shortcut.health' as any}
+          onPress={() => router.push('/health-sync' as never)}
+        />
       </View>
+
       <RewardToast reward={reward} onHide={() => setReward(null)} />
     </ScreenShell>
   );
 }
 
-function MacroPill({ label, value, color }: { label: string; value: string; color: string }) {
-  return (
-    <View style={styles.macroPill}>
-      <View style={[styles.macroDot, { backgroundColor: color }]} />
-      <Text style={styles.macroValue}>{value}</Text>
-      <Text style={styles.macroLabel}>{label}</Text>
-    </View>
-  );
-}
+// --- Sub-components ---
 
-function DailyFocusPill({ item }: { item: DailyFocusItem }) {
+const RING_GRAD_START = '#7cc04f';
+const RING_GRAD_END = '#4f9b6e';
+
+function CaloriesRingHero({
+  consumed,
+  burned,
+  target,
+}: {
+  consumed: number;
+  burned: number;
+  target: number;
+}) {
   const { colors } = useAppTheme();
-  const accent = focusToneColor(item.tone, colors as Record<string, string>);
-  const toneStyle = item.tone === 'good'
-    ? styles.focusPillGood
-    : item.tone === 'warn'
-      ? styles.focusPillWarn
-      : item.tone === 'muted'
-        ? styles.focusPillMuted
-        : styles.focusPillInfo;
+  const { t } = useI18n();
+  const safeConsumed = safeNumber(consumed);
+  const safeBurned = safeNumber(burned);
+  const safeTarget = safePositiveNumber(target, 1800);
+  const remaining = Math.max(0, safeTarget - safeConsumed);
+  const net = safeConsumed - safeBurned;
+  const progress = clampProgress(safeConsumed / safeTarget);
+  const SIZE = 128;
+  const STROKE = 13;
+  const RADIUS = 56;
+  const CIRC = 2 * Math.PI * RADIUS;
 
   return (
-    <View style={[styles.focusPill, toneStyle]}>
-      <View style={styles.focusHeader}>
-        <Ionicons name={item.icon} size={15} color={accent} />
-        <Text style={styles.focusLabel}>{item.label}</Text>
+    <View style={styles.ringHeroRow}>
+      <View style={{ width: SIZE, height: SIZE }}>
+        <Svg width={SIZE} height={SIZE} style={{ position: 'absolute', top: 0, left: 0 }}>
+          <Defs>
+            <SvgLinearGradient id="ringGrad" x1="0" y1="0" x2="1" y2="1">
+              <Stop offset="0" stopColor={RING_GRAD_START} />
+              <Stop offset="1" stopColor={RING_GRAD_END} />
+            </SvgLinearGradient>
+          </Defs>
+          <Circle
+            cx={SIZE / 2} cy={SIZE / 2} r={RADIUS}
+            stroke={colors.progressBg} strokeWidth={STROKE} fill="none"
+          />
+          <Circle
+            cx={SIZE / 2} cy={SIZE / 2} r={RADIUS}
+            stroke="url(#ringGrad)" strokeWidth={STROKE} fill="none"
+            strokeLinecap="round"
+            strokeDasharray={`${CIRC} ${CIRC}`}
+            strokeDashoffset={CIRC * (1 - progress)}
+            transform={`rotate(-90 ${SIZE / 2} ${SIZE / 2})`}
+          />
+        </Svg>
+        <View style={styles.ringHeroCenter}>
+          <Text style={[styles.ringHeroValue, { color: colors.text }]}>
+            {formatNumber(remaining)}
+          </Text>
+          <Text style={[styles.ringHeroLabel, { color: colors.textMuted }]}>
+            {t('screen.tabs.index.hifi.ring.remainingOf' as any, { target: formatNumber(safeTarget) })}
+          </Text>
+        </View>
       </View>
-      <Text style={styles.focusValue} numberOfLines={1}>{item.value}</Text>
-      <Text style={styles.focusHint} numberOfLines={2}>{item.hint}</Text>
-      <View style={styles.focusProgressTrack}>
-        <View style={[styles.focusProgressFill, { width: `${Math.round(item.progress * 100)}%` as any, backgroundColor: accent }]} />
+      <View style={styles.ringHeroMetrics}>
+        <HeroMetricRow
+          iconType="intake"
+          label={t('screen.tabs.index.hifi.ring.eaten' as any)}
+          value={formatNumber(safeConsumed)}
+          bg={colors.surfaceSuccess}
+          iconColor={colors.accentLeaf}
+        />
+        <HeroMetricRow
+          iconType="activity"
+          label={t('screen.tabs.index.hifi.ring.activity' as any)}
+          value={`+${formatNumber(safeBurned)}`}
+          bg={colors.surfaceInfo}
+          iconColor={colors.accentCyan}
+        />
+        <HeroMetricRow
+          iconType="net"
+          label={t('screen.tabs.index.hifi.ring.net' as any)}
+          value={formatNumber(net)}
+          bg={colors.surfaceWarm}
+          iconColor={colors.textSoft}
+        />
       </View>
     </View>
   );
 }
 
-function QualityPill({ label, value, active, over }: { label: string; value: string; active: boolean; over?: boolean }) {
-  return (
-    <View style={[styles.qualityPill, !active && styles.qualityPillMuted, over && styles.qualityPillOver]}>
-      <Text style={styles.qualityLabel}>{label}</Text>
-      <Text style={styles.qualityValue}>{active ? value : '-'}</Text>
-    </View>
-  );
-}
-
-function QuickLink({ icon, label, onPress }: { icon: keyof typeof Ionicons.glyphMap; label: string; onPress: () => void }) {
+function HeroMetricRow({
+  iconType,
+  label,
+  value,
+  bg,
+  iconColor,
+}: {
+  iconType: 'intake' | 'activity' | 'net';
+  label: string;
+  value: string;
+  bg: string;
+  iconColor: string;
+}) {
   const { colors } = useAppTheme();
   return (
-    <TouchableOpacity style={styles.quickLink} onPress={onPress}>
-      <Ionicons name={icon} size={18} color={colors.accentCyan} />
-      <Text style={styles.quickLinkText}>{label}</Text>
+    <View style={styles.heroMetric}>
+      <View style={[styles.heroMetricIconBox, { backgroundColor: bg }]}>
+        <HeroMetricIcon type={iconType} color={iconColor} />
+      </View>
+      <View>
+        <Text style={[styles.heroMetricLabel, { color: colors.textMuted }]}>{label}</Text>
+        <Text style={[styles.heroMetricValue, { color: colors.text }]}>{value}</Text>
+      </View>
+    </View>
+  );
+}
+
+function HeroMetricIcon({ type, color }: { type: 'intake' | 'activity' | 'net'; color: string }) {
+  const iconName: keyof typeof Ionicons.glyphMap =
+    type === 'intake' ? 'restaurant-outline' : type === 'activity' ? 'walk-outline' : 'scale-outline';
+  return <Ionicons name={iconName} size={19} color={color} />;
+}
+
+function MacroBarCard({
+  label,
+  eaten,
+  goal,
+  color,
+}: {
+  label: string;
+  eaten: number;
+  goal: number;
+  color: string;
+}) {
+  const { colors } = useAppTheme();
+  const pct = clampProgress(safeNumber(eaten) / Math.max(safePositiveNumber(goal, 1), 1));
+  return (
+    <View style={[styles.macroBarCard, { backgroundColor: colors.surface, borderColor: colors.borderSubtle }]}>
+      <Text style={[styles.macroBarLabel, { color: colors.textMuted }]}>{label}</Text>
+      <Text style={[styles.macroBarValue, { color: colors.text }]}>
+        {formatNumber(eaten)}
+        <Text style={[styles.macroBarGoal, { color: colors.textDisabled }]}>/{goal}g</Text>
+      </Text>
+      <View style={[styles.macroBarTrack, { backgroundColor: colors.progressBg }]}>
+        <View style={[styles.macroBarFill, { width: `${Math.round(pct * 100)}%` as any, backgroundColor: color }]} />
+      </View>
+    </View>
+  );
+}
+
+function QualityGridCell({
+  label,
+  value,
+  threshold,
+  tone,
+}: {
+  label: string;
+  value: string;
+  threshold: string;
+  tone: 'good' | 'limit';
+}) {
+  const { colors } = useAppTheme();
+  return (
+    <View style={[
+      styles.qualityCell,
+      {
+        backgroundColor: tone === 'good' ? colors.surfaceSuccess : colors.surfaceInfo,
+        borderColor: tone === 'good' ? colors.borderSuccess : colors.borderInfo,
+      },
+    ]}>
+      <Text style={[styles.qualityCellLabel, { color: colors.textMuted }]}>{label}</Text>
+      <Text style={[styles.qualityCellValue, { color: colors.text }]}>
+        {value}{' '}
+        <Text style={[styles.qualityCellThreshold, { color: tone === 'good' ? colors.accentLeaf : colors.textMuted }]}>
+          {threshold}
+        </Text>
+      </Text>
+    </View>
+  );
+}
+
+const NEXT_STEP_ICON_MAP: Record<string, keyof typeof Ionicons.glyphMap> = {
+  profile: 'shield-checkmark-outline',
+  scan: 'camera-outline',
+  movement: 'walk-outline',
+  nudge: 'bulb-outline',
+  log: 'checkmark-circle',
+};
+
+function NextStepDarkCard({
+  kind,
+  title,
+  body,
+  primaryLabel,
+  isLogging,
+  completed,
+  onPress,
+}: {
+  kind: 'profile' | 'scan' | 'movement' | 'nudge' | 'log';
+  title: string;
+  body: string;
+  primaryLabel: string;
+  isLogging: boolean;
+  completed: boolean;
+  onPress: () => void;
+}) {
+  const { colors, mode } = useAppTheme();
+  const { t } = useI18n();
+  const iconName = NEXT_STEP_ICON_MAP[kind] ?? 'bulb-outline';
+  const isDone = kind === 'movement' && completed;
+  const isDisabled = kind === 'movement' && (isLogging || completed);
+  const cardGradient: [string, string] = mode === 'dark'
+    ? [colors.surfaceAlt, colors.surfacePressed]
+    : [colors.text, colors.accentCyan];
+  const secondaryText = mode === 'dark' ? colors.textSoft : colors.surfaceMuted;
+
+  return (
+    <LinearGradient
+      colors={cardGradient}
+      start={{ x: 0.3, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={styles.nextStepCard}
+    >
+      <View style={styles.nextStepRow}>
+        <View style={[styles.nextStepIconWrap, { backgroundColor: mode === 'dark' ? colors.surfaceSuccess : colors.surfaceAlt }]}>
+          <Ionicons name={iconName} size={20} color={colors.accentMint} />
+        </View>
+        <View style={styles.nextStepCopy}>
+          <Text style={[styles.nextStepEyebrow, { color: colors.accentMint }]}>
+            {t('screen.tabs.index.hifi.nextstep.eyebrow' as any)}
+          </Text>
+          <Text style={[styles.nextStepTitle, { color: mode === 'dark' ? colors.text : colors.surface }]}>{title}</Text>
+          <Text style={[styles.nextStepBody, { color: secondaryText }]}>{body}</Text>
+        </View>
+      </View>
+      <TouchableOpacity
+        style={[
+          styles.nextStepButton,
+          { backgroundColor: colors.accentMint },
+          isDone && styles.nextStepButtonDone,
+          isDone && { backgroundColor: mode === 'dark' ? colors.surfaceSuccess : colors.surfaceAlt },
+          isDisabled && styles.disabledButton,
+        ]}
+        onPress={onPress}
+        disabled={isDisabled}
+      >
+        <Text style={[styles.nextStepButtonText, { color: colors.textOnAccent }, isDone && { color: colors.accentMint }]}>
+          {isDone
+            ? t('screen.tabs.index.hifi.nextstep.done' as any)
+            : primaryLabel}
+        </Text>
+      </TouchableOpacity>
+    </LinearGradient>
+  );
+}
+
+const MEAL_ICON_MAP: Record<MealType, keyof typeof Ionicons.glyphMap> = {
+  breakfast: 'sunny-outline',
+  lunch: 'partly-sunny-outline',
+  dinner: 'moon-outline',
+  snack: 'cafe-outline',
+};
+
+function MealListRow({ log, isLast }: { log: FoodLog; isLast: boolean }) {
+  const { colors } = useAppTheme();
+  const { t } = useI18n();
+  const name = (log as any).name_vi ?? log.name;
+  const mealLabel = t(MEAL_LABEL_KEYS[log.meal_type]);
+  const kcal = safeNumber((log as any).calories ?? (log as any).total_calories ?? 0);
+  const isAi = !!(log as any).ai_scan_id;
+
+  const MEAL_BG: Record<MealType, string> = {
+    breakfast: colors.surfaceSuccess,
+    lunch: colors.surfaceInfo,
+    dinner: colors.surfaceWarning,
+    snack: colors.surfaceMuted,
+  };
+  const MEAL_ICON_COLOR: Record<MealType, string> = {
+    breakfast: colors.accentAmber,
+    lunch: colors.accentAmber,
+    dinner: colors.accentCyan,
+    snack: colors.textSoft,
+  };
+
+  return (
+    <View style={[styles.mealRow, !isLast && { borderBottomWidth: 1, borderBottomColor: colors.borderSubtle }]}>
+      <View style={[styles.mealRowIconBox, { backgroundColor: MEAL_BG[log.meal_type] }]}>
+        <Ionicons
+          name={MEAL_ICON_MAP[log.meal_type]}
+          size={18}
+          color={MEAL_ICON_COLOR[log.meal_type]}
+        />
+      </View>
+      <View style={styles.mealRowCopy}>
+        <Text style={[styles.mealRowName, { color: colors.text }]} numberOfLines={1}>{name}</Text>
+        <Text style={[styles.mealRowMeta, { color: colors.textMuted }]}>
+          {mealLabel} - {formatNumber(kcal)} kcal
+        </Text>
+      </View>
+      {isAi && (
+        <View style={[styles.aiBadge, { backgroundColor: colors.surfaceSuccess, borderColor: colors.borderSuccess }]}>
+          <Ionicons name="sparkles-outline" size={10} color={colors.accentLeaf} />
+          <Text style={[styles.aiBadgeText, { color: colors.accentLeaf }]}>
+            {t('screen.tabs.index.hifi.meals.aiBadge' as any)}
+          </Text>
+        </View>
+      )}
+    </View>
+  );
+}
+
+function ShortcutTile({
+  iconName,
+  tone,
+  labelKey,
+  onPress,
+}: {
+  iconName: keyof typeof Ionicons.glyphMap;
+  tone: 'progress' | 'insights' | 'achievement' | 'health';
+  labelKey: any;
+  onPress: () => void;
+}) {
+  const { colors } = useAppTheme();
+  const { t } = useI18n();
+  const toneMap: Record<typeof tone, { bg: string; icon: string }> = {
+    progress: { bg: colors.surfaceSuccess, icon: colors.accentLeaf },
+    insights: { bg: colors.surfaceInfo, icon: colors.accentCyan },
+    achievement: { bg: colors.surfaceWarning, icon: colors.accentAmber },
+    health: { bg: colors.surfaceSuccess, icon: colors.accentLeaf },
+  };
+  const toneStyle = toneMap[tone];
+  return (
+    <TouchableOpacity
+      style={[styles.shortcutTile, { backgroundColor: colors.surface, borderColor: colors.borderSubtle }]}
+      onPress={onPress}
+      activeOpacity={0.78}
+    >
+      <View style={[styles.shortcutIconBubble, { backgroundColor: toneStyle.bg }]}>
+        <Ionicons name={iconName} size={18} color={toneStyle.icon} />
+      </View>
+      <Text style={[styles.shortcutLabel, { color: colors.textSoft }]}>{t(labelKey)}</Text>
     </TouchableOpacity>
   );
 }
 
-const styles = createThemedStyles((colors, radii) => ({
-  screen: {
-    paddingBottom: 28,
-  },
-  screenCompact: {
-    paddingBottom: 8,
-  },
+function RoadmapRow({
+  item,
+  isLast,
+  updating,
+  onToggle,
+}: {
+  item: DailyRoadmapItem;
+  isLast: boolean;
+  updating: boolean;
+  onToggle: () => void;
+}) {
+  const { colors } = useAppTheme();
+  const { t } = useI18n();
+  return (
+    <TouchableOpacity
+      style={[styles.roadmapRow, !isLast && { borderBottomWidth: 1, borderBottomColor: colors.borderSubtle }]}
+      onPress={onToggle}
+      disabled={updating}
+      activeOpacity={0.7}
+    >
+      <Ionicons
+        name={item.is_completed ? 'checkmark-circle' : 'ellipse-outline'}
+        size={22}
+        color={item.is_completed ? colors.accentLeaf : colors.borderStrong}
+      />
+      <View style={styles.roadmapRowCopy}>
+        <Text
+          style={[
+            styles.roadmapRowTitle,
+            { color: item.is_completed ? colors.textMuted : colors.text },
+            item.is_completed && { textDecorationLine: 'line-through' as const },
+          ]}
+          numberOfLines={1}
+        >
+          {item.task_title}
+        </Text>
+        {(item.duration_min || item.estimated_kcal) ? (
+          <Text style={[styles.roadmapRowMeta, { color: colors.textDisabled }]}>
+            {t('screen.tabs.index.plan.roadmapMeta', {
+              minutes: item.duration_min ?? 0,
+              kcal: formatNumber(item.estimated_kcal ?? 0),
+            })}
+          </Text>
+        ) : null}
+      </View>
+      <Text style={[styles.roadmapRowAction, { color: item.is_completed ? colors.accentLeaf : colors.textMuted }]}>
+        {item.is_completed
+          ? t('screen.tabs.index.plan.done')
+          : updating ? '...' : t('screen.tabs.index.plan.markDone')}
+      </Text>
+    </TouchableOpacity>
+  );
+}
+
+function CompactCoachCard({ bridge }: { bridge: TodayCoachBridge }) {
+  const { colors } = useAppTheme();
+  const { t } = useI18n();
+  const TONE_BG: Record<TodayCoachBridge['tone'], string> = {
+    good: colors.surfaceSuccess,
+    warn: colors.surfaceWarning,
+    info: colors.surfaceInfo,
+  };
+  const TONE_ICON_COLOR: Record<TodayCoachBridge['tone'], string> = {
+    good: colors.accentLeaf,
+    warn: colors.accentAmber,
+    info: colors.accentCyan,
+  };
+  return (
+    <View style={styles.coachRow}>
+      <View style={[styles.coachIconBox, { backgroundColor: TONE_BG[bridge.tone] }]}>
+        <Ionicons name="chatbubble-ellipses-outline" size={18} color={TONE_ICON_COLOR[bridge.tone]} />
+      </View>
+      <View style={styles.coachCopy}>
+        <Text style={[styles.coachEyebrow, { color: colors.accentCyan }]}>
+          {t('screen.tabs.index.coach.eyebrow')}
+        </Text>
+        <Text style={[styles.coachTitle, { color: colors.text }]} numberOfLines={1}>
+          {bridge.title}
+        </Text>
+        <Text style={[styles.coachBody, { color: colors.textMuted }]} numberOfLines={2}>
+          {bridge.body}
+        </Text>
+      </View>
+      <TouchableOpacity
+        style={[styles.coachButton, { backgroundColor: colors.accentPrimary }]}
+        onPress={() => router.push('/coach' as never)}
+      >
+        <Ionicons name="arrow-forward" size={16} color={colors.textOnAccent} />
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+function CompactHealthScoreCard({
+  score,
+  breakdown,
+  trendText,
+  trendTone,
+}: {
+  score: NonNullable<ReturnType<typeof useAppTheme> extends never ? never : any>;
+  breakdown: { key: string; label: string; value: number }[];
+  trendText: string;
+  trendTone: 'good' | 'warn' | 'neutral';
+}) {
+  const { colors } = useAppTheme();
+  const { t } = useI18n();
+  const TREND_COLOR: Record<string, string> = {
+    good: colors.accentLeaf,
+    warn: colors.accentCoral,
+    neutral: colors.textMuted,
+  };
+  const overall = safeNumber(score.overall);
+  return (
+    <View style={styles.healthRow}>
+      <View style={styles.healthScoreCircle}>
+        <Text style={[styles.healthScoreValue, { color: colors.text }]}>{formatNumber(overall)}</Text>
+        <Text style={[styles.healthScoreMax, { color: colors.textDisabled }]}>/100</Text>
+      </View>
+      <View style={styles.healthRight}>
+        <Text style={[styles.healthEyebrow, { color: colors.accentCyan }]}>
+          {t('screen.tabs.index.health.eyebrow')}
+        </Text>
+        <Text style={[styles.healthTrend, { color: TREND_COLOR[trendTone] }]} numberOfLines={1}>
+          {trendText}
+        </Text>
+        <View style={styles.healthBarsRow}>
+          {breakdown.map((item) => (
+            <View key={item.key} style={styles.healthBarCol}>
+              <View style={[styles.healthBarTrack, { backgroundColor: colors.progressBg }]}>
+                <View style={[
+                  styles.healthBarFill,
+                  { width: `${Math.round(clampProgress(item.value / 100) * 100)}%` as any, backgroundColor: colors.accentLeaf },
+                ]} />
+              </View>
+              <Text style={[styles.healthBarLabel, { color: colors.textDisabled }]}>{item.label}</Text>
+            </View>
+          ))}
+        </View>
+      </View>
+    </View>
+  );
+}
+
+// --- Styles ---
+
+const styles = createThemedStyles((colors) => ({
+  screen: { paddingBottom: 28 },
+
+  // Header
   headerRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: 14,
-    marginBottom: 18,
+    flexDirection: 'row' as const,
+    alignItems: 'flex-start' as const,
+    justifyContent: 'space-between' as const,
+    gap: 12,
+    marginBottom: 14,
   },
-  headerRowCompact: {
-    gap: 8,
-    marginBottom: 12,
+  headerLeft: { flex: 1 },
+  headerDate: {
+    fontSize: 12,
+    fontWeight: '700' as const,
+    letterSpacing: 1,
+    textTransform: 'uppercase' as const,
   },
-  headerCopy: {
-    flex: 1,
-  },
-  dashboardTitle: {
-    color: colors.text,
-    fontSize: 38,
-    lineHeight: 40,
-    fontWeight: '900',
-    letterSpacing: -1.35,
-    marginBottom: 10,
-  },
-  dashboardTitleCompact: {
-    fontSize: 32,
-    lineHeight: 34,
-    letterSpacing: -1,
-    marginBottom: 6,
-  },
-  heroBody: {
-    maxWidth: 520,
-  },
-  heroBodyCompact: {
-    fontSize: 13,
-    lineHeight: 19,
+  headerGreeting: {
+    fontSize: 25,
+    fontWeight: '800' as const,
+    letterSpacing: -0.5,
+    marginTop: 3,
   },
   streakPill: {
-    minHeight: 40,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    borderRadius: 999,
-    paddingHorizontal: 13,
-    backgroundColor: colors.surfaceWarning,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    borderRadius: 20,
     borderWidth: 1,
-    borderColor: colors.borderWarning,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    gap: 4,
   },
-  streakPillCompact: {
-    minHeight: 34,
-    paddingHorizontal: 10,
-  },
-  streakText: {
-    color: colors.text,
-    fontSize: 13,
-    fontWeight: '900',
-  },
-  nextActionCard: {
-    marginBottom: 16,
-    borderColor: colors.borderInfo,
-    backgroundColor: colors.surfaceInfo,
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: 15,
-    overflow: 'hidden',
-  },
-  nextActionCardCompact: {
+  streakText: { fontSize: 14, fontWeight: '800' as const },
+
+  // Safety banner
+  safetyBanner: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 11,
+    borderRadius: 18,
+    borderWidth: 1,
     padding: 12,
-    gap: 10,
+    marginBottom: 14,
   },
-  nextActionCardGood: {
-    borderColor: colors.borderSuccess,
-    backgroundColor: colors.surfaceSuccess,
+  bannerTextCol: { flex: 1 },
+  bannerTitle: { fontSize: 12.5, fontWeight: '700' as const },
+  bannerSubtitle: { fontSize: 11, marginTop: 1 },
+  bannerButton: { borderRadius: 12, paddingHorizontal: 11, paddingVertical: 6 },
+  bannerButtonText: { fontSize: 12, fontWeight: '800' as const },
+
+  // Hero card
+  heroCard: { marginBottom: 16, borderRadius: 28 },
+
+  // Ring hero
+  ringHeroRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    gap: 24,
   },
-  nextActionCardWarn: {
-    borderColor: colors.borderWarning,
-    backgroundColor: colors.surfaceWarning,
+  ringHeroCenter: {
+    position: 'absolute' as const,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
-  nextActionIconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 999,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.borderSubtle,
-  },
-  nextActionIconWrapCompact: {
-    width: 36,
-    height: 36,
-  },
-  nextActionCopy: {
-    flex: 1,
-    minWidth: 180,
-  },
-  nextActionCopyCompact: {
-    minWidth: 0,
-    flexBasis: 0,
-  },
-  nextActionLabel: {
-    color: colors.textMuted,
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 0.5,
-    marginBottom: 3,
-  },
-  nextActionTitle: {
-    color: colors.text,
-    fontSize: 18,
-    lineHeight: 23,
-    fontWeight: '900',
-  },
-  nextActionTitleCompact: {
-    fontSize: 16,
-    lineHeight: 20,
-  },
-  nextActionBody: {
-    color: colors.textSoft,
-    fontSize: 12,
-    lineHeight: 18,
-    marginTop: 4,
-  },
-  nextActionBodyCompact: {
-    lineHeight: 16,
-  },
-  nextActionButton: {
-    minHeight: 44,
-    minWidth: 122,
-    borderRadius: radii.lg,
-    backgroundColor: colors.accentMint,
-    paddingHorizontal: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  nextActionButtonCompact: {
-    minHeight: 36,
-    minWidth: 92,
-    paddingHorizontal: 10,
-  },
-  nextActionButtonText: {
-    color: colors.textOnAccent,
-    fontSize: 13,
-    lineHeight: 17,
-    fontWeight: '900',
-  },
-  coachBridgeCard: {
-    marginBottom: 16,
-    borderColor: colors.borderInfo,
-    backgroundColor: colors.surfaceInfo,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
-  },
-  coachBridgeGood: {
-    borderColor: colors.borderSuccess,
-    backgroundColor: colors.surfaceSuccess,
-  },
-  coachBridgeWarn: {
-    borderColor: colors.borderWarning,
-    backgroundColor: colors.surfaceWarning,
-  },
-  coachBridgeCopy: {
-    flex: 1,
-    minWidth: 0,
-  },
-  coachBridgeHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
-    marginBottom: 4,
-  },
-  coachBridgeEyebrow: {
-    color: colors.textMuted,
-    fontSize: 11,
-    fontWeight: '900',
-  },
-  coachBridgeStatus: {
-    color: colors.accentCyan,
-    fontSize: 11,
-    fontWeight: '900',
-    textAlign: 'right',
-  },
-  coachBridgeStatusWarn: {
-    color: colors.accentAmber,
-  },
-  coachBridgeTitle: {
-    color: colors.text,
-    fontSize: 16,
-    lineHeight: 21,
-    fontWeight: '900',
-  },
-  coachBridgeBody: {
-    color: colors.textSoft,
-    fontSize: 12,
-    lineHeight: 19,
-    marginTop: 4,
-  },
-  coachBridgeButton: {
-    minHeight: 42,
-    minWidth: 96,
-    borderRadius: 999,
-    backgroundColor: colors.accentMint,
-    paddingHorizontal: 11,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  coachBridgeButtonText: {
-    color: colors.textOnAccent,
-    fontSize: 12,
-    fontWeight: '900',
-  },
-  healthScoreCard: {
-    marginBottom: 16,
-    borderColor: colors.borderSuccess,
-    backgroundColor: colors.surfaceSuccess,
-    gap: 13,
-  },
-  healthScoreHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: 14,
-  },
-  healthScoreCopy: {
-    flex: 1,
-    minWidth: 0,
-  },
-  healthScoreEyebrow: {
-    color: colors.textMuted,
-    fontSize: 11,
-    fontWeight: '900',
-    letterSpacing: 0.5,
-    marginBottom: 4,
-  },
-  healthScoreTitle: {
-    color: colors.text,
-    fontSize: 18,
-    lineHeight: 23,
-    fontWeight: '900',
-  },
-  healthScoreBody: {
-    color: colors.textSoft,
-    fontSize: 13,
-    lineHeight: 19,
-    marginTop: 4,
-  },
-  healthScoreBadge: {
-    minWidth: 76,
-    borderRadius: radii.lg,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.borderSubtle,
-    paddingHorizontal: 10,
-    paddingVertical: 9,
-    alignItems: 'center',
-  },
-  healthScoreValue: {
-    color: colors.accentMint,
-    fontSize: 28,
+  ringHeroValue: {
+    fontSize: 29,
+    fontWeight: '800' as const,
+    letterSpacing: -1,
     lineHeight: 32,
-    fontWeight: '900',
   },
-  healthScoreUnit: {
-    color: colors.textMuted,
+  ringHeroLabel: {
     fontSize: 11,
-    fontWeight: '800',
+    fontWeight: '600' as const,
+    marginTop: 2,
+    textAlign: 'center' as const,
   },
-  healthTrendRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignItems: 'center',
-    gap: 8,
-  },
-  healthTrendPill: {
-    minHeight: 30,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: colors.borderSuccess,
-    backgroundColor: colors.surface,
-    paddingHorizontal: 9,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-  },
-  healthTrendPillGood: {
-    borderColor: colors.borderSuccess,
-  },
-  healthTrendPillWarn: {
-    borderColor: colors.borderWarning,
-    backgroundColor: colors.surfaceWarning,
-  },
-  healthTrendText: {
-    color: colors.accentMint,
-    fontSize: 12,
-    fontWeight: '900',
-  },
-  healthTrendTextWarn: {
-    color: colors.accentAmber,
-  },
-  healthAdherenceText: {
-    flexShrink: 1,
-    color: colors.textSoft,
-    fontSize: 12,
-    lineHeight: 18,
-    fontWeight: '800',
-  },
-  healthScoreBreakdown: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+  ringHeroMetrics: { flex: 1, gap: 13 },
+  heroMetric: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     gap: 10,
   },
-  healthScoreMetric: {
-    flexGrow: 1,
-    flexBasis: '46%',
-    minWidth: 136,
-    borderRadius: radii.lg,
-    backgroundColor: colors.surface,
+  heroMetricIconBox: {
+    width: 38,
+    height: 38,
+    borderRadius: 13,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  heroMetricLabel: { fontSize: 12, fontWeight: '600' as const },
+  heroMetricValue: { fontSize: 18, fontWeight: '800' as const, lineHeight: 22 },
+
+  // Preset chips
+  presetRow: { flexDirection: 'row' as const, gap: 10, marginBottom: 18 },
+  presetChip: {
+    flex: 1,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: colors.borderSubtle,
+    paddingVertical: 12,
+    paddingHorizontal: 4,
+    alignItems: 'center' as const,
+  },
+  presetChipActive: {},
+  presetChipText: {
+    fontSize: 12.5,
+    fontWeight: '800' as const,
+    textAlign: 'center' as const,
+  },
+
+  // Macro bars
+  macroBarRow: { flexDirection: 'row' as const, gap: 12, marginBottom: 16 },
+  macroBarCard: { flex: 1, borderRadius: 20, borderWidth: 1, padding: 16, minHeight: 96 },
+  macroBarLabel: { fontSize: 12, fontWeight: '700' as const },
+  macroBarValue: { fontSize: 22, fontWeight: '800' as const, marginTop: 4, marginBottom: 8, lineHeight: 26 },
+  macroBarGoal: { fontSize: 11, fontWeight: '600' as const },
+  macroBarTrack: { height: 6, borderRadius: 3, overflow: 'hidden' as const },
+  macroBarFill: { height: '100%' as any, borderRadius: 3 },
+
+  // Nutrition quality
+  qualityCard: { marginBottom: 12 },
+  qualityCardHeader: {
+    flexDirection: 'row' as const,
+    justifyContent: 'space-between' as const,
+    alignItems: 'center' as const,
+    marginBottom: 12,
+  },
+  qualityCardTitle: { fontSize: 13, fontWeight: '800' as const },
+  qualityCardSub: { fontSize: 11 },
+  qualityGrid: { flexDirection: 'row' as const, flexWrap: 'wrap' as const, gap: 8 },
+  qualityCell: {
+    flex: 1,
+    minWidth: '46%' as any,
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 11,
+    paddingVertical: 9,
+  },
+  qualityCellLabel: { fontSize: 10.5, fontWeight: '700' as const },
+  qualityCellValue: { fontSize: 13, fontWeight: '800' as const, marginTop: 2 },
+  qualityCellThreshold: { fontSize: 10, fontWeight: '700' as const },
+
+  // Next step dark card
+  nextStepCard: {
+    borderRadius: 24,
+    padding: 18,
+    marginBottom: 12,
+    ...(Platform.OS === 'web'
+      ? ({ boxShadow: `0 18px 38px ${colors.shadow}38` } as any)
+      : {
+          shadowColor: colors.shadow,
+          shadowOpacity: 0.22,
+          shadowRadius: 19,
+          shadowOffset: { width: 0, height: 9 },
+          elevation: 8,
+        }),
+  },
+  nextStepRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 14,
+    marginBottom: 14,
+  },
+  nextStepIconWrap: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    backgroundColor: colors.surfaceAlt,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  nextStepCopy: { flex: 1 },
+  nextStepEyebrow: {
+    fontSize: 11,
+    fontWeight: '700' as const,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase' as const,
+    color: colors.accentMint,
+  },
+  nextStepTitle: {
+    fontSize: 13.5,
+    fontWeight: '600' as const,
+    color: colors.text,
+    marginTop: 3,
+    lineHeight: 19,
+  },
+  nextStepBody: { fontSize: 12, color: colors.textSoft, marginTop: 2, lineHeight: 17 },
+  nextStepButton: {
+    height: 42,
+    borderRadius: 14,
+    backgroundColor: colors.accentMint,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  nextStepButtonDone: {},
+  nextStepButtonText: {
+    fontSize: 13.5,
+    fontWeight: '800' as const,
+    color: colors.textOnAccent,
+  },
+  nextStepButtonTextDone: {},
+
+  // Section header
+  sectionHeader: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    marginBottom: 10,
+    marginTop: 4,
+  },
+  sectionTitle: { fontSize: 13, fontWeight: '800' as const },
+  sectionLink: { fontSize: 12, fontWeight: '700' as const },
+
+  // Meal list
+  mealListCard: { padding: 6, marginBottom: 14 },
+  mealRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 12,
     padding: 10,
   },
-  healthScoreMetricHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 8,
-    marginBottom: 8,
+  mealRowIconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: 13,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
-  healthScoreMetricLabel: {
-    color: colors.textSoft,
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  healthScoreMetricValue: {
-    color: colors.text,
-    fontSize: 12,
-    fontWeight: '900',
-  },
-  healthScoreTrack: {
-    height: 6,
-    borderRadius: 999,
-    backgroundColor: colors.surfacePressed,
-    overflow: 'hidden',
-  },
-  healthScoreFill: {
-    height: '100%',
-    borderRadius: 999,
-    backgroundColor: colors.accentMint,
-  },
-  healthSignalList: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  healthSignalChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    borderRadius: radii.sm,
-    backgroundColor: colors.surface,
+  mealRowCopy: { flex: 1, minWidth: 0 },
+  mealRowName: { fontSize: 13.5, fontWeight: '700' as const },
+  mealRowMeta: { fontSize: 11, marginTop: 1 },
+  aiBadge: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 3,
+    borderRadius: 8,
     borderWidth: 1,
-    borderColor: colors.borderSubtle,
-    paddingHorizontal: 9,
-    paddingVertical: 7,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
   },
-  healthSignalText: {
-    color: colors.textSoft,
-    fontSize: 11,
-    lineHeight: 15,
-    fontWeight: '700',
-  },
-  healthScoreAction: {
-    minHeight: 44,
-    borderRadius: radii.lg,
-    backgroundColor: colors.accentMint,
-    paddingHorizontal: 13,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
+  aiBadgeText: { fontSize: 10, fontWeight: '800' as const },
+
+  // Shortcuts
+  shortcutGrid: { flexDirection: 'row' as const, gap: 9, marginBottom: 8 },
+  shortcutTile: {
+    flex: 1,
+    borderRadius: 16,
+    borderWidth: 1,
+    paddingTop: 11,
+    paddingBottom: 10,
+    paddingHorizontal: 6,
+    alignItems: 'center' as const,
     gap: 6,
   },
-  healthScoreActionText: {
-    color: colors.textOnAccent,
-    fontSize: 13,
-    fontWeight: '900',
+  shortcutIconBubble: {
+    width: 30,
+    height: 30,
+    borderRadius: 12,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
-  successForecastCard: {
-    marginBottom: 16,
-    borderColor: colors.borderInfo,
-    backgroundColor: colors.surfaceInfo,
+  shortcutLabel: {
+    fontSize: 10.5,
+    fontWeight: '700' as const,
+    textAlign: 'center' as const,
+  },
+
+  disabledButton: { opacity: 0.6 },
+
+  supportPanel: {
+    marginTop: 16,
+    marginBottom: 12,
+  },
+  supportDivider: {
+    height: 1,
+    marginVertical: 14,
+  },
+
+  // Roadmap plan
+  roadmapHeader: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    marginBottom: 10,
+  },
+  roadmapCounter: { fontSize: 12, fontWeight: '700' as const },
+  roadmapRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 12,
+    paddingVertical: 11,
+  },
+  roadmapRowCopy: { flex: 1, minWidth: 0 },
+  roadmapRowTitle: { fontSize: 13.5, fontWeight: '700' as const },
+  roadmapRowMeta: { fontSize: 11, marginTop: 2 },
+  roadmapRowAction: { fontSize: 11.5, fontWeight: '700' as const },
+
+  // Compact coach card
+  coachRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     gap: 12,
   },
-  successForecastCardGood: {
-    borderColor: colors.borderSuccess,
-    backgroundColor: colors.surfaceSuccess,
+  coachIconBox: {
+    width: 38,
+    height: 38,
+    borderRadius: 13,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    flexShrink: 0,
   },
-  successForecastCardWarn: {
-    borderColor: colors.borderWarning,
-    backgroundColor: colors.surfaceWarning,
-  },
-  successForecastHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: 14,
-  },
-  successForecastCopy: {
-    flex: 1,
-    minWidth: 0,
-  },
-  successForecastEyebrow: {
-    color: colors.textMuted,
-    fontSize: 11,
-    fontWeight: '900',
-    letterSpacing: 0.5,
-    marginBottom: 4,
-  },
-  successForecastTitle: {
-    color: colors.text,
-    fontSize: 17,
-    lineHeight: 22,
-    fontWeight: '900',
-  },
-  successForecastBody: {
-    color: colors.textSoft,
-    fontSize: 13,
-    lineHeight: 19,
-    marginTop: 4,
-  },
-  successForecastBadge: {
-    minWidth: 76,
-    borderRadius: radii.lg,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.borderSubtle,
-    paddingHorizontal: 10,
-    paddingVertical: 9,
-    alignItems: 'center',
-  },
-  successForecastValue: {
-    color: colors.accentMint,
-    fontSize: 28,
-    lineHeight: 32,
-    fontWeight: '900',
-  },
-  successForecastValueWarn: {
-    color: colors.accentAmber,
-  },
-  successForecastUnit: {
-    color: colors.textMuted,
-    fontSize: 11,
-    fontWeight: '800',
-  },
-  successForecastDriverGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  successForecastDriver: {
-    flexGrow: 1,
-    flexBasis: '22%',
-    minWidth: 92,
-    borderRadius: radii.sm,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.borderSubtle,
-    paddingHorizontal: 9,
-    paddingVertical: 8,
-  },
-  successForecastDriverLabel: {
-    color: colors.textMuted,
-    fontSize: 10,
-    lineHeight: 14,
-    fontWeight: '800',
-  },
-  successForecastDriverValue: {
-    color: colors.text,
-    fontSize: 14,
-    lineHeight: 18,
-    fontWeight: '900',
-    marginTop: 2,
-  },
-  successForecastSteps: {
-    gap: 7,
-  },
-  successForecastStep: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 7,
-  },
-  successForecastStepText: {
-    flex: 1,
-    minWidth: 0,
-    color: colors.textSoft,
-    fontSize: 12,
-    lineHeight: 18,
-    fontWeight: '700',
-  },
-  successForecastAction: {
-    minHeight: 44,
-    borderRadius: radii.lg,
-    backgroundColor: colors.accentMint,
-    paddingHorizontal: 13,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-  },
-  successForecastActionWarn: {
-    backgroundColor: colors.accentAmber,
-  },
-  successForecastActionText: {
-    color: colors.textOnAccent,
-    fontSize: 13,
-    fontWeight: '900',
-  },
-  dynamicInterventionCard: {
-    marginBottom: 16,
-    borderColor: colors.borderInfo,
-    backgroundColor: colors.surfaceInfo,
-    gap: 12,
-  },
-  dynamicInterventionCardGood: {
-    borderColor: colors.borderSuccess,
-    backgroundColor: colors.surfaceSuccess,
-  },
-  dynamicInterventionCardWarn: {
-    borderColor: colors.borderWarning,
-    backgroundColor: colors.surfaceWarning,
-  },
-  dynamicInterventionHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 10,
-  },
-  dynamicInterventionIcon: {
+  coachCopy: { flex: 1, minWidth: 0 },
+  coachEyebrow: { fontSize: 10, fontWeight: '700' as const, letterSpacing: 0.5, textTransform: 'uppercase' as const },
+  coachTitle: { fontSize: 13, fontWeight: '800' as const, marginTop: 1 },
+  coachBody: { fontSize: 11.5, marginTop: 2, lineHeight: 16 },
+  coachButton: {
     width: 34,
     height: 34,
-    borderRadius: 17,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.borderSubtle,
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderRadius: 12,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    flexShrink: 0,
   },
-  dynamicInterventionCopy: {
-    flex: 1,
-    minWidth: 0,
-  },
-  dynamicInterventionEyebrow: {
-    color: colors.textMuted,
-    fontSize: 11,
-    fontWeight: '900',
-    letterSpacing: 0.5,
-    marginBottom: 3,
-  },
-  dynamicInterventionTitle: {
-    color: colors.text,
-    fontSize: 17,
-    lineHeight: 22,
-    fontWeight: '900',
-  },
-  dynamicInterventionBody: {
-    color: colors.textSoft,
-    fontSize: 13,
-    lineHeight: 19,
-    marginTop: 4,
-  },
-  dynamicInterventionSteps: {
-    gap: 7,
-  },
-  dynamicInterventionStep: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 7,
-  },
-  dynamicInterventionStepText: {
-    flex: 1,
-    minWidth: 0,
-    color: colors.textSoft,
-    fontSize: 12,
-    lineHeight: 18,
-    fontWeight: '700',
-  },
-  dynamicInterventionAction: {
-    minHeight: 44,
-    borderRadius: radii.lg,
-    backgroundColor: colors.accentMint,
-    paddingHorizontal: 13,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-  },
-  dynamicInterventionActionWarn: {
-    backgroundColor: colors.accentAmber,
-  },
-  dynamicInterventionActionText: {
-    color: colors.textOnAccent,
-    fontSize: 13,
-    fontWeight: '900',
-  },
-  todayPlanCard: {
-    marginBottom: 16,
-    borderColor: colors.borderInfo,
-    backgroundColor: colors.surfaceInfo,
-    gap: 12,
-  },
-  todayPlanHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: 14,
-  },
-  todayPlanCopy: {
-    flex: 1,
-    minWidth: 0,
-  },
-  todayPlanEyebrow: {
-    color: colors.textMuted,
-    fontSize: 11,
-    fontWeight: '900',
-    letterSpacing: 0.6,
-    marginBottom: 3,
-  },
-  todayPlanTitle: {
-    color: colors.text,
-    fontSize: 17,
-    lineHeight: 22,
-    fontWeight: '900',
-  },
-  todayPlanBody: {
-    color: colors.textSoft,
-    fontSize: 13,
-    lineHeight: 19,
-    marginTop: 4,
-  },
-  todayPlanGoal: {
-    color: colors.accentCyan,
-    fontSize: 12,
-    lineHeight: 18,
-    fontWeight: '800',
-    marginTop: 6,
-  },
-  todayPlanWarning: {
-    color: colors.accentAmber,
-    fontSize: 11,
-    lineHeight: 16,
-    fontWeight: '800',
-    marginTop: 5,
-  },
-  todayPlanMetric: {
-    minWidth: 78,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: colors.borderInfo,
-    backgroundColor: colors.surface,
-    paddingHorizontal: 10,
-    paddingVertical: 9,
-    alignItems: 'center',
-  },
-  todayPlanMetricValue: {
-    color: colors.accentMint,
-    fontSize: 20,
-    lineHeight: 24,
-    fontWeight: '900',
-  },
-  todayPlanMetricOver: {
-    color: colors.accentCoral,
-  },
-  todayPlanMetricLabel: {
-    color: colors.textMuted,
-    fontSize: 11,
-    fontWeight: '800',
-    marginTop: 2,
-  },
-  todayPlanRoadmapList: {
-    gap: 8,
-  },
-  todayPlanRoadmapItem: {
-    minHeight: 48,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: colors.borderInfo,
-    backgroundColor: colors.surface,
-    paddingHorizontal: 10,
-    paddingVertical: 9,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 9,
-  },
-  todayPlanRoadmapItemDone: {
-    borderColor: colors.borderSuccess,
-    backgroundColor: colors.surfaceSuccess,
-  },
-  todayPlanRoadmapCopy: {
-    flex: 1,
-    minWidth: 0,
-  },
-  todayPlanRoadmapTitle: {
-    color: colors.text,
-    fontSize: 13,
-    lineHeight: 17,
-    fontWeight: '800',
-  },
-  todayPlanRoadmapMeta: {
-    color: colors.textMuted,
-    fontSize: 11,
-    lineHeight: 15,
-    marginTop: 2,
-  },
-  todayPlanRoadmapAction: {
-    color: colors.accentMint,
-    fontSize: 11,
-    fontWeight: '900',
-  },
-  todayPlanActions: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 9,
-  },
-  todayPlanPrimary: {
-    minHeight: 40,
-    borderRadius: radii.lg,
-    backgroundColor: colors.accentMint,
-    paddingHorizontal: 13,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  todayPlanPrimaryText: {
-    color: colors.textOnAccent,
-    fontSize: 12,
-    fontWeight: '900',
-  },
-  todayPlanSecondary: {
-    minHeight: 40,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: colors.borderInfo,
-    backgroundColor: colors.surface,
-    paddingHorizontal: 13,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  todayPlanSecondaryText: {
-    color: colors.info,
-    fontSize: 12,
-    fontWeight: '900',
-  },
-  cockpitCard: {
-    marginBottom: 20,
-    backgroundColor: colors.surface,
-    borderColor: colors.borderSubtle,
-    padding: 22,
-  },
-  cockpitCardCompact: {
-    marginBottom: 12,
-    padding: 12,
-  },
-  cockpitMain: {
-    flexDirection: 'row',
-    alignItems: 'center',
+
+  // Compact health score card
+  healthRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     gap: 16,
   },
-  cockpitMainCompact: {
-    gap: 8,
-  },
-  ringWrap: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  ringSvg: {
-    position: 'absolute',
-  },
-  ringCenter: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  ringValue: {
-    color: colors.text,
-    fontSize: 40,
-    fontWeight: '900',
-    lineHeight: 46,
-  },
-  ringValueCompact: {
-    fontSize: 32,
-    lineHeight: 38,
-  },
-  ringLabel: {
-    color: colors.textMuted,
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  ringLabelCompact: {
-    fontSize: 11,
-  },
-  ringRemain: {
-    color: colors.accentMint,
-    fontSize: 13,
-    fontWeight: '800',
-    marginTop: 7,
-  },
-  ringRemainCompact: {
-    fontSize: 12,
-    marginTop: 5,
-  },
-  ringRemainOver: {
-    color: colors.accentCoral,
-  },
-  cockpitSide: {
-    flex: 1,
-    gap: 8,
-  },
-  cockpitSideCompact: {
-    gap: 6,
-  },
-  targetRow: {
-    borderRadius: radii.lg,
-    backgroundColor: colors.surfaceMuted,
-    borderWidth: 1,
-    borderColor: colors.borderSubtle,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-  },
-  targetRowCompact: {
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-  },
-  targetLabel: {
-    color: colors.textMuted,
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  targetValue: {
-    color: colors.text,
-    fontSize: 18,
-    fontWeight: '900',
-    marginTop: 2,
-  },
-  targetValueCompact: {
-    fontSize: 16,
-  },
-  targetValueBurned: {
-    color: colors.accentAmber,
-    fontSize: 18,
-    fontWeight: '900',
-    marginTop: 2,
-  },
-  macroRow: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 20,
-  },
-  macroRowCompact: {
-    gap: 6,
-    marginTop: 12,
-  },
-  macroPill: {
-    flex: 1,
-    minHeight: 64,
-    borderRadius: radii.lg,
-    backgroundColor: colors.surfaceMuted,
-    borderWidth: 1,
-    borderColor: colors.borderSubtle,
-    padding: 12,
-  },
-  macroDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginBottom: 5,
-  },
-  macroValue: {
-    color: colors.text,
-    fontSize: 18,
-    fontWeight: '900',
-  },
-  macroLabel: {
-    color: colors.textMuted,
-    fontSize: 11,
-    marginTop: 1,
-  },
-  focusStrip: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 11,
-    marginTop: 18,
-  },
-  focusPill: {
-    flex: 1,
-    minWidth: 112,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    padding: 12,
-  },
-  focusPillGood: {
+  healthScoreCircle: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     backgroundColor: colors.surfaceSuccess,
-    borderColor: colors.borderSuccess,
-  },
-  focusPillInfo: {
-    backgroundColor: colors.surfaceInfo,
-    borderColor: colors.borderInfo,
-  },
-  focusPillWarn: {
-    backgroundColor: colors.surfaceWarning,
-    borderColor: colors.borderWarning,
-  },
-  focusPillMuted: {
-    backgroundColor: colors.surfaceMuted,
-    borderColor: colors.borderSubtle,
-  },
-  focusHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    marginBottom: 6,
-  },
-  focusLabel: {
-    color: colors.textMuted,
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 0.45,
-  },
-  focusValue: {
-    color: colors.text,
-    fontSize: 15,
-    fontWeight: '900',
-  },
-  focusHint: {
-    color: colors.textSoft,
-    fontSize: 11,
-    lineHeight: 16,
-    minHeight: 32,
-    marginTop: 3,
-  },
-  focusProgressTrack: {
-    height: 5,
-    borderRadius: 999,
-    overflow: 'hidden',
-    backgroundColor: colors.progressBg,
-    marginTop: 8,
-  },
-  focusProgressFill: {
-    height: '100%',
-    borderRadius: 999,
-  },
-  qualityRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 11,
-    marginTop: 14,
-  },
-  qualityPill: {
-    minWidth: '47%',
-    flex: 1,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: colors.borderSubtle,
-    backgroundColor: colors.surfaceMuted,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  qualityPillMuted: {
-    borderColor: colors.borderSubtle,
-    backgroundColor: colors.surfaceMuted,
-  },
-  qualityPillOver: {
-    borderColor: colors.borderWarning,
-    backgroundColor: colors.surfaceWarning,
-  },
-  qualityLabel: {
-    color: colors.textMuted,
-    fontSize: 11,
-    fontWeight: '800',
-  },
-  qualityValue: {
-    color: colors.text,
-    fontSize: 13,
-    fontWeight: '900',
-    marginTop: 2,
-  },
-  qualityCoverageNote: {
-    color: colors.textMuted,
-    fontSize: 11,
-    lineHeight: 16,
-    marginTop: 8,
-  },
-  actionGrid: {
-    flexDirection: 'row',
-    gap: 11,
-    marginBottom: 16,
-  },
-  actionGridCompact: {
-    gap: 8,
-    marginBottom: 10,
-  },
-  movementCard: {
-    marginBottom: 16,
-    backgroundColor: colors.surfaceSuccess,
-    borderColor: colors.borderSuccess,
-    gap: 12,
-  },
-  movementCardCaution: {
-    backgroundColor: colors.surfaceWarning,
-    borderColor: colors.borderWarning,
-  },
-  movementCardSurplus: {
-    backgroundColor: colors.surfaceWarning,
-    borderColor: colors.borderWarning,
-  },
-  movementCardFuel: {
-    backgroundColor: colors.surfaceInfo,
-    borderColor: colors.borderInfo,
-  },
-  movementHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 10,
-    marginBottom: 12,
-  },
-  movementTitleWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  movementTitle: {
-    color: colors.text,
-    fontSize: 16,
-    lineHeight: 21,
-    fontWeight: '900',
-  },
-  movementMetric: {
-    color: colors.accentMint,
-    fontSize: 12,
-    fontWeight: '900',
-  },
-  movementSourcePill: {
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: colors.borderSuccess,
-    backgroundColor: colors.surfaceSuccess,
-    paddingHorizontal: 9,
-    paddingVertical: 5,
-  },
-  movementSourceText: {
-    color: colors.accentMint,
-    fontSize: 11,
-    fontWeight: '900',
-  },
-  movementNextAction: {
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: colors.borderSuccess,
-    backgroundColor: colors.surfaceSuccess,
-    padding: 13,
-    gap: 9,
-  },
-  movementActionLabel: {
-    color: colors.textMuted,
-    fontSize: 11,
-    fontWeight: '900',
-    letterSpacing: 0.45,
-  },
-  movementMetaRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  movementMetaPill: {
-    minHeight: 28,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: colors.borderSuccess,
-    backgroundColor: colors.surfaceSuccess,
-    paddingHorizontal: 9,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-  },
-  movementMetaText: {
-    color: colors.text,
-    fontSize: 12,
-    fontWeight: '900',
-  },
-  movementProgressHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: 10,
-    marginTop: 3,
-  },
-  movementProgressLabel: {
-    color: colors.textMuted,
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  movementProgressBar: {
-    height: 7,
-    borderRadius: 999,
-    overflow: 'hidden',
-    backgroundColor: colors.progressBg,
-  },
-  movementProgressFill: {
-    height: '100%',
-    borderRadius: 999,
-    backgroundColor: colors.accentMint,
-  },
-  movementBodyRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  movementCopy: {
-    flex: 1,
-    minWidth: 0,
-  },
-  movementPlanTitle: {
-    color: colors.text,
-    fontSize: 18,
-    lineHeight: 23,
-    fontWeight: '900',
-  },
-  movementCalorieStatus: {
-    color: colors.accentCyan,
-    fontSize: 12,
-    lineHeight: 18,
-    fontWeight: '800',
-  },
-  movementPlanDetail: {
-    color: colors.textSoft,
-    fontSize: 12,
-    lineHeight: 19,
-  },
-  movementTargetGuidance: {
-    color: colors.text,
-    fontSize: 12,
-    lineHeight: 19,
-    fontWeight: '700',
-  },
-  movementPlanMeta: {
-    color: colors.textMuted,
-    fontSize: 11,
-    lineHeight: 16,
-    marginTop: 5,
-  },
-  movementLogButton: {
-    minHeight: 42,
-    maxWidth: '100%',
-    flexShrink: 1,
-    borderRadius: radii.lg,
-    backgroundColor: colors.accentMint,
-    paddingHorizontal: 13,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-    gap: 5,
-  },
-  movementActionRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    maxWidth: '100%',
-    gap: 8,
-    marginTop: 2,
-  },
-  movementSecondaryButton: {
-    minHeight: 42,
-    maxWidth: '100%',
-    flexShrink: 1,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: colors.borderSuccess,
-    backgroundColor: colors.surfaceSuccess,
-    paddingHorizontal: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-    gap: 5,
-  },
-  movementSecondaryText: {
-    color: colors.accentMint,
-    fontSize: 12,
-    fontWeight: '900',
-  },
-  movementLogText: {
-    color: colors.textOnAccent,
-    fontSize: 12,
-    fontWeight: '900',
-  },
-  safetySetupCard: {
-    gap: 10,
-    marginBottom: 14,
-    backgroundColor: colors.surfaceSuccess,
-    borderColor: colors.borderSuccess,
-  },
-  medicalReviewCard: {
-    backgroundColor: colors.surfaceWarning,
-    borderColor: colors.borderWarning,
-  },
-  safetySetupHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  safetySetupTitle: {
-    color: colors.text,
-    fontSize: 14,
-    fontWeight: '900',
-  },
-  safetySetupBody: {
-    color: colors.textMuted,
-    fontSize: 12,
-    lineHeight: 19,
-  },
-  safetySetupButton: {
-    alignSelf: 'flex-start',
-    minHeight: 38,
-    borderRadius: radii.lg,
-    backgroundColor: colors.accentMint,
-    paddingHorizontal: 11,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  safetySetupButtonText: {
-    color: colors.textOnAccent,
-    fontSize: 12,
-    fontWeight: '900',
-  },
-  primaryAction: {
-    flex: 1.25,
-    minHeight: 58,
-    borderRadius: radii.lg,
-    backgroundColor: colors.accentMint,
-    borderWidth: 1,
-    borderColor: colors.borderSuccess,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  primaryActionCompact: {
-    minHeight: 50,
-    gap: 6,
-  },
-  primaryActionText: {
-    color: colors.textOnAccent,
-    fontSize: 16,
-    fontWeight: '900',
-  },
-  secondaryAction: {
-    flex: 1,
-    minHeight: 58,
-    borderRadius: radii.lg,
-    backgroundColor: colors.surfaceAlt,
-    borderWidth: 1,
-    borderColor: colors.border,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  secondaryActionCompact: {
-    minHeight: 50,
-    gap: 6,
-  },
-  secondaryActionText: {
-    color: colors.accentMint,
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  secondaryActionCopy: {
-    flexShrink: 1,
-    alignItems: 'flex-start',
-  },
-  secondaryActionHint: {
-    color: colors.textMuted,
-    fontSize: 10,
-    lineHeight: 14,
-    marginTop: 1,
-  },
-  nudgeRow: {
-    gap: 10,
-    marginBottom: 18,
-  },
-  nudgeChip: {
-    minHeight: 62,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    paddingHorizontal: 13,
-    paddingVertical: 11,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  goodNudge: {
-    backgroundColor: colors.surfaceSuccess,
-    borderColor: colors.borderSuccess,
-  },
-  infoNudge: {
-    backgroundColor: colors.surfaceInfo,
-    borderColor: colors.borderInfo,
-  },
-  warnNudge: {
-    backgroundColor: colors.surfaceWarning,
-    borderColor: colors.borderWarning,
-  },
-  nudgeCopy: {
-    flex: 1,
-  },
-  nudgeTitle: {
-    color: colors.text,
-    fontSize: 13,
-    fontWeight: '900',
-  },
-  nudgeBody: {
-    color: colors.textSoft,
-    fontSize: 12,
-    marginTop: 2,
-    lineHeight: 18,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-  },
-  sectionTitle: {
-    color: colors.text,
-    fontSize: 18,
-    fontWeight: '900',
-  },
-  sectionLink: {
-    color: colors.accentCyan,
-    fontSize: 13,
-    fontWeight: '800',
-  },
-  mealList: {
-    gap: 12,
-  },
-  mealCard: {
-    flexDirection: 'row',
-    gap: 13,
-    padding: 13,
-  },
-  mealImage: {
-    width: 82,
-    height: 82,
-    borderRadius: radii.lg,
-    backgroundColor: colors.surfaceAlt,
-  },
-  mealContent: {
-    flex: 1,
-    justifyContent: 'center',
-  },
-  mealTopRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: 10,
-    alignItems: 'flex-start',
-  },
-  mealName: {
-    color: colors.text,
-    fontSize: 15,
-    lineHeight: 20,
-    fontWeight: '900',
-  },
-  mealHint: {
-    color: colors.textMuted,
-    fontSize: 12,
-    marginTop: 2,
-  },
-  mealCalories: {
-    color: colors.accentMint,
-    fontSize: 13,
-    fontWeight: '900',
-  },
-  mealItems: {
-    color: colors.textSoft,
-    fontSize: 13,
-    lineHeight: 19,
-    marginTop: 8,
-  },
-  mealItemsMuted: {
-    color: colors.textMuted,
-    fontSize: 13,
-    marginTop: 8,
-  },
-  quickLinks: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 16,
-  },
-  quickLink: {
-    flex: 1,
-    minHeight: 50,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceAlt,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-    gap: 6,
-  },
-  quickLinkText: {
-    color: colors.textSoft,
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  goalPlanCard: {
-    marginBottom: 12,
-    borderRadius: radii.lg,
-    backgroundColor: colors.surfaceSuccess,
-    borderWidth: 1,
-    borderColor: colors.borderSuccess,
-  },
-  goalPlanHeader: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: 12,
-    marginBottom: 10,
-  },
-  goalPlanHeaderCopy: {
-    flex: 1,
-  },
-  goalPlanEyebrow: {
-    color: colors.textMuted,
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  goalPlanTitle: {
-    color: colors.text,
-    fontSize: 18,
-    fontWeight: '900',
-    marginTop: 2,
-  },
-  goalPlanBody: {
-    color: colors.textMuted,
-    fontSize: 13,
-    lineHeight: 19,
-  },
-  goalPlanStatusPill: {
-    minHeight: 28,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: colors.borderSuccess,
-    backgroundColor: colors.surfaceSuccess,
-    paddingHorizontal: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  goalPlanStatusPillWarn: {
-    borderColor: colors.borderWarning,
-    backgroundColor: colors.surfaceWarning,
-  },
-  goalPlanStatusText: {
-    color: colors.accentMint,
-    fontSize: 12,
-    fontWeight: '900',
-  },
-  goalPlanStatusTextWarn: {
-    color: colors.accentAmber,
-  },
-  activeGoalPlanBox: {
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: colors.borderSuccess,
-    backgroundColor: colors.surfaceSuccess,
-    padding: 10,
-    gap: 4,
-  },
-  activeGoalPlanTitle: {
-    color: colors.text,
-    fontSize: 14,
-    fontWeight: '900',
-  },
-  activeGoalPlanMeta: {
-    color: colors.textSoft,
-    fontSize: 12,
-    lineHeight: 17,
-  },
-  activeGoalPlanWarning: {
-    color: colors.accentAmber,
-    fontSize: 12,
-    lineHeight: 17,
-    fontWeight: '800',
-  },
-  goalPlanSubhead: {
-    color: colors.textMuted,
-    fontSize: 12,
-    fontWeight: '800',
-    marginTop: 12,
-  },
-  goalOptionsRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 8,
-    flexWrap: 'wrap',
-  },
-  goalOption: {
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: colors.borderSuccess,
-    backgroundColor: colors.surfaceSuccess,
-  },
-  goalOptionSelected: {
-    backgroundColor: colors.accentMint,
-    borderColor: colors.borderSuccess,
-  },
-  goalOptionText: {
-    color: colors.textMuted,
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  goalOptionTextSelected: {
-    color: colors.textOnAccent,
-  },
-  goalPlanPreview: {
-    marginTop: 10,
-    borderRadius: radii.lg,
-    borderWidth: 1,
-    borderColor: colors.borderSuccess,
-    backgroundColor: colors.surfaceSuccess,
-    padding: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 12,
-  },
-  goalPlanPreviewCopy: {
-    flex: 1,
-    minWidth: 180,
-  },
-  goalPlanPreviewTitle: {
-    color: colors.text,
-    fontSize: 13,
-    fontWeight: '900',
-  },
-  goalPlanPreviewText: {
-    color: colors.textMuted,
-    fontSize: 12,
-    lineHeight: 17,
-    marginTop: 2,
-  },
-  goalPlanFootnote: {
-    color: colors.textMuted,
-    fontSize: 11,
-    lineHeight: 16,
-    marginTop: 8,
-  },
-  applyButton: {
-    minWidth: 108,
-    minHeight: 44,
-    borderRadius: radii.lg,
-    backgroundColor: colors.accentMint,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  applyButtonText: {
-    color: colors.textOnAccent,
-    fontSize: 14,
-    fontWeight: '900',
-  },
-  disabledButton: {
-    opacity: 0.6,
-  },
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    flexShrink: 0,
+  },
+  healthScoreValue: { fontSize: 22, fontWeight: '900' as const, lineHeight: 26 },
+  healthScoreMax: { fontSize: 10, fontWeight: '600' as const },
+  healthRight: { flex: 1, minWidth: 0 },
+  healthEyebrow: { fontSize: 10, fontWeight: '700' as const, letterSpacing: 0.5, textTransform: 'uppercase' as const },
+  healthTrend: { fontSize: 11.5, fontWeight: '600' as const, marginTop: 2 },
+  healthBarsRow: { flexDirection: 'row' as const, gap: 8, marginTop: 8 },
+  healthBarCol: { flex: 1 },
+  healthBarTrack: { height: 5, borderRadius: 3, overflow: 'hidden' as const },
+  healthBarFill: { height: '100%' as any, borderRadius: 3 },
+  healthBarLabel: { fontSize: 9.5, fontWeight: '600' as const, marginTop: 3, textAlign: 'center' as const },
 }));
-
-
