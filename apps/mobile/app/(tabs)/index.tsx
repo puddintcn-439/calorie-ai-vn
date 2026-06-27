@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Image,
+  Animated,
   Platform,
   TouchableOpacity,
   useWindowDimensions,
@@ -46,8 +46,10 @@ import { buildInterventionEvent, recordInterventionEvent } from '../../services/
 import { telemetryService } from '../../services/telemetry.service';
 import { TodayHero } from '../../components/today/TodayHero';
 import { getProteinTarget, useTodayHero } from '../../hooks/useTodayHero';
+import { TodayCoachCard } from '../../components/today/TodayCoachCard';
+import { TodayCoachSuggestion, useTodayCoach } from '../../hooks/useTodayCoach';
+import { MealRecommendation } from '../../services/calorie-target.service';
 
-const mealIllustration = require('../../assets/images/vietnamese-meal.jpg') as number;
 
 const MEAL_ORDER: MealType[] = ['breakfast', 'lunch', 'dinner', 'snack'];
 
@@ -76,13 +78,6 @@ type DailyFocusItem = {
   icon: keyof typeof Ionicons.glyphMap;
   tone: FocusTone;
   progress: number;
-};
-
-type TodayCoachBridge = {
-  title: string;
-  body: string;
-  status: string;
-  tone: 'good' | 'warn' | 'info';
 };
 
 function successForecastTone(forecast: SuccessForecast) {
@@ -535,70 +530,6 @@ function getDisplayStreak(summary: { current_streak?: unknown } | null | undefin
   return Math.max(currentStreak, hasFoodLogToday || hasActivityLogToday ? 1 : 0);
 }
 
-function buildTodayCoachBridge(args: {
-  logsCount: number;
-  consumed: number;
-  burned: number;
-  target: number;
-  protein: number;
-  streak: number;
-  locale: Locale;
-}): TodayCoachBridge {
-  const logsCount = safeNumber(args.logsCount);
-  const consumed = safeNumber(args.consumed);
-  const burned = safeNumber(args.burned);
-  const target = safePositiveNumber(args.target, 1800);
-  const protein = safeNumber(args.protein);
-  const streak = safeNumber(args.streak);
-  const locale = args.locale;
-  const net = Math.max(0, consumed - burned);
-  const remaining = target - net;
-  const proteinTarget = Math.max(70, Math.round(target * 0.075 / 4));
-
-  if (logsCount === 0 && streak === 0) {
-    return {
-      title: tr('screen.tabs.index.coach.restart.title', locale),
-      body: tr('screen.tabs.index.coach.restart.body', locale),
-      status: tr('screen.tabs.index.coach.restart.status', locale),
-      tone: 'info',
-    };
-  }
-
-  if (logsCount === 0) {
-    return {
-      title: tr('screen.tabs.index.coach.empty.title', locale),
-      body: tr('screen.tabs.index.coach.empty.body', locale),
-      status: tr('screen.tabs.index.coach.empty.status', locale, { days: formatNumber(streak) }),
-      tone: 'info',
-    };
-  }
-
-  if (remaining < -150) {
-    return {
-      title: tr('screen.tabs.index.coach.over.title', locale),
-      body: tr('screen.tabs.index.coach.over.body', locale),
-      status: tr('screen.tabs.index.coach.over.status', locale, { kcal: formatNumber(Math.abs(remaining)) }),
-      tone: 'warn',
-    };
-  }
-
-  if (protein < proteinTarget * 0.65) {
-    return {
-      title: tr('screen.tabs.index.coach.protein.title', locale),
-      body: tr('screen.tabs.index.coach.protein.body', locale),
-      status: `${formatNumber(protein)}/${proteinTarget}g`,
-      tone: 'info',
-    };
-  }
-
-  return {
-    title: tr('screen.tabs.index.coach.track.title', locale),
-    body: tr('screen.tabs.index.coach.track.body', locale),
-    status: tr('screen.tabs.index.coach.track.status', locale, { kcal: formatNumber(Math.max(0, remaining)) }),
-    tone: 'good',
-  };
-}
-
 type MovementPlan = {
   preference_id?: string;
   title: string;
@@ -822,7 +753,7 @@ export default function DashboardScreen() {
   } = useLogStore();
   const { summary, fetchSummary } = useGamificationStore();
   const { token, isLoading: authLoading } = useAuthStore();
-  const { fetchRecommendations } = useCalorieTargetStore();
+  const { recommendations, fetchRecommendations } = useCalorieTargetStore();
   const { fetchWeeklyInsights } = useInsightsStore();
   const [profileMeta, setProfileMeta] = useState<DashboardProfileMeta | null>(null);
   const [selectedGoal, setSelectedGoal] = useState<string>(QUICK_GOAL_OPTIONS[1].key);
@@ -867,7 +798,8 @@ export default function DashboardScreen() {
     fetchActivityLogs().catch(() => {});
     fetchReminderEffectiveness().catch(() => setReminderEffectiveness(null));
     fetchBehaviorMemory().catch(() => setBehaviorMemory(null));
-  }, [authLoading, fetchActivityLogs, fetchBehaviorMemory, fetchProfileMeta, fetchReminderEffectiveness, fetchSummary, fetchTodaySummary, token]);
+    fetchRecommendations().catch(() => {});
+  }, [authLoading, fetchActivityLogs, fetchBehaviorMemory, fetchProfileMeta, fetchRecommendations, fetchReminderEffectiveness, fetchSummary, fetchTodaySummary, token]);
 
   useEffect(() => {
     if (todaySummary?.profile) {
@@ -895,6 +827,14 @@ export default function DashboardScreen() {
   const logs = dailyLog?.logs ?? [];
   const logsByMeal = useMemo(() => groupLogsByMeal(logs), [logs]);
   const mealTimeline = useMemo(() => buildMealTimeline(logs), [logs]);
+  const suggestedMeal = useMemo(() => {
+    if (logs.length > 0 || !recommendations?.meals?.length) return null;
+    const hour = new Date().getHours();
+    const mealType: MealType = hour < 10 ? 'breakfast' : hour < 15 ? 'lunch' : hour < 20 ? 'dinner' : 'snack';
+    const meal = recommendations.meals.find((item) => item.meal_type === mealType);
+    const food = meal?.suggested_foods?.[0];
+    return meal && food ? { meal, food } : null;
+  }, [logs.length, recommendations]);
   const displayStreak = getDisplayStreak(summary, logs, activityLogs);
   const consumed = safeNumber(dailyLog?.total_calories);
   const burned = activityLogs.reduce((sum, item) => sum + safeNumber(item.calories_burned), 0);
@@ -1065,6 +1005,13 @@ export default function DashboardScreen() {
       ? t('screen.tabs.index.plan.metricLeft')
       : t('screen.tabs.index.plan.metricOver');
   const healthScore = todaySummary?.health_score;
+  const waterIntakeL = Math.max(0, safeNumber(
+    todaySummary?.waterIntake ?? todaySummary?.water_intake_l,
+  ));
+  const waterGoalL = safePositiveNumber(
+    todaySummary?.waterGoal ?? todaySummary?.water_goal_l,
+    2.5,
+  );
   const healthTrendDelta = healthScore?.trend.delta_vs_7d ?? null;
   const healthTrendTone = healthScore?.trend.direction === 'up'
     ? 'good'
@@ -1207,6 +1154,20 @@ export default function DashboardScreen() {
     firstName,
     locale,
   });
+  const todayCoach = useTodayCoach({
+    logsCount: logs.length,
+    remainingCalories: target - consumed,
+    proteinGapG,
+    activityGapMinutes: Math.max(0, (movementPlan?.daily_minutes_target ?? 25) - activityMinutes),
+    locale,
+  });
+  const coachUpdatedAt = t('screen.tabs.index.aiCoach.updatedAt', {
+    time: new Intl.DateTimeFormat(locale === 'vi' ? 'vi-VN' : 'en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).format(new Date()),
+  });
   const nextAction = useMemo(() => {
     if (logs.length === 0) {
       return {
@@ -1283,17 +1244,6 @@ export default function DashboardScreen() {
       primaryLabel: t('screen.tabs.index.next.openJournal'),
     };
   }, [logs.length, movementButtonLabel, movementPlan, movementPlanCompleted, nudges, proteinGapG, safetyCard, t]);
-  const coachBridge = useMemo(() => buildTodayCoachBridge({
-    logsCount: logs.length,
-    consumed,
-    burned,
-    target,
-    protein,
-    streak: displayStreak,
-    locale,
-  }), [burned, consumed, displayStreak, locale, logs.length, protein, target]);
-  const visibleNudges = nextAction.kind === 'nudge' ? nudges.slice(1) : nudges;
-
   const handleNextActionPress = () => {
     if (nextAction.kind === 'profile') {
       router.push('/profile' as never);
@@ -1310,6 +1260,18 @@ export default function DashboardScreen() {
     router.push('/log' as never);
   };
 
+  const handleCoachSuggestionPress = (suggestion: TodayCoachSuggestion) => {
+    if (suggestion.type === 'scan' || suggestion.type === 'protein') {
+      router.push('/scan' as never);
+      return;
+    }
+    if (suggestion.type === 'calories') {
+      router.push('/log' as never);
+      return;
+    }
+    router.push('/coach' as never);
+  };
+
   // Macro targets derived from calorie target
   const carbsTargetG = Math.round((target * 0.5) / 4);
   const fatTargetG = Math.round((target * 0.25) / 9);
@@ -1321,7 +1283,16 @@ export default function DashboardScreen() {
       <TodayHero
         model={todayHero}
         streak={displayStreak}
+        waterIntakeL={waterIntakeL}
+        waterGoalL={waterGoalL}
         onPressStreak={() => router.push('/achievements' as never)}
+      />
+
+      <TodayCoachCard
+        suggestions={todayCoach.suggestions}
+        motivation={todayCoach.motivation}
+        updatedAt={coachUpdatedAt}
+        onPress={handleCoachSuggestionPress}
       />
 
       {/* 2. Safety banner — only when profile incomplete or has medical flags */}
@@ -1446,41 +1417,42 @@ export default function DashboardScreen() {
         <Text style={[styles.sectionTitle, { color: colors.text }]}>
           {t('screen.tabs.index.hifi.meals.title' as any)}
         </Text>
-        <TouchableOpacity onPress={() => router.push('/log' as never)}>
-          <Text style={[styles.sectionLink, { color: colors.accentCyan }]}>
-            {t('screen.tabs.index.hifi.meals.viewLog' as any)}
-          </Text>
-        </TouchableOpacity>
+        {mealTimeline.length > 3 && (
+          <TouchableOpacity onPress={() => router.push('/log' as never)}>
+            <Text style={[styles.sectionLink, { color: colors.accentCyan }]}>
+              {t('screen.tabs.index.hifi.meals.viewAll' as any)}
+            </Text>
+          </TouchableOpacity>
+        )}
       </View>
       {mealTimeline.length > 0 ? (
         <SurfaceCard revealDelay={180} style={[styles.mealTimelineCard, { borderRadius: 20 }]}>
-          {mealTimeline.map((entry, idx) => (
+          {mealTimeline.slice(0, 3).map((entry, idx) => (
             <MealTimelineRow
               key={entry.mealType}
               entry={entry}
-              isLast={idx === mealTimeline.length - 1}
+              isLast={idx === Math.min(mealTimeline.length, 3) - 1}
             />
           ))}
         </SurfaceCard>
       ) : (
-        <MealTimelineEmpty onPress={() => router.push('/scan' as never)} />
+        <MealTimelineEmpty
+          suggestion={suggestedMeal}
+          onViewSuggestion={() => router.push('/insights' as never)}
+        />
       )}
 
-      {/* 9a. Support panel — compact coach + health */}
-      <SurfaceCard revealDelay={200} style={[styles.supportPanel, { borderRadius: 20 }]}>
-        <CompactCoachCard bridge={coachBridge} />
-        {healthScore && (
-          <>
-            <View style={[styles.supportDivider, { backgroundColor: colors.borderSubtle }]} />
-            <CompactHealthScoreCard
-              score={healthScore}
-              breakdown={healthScoreBreakdown.slice(0, 3)}
-              trendText={healthTrendText}
-              trendTone={healthTrendTone}
-            />
-          </>
-        )}
-      </SurfaceCard>
+      {/* 9a. Health support */}
+      {healthScore && (
+        <SurfaceCard revealDelay={200} style={[styles.supportPanel, { borderRadius: 20 }]}>
+          <CompactHealthScoreCard
+            score={healthScore}
+            proteinGapG={proteinGapG}
+            activityGapMinutes={Math.max(0, (movementPlan?.daily_minutes_target ?? 25) - activityMinutes)}
+            logsCount={logs.length}
+          />
+        </SurfaceCard>
+      )}
 
       {/* 9. Shortcut tiles */}
       <View style={styles.shortcutGrid}>
@@ -1530,6 +1502,11 @@ function MacroBarCard({
 }) {
   const { colors } = useAppTheme();
   const pct = clampProgress(safeNumber(eaten) / Math.max(safePositiveNumber(goal, 1), 1));
+  const progress = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(progress, { toValue: pct, duration: 340, useNativeDriver: false }).start();
+  }, [pct, progress]);
+  const stateColor = pct >= 1 ? colors.success : pct >= 0.75 ? colors.warning : colors.textDisabled;
   return (
     <View style={[styles.macroBarCard, { backgroundColor: colors.surface, borderColor: colors.borderSubtle }]}>
       <Text style={[styles.macroBarLabel, { color: colors.textMuted }]}>{label}</Text>
@@ -1538,7 +1515,10 @@ function MacroBarCard({
         <Text style={[styles.macroBarGoal, { color: colors.textDisabled }]}>/{goal}g</Text>
       </Text>
       <View style={[styles.macroBarTrack, { backgroundColor: colors.progressBg }]}>
-        <View style={[styles.macroBarFill, { width: `${Math.round(pct * 100)}%` as any, backgroundColor: color }]} />
+        <Animated.View style={[styles.macroBarFill, {
+          width: progress.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }),
+          backgroundColor: stateColor,
+        }]} />
       </View>
     </View>
   );
@@ -1688,12 +1668,9 @@ function MealTimelineRow({ entry, isLast }: { entry: MealTimelineEntry; isLast: 
         <View style={[styles.mealTimelineDot, { backgroundColor: colors.accentLeaf, borderColor: colors.surface }]} />
         {!isLast && <View style={[styles.mealTimelineLine, { backgroundColor: colors.borderSuccess }]} />}
       </View>
-      <Image
-        source={entry.imageUrl ? { uri: entry.imageUrl } : mealIllustration}
-        style={styles.mealTimelineImage}
-        resizeMode="cover"
-        accessibilityLabel={names}
-      />
+      <View style={[styles.mealTimelineIcon, { backgroundColor: colors.surfaceSuccess }]}>
+        <Ionicons name={MEAL_ICON_MAP[entry.mealType]} size={19} color={colors.accentLeaf} />
+      </View>
       <View style={styles.mealTimelineCopy}>
         <View style={styles.mealTimelineTitleRow}>
           <Text style={[styles.mealTimelineTitle, { color: colors.text }]}>{mealLabel}</Text>
@@ -1720,34 +1697,46 @@ function MealTimelineRow({ entry, isLast }: { entry: MealTimelineEntry; isLast: 
   );
 }
 
-function MealTimelineEmpty({ onPress }: { onPress: () => void }) {
+function MealTimelineEmpty({
+  suggestion,
+  onViewSuggestion,
+}: {
+  suggestion: { meal: MealRecommendation; food: MealRecommendation['suggested_foods'][number] } | null;
+  onViewSuggestion: () => void;
+}) {
   const { colors } = useAppTheme();
   const { t } = useI18n();
 
   return (
     <SurfaceCard revealDelay={180} style={[styles.mealTimelineEmpty, { borderRadius: 20 }]}>
       <View style={[styles.mealEmptyIcon, { backgroundColor: colors.surfaceSuccess }]}>
-        <Ionicons name="camera-outline" size={22} color={colors.accentLeaf} />
+        <Ionicons name={suggestion ? 'sparkles-outline' : 'restaurant-outline'} size={22} color={colors.accentLeaf} />
       </View>
       <View style={styles.mealEmptyCopy}>
         <Text style={[styles.mealEmptyTitle, { color: colors.text }]}>
-          {t('screen.tabs.index.hifi.meals.emptyTitle' as any)}
+          {suggestion
+            ? t('screen.tabs.index.hifi.meals.suggestionTitle' as any)
+            : t('screen.tabs.index.hifi.meals.emptyStatusTitle' as any)}
         </Text>
         <Text style={[styles.mealEmptyBody, { color: colors.textMuted }]}>
-          {t('screen.tabs.index.hifi.meals.emptyBody' as any)}
+          {suggestion
+            ? `${suggestion.food.name} · ${formatNumber(suggestion.meal.recommended_calories)} kcal · ${formatNumber(suggestion.food.protein_g)}g protein · ${formatNumber(suggestion.food.fat_g)}g fat`
+            : t('screen.tabs.index.hifi.meals.emptyStatusBody' as any)}
         </Text>
       </View>
-      <TouchableOpacity
-        style={[styles.mealEmptyButton, { backgroundColor: colors.accentLeaf }]}
-        onPress={onPress}
-        activeOpacity={0.8}
-        accessibilityRole="button"
-      >
-        <Ionicons name="scan-outline" size={17} color={colors.textOnAccent} />
-        <Text style={[styles.mealEmptyButtonText, { color: colors.textOnAccent }]}>
-          {t('screen.tabs.index.hifi.meals.firstScan' as any)}
-        </Text>
-      </TouchableOpacity>
+      {suggestion && (
+        <TouchableOpacity
+          style={[styles.mealSuggestionLink, { backgroundColor: colors.surfaceSuccess }]}
+          onPress={onViewSuggestion}
+          activeOpacity={0.8}
+          accessibilityRole="button"
+        >
+          <Text style={[styles.mealSuggestionLinkText, { color: colors.success }]}>
+            {t('screen.tabs.index.hifi.meals.viewSuggestion' as any)}
+          </Text>
+          <Ionicons name="arrow-forward" size={14} color={colors.success} />
+        </TouchableOpacity>
+      )}
     </SurfaceCard>
   );
 }
@@ -1840,89 +1829,68 @@ function RoadmapRow({
   );
 }
 
-function CompactCoachCard({ bridge }: { bridge: TodayCoachBridge }) {
-  const { colors } = useAppTheme();
-  const { t } = useI18n();
-  const TONE_BG: Record<TodayCoachBridge['tone'], string> = {
-    good: colors.surfaceSuccess,
-    warn: colors.surfaceWarning,
-    info: colors.surfaceInfo,
-  };
-  const TONE_ICON_COLOR: Record<TodayCoachBridge['tone'], string> = {
-    good: colors.accentLeaf,
-    warn: colors.accentAmber,
-    info: colors.accentCyan,
-  };
-  return (
-    <View style={styles.coachRow}>
-      <View style={[styles.coachIconBox, { backgroundColor: TONE_BG[bridge.tone] }]}>
-        <Ionicons name="chatbubble-ellipses-outline" size={18} color={TONE_ICON_COLOR[bridge.tone]} />
-      </View>
-      <View style={styles.coachCopy}>
-        <Text style={[styles.coachEyebrow, { color: colors.accentCyan }]}>
-          {t('screen.tabs.index.coach.eyebrow')}
-        </Text>
-        <Text style={[styles.coachTitle, { color: colors.text }]} numberOfLines={1}>
-          {bridge.title}
-        </Text>
-        <Text style={[styles.coachBody, { color: colors.textMuted }]} numberOfLines={2}>
-          {bridge.body}
-        </Text>
-      </View>
-      <TouchableOpacity
-        style={[styles.coachButton, { backgroundColor: colors.accentPrimary }]}
-        onPress={() => router.push('/coach' as never)}
-      >
-        <Ionicons name="arrow-forward" size={16} color={colors.textOnAccent} />
-      </TouchableOpacity>
-    </View>
-  );
-}
-
 function CompactHealthScoreCard({
   score,
-  breakdown,
-  trendText,
-  trendTone,
+  proteinGapG,
+  activityGapMinutes,
+  logsCount,
 }: {
   score: NonNullable<ReturnType<typeof useAppTheme> extends never ? never : any>;
-  breakdown: { key: string; label: string; value: number }[];
-  trendText: string;
-  trendTone: 'good' | 'warn' | 'neutral';
+  proteinGapG: number;
+  activityGapMinutes: number;
+  logsCount: number;
 }) {
   const { colors } = useAppTheme();
   const { t } = useI18n();
-  const TREND_COLOR: Record<string, string> = {
-    good: colors.accentLeaf,
-    warn: colors.accentCoral,
-    neutral: colors.textMuted,
-  };
   const overall = safeNumber(score.overall);
+  const ringScale = useRef(new Animated.Value(0.9)).current;
+  useEffect(() => {
+    Animated.spring(ringScale, { toValue: 1, speed: 18, bounciness: 3, useNativeDriver: true }).start();
+  }, [overall, ringScale]);
+  const level = overall >= 80 ? 'good' : overall >= 50 ? 'average' : 'improve';
+  const levelColor = level === 'good' ? colors.success : level === 'average' ? colors.warning : colors.danger;
+  const levelSurface = level === 'good' ? colors.surfaceSuccess : level === 'average' ? colors.surfaceWarning : colors.surfaceDanger;
+  const reasons = [
+    proteinGapG > 0 ? t('screen.tabs.index.health.reason.protein', { grams: formatNumber(proteinGapG) }) : null,
+    activityGapMinutes > 0 ? t('screen.tabs.index.health.reason.activity', { minutes: formatNumber(activityGapMinutes) }) : null,
+    logsCount < 3 ? t('screen.tabs.index.health.reason.meals') : null,
+  ].filter((item): item is string => Boolean(item)).slice(0, 3);
   return (
     <View style={styles.healthRow}>
-      <View style={styles.healthScoreCircle}>
-        <Text style={[styles.healthScoreValue, { color: colors.text }]}>{formatNumber(overall)}</Text>
+      <Animated.View style={[styles.healthScoreCircle, {
+        backgroundColor: levelSurface,
+        borderColor: levelColor,
+        transform: [{ scale: ringScale }],
+      }]}>
+        <Text style={[styles.healthScoreValue, { color: levelColor }]}>{formatNumber(overall)}</Text>
         <Text style={[styles.healthScoreMax, { color: colors.textDisabled }]}>/100</Text>
-      </View>
+      </Animated.View>
       <View style={styles.healthRight}>
         <Text style={[styles.healthEyebrow, { color: colors.accentCyan }]}>
           {t('screen.tabs.index.health.eyebrow')}
         </Text>
-        <Text style={[styles.healthTrend, { color: TREND_COLOR[trendTone] }]} numberOfLines={1}>
-          {trendText}
+        <Text style={[styles.healthRating, { color: levelColor }]}>
+          {formatNumber(overall)} /100 – {t(`screen.tabs.index.health.rating.${level}` as any)}
         </Text>
-        <View style={styles.healthBarsRow}>
-          {breakdown.map((item) => (
-            <View key={item.key} style={styles.healthBarCol}>
-              <View style={[styles.healthBarTrack, { backgroundColor: colors.progressBg }]}>
-                <View style={[
-                  styles.healthBarFill,
-                  { width: `${Math.round(clampProgress(item.value / 100) * 100)}%` as any, backgroundColor: colors.accentLeaf },
-                ]} />
-              </View>
-              <Text style={[styles.healthBarLabel, { color: colors.textDisabled }]}>{item.label}</Text>
-            </View>
-          ))}
+        <Text style={[styles.healthExplanation, { color: colors.textMuted }]} numberOfLines={2}>
+          {t(`screen.tabs.index.health.rating.${level}.body` as any)}
+        </Text>
+        {reasons.length > 0 && (
+          <View style={styles.healthReasons}>
+            {reasons.map((reason) => (
+              <Text key={reason} style={[styles.healthReason, { color: colors.textSoft }]}>• {reason}</Text>
+            ))}
+          </View>
+        )}
+        <View style={styles.healthScale}>
+          <View style={[styles.healthScaleSegment, { backgroundColor: colors.danger }]} />
+          <View style={[styles.healthScaleSegment, { backgroundColor: colors.warning }]} />
+          <View style={[styles.healthScaleSegment, { backgroundColor: colors.success }]} />
+        </View>
+        <View style={styles.healthScaleLabels}>
+          <Text style={[styles.healthScaleLabel, { color: colors.textDisabled }]}>{t('screen.tabs.index.health.rating.improve' as any)}</Text>
+          <Text style={[styles.healthScaleLabel, { color: colors.textDisabled }]}>{t('screen.tabs.index.health.rating.average' as any)}</Text>
+          <Text style={[styles.healthScaleLabel, { color: colors.textDisabled }]}>{t('screen.tabs.index.health.rating.good' as any)}</Text>
         </View>
       </View>
     </View>
@@ -1951,8 +1919,8 @@ const styles = createThemedStyles((colors) => ({
   bannerButtonText: { fontSize: 12, fontWeight: '800' as const },
 
   // Macro bars
-  macroBarRow: { flexDirection: 'row' as const, gap: 12, marginBottom: 16 },
-  macroBarCard: { flex: 1, borderRadius: 20, borderWidth: 1, padding: 16, minHeight: 96 },
+  macroBarRow: { flexDirection: 'row' as const, gap: 10, marginBottom: 13 },
+  macroBarCard: { flex: 1, borderRadius: 18, borderWidth: 1, padding: 14, minHeight: 84 },
   macroBarLabel: { fontSize: 12, fontWeight: '700' as const },
   macroBarValue: { fontSize: 22, fontWeight: '800' as const, marginTop: 4, marginBottom: 8, lineHeight: 26 },
   macroBarGoal: { fontSize: 11, fontWeight: '600' as const },
@@ -2054,7 +2022,7 @@ const styles = createThemedStyles((colors) => ({
   sectionLink: { fontSize: 12, fontWeight: '700' as const },
 
   // Meal timeline
-  mealTimelineCard: { paddingHorizontal: 14, paddingVertical: 8, marginBottom: 14 },
+  mealTimelineCard: { paddingHorizontal: 12, paddingVertical: 6, marginBottom: 12 },
   mealTimelineRow: {
     flexDirection: 'row' as const,
     alignItems: 'flex-start' as const,
@@ -2068,7 +2036,15 @@ const styles = createThemedStyles((colors) => ({
   },
   mealTimelineDot: { width: 12, height: 12, borderRadius: 6, borderWidth: 3, marginTop: 22, zIndex: 1 },
   mealTimelineLine: { position: 'absolute' as const, top: 34, bottom: -18, width: 2 },
-  mealTimelineImage: { width: 64, height: 64, borderRadius: 16, marginLeft: 7, marginRight: 12 },
+  mealTimelineIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 14,
+    marginLeft: 7,
+    marginRight: 12,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
   mealTimelineCopy: { flex: 1, minWidth: 0, paddingTop: 1 },
   mealTimelineTitleRow: {
     flexDirection: 'row' as const,
@@ -2103,16 +2079,15 @@ const styles = createThemedStyles((colors) => ({
   mealEmptyCopy: { alignItems: 'center' as const, marginTop: 11, marginBottom: 15, maxWidth: 280 },
   mealEmptyTitle: { fontSize: 14, fontWeight: '800' as const, textAlign: 'center' as const },
   mealEmptyBody: { fontSize: 11.5, lineHeight: 17, textAlign: 'center' as const, marginTop: 4 },
-  mealEmptyButton: {
-    minHeight: 44,
-    borderRadius: 14,
-    paddingHorizontal: 18,
+  mealSuggestionLink: {
+    minHeight: 38,
+    borderRadius: 12,
+    paddingHorizontal: 14,
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-    gap: 8,
+    gap: 7,
   },
-  mealEmptyButtonText: { fontSize: 13, fontWeight: '800' as const },
+  mealSuggestionLinkText: { fontSize: 12, fontWeight: '800' as const },
 
   // Shortcuts
   shortcutGrid: { flexDirection: 'row' as const, gap: 9, marginBottom: 8 },
@@ -2169,33 +2144,6 @@ const styles = createThemedStyles((colors) => ({
   roadmapRowMeta: { fontSize: 11, marginTop: 2 },
   roadmapRowAction: { fontSize: 11.5, fontWeight: '700' as const },
 
-  // Compact coach card
-  coachRow: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    gap: 12,
-  },
-  coachIconBox: {
-    width: 38,
-    height: 38,
-    borderRadius: 13,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-    flexShrink: 0,
-  },
-  coachCopy: { flex: 1, minWidth: 0 },
-  coachEyebrow: { fontSize: 10, fontWeight: '700' as const, letterSpacing: 0.5, textTransform: 'uppercase' as const },
-  coachTitle: { fontSize: 13, fontWeight: '800' as const, marginTop: 1 },
-  coachBody: { fontSize: 11.5, marginTop: 2, lineHeight: 16 },
-  coachButton: {
-    width: 34,
-    height: 34,
-    borderRadius: 12,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-    flexShrink: 0,
-  },
-
   // Compact health score card
   healthRow: {
     flexDirection: 'row' as const,
@@ -2206,7 +2154,7 @@ const styles = createThemedStyles((colors) => ({
     width: 60,
     height: 60,
     borderRadius: 30,
-    backgroundColor: colors.surfaceSuccess,
+    borderWidth: 2,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
     flexShrink: 0,
@@ -2215,10 +2163,12 @@ const styles = createThemedStyles((colors) => ({
   healthScoreMax: { fontSize: 10, fontWeight: '600' as const },
   healthRight: { flex: 1, minWidth: 0 },
   healthEyebrow: { fontSize: 10, fontWeight: '700' as const, letterSpacing: 0.5, textTransform: 'uppercase' as const },
-  healthTrend: { fontSize: 11.5, fontWeight: '600' as const, marginTop: 2 },
-  healthBarsRow: { flexDirection: 'row' as const, gap: 8, marginTop: 8 },
-  healthBarCol: { flex: 1 },
-  healthBarTrack: { height: 5, borderRadius: 3, overflow: 'hidden' as const },
-  healthBarFill: { height: '100%' as any, borderRadius: 3 },
-  healthBarLabel: { fontSize: 9.5, fontWeight: '600' as const, marginTop: 3, textAlign: 'center' as const },
+  healthRating: { fontSize: 13.5, fontWeight: '900' as const, marginTop: 2 },
+  healthExplanation: { fontSize: 10.5, lineHeight: 15, fontWeight: '500' as const, marginTop: 3 },
+  healthReasons: { flexDirection: 'row' as const, flexWrap: 'wrap' as const, gap: 8, marginTop: 6 },
+  healthReason: { fontSize: 9.5, lineHeight: 13, fontWeight: '600' as const },
+  healthScale: { flexDirection: 'row' as const, gap: 3, marginTop: 9 },
+  healthScaleSegment: { flex: 1, height: 4, borderRadius: 2 },
+  healthScaleLabels: { flexDirection: 'row' as const, gap: 4, marginTop: 4 },
+  healthScaleLabel: { flex: 1, fontSize: 8, fontWeight: '600' as const, textAlign: 'center' as const },
 }));

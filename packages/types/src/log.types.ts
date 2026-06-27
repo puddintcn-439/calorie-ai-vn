@@ -60,6 +60,10 @@ export interface DailyLog {
 export interface TodaySummary {
   date: string;
   timezone_offset_minutes: number;
+  waterIntake?: number;
+  waterGoal?: number;
+  water_intake_l?: number;
+  water_goal_l?: number;
   daily_log: DailyLog | null;
   activity_logs: ActivityLog[];
   daily_roadmap: DailyRoadmapItem[];

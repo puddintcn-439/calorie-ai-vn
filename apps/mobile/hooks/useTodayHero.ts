@@ -2,17 +2,23 @@ import { useMemo } from 'react';
 import { GoalPlan, UserGoal } from '@calorie-ai/types';
 import { Locale, tr } from '../components/i18n';
 
-export type TodayHeroTone = 'good' | 'steady' | 'near' | 'over';
+export type TodayHeroTone = 'good' | 'steady' | 'near' | 'over' | 'complete';
 
 export type TodayHeroModel = {
   greeting: string;
   remainingCalories: number;
+  remainingCaloriesLabel: string;
   calorieLabel: string;
+  progressPercent: number;
+  progressLabel: string;
+  calorieProgressDetail: string;
   statusLabel: string;
   statusTone: TodayHeroTone;
-  proteinStatus: string;
+  proteinTitle: string;
+  proteinDetail: string;
   proteinReached: boolean;
-  activityStatus: string;
+  activityTitle: string;
+  activityDetail: string;
   activityReached: boolean;
   motivation: string;
 };
@@ -55,6 +61,7 @@ export function buildTodayHero(input: TodayHeroInput): TodayHeroModel {
   const consumed = Math.max(0, finite(input.consumedCalories));
   const remaining = target - consumed;
   const remainingRatio = remaining / target;
+  const consumedPercent = Math.max(0, Math.round((consumed / target) * 100));
   const proteinTarget = Math.max(1, finite(input.proteinTargetG, 78));
   const proteinGap = Math.max(0, proteinTarget - Math.max(0, finite(input.proteinG)));
   const activityTarget = Math.max(1, finite(input.activityTargetMinutes, 25));
@@ -68,6 +75,9 @@ export function buildTodayHero(input: TodayHeroInput): TodayHeroModel {
   if (remaining < 0) {
     statusTone = 'over';
     statusLabel = tr('screen.tabs.index.todayHero.status.over', input.locale);
+  } else if (remaining === 0 && consumed > 0) {
+    statusTone = 'complete';
+    statusLabel = tr('screen.tabs.index.todayHero.status.complete', input.locale);
   } else if (remainingRatio > 0.6) {
     statusTone = 'good';
     statusLabel = tr('screen.tabs.index.todayHero.status.onTrack', input.locale);
@@ -100,19 +110,32 @@ export function buildTodayHero(input: TodayHeroInput): TodayHeroModel {
 
   return {
     greeting: tr(`screen.tabs.index.todayHero.greeting.${dayPart}` as any, input.locale, { name }),
-    remainingCalories: Math.max(0, remaining),
+    remainingCalories: remaining,
+    remainingCaloriesLabel: format(remaining, input.locale),
     calorieLabel: remaining < 0
       ? tr('screen.tabs.index.todayHero.exceededBy', input.locale, { kcal: format(Math.abs(remaining), input.locale) })
       : tr('screen.tabs.index.todayHero.remaining', input.locale),
+    progressPercent: consumedPercent,
+    progressLabel: `${consumedPercent}%`,
+    calorieProgressDetail: tr('screen.tabs.index.todayHero.progressDetail', input.locale, {
+      consumed: format(consumed, input.locale),
+      target: format(target, input.locale),
+    }),
     statusLabel,
     statusTone,
-    proteinStatus: proteinReached
+    proteinTitle: proteinReached
       ? tr('screen.tabs.index.todayHero.protein.reached', input.locale)
       : tr('screen.tabs.index.todayHero.protein.low', input.locale, { grams: format(proteinGap, input.locale) }),
+    proteinDetail: proteinReached
+      ? tr('screen.tabs.index.todayHero.protein.reachedDetail', input.locale)
+      : tr('screen.tabs.index.todayHero.protein.lowDetail', input.locale),
     proteinReached,
-    activityStatus: activityReached
+    activityTitle: activityReached
       ? tr('screen.tabs.index.todayHero.activity.reached', input.locale)
       : tr('screen.tabs.index.todayHero.activity.low', input.locale, { minutes: format(activityGap, input.locale) }),
+    activityDetail: activityReached
+      ? tr('screen.tabs.index.todayHero.activity.reachedDetail', input.locale)
+      : tr('screen.tabs.index.todayHero.activity.lowDetail', input.locale),
     activityReached,
     motivation,
   };
