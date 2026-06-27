@@ -20,6 +20,7 @@ export function TodayHero({ model, streak, waterIntakeL, waterGoalL, onPressStre
   const { locale, t } = useI18n();
   const { width } = useWindowDimensions();
   const isWide = width >= 720;
+  const isPhone = width < 600;
   const waterProgress = Math.max(0, Math.min(1, waterIntakeL / Math.max(waterGoalL, 0.1)));
   const calorieAnimation = useRef(new Animated.Value(0)).current;
   const waterAnimation = useRef(new Animated.Value(0)).current;
@@ -56,7 +57,7 @@ export function TodayHero({ model, streak, waterIntakeL, waterGoalL, onPressStre
 
   return (
     <SurfaceCard revealDelay={40} style={styles.card}>
-      <View style={styles.topRow}>
+      <View style={[styles.topRow, isPhone && styles.topRowPhone]}>
         <View style={styles.greetingCopy}>
           <Text style={[styles.greeting, { color: colors.text }]}>{model.greeting}</Text>
           <View style={[styles.statusBadge, { backgroundColor: status.background }]}>
@@ -64,9 +65,13 @@ export function TodayHero({ model, streak, waterIntakeL, waterGoalL, onPressStre
             <Text style={[styles.statusText, { color: status.foreground }]}>{model.statusLabel}</Text>
           </View>
         </View>
-        <View style={[styles.wellnessPanel, { backgroundColor: colors.surfaceLifted }]}>
+        <View style={[
+          styles.wellnessPanel,
+          isPhone && styles.wellnessPanelPhone,
+          { backgroundColor: colors.surfaceLifted },
+        ]}>
           <TouchableOpacity
-            style={styles.streakButton}
+            style={[styles.streakButton, isPhone && styles.streakButtonPhone]}
             onPress={onPressStreak}
             activeOpacity={0.75}
             accessibilityRole="button"
@@ -74,7 +79,7 @@ export function TodayHero({ model, streak, waterIntakeL, waterGoalL, onPressStre
           >
             <View style={styles.streakValueRow}>
               <Ionicons name="flame" size={17} color={colors.accentAmber} />
-              <Text style={[styles.streakText, { color: colors.text }]}>
+              <Text style={[styles.streakText, isPhone && styles.streakTextPhone, { color: colors.text }]} numberOfLines={2}>
                 {streak > 3
                   ? t('screen.tabs.index.todayHero.streakDays' as any, { days: streak })
                   : streak > 0 ? streak : t('screen.tabs.index.todayHero.streakStart' as any)}
@@ -83,7 +88,7 @@ export function TodayHero({ model, streak, waterIntakeL, waterGoalL, onPressStre
             {streak > 0 && <Text style={[styles.streakLabel, { color: colors.textMuted }]}>Streak</Text>}
           </TouchableOpacity>
           <View style={[styles.wellnessDivider, { backgroundColor: colors.borderSubtle }]} />
-          <View style={styles.waterBlock}>
+          <View style={[styles.waterBlock, isPhone && styles.waterBlockPhone]}>
             <View style={styles.waterValueRow}>
               <Ionicons name="water" size={17} color={colors.info} />
               <Text style={[styles.waterValue, { color: colors.text }]}>
@@ -214,6 +219,11 @@ const styles = createThemedStyles((colors) => ({
     justifyContent: 'space-between' as const,
     gap: 12,
   },
+  topRowPhone: {
+    flexDirection: 'column' as const,
+    alignItems: 'stretch' as const,
+    gap: 10,
+  },
   greetingCopy: { flex: 1, minWidth: 0 },
   greeting: { fontSize: 20, lineHeight: 25, fontWeight: '800' as const, letterSpacing: -0.35 },
   statusBadge: {
@@ -235,12 +245,22 @@ const styles = createThemedStyles((colors) => ({
     paddingVertical: 7,
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
+    overflow: 'hidden' as const,
+  },
+  wellnessPanelPhone: {
+    alignSelf: 'stretch' as const,
+    justifyContent: 'space-between' as const,
   },
   streakButton: {
     minWidth: 55,
     paddingHorizontal: 7,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
+  },
+  streakButtonPhone: {
+    flex: 1.25,
+    minWidth: 0,
+    alignItems: 'flex-start' as const,
   },
   streakValueRow: {
     flexDirection: 'row' as const,
@@ -249,9 +269,11 @@ const styles = createThemedStyles((colors) => ({
     gap: 4,
   },
   streakText: { fontSize: 16, fontWeight: '900' as const, fontVariant: ['tabular-nums'] as any },
+  streakTextPhone: { flexShrink: 1, fontSize: 12.5, lineHeight: 16 },
   streakLabel: { fontSize: 9.5, fontWeight: '700' as const, marginTop: 2 },
   wellnessDivider: { width: 1, alignSelf: 'stretch' as const, marginVertical: 2 },
-  waterBlock: { minWidth: 108, paddingHorizontal: 9 },
+  waterBlock: { minWidth: 108, paddingHorizontal: 9, flex: 1 },
+  waterBlockPhone: { minWidth: 0, flex: 1 },
   waterValueRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 4 },
   waterValue: { fontSize: 14, fontWeight: '900' as const, fontVariant: ['tabular-nums'] as any },
   waterGoal: { fontSize: 9.5, fontWeight: '700' as const },

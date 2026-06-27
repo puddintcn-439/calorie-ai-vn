@@ -159,7 +159,7 @@ function buildNutritionTargets(target: number) {
   const safeTarget = safePositiveNumber(target, 1800);
   return {
     fiber_g_min: Math.round((safeTarget / 1000) * 14),
-    sodium_mg_max: 2300,
+    sodium_mg_max: 2000,
     sugar_g_max: Math.round((safeTarget * 0.1) / 4),
     saturated_fat_g_max: Math.round((safeTarget * 0.1) / 9),
   };
@@ -827,6 +827,9 @@ export default function DashboardScreen() {
   const logs = dailyLog?.logs ?? [];
   const logsByMeal = useMemo(() => groupLogsByMeal(logs), [logs]);
   const mealTimeline = useMemo(() => buildMealTimeline(logs), [logs]);
+  const coreMealsLogged = MEAL_ORDER
+    .filter((mealType) => mealType !== 'snack' && logsByMeal[mealType].length > 0)
+    .length;
   const suggestedMeal = useMemo(() => {
     if (logs.length > 0 || !recommendations?.meals?.length) return null;
     const hour = new Date().getHours();
@@ -1449,7 +1452,7 @@ export default function DashboardScreen() {
             score={healthScore}
             proteinGapG={proteinGapG}
             activityGapMinutes={Math.max(0, (movementPlan?.daily_minutes_target ?? 25) - activityMinutes)}
-            logsCount={logs.length}
+            logsCount={coreMealsLogged}
           />
         </SurfaceCard>
       )}
@@ -1843,13 +1846,18 @@ function CompactHealthScoreCard({
   const { colors } = useAppTheme();
   const { t } = useI18n();
   const overall = safeNumber(score.overall);
+  const hasScore = score.label !== 'needs_data';
   const ringScale = useRef(new Animated.Value(0.9)).current;
   useEffect(() => {
     Animated.spring(ringScale, { toValue: 1, speed: 18, bounciness: 3, useNativeDriver: true }).start();
   }, [overall, ringScale]);
-  const level = overall >= 80 ? 'good' : overall >= 50 ? 'average' : 'improve';
-  const levelColor = level === 'good' ? colors.success : level === 'average' ? colors.warning : colors.danger;
-  const levelSurface = level === 'good' ? colors.surfaceSuccess : level === 'average' ? colors.surfaceWarning : colors.surfaceDanger;
+  const level = overall >= 85 ? 'excellent' : overall >= 70 ? 'good' : overall >= 50 ? 'building' : 'improve';
+  const levelColor = level === 'excellent' || level === 'good'
+    ? colors.success
+    : level === 'building' ? colors.warning : colors.danger;
+  const levelSurface = level === 'excellent' || level === 'good'
+    ? colors.surfaceSuccess
+    : level === 'building' ? colors.surfaceWarning : colors.surfaceDanger;
   const reasons = [
     proteinGapG > 0 ? t('screen.tabs.index.health.reason.protein', { grams: formatNumber(proteinGapG) }) : null,
     activityGapMinutes > 0 ? t('screen.tabs.index.health.reason.activity', { minutes: formatNumber(activityGapMinutes) }) : null,
@@ -1862,36 +1870,43 @@ function CompactHealthScoreCard({
         borderColor: levelColor,
         transform: [{ scale: ringScale }],
       }]}>
-        <Text style={[styles.healthScoreValue, { color: levelColor }]}>{formatNumber(overall)}</Text>
+        <Text style={[styles.healthScoreValue, { color: levelColor }]}>{hasScore ? formatNumber(overall) : '--'}</Text>
         <Text style={[styles.healthScoreMax, { color: colors.textDisabled }]}>/100</Text>
       </Animated.View>
       <View style={styles.healthRight}>
         <Text style={[styles.healthEyebrow, { color: colors.accentCyan }]}>
           {t('screen.tabs.index.health.eyebrow')}
+          {score.is_provisional ? ` · ${t('screen.tabs.index.health.provisional' as any)}` : ''}
         </Text>
         <Text style={[styles.healthRating, { color: levelColor }]}>
-          {formatNumber(overall)} /100 – {t(`screen.tabs.index.health.rating.${level}` as any)}
+          {hasScore
+            ? `${formatNumber(overall)} /100 – ${t(`screen.tabs.index.health.rating.${level}` as any)}`
+            : t('screen.tabs.index.health.rating.needsData' as any)}
         </Text>
         <Text style={[styles.healthExplanation, { color: colors.textMuted }]} numberOfLines={2}>
-          {t(`screen.tabs.index.health.rating.${level}.body` as any)}
+          {hasScore
+            ? t(`screen.tabs.index.health.rating.${level}.body` as any)
+            : t('screen.tabs.index.health.rating.needsData.body' as any)}
         </Text>
-        {reasons.length > 0 && (
+        {hasScore && reasons.length > 0 && (
           <View style={styles.healthReasons}>
             {reasons.map((reason) => (
               <Text key={reason} style={[styles.healthReason, { color: colors.textSoft }]}>• {reason}</Text>
             ))}
           </View>
         )}
-        <View style={styles.healthScale}>
+        {hasScore && <View style={styles.healthScale}>
           <View style={[styles.healthScaleSegment, { backgroundColor: colors.danger }]} />
           <View style={[styles.healthScaleSegment, { backgroundColor: colors.warning }]} />
           <View style={[styles.healthScaleSegment, { backgroundColor: colors.success }]} />
-        </View>
-        <View style={styles.healthScaleLabels}>
+          <View style={[styles.healthScaleSegment, { backgroundColor: colors.accentLeaf }]} />
+        </View>}
+        {hasScore && <View style={styles.healthScaleLabels}>
           <Text style={[styles.healthScaleLabel, { color: colors.textDisabled }]}>{t('screen.tabs.index.health.rating.improve' as any)}</Text>
-          <Text style={[styles.healthScaleLabel, { color: colors.textDisabled }]}>{t('screen.tabs.index.health.rating.average' as any)}</Text>
+          <Text style={[styles.healthScaleLabel, { color: colors.textDisabled }]}>{t('screen.tabs.index.health.rating.building' as any)}</Text>
           <Text style={[styles.healthScaleLabel, { color: colors.textDisabled }]}>{t('screen.tabs.index.health.rating.good' as any)}</Text>
-        </View>
+          <Text style={[styles.healthScaleLabel, { color: colors.textDisabled }]}>{t('screen.tabs.index.health.rating.excellent' as any)}</Text>
+        </View>}
       </View>
     </View>
   );

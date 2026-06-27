@@ -189,7 +189,7 @@ describe('LogService.getDailyLog', () => {
 // deleteLog
 // ─────────────────────────────────────────────────────────────────────────────
 describe('LogService.getTodaySummary', () => {
-  it('adds a behavior-oriented health score to the daily summary', async () => {
+  it('adds a daily balance score to the daily summary', async () => {
     const logs: FoodLog[] = [
       { id: 'b', user_id: 'u1', quantity: 1, calories: 500, protein_g: 35, carbs_g: 50, fat_g: 14, fiber_g: 8, sugar_g: 6, saturated_fat_g: 3, sodium_mg: 500, name: 'Breakfast', meal_type: 'breakfast', estimated_grams: 300, unit: 'serving', source: 'manual_entry', logged_at: '2026-06-06T07:00:00Z', created_at: '2026-06-06T07:00:00Z' },
       { id: 'l', user_id: 'u1', quantity: 1, calories: 700, protein_g: 45, carbs_g: 78, fat_g: 20, fiber_g: 10, sugar_g: 8, saturated_fat_g: 4, sodium_mg: 700, name: 'Lunch', meal_type: 'lunch', estimated_grams: 450, unit: 'serving', source: 'manual_entry', logged_at: '2026-06-06T12:00:00Z', created_at: '2026-06-06T12:00:00Z' },
@@ -260,9 +260,11 @@ describe('LogService.getTodaySummary', () => {
     const summary = await service.getTodaySummary('u1', '2026-06-06');
 
     expect(summary.health_score.overall).toBeGreaterThanOrEqual(70);
-    expect(summary.health_score.label).toBe('steady');
+    expect(summary.health_score.label).toBe('strong');
     expect(summary.health_score.nutrition).toBeGreaterThanOrEqual(85);
-    expect(summary.health_score.activity).toBe(60);
+    expect(summary.health_score.activity).toBe(75);
+    expect(summary.health_score.consistency).toBe(100);
+    expect(summary.health_score.recovery).toBe(0);
     expect(summary.health_score.trend.average_7d).toBeGreaterThanOrEqual(70);
     expect(summary.health_score.trend.direction).toBe('flat');
     expect(summary.health_score.trend.days_with_data).toBe(7);

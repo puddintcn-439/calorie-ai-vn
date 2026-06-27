@@ -93,6 +93,7 @@ export interface TodaySummary {
   };
   health_score: {
     overall: number;
+    is_provisional?: boolean;
     label: 'needs_data' | 'building' | 'steady' | 'strong';
     nutrition: number;
     activity: number;

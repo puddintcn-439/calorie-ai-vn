@@ -153,7 +153,16 @@ export class LogService {
       roadmap_remaining: Math.max(0, activeRoadmap.length - roadmapCompleted),
       planned_activity_kcal: activeRoadmap.reduce((sum, item) => sum + Number(item.estimated_kcal ?? 0), 0),
     };
-    const baseHealthScore = this.buildHealthScore(dailyLog, activityLogs, activeRoadmap, plan, profile);
+    const baseHealthScore = this.buildHealthScore(
+      dailyLog,
+      activityLogs,
+      activeRoadmap,
+      plan,
+      profile,
+      undefined,
+      date,
+      tzOffsetMinutes,
+    );
     const behaviorMetrics = await this.buildHealthScoreBehaviorMetrics(userId, date, tzOffsetMinutes, baseHealthScore, profile);
 
     return {
@@ -186,61 +195,75 @@ export class LogService {
     plan: TodaySummary['plan'],
     profile: TodaySummary['profile'],
     behaviorMetrics?: HealthScoreBehaviorMetrics,
+    scoreDate?: string,
+    tzOffsetMinutes: number = 0,
   ): TodaySummary['health_score'] {
     const clamp = (value: number, min = 0, max = 100) => Math.max(min, Math.min(max, Math.round(value)));
     const safeTarget = Math.max(Number(plan.target_calories || profile?.daily_calorie_target || 1800), 1);
     const logs = dailyLog?.logs ?? [];
-    const mealTypesLogged = new Set(logs.map((log) => log.meal_type)).size;
+    const coreMealTypes = new Set(logs.map((log) => log.meal_type).filter((type) => type !== 'snack'));
+    const mealTypesLogged = coreMealTypes.size;
     const activityMinutes = activityLogs.reduce((sum, item) => sum + Number(item.duration_min ?? 0), 0);
+    const expectedProgress = this.expectedDailyProgress(scoreDate, tzOffsetMinutes, logs);
+    const calorieScore = expectedProgress === null
+      ? null
+      : clamp(100 - Math.abs((Number(dailyLog?.total_calories ?? 0) / safeTarget) - expectedProgress) * 125);
+    const proteinTarget = this.dailyProteinTarget(profile);
+    const proteinScore = clamp((Number(dailyLog?.total_protein_g ?? 0) / proteinTarget) * 100);
+    const qualityCoverage = dailyLog?.nutrition_quality_coverage;
+    const completeCoverage = (field: 'fiber_items' | 'sodium_items' | 'saturated_fat_items') => (
+      Number(qualityCoverage?.total_items ?? 0) > 0
+      && Number(qualityCoverage?.[field] ?? 0) === Number(qualityCoverage?.total_items ?? 0)
+    );
+    const fiberTarget = Math.max((safeTarget / 1000) * 14, 1);
+    const saturatedFatLimit = Math.max((safeTarget * 0.1) / 9, 1);
+    const nutritionParts: Array<{ score: number; weight: number }> = [
+      ...(calorieScore === null ? [] : [{ score: calorieScore, weight: 0.3 }]),
+      { score: proteinScore, weight: 0.25 },
+      ...(completeCoverage('fiber_items')
+        ? [{ score: clamp((Number(dailyLog?.total_fiber_g ?? 0) / fiberTarget) * 100), weight: 0.15 }]
+        : []),
+      ...(completeCoverage('sodium_items')
+        ? [{ score: this.upperLimitScore(Number(dailyLog?.total_sodium_mg ?? 0), 2000), weight: 0.1 }]
+        : []),
+      ...(completeCoverage('saturated_fat_items')
+        ? [{ score: this.upperLimitScore(Number(dailyLog?.total_saturated_fat_g ?? 0), saturatedFatLimit), weight: 0.1 }]
+        : []),
+    ];
+    const nutritionWeight = nutritionParts.reduce((sum, item) => sum + item.weight, 0);
+    const nutrition = nutritionWeight > 0
+      ? clamp(nutritionParts.reduce((sum, item) => sum + item.score * item.weight, 0) / nutritionWeight)
+      : 0;
+
+    const plannedMinutes = roadmap.reduce((sum, item) => sum + Math.max(0, Number(item.duration_min ?? 0)), 0);
+    const activityTarget = plannedMinutes > 0 ? plannedMinutes : 30;
+    const activity = clamp((activityMinutes / activityTarget) * 100);
+    const expectedMeals = this.expectedCoreMeals(scoreDate, tzOffsetMinutes);
+    const consistency = expectedMeals > 0 ? clamp((mealTypesLogged / expectedMeals) * 100) : 100;
+    const recovery = 0; // Retained only for API compatibility; no recovery data is currently collected.
+    const overall = logs.length === 0
+      ? 0
+      : clamp(nutrition * 0.5 + activity * 0.3 + consistency * 0.2);
     const roadmapTotal = roadmap.length;
     const roadmapDone = roadmap.filter((item) => item.is_completed).length;
-    const roadmapCompletion = roadmapTotal > 0 ? roadmapDone / roadmapTotal : null;
-    const calorieGapPct = Math.abs(plan.net_calories - safeTarget) / safeTarget;
-    const calorieScore = logs.length === 0 ? 20 : clamp(100 - calorieGapPct * 120);
-    const proteinTarget = Math.max(Number(profile?.weight_kg ?? 65) * 1.2, 60);
-    const proteinScore = logs.length === 0 ? 20 : clamp((Number(dailyLog?.total_protein_g ?? 0) / proteinTarget) * 100);
-    const qualityCoverage = dailyLog?.nutrition_quality_coverage;
-    const coverageScore = qualityCoverage?.total_items
-      ? clamp((
-        Number(qualityCoverage.fiber_items ?? 0)
-        + Number(qualityCoverage.sugar_items ?? 0)
-        + Number(qualityCoverage.sodium_items ?? 0)
-        + Number(qualityCoverage.saturated_fat_items ?? 0)
-      ) / (qualityCoverage.total_items * 4) * 100)
-      : logs.length > 0 ? 45 : 20;
-    const nutrition = clamp(calorieScore * 0.5 + proteinScore * 0.3 + coverageScore * 0.2);
-
-    const activityBase = roadmapCompletion !== null
-      ? roadmapCompletion * 100
-      : Math.min(activityMinutes / 30, 1) * 100;
-    const activity = clamp(activityBase + (plan.burned_calories > 0 ? 10 : 0));
-
-    const mealConsistency = Math.min(mealTypesLogged / 3, 1) * 100;
-    const planConsistency = roadmapCompletion !== null ? roadmapCompletion * 100 : activityMinutes > 0 ? 75 : 45;
-    const consistency = clamp(mealConsistency * 0.65 + planConsistency * 0.35);
-
-    const intenseMinutes = activityMinutes;
-    const recovery = clamp(intenseMinutes > 90 ? 68 : intenseMinutes > 45 ? 78 : logs.length > 0 || activityMinutes > 0 ? 72 : 55);
-
-    const overall = clamp(nutrition * 0.4 + activity * 0.25 + consistency * 0.25 + recovery * 0.1);
     const signals: string[] = [];
     if (logs.length === 0) signals.push('No meal logged yet');
     if (mealTypesLogged > 0 && mealTypesLogged < 3) signals.push(`${mealTypesLogged}/3 core meals logged`);
     if (nutrition >= 80) signals.push('Nutrition is close to plan');
     if (activityMinutes > 0) signals.push(`${activityMinutes} activity minutes logged`);
     if (roadmapTotal > 0) signals.push(`${roadmapDone}/${roadmapTotal} plan tasks complete`);
-    if (coverageScore < 70 && logs.length > 0) signals.push('Nutrition detail coverage is incomplete');
+    if (nutritionParts.length < 5 && logs.length > 0) signals.push('Nutrition detail coverage is incomplete');
 
     const nextAction: TodaySummary['health_score']['next_action'] =
       logs.length === 0 ? 'log_meal'
         : roadmapTotal > 0 && roadmapDone < roadmapTotal ? 'complete_plan'
           : activityMinutes === 0 ? 'move'
-            : recovery < 70 ? 'recover'
-              : 'maintain';
+            : 'maintain';
 
     return {
       overall,
-      label: overall < 45 ? 'needs_data' : overall < 65 ? 'building' : overall < 82 ? 'steady' : 'strong',
+      is_provisional: this.isCurrentLocalDate(scoreDate, tzOffsetMinutes),
+      label: logs.length === 0 ? 'needs_data' : overall < 70 ? 'building' : overall < 85 ? 'steady' : 'strong',
       nutrition,
       activity,
       consistency,
@@ -269,7 +292,7 @@ export class LogService {
       const plan = this.buildSummaryPlan(dailyLog, activityLogs, activeRoadmap, profile);
       const score = day === date
         ? currentScore
-        : this.buildHealthScore(dailyLog, activityLogs, activeRoadmap, plan, profile);
+        : this.buildHealthScore(dailyLog, activityLogs, activeRoadmap, plan, profile, undefined, day, tzOffsetMinutes);
       return { date: day, dailyLog, activityLogs, roadmap: activeRoadmap, plan, score };
     }));
 
@@ -443,6 +466,67 @@ export class LogService {
 
   private round(value: number): number {
     return Math.round(value);
+  }
+
+  private dailyProteinTarget(profile: TodaySummary['profile']): number {
+    const weightKg = Math.max(35, Number(profile?.weight_kg ?? 65));
+    const direction = profile?.goal_plan?.direction;
+    const multiplier = profile?.goal === 'gain_muscle' || direction === 'gain'
+      ? 1.6
+      : profile?.goal === 'lose_weight' || direction === 'loss'
+        ? 1.4
+        : 1.2;
+    return Math.max(weightKg * multiplier, 1);
+  }
+
+  private upperLimitScore(consumed: number, limit: number): number {
+    if (consumed <= limit) return 100;
+    return this.clamp(100 - ((consumed - limit) / Math.max(limit, 1)) * 100);
+  }
+
+  private isCurrentLocalDate(scoreDate?: string, tzOffsetMinutes: number = 0): boolean {
+    if (!scoreDate) return false;
+    const localNow = new Date(Date.now() - tzOffsetMinutes * 60_000);
+    return scoreDate === localNow.toISOString().slice(0, 10);
+  }
+
+  private expectedDailyProgress(
+    scoreDate?: string,
+    tzOffsetMinutes: number = 0,
+    logs: FoodLog[] = [],
+  ): number | null {
+    if (!scoreDate) return 1;
+    const localNow = new Date(Date.now() - tzOffsetMinutes * 60_000);
+    const localDate = localNow.toISOString().slice(0, 10);
+    if (scoreDate < localDate) return 1;
+    if (scoreDate > localDate) return null;
+    const hour = localNow.getUTCHours() + localNow.getUTCMinutes() / 60;
+    if (hour >= 21) return 1;
+    const coreMealsLogged = new Set(
+      logs.map((log) => log.meal_type).filter((mealType) => mealType !== 'snack'),
+    ).size;
+    const mealProgress = Math.min(coreMealsLogged / 3, 1);
+    const firstMealHour = logs.length > 0
+      ? Math.min(...logs.map((log) => {
+          const localLoggedAt = new Date(new Date(log.logged_at).getTime() - tzOffsetMinutes * 60_000);
+          return localLoggedAt.getUTCHours() + localLoggedAt.getUTCMinutes() / 60;
+        }))
+      : 7;
+    const eatingWindowStart = Math.min(7, firstMealHour);
+    const timeProgress = Math.max(0, Math.min(1, (hour - eatingWindowStart) / Math.max(21 - eatingWindowStart, 1)));
+    return Math.max(timeProgress, mealProgress);
+  }
+
+  private expectedCoreMeals(scoreDate?: string, tzOffsetMinutes: number = 0): number {
+    if (!scoreDate) return 3;
+    const localNow = new Date(Date.now() - tzOffsetMinutes * 60_000);
+    const localDate = localNow.toISOString().slice(0, 10);
+    if (scoreDate < localDate) return 3;
+    if (scoreDate > localDate) return 1;
+    const hour = localNow.getUTCHours() + localNow.getUTCMinutes() / 60;
+    if (hour < 10) return 1;
+    if (hour < 15) return 2;
+    return 3;
   }
 
   private addDays(date: string, days: number): string {
