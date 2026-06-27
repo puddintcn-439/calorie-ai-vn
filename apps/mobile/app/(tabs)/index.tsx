@@ -27,7 +27,6 @@ import {
   UserGoal,
 } from '@calorie-ai/types';
 import { BodyText, Eyebrow, ScreenShell, SurfaceCard } from '../../components/ui-shell';
-import { EmptyState } from '../../components/empty-state';
 import { createThemedStyles, useAppTheme } from '../../components/theme';
 import { useGamificationStore } from '../../store/gamification.store';
 import { useLogStore } from '../../store/log.store';
@@ -47,7 +46,6 @@ import { buildInterventionEvent, recordInterventionEvent } from '../../services/
 import { telemetryService } from '../../services/telemetry.service';
 
 const mealIllustration = require('../../assets/images/vietnamese-meal.jpg') as number;
-const todayHeroIllustration = require('../../assets/images/today-hero.jpg') as number;
 
 const MEAL_ORDER: MealType[] = ['breakfast', 'lunch', 'dinner', 'snack'];
 
@@ -117,6 +115,36 @@ function groupLogsByMeal(logs: FoodLog[]) {
     },
     { breakfast: [], lunch: [], dinner: [], snack: [] },
   );
+}
+
+type MealTimelineEntry = {
+  mealType: MealType;
+  logs: FoodLog[];
+  loggedAt: string;
+  calories: number;
+  imageUrl: string | undefined;
+};
+
+function buildMealTimeline(logs: FoodLog[]): MealTimelineEntry[] {
+  const grouped = groupLogsByMeal(logs);
+
+  return MEAL_ORDER
+    .map((mealType) => {
+      const mealLogs = [...grouped[mealType]].sort(
+        (a, b) => Date.parse(a.logged_at) - Date.parse(b.logged_at),
+      );
+      if (mealLogs.length === 0) return null;
+
+      return {
+        mealType,
+        logs: mealLogs,
+        loggedAt: mealLogs[0].logged_at,
+        calories: mealLogs.reduce((sum, log) => sum + safeNumber(log.calories), 0),
+        imageUrl: mealLogs.find((log) => Boolean(log.image_url))?.image_url,
+      };
+    })
+    .filter((entry): entry is MealTimelineEntry => entry !== null)
+    .sort((a, b) => Date.parse(a.loggedAt) - Date.parse(b.loggedAt));
 }
 
 function hasVeg(logs: FoodLog[]) {
@@ -872,6 +900,7 @@ export default function DashboardScreen() {
 
   const logs = dailyLog?.logs ?? [];
   const logsByMeal = useMemo(() => groupLogsByMeal(logs), [logs]);
+  const mealTimeline = useMemo(() => buildMealTimeline(logs), [logs]);
   const displayStreak = getDisplayStreak(summary, logs, activityLogs);
   const consumed = safeNumber(dailyLog?.total_calories);
   const burned = activityLogs.reduce((sum, item) => sum + safeNumber(item.calories_burned), 0);
@@ -1530,23 +1559,18 @@ export default function DashboardScreen() {
           </Text>
         </TouchableOpacity>
       </View>
-      {logs.length > 0 ? (
-        <SurfaceCard revealDelay={180} style={[styles.mealListCard, { borderRadius: 20 }]}>
-          {logs.slice(0, 5).map((log, idx) => (
-            <MealListRow
-              key={(log as any).id ?? idx}
-              log={log}
-              isLast={idx === Math.min(logs.length, 5) - 1}
+      {mealTimeline.length > 0 ? (
+        <SurfaceCard revealDelay={180} style={[styles.mealTimelineCard, { borderRadius: 20 }]}>
+          {mealTimeline.map((entry, idx) => (
+            <MealTimelineRow
+              key={entry.mealType}
+              entry={entry}
+              isLast={idx === mealTimeline.length - 1}
             />
           ))}
         </SurfaceCard>
       ) : (
-        <EmptyState
-          imageSource={todayHeroIllustration}
-          icon="restaurant-outline"
-          title="screen.tabs.index.title.001"
-          description="screen.tabs.index.description.001"
-        />
+        <MealTimelineEmpty onPress={() => router.push('/scan' as never)} />
       )}
 
       {/* 9a. Support panel — compact coach + health */}
@@ -1857,51 +1881,98 @@ const MEAL_ICON_MAP: Record<MealType, keyof typeof Ionicons.glyphMap> = {
   snack: 'cafe-outline',
 };
 
-function MealListRow({ log, isLast }: { log: FoodLog; isLast: boolean }) {
-  const { colors } = useAppTheme();
-  const { t } = useI18n();
-  const name = (log as any).name_vi ?? log.name;
-  const mealLabel = t(MEAL_LABEL_KEYS[log.meal_type]);
-  const kcal = safeNumber((log as any).calories ?? (log as any).total_calories ?? 0);
-  const isAi = !!(log as any).ai_scan_id;
+function formatMealTime(value: string, locale: Locale) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '--:--';
+  return new Intl.DateTimeFormat(locale === 'vi' ? 'vi-VN' : 'en-US', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(date);
+}
 
-  const MEAL_BG: Record<MealType, string> = {
-    breakfast: colors.surfaceSuccess,
-    lunch: colors.surfaceInfo,
-    dinner: colors.surfaceWarning,
-    snack: colors.surfaceMuted,
-  };
-  const MEAL_ICON_COLOR: Record<MealType, string> = {
-    breakfast: colors.accentAmber,
-    lunch: colors.accentAmber,
-    dinner: colors.accentCyan,
-    snack: colors.textSoft,
-  };
+function MealTimelineRow({ entry, isLast }: { entry: MealTimelineEntry; isLast: boolean }) {
+  const { colors } = useAppTheme();
+  const { locale, t } = useI18n();
+  const mealLabel = t(MEAL_LABEL_KEYS[entry.mealType]);
+  const names = entry.logs
+    .map((log) => (locale === 'vi' ? log.name_vi ?? log.name : log.name))
+    .join(', ');
+  const isAi = entry.logs.some((log) => Boolean(log.ai_scan_id));
 
   return (
-    <View style={[styles.mealRow, !isLast && { borderBottomWidth: 1, borderBottomColor: colors.borderSubtle }]}>
-      <View style={[styles.mealRowIconBox, { backgroundColor: MEAL_BG[log.meal_type] }]}>
-        <Ionicons
-          name={MEAL_ICON_MAP[log.meal_type]}
-          size={18}
-          color={MEAL_ICON_COLOR[log.meal_type]}
-        />
+    <TouchableOpacity
+      style={styles.mealTimelineRow}
+      onPress={() => router.push('/log' as never)}
+      activeOpacity={0.72}
+      accessibilityRole="button"
+      accessibilityLabel={`${mealLabel}, ${formatNumber(entry.calories)} kcal`}
+    >
+      <View style={styles.mealTimelineRail}>
+        <View style={[styles.mealTimelineDot, { backgroundColor: colors.accentLeaf, borderColor: colors.surface }]} />
+        {!isLast && <View style={[styles.mealTimelineLine, { backgroundColor: colors.borderSuccess }]} />}
       </View>
-      <View style={styles.mealRowCopy}>
-        <Text style={[styles.mealRowName, { color: colors.text }]} numberOfLines={1}>{name}</Text>
-        <Text style={[styles.mealRowMeta, { color: colors.textMuted }]}>
-          {mealLabel} - {formatNumber(kcal)} kcal
+      <Image
+        source={entry.imageUrl ? { uri: entry.imageUrl } : mealIllustration}
+        style={styles.mealTimelineImage}
+        resizeMode="cover"
+        accessibilityLabel={names}
+      />
+      <View style={styles.mealTimelineCopy}>
+        <View style={styles.mealTimelineTitleRow}>
+          <Text style={[styles.mealTimelineTitle, { color: colors.text }]}>{mealLabel}</Text>
+          <Text style={[styles.mealTimelineTime, { color: colors.textMuted }]}>
+            {formatMealTime(entry.loggedAt, locale)}
+          </Text>
+        </View>
+        <Text style={[styles.mealTimelineNames, { color: colors.textSoft }]} numberOfLines={2}>
+          {names}
+        </Text>
+        <Text style={[styles.mealTimelineKcal, { color: colors.accentLeaf }]}>
+          {formatNumber(entry.calories)} kcal
         </Text>
       </View>
       {isAi && (
-        <View style={[styles.aiBadge, { backgroundColor: colors.surfaceSuccess, borderColor: colors.borderSuccess }]}>
+        <View style={[styles.aiBadge, { backgroundColor: colors.surfaceSuccess }]}>
           <Ionicons name="sparkles-outline" size={10} color={colors.accentLeaf} />
           <Text style={[styles.aiBadgeText, { color: colors.accentLeaf }]}>
             {t('screen.tabs.index.hifi.meals.aiBadge' as any)}
           </Text>
         </View>
       )}
-    </View>
+    </TouchableOpacity>
+  );
+}
+
+function MealTimelineEmpty({ onPress }: { onPress: () => void }) {
+  const { colors } = useAppTheme();
+  const { t } = useI18n();
+
+  return (
+    <SurfaceCard revealDelay={180} style={[styles.mealTimelineEmpty, { borderRadius: 20 }]}>
+      <View style={[styles.mealEmptyIcon, { backgroundColor: colors.surfaceSuccess }]}>
+        <Ionicons name="camera-outline" size={22} color={colors.accentLeaf} />
+      </View>
+      <View style={styles.mealEmptyCopy}>
+        <Text style={[styles.mealEmptyTitle, { color: colors.text }]}>
+          {t('screen.tabs.index.hifi.meals.emptyTitle' as any)}
+        </Text>
+        <Text style={[styles.mealEmptyBody, { color: colors.textMuted }]}>
+          {t('screen.tabs.index.hifi.meals.emptyBody' as any)}
+        </Text>
+      </View>
+      <TouchableOpacity
+        style={[styles.mealEmptyButton, { backgroundColor: colors.accentLeaf }]}
+        onPress={onPress}
+        activeOpacity={0.8}
+        accessibilityRole="button"
+      >
+        <Ionicons name="scan-outline" size={17} color={colors.textOnAccent} />
+        <Text style={[styles.mealEmptyButtonText, { color: colors.textOnAccent }]}>
+          {t('screen.tabs.index.hifi.meals.firstScan' as any)}
+        </Text>
+      </TouchableOpacity>
+    </SurfaceCard>
   );
 }
 
@@ -2302,34 +2373,66 @@ const styles = createThemedStyles((colors) => ({
   sectionTitle: { fontSize: 13, fontWeight: '800' as const },
   sectionLink: { fontSize: 12, fontWeight: '700' as const },
 
-  // Meal list
-  mealListCard: { padding: 6, marginBottom: 14 },
-  mealRow: {
+  // Meal timeline
+  mealTimelineCard: { paddingHorizontal: 14, paddingVertical: 8, marginBottom: 14 },
+  mealTimelineRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'flex-start' as const,
+    minHeight: 88,
+    paddingVertical: 9,
+  },
+  mealTimelineRail: {
+    width: 18,
+    alignSelf: 'stretch' as const,
+    alignItems: 'center' as const,
+  },
+  mealTimelineDot: { width: 12, height: 12, borderRadius: 6, borderWidth: 3, marginTop: 22, zIndex: 1 },
+  mealTimelineLine: { position: 'absolute' as const, top: 34, bottom: -18, width: 2 },
+  mealTimelineImage: { width: 64, height: 64, borderRadius: 16, marginLeft: 7, marginRight: 12 },
+  mealTimelineCopy: { flex: 1, minWidth: 0, paddingTop: 1 },
+  mealTimelineTitleRow: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
-    gap: 12,
-    padding: 10,
+    justifyContent: 'space-between' as const,
+    gap: 8,
   },
-  mealRowIconBox: {
-    width: 40,
-    height: 40,
-    borderRadius: 13,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-  },
-  mealRowCopy: { flex: 1, minWidth: 0 },
-  mealRowName: { fontSize: 13.5, fontWeight: '700' as const },
-  mealRowMeta: { fontSize: 11, marginTop: 1 },
+  mealTimelineTitle: { fontSize: 14, fontWeight: '800' as const },
+  mealTimelineTime: { fontSize: 11, fontWeight: '700' as const, fontVariant: ['tabular-nums'] as any },
+  mealTimelineNames: { fontSize: 11.5, lineHeight: 16, marginTop: 3, paddingRight: 4 },
+  mealTimelineKcal: { fontSize: 11.5, fontWeight: '800' as const, marginTop: 3 },
   aiBadge: {
+    position: 'absolute' as const,
+    right: 0,
+    bottom: 9,
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     gap: 3,
     borderRadius: 8,
-    borderWidth: 1,
     paddingHorizontal: 7,
     paddingVertical: 3,
   },
   aiBadgeText: { fontSize: 10, fontWeight: '800' as const },
+  mealTimelineEmpty: { marginBottom: 14, alignItems: 'center' as const, paddingVertical: 20 },
+  mealEmptyIcon: {
+    width: 46,
+    height: 46,
+    borderRadius: 16,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  mealEmptyCopy: { alignItems: 'center' as const, marginTop: 11, marginBottom: 15, maxWidth: 280 },
+  mealEmptyTitle: { fontSize: 14, fontWeight: '800' as const, textAlign: 'center' as const },
+  mealEmptyBody: { fontSize: 11.5, lineHeight: 17, textAlign: 'center' as const, marginTop: 4 },
+  mealEmptyButton: {
+    minHeight: 44,
+    borderRadius: 14,
+    paddingHorizontal: 18,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    gap: 8,
+  },
+  mealEmptyButtonText: { fontSize: 13, fontWeight: '800' as const },
 
   // Shortcuts
   shortcutGrid: { flexDirection: 'row' as const, gap: 9, marginBottom: 8 },
