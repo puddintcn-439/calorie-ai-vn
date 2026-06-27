@@ -8,7 +8,7 @@ import {
 } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import Svg, { Circle, Defs, LinearGradient as SvgLinearGradient, Stop } from 'react-native-svg';
+import Svg, { Circle } from 'react-native-svg';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
   ACTIVITY_MET,
@@ -44,6 +44,8 @@ import { buildSuccessForecast } from '../../services/success-forecast.service';
 import { buildDynamicIntervention } from '../../services/dynamic-intervention.service';
 import { buildInterventionEvent, recordInterventionEvent } from '../../services/intervention-memory.service';
 import { telemetryService } from '../../services/telemetry.service';
+import { TodayHero } from '../../components/today/TodayHero';
+import { getProteinTarget, useTodayHero } from '../../hooks/useTodayHero';
 
 const mealIllustration = require('../../assets/images/vietnamese-meal.jpg') as number;
 
@@ -173,13 +175,6 @@ function clampProgress(value: number) {
   return Math.max(0, Math.min(1, value));
 }
 
-function buildProteinTarget(goal?: UserGoal, direction?: GoalPlan['direction'], weightKg = 65) {
-  const kg = Math.max(35, safePositiveNumber(weightKg, 65));
-  if (goal === 'gain_muscle' || direction === 'gain') return Math.round(kg * 1.6);
-  if (goal === 'lose_weight' || direction === 'loss') return Math.round(kg * 1.4);
-  return Math.round(kg * 1.2);
-}
-
 function focusToneColor(tone: FocusTone, colors: Record<string, string>) {
   if (tone === 'good') return colors.accentMint;
   if (tone === 'warn') return colors.accentAmber;
@@ -217,7 +212,7 @@ function buildDailyFocusItems(args: {
   const netKcal = Math.max(0, consumedKcal - burnedKcal);
   const remaining = targetKcal - netKcal;
   const calorieRatio = netKcal / Math.max(targetKcal, 1);
-  const proteinTarget = buildProteinTarget(args.goal, args.goalDirection, args.weightKg);
+  const proteinTarget = getProteinTarget(args.goal, args.goalDirection, args.weightKg);
   const proteinGap = Math.max(0, proteinTarget - proteinG);
   const locale = args.locale;
   const items: DailyFocusItem[] = [
@@ -807,7 +802,7 @@ function buildMovementPlan(
 }
 
 export default function DashboardScreen() {
-  const { colors, mode } = useAppTheme();
+  const { colors } = useAppTheme();
   const shownInterventionKeysRef = useRef<Set<string>>(new Set());
   const forecastSnapshotKeysRef = useRef<Set<string>>(new Set());
   const { locale, t } = useI18n();
@@ -831,7 +826,6 @@ export default function DashboardScreen() {
   const { fetchWeeklyInsights } = useInsightsStore();
   const [profileMeta, setProfileMeta] = useState<DashboardProfileMeta | null>(null);
   const [selectedGoal, setSelectedGoal] = useState<string>(QUICK_GOAL_OPTIONS[1].key);
-  const [isApplyingTarget, setIsApplyingTarget] = useState(false);
   const [isLoggingMovement, setIsLoggingMovement] = useState(false);
   const [updatingRoadmapId, setUpdatingRoadmapId] = useState<string | null>(null);
   const [reward, setReward] = useState<RewardToastData | null>(null);
@@ -1154,39 +1148,6 @@ export default function DashboardScreen() {
     }
   }
 
-  async function applySelectedTarget() {
-    setIsApplyingTarget(true);
-    try {
-      const res = await apiClient.patch<User>('/user/profile', {
-        goal: goalFromQuickOption(selectedGoalOption.type),
-        goal_plan: selectedGoalPlan,
-      });
-      setProfileMeta({
-        age: res.data.age,
-        gender: res.data.gender,
-        height_cm: res.data.height_cm,
-        weight_kg: res.data.weight_kg,
-        health_flags: res.data.health_flags,
-        activity_level: res.data.activity_level,
-        goal_plan: res.data.goal_plan,
-        daily_calorie_target: res.data.daily_calorie_target,
-        goal: res.data.goal,
-      });
-      await Promise.all([
-        fetchDailyLog(),
-        fetchRecommendations().catch(() => {}),
-        fetchWeeklyInsights().catch(() => {}),
-      ]);
-      const savedTarget = safePositiveNumber(res.data.daily_calorie_target, target);
-      const planWarnings = res.data.goal_plan?.warnings?.[0];
-      Alert.alert('screen.tabs.index.alert.001', t('screen.tabs.index.alert.savedTargetBody', { target: formatNumber(savedTarget), warnings: planWarnings ? `\n${planWarnings}` : '' }));
-    } catch (e: any) {
-      Alert.alert('screen.tabs.index.alert.002', e?.response?.data?.message ?? 'screen.tabs.index.alert.003');
-    } finally {
-      setIsApplyingTarget(false);
-    }
-  }
-
   async function logMovementPlan() {
     if (!movementPlan || movementPlanCompleted || isLoggingMovement) return;
 
@@ -1216,44 +1177,6 @@ export default function DashboardScreen() {
     }
   }
 
-  const GOAL_PRESET_KEYS: Record<'lose' | 'maintain' | 'gain', string> = {
-    lose: 'loss_0.5',
-    maintain: 'maintain',
-    gain: 'gain_0.25',
-  };
-
-  async function applyGoalPreset(preset: 'lose' | 'maintain' | 'gain') {
-    const option = QUICK_GOAL_OPTIONS.find((o) => o.key === GOAL_PRESET_KEYS[preset]) ?? QUICK_GOAL_OPTIONS[3];
-    setIsApplyingTarget(true);
-    try {
-      const res = await apiClient.patch<User>('/user/profile', {
-        goal: goalFromQuickOption(option.type),
-        goal_plan: buildQuickGoalPlan(option),
-      });
-      setProfileMeta({
-        age: res.data.age,
-        gender: res.data.gender,
-        height_cm: res.data.height_cm,
-        weight_kg: res.data.weight_kg,
-        health_flags: res.data.health_flags,
-        activity_level: res.data.activity_level,
-        goal_plan: res.data.goal_plan,
-        daily_calorie_target: res.data.daily_calorie_target,
-        goal: res.data.goal,
-        full_name: res.data.full_name,
-      });
-      await Promise.all([
-        fetchDailyLog(),
-        fetchRecommendations().catch(() => {}),
-        fetchWeeklyInsights().catch(() => {}),
-      ]);
-    } catch {
-      // silently fail â€” ring stays at current target
-    } finally {
-      setIsApplyingTarget(false);
-    }
-  }
-
   const movementProgressPct = movementPlan
     ? clampProgress(activityMinutes / Math.max(safeNumber(movementPlan.daily_minutes_target), 1)) * 100
     : 0;
@@ -1265,19 +1188,26 @@ export default function DashboardScreen() {
     : isLoggingMovement
       ? t('screen.tabs.index.movement.button.logging')
       : t('screen.tabs.index.movement.button.complete');
+  const firstName = profileMeta?.full_name?.trim().split(/\s+/).pop() ?? '';
+  const proteinTargetG = getProteinTarget(
+    profileMeta?.goal,
+    profileMeta?.goal_plan?.direction,
+    profileMeta?.weight_kg,
+  );
+  const proteinGapG = Math.max(0, proteinTargetG - protein);
+  const todayHero = useTodayHero({
+    consumedCalories: consumed,
+    targetCalories: target,
+    proteinG: protein,
+    proteinTargetG,
+    activityMinutes,
+    activityTargetMinutes: movementPlan?.daily_minutes_target ?? 25,
+    logsCount: logs.length,
+    streak: displayStreak,
+    firstName,
+    locale,
+  });
   const nextAction = useMemo(() => {
-    if (safetyCard) {
-      return {
-        kind: 'profile' as const,
-        tone: safetyCard.tone === 'review' ? 'warn' as const : 'info' as const,
-        icon: safetyCard.icon,
-        label: t('screen.tabs.index.next.priority'),
-        title: safetyCard.title,
-        body: safetyCard.body,
-        primaryLabel: safetyCard.action,
-      };
-    }
-
     if (logs.length === 0) {
       return {
         kind: 'scan' as const,
@@ -1287,6 +1217,30 @@ export default function DashboardScreen() {
         title: t('screen.tabs.index.next.firstMeal.title'),
         body: t('screen.tabs.index.next.firstMeal.body'),
         primaryLabel: t('screen.tabs.index.next.firstMeal.primary'),
+      };
+    }
+
+    if (proteinGapG > 0) {
+      return {
+        kind: 'scan' as const,
+        tone: 'info' as const,
+        icon: 'barbell-outline' as const,
+        label: t('screen.tabs.index.next.action'),
+        title: t('screen.tabs.index.next.protein.title', { grams: formatNumber(proteinGapG) }),
+        body: t('screen.tabs.index.next.protein.body'),
+        primaryLabel: t('screen.tabs.index.next.protein.primary'),
+      };
+    }
+
+    if (safetyCard) {
+      return {
+        kind: 'profile' as const,
+        tone: safetyCard.tone === 'review' ? 'warn' as const : 'info' as const,
+        icon: safetyCard.icon,
+        label: t('screen.tabs.index.next.priority'),
+        title: safetyCard.title,
+        body: safetyCard.body,
+        primaryLabel: safetyCard.action,
       };
     }
 
@@ -1328,7 +1282,7 @@ export default function DashboardScreen() {
       body: t('screen.tabs.index.next.steady.body'),
       primaryLabel: t('screen.tabs.index.next.openJournal'),
     };
-  }, [locale, logs.length, movementButtonLabel, movementPlan, movementPlanCompleted, nudges, safetyCard, t]);
+  }, [logs.length, movementButtonLabel, movementPlan, movementPlanCompleted, nudges, proteinGapG, safetyCard, t]);
   const coachBridge = useMemo(() => buildTodayCoachBridge({
     logsCount: logs.length,
     consumed,
@@ -1356,50 +1310,19 @@ export default function DashboardScreen() {
     router.push('/log' as never);
   };
 
-
-  // Header date: use Intl to avoid hardcoded locale strings in source
-  const todayDateObj = new Date();
-  const intlLocale = locale === 'vi' ? 'vi-VN' : 'en-US';
-  const headerDateLabel = new Intl.DateTimeFormat(intlLocale, {
-    weekday: 'long', day: 'numeric', month: 'numeric',
-  }).format(todayDateObj);
-
-  // User first name (last word of full_name = Vietnamese given name)
-  const firstName = profileMeta?.full_name?.trim().split(/\s+/).pop() ?? '';
-
   // Macro targets derived from calorie target
-  const proteinTargetG = buildProteinTarget(profileMeta?.goal, profileMeta?.goal_plan?.direction, profileMeta?.weight_kg);
   const carbsTargetG = Math.round((target * 0.5) / 4);
   const fatTargetG = Math.round((target * 0.25) / 9);
-
-  // Active preset from user saved goal plan direction
-  const activeGoalPreset: 'lose' | 'maintain' | 'gain' =
-    profileMeta?.goal_plan?.direction === 'loss' ? 'lose' :
-    profileMeta?.goal_plan?.direction === 'gain' ? 'gain' : 'maintain';
-  const activePresetBg = mode === 'light' ? colors.text : colors.accentMint;
-  const activePresetText = mode === 'light' ? colors.surface : colors.textOnAccent;
 
   return (
     <ScreenShell contentStyle={styles.screen}>
 
-      {/* 1. Header */}
-      <View style={styles.headerRow}>
-        <View style={styles.headerLeft}>
-          <Text style={[styles.headerDate, { color: colors.accentCyan }]}>{headerDateLabel}</Text>
-          <Text style={[styles.headerGreeting, { color: colors.text }]}>
-            {firstName
-              ? t('screen.tabs.index.hifi.header.greeting' as any, { name: firstName })
-              : t('screen.tabs.index.hero.title')}
-          </Text>
-        </View>
-        <TouchableOpacity
-          style={[styles.streakPill, { backgroundColor: colors.surface, borderColor: colors.borderSubtle }]}
-          onPress={() => router.push('/achievements' as never)}
-        >
-          <Ionicons name="flame" size={13} color={colors.accentAmber} />
-          <Text style={[styles.streakText, { color: colors.text }]}> {displayStreak}</Text>
-        </TouchableOpacity>
-      </View>
+      {/* 1. AI health assistant hero */}
+      <TodayHero
+        model={todayHero}
+        streak={displayStreak}
+        onPressStreak={() => router.push('/achievements' as never)}
+      />
 
       {/* 2. Safety banner — only when profile incomplete or has medical flags */}
       {safetyCard && !bannerDismissed && (
@@ -1427,36 +1350,6 @@ export default function DashboardScreen() {
           </TouchableOpacity>
         </View>
       )}
-
-      {/* 3. Hero calorie ring */}
-      <SurfaceCard revealDelay={40} style={[styles.heroCard, { padding: 26 }]}>
-        <CaloriesRingHero consumed={consumed} burned={burned} target={target} />
-      </SurfaceCard>
-
-      {/* 4. Preset goal chips */}
-      <View style={styles.presetRow}>
-        {(['lose', 'maintain', 'gain'] as const).map((preset) => {
-          const active = activeGoalPreset === preset;
-          return (
-            <TouchableOpacity
-              key={preset}
-              style={[
-                styles.presetChip,
-                active
-                  ? [styles.presetChipActive, { backgroundColor: activePresetBg, borderColor: activePresetBg }]
-                  : { backgroundColor: colors.surface, borderColor: colors.borderSubtle },
-                isApplyingTarget && styles.disabledButton,
-              ]}
-              onPress={() => { void applyGoalPreset(preset); }}
-              disabled={isApplyingTarget}
-            >
-              <Text style={[styles.presetChipText, { color: active ? activePresetText : colors.textSoft }]}>
-                {t(`screen.tabs.index.hifi.preset.${preset}` as any)}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
 
       {/* 5. Macro bars */}
       <View style={styles.macroBarRow}>
@@ -1623,123 +1516,6 @@ export default function DashboardScreen() {
 }
 
 // --- Sub-components ---
-
-const RING_GRAD_START = '#7cc04f';
-const RING_GRAD_END = '#4f9b6e';
-
-function CaloriesRingHero({
-  consumed,
-  burned,
-  target,
-}: {
-  consumed: number;
-  burned: number;
-  target: number;
-}) {
-  const { colors } = useAppTheme();
-  const { t } = useI18n();
-  const safeConsumed = safeNumber(consumed);
-  const safeBurned = safeNumber(burned);
-  const safeTarget = safePositiveNumber(target, 1800);
-  const remaining = Math.max(0, safeTarget - safeConsumed);
-  const net = safeConsumed - safeBurned;
-  const progress = clampProgress(safeConsumed / safeTarget);
-  const SIZE = 128;
-  const STROKE = 13;
-  const RADIUS = 56;
-  const CIRC = 2 * Math.PI * RADIUS;
-
-  return (
-    <View style={styles.ringHeroRow}>
-      <View style={{ width: SIZE, height: SIZE }}>
-        <Svg width={SIZE} height={SIZE} style={{ position: 'absolute', top: 0, left: 0 }}>
-          <Defs>
-            <SvgLinearGradient id="ringGrad" x1="0" y1="0" x2="1" y2="1">
-              <Stop offset="0" stopColor={RING_GRAD_START} />
-              <Stop offset="1" stopColor={RING_GRAD_END} />
-            </SvgLinearGradient>
-          </Defs>
-          <Circle
-            cx={SIZE / 2} cy={SIZE / 2} r={RADIUS}
-            stroke={colors.progressBg} strokeWidth={STROKE} fill="none"
-          />
-          <Circle
-            cx={SIZE / 2} cy={SIZE / 2} r={RADIUS}
-            stroke="url(#ringGrad)" strokeWidth={STROKE} fill="none"
-            strokeLinecap="round"
-            strokeDasharray={`${CIRC} ${CIRC}`}
-            strokeDashoffset={CIRC * (1 - progress)}
-            transform={`rotate(-90 ${SIZE / 2} ${SIZE / 2})`}
-          />
-        </Svg>
-        <View style={styles.ringHeroCenter}>
-          <Text style={[styles.ringHeroValue, { color: colors.text }]}>
-            {formatNumber(remaining)}
-          </Text>
-          <Text style={[styles.ringHeroLabel, { color: colors.textMuted }]}>
-            {t('screen.tabs.index.hifi.ring.remainingOf' as any, { target: formatNumber(safeTarget) })}
-          </Text>
-        </View>
-      </View>
-      <View style={styles.ringHeroMetrics}>
-        <HeroMetricRow
-          iconType="intake"
-          label={t('screen.tabs.index.hifi.ring.eaten' as any)}
-          value={formatNumber(safeConsumed)}
-          bg={colors.surfaceSuccess}
-          iconColor={colors.accentLeaf}
-        />
-        <HeroMetricRow
-          iconType="activity"
-          label={t('screen.tabs.index.hifi.ring.activity' as any)}
-          value={`+${formatNumber(safeBurned)}`}
-          bg={colors.surfaceInfo}
-          iconColor={colors.accentCyan}
-        />
-        <HeroMetricRow
-          iconType="net"
-          label={t('screen.tabs.index.hifi.ring.net' as any)}
-          value={formatNumber(net)}
-          bg={colors.surfaceWarm}
-          iconColor={colors.textSoft}
-        />
-      </View>
-    </View>
-  );
-}
-
-function HeroMetricRow({
-  iconType,
-  label,
-  value,
-  bg,
-  iconColor,
-}: {
-  iconType: 'intake' | 'activity' | 'net';
-  label: string;
-  value: string;
-  bg: string;
-  iconColor: string;
-}) {
-  const { colors } = useAppTheme();
-  return (
-    <View style={styles.heroMetric}>
-      <View style={[styles.heroMetricIconBox, { backgroundColor: bg }]}>
-        <HeroMetricIcon type={iconType} color={iconColor} />
-      </View>
-      <View>
-        <Text style={[styles.heroMetricLabel, { color: colors.textMuted }]}>{label}</Text>
-        <Text style={[styles.heroMetricValue, { color: colors.text }]}>{value}</Text>
-      </View>
-    </View>
-  );
-}
-
-function HeroMetricIcon({ type, color }: { type: 'intake' | 'activity' | 'net'; color: string }) {
-  const iconName: keyof typeof Ionicons.glyphMap =
-    type === 'intake' ? 'restaurant-outline' : type === 'activity' ? 'walk-outline' : 'scale-outline';
-  return <Ionicons name={iconName} size={19} color={color} />;
-}
 
 function MacroBarCard({
   label,
@@ -2158,38 +1934,6 @@ function CompactHealthScoreCard({
 const styles = createThemedStyles((colors) => ({
   screen: { paddingBottom: 28 },
 
-  // Header
-  headerRow: {
-    flexDirection: 'row' as const,
-    alignItems: 'flex-start' as const,
-    justifyContent: 'space-between' as const,
-    gap: 12,
-    marginBottom: 14,
-  },
-  headerLeft: { flex: 1 },
-  headerDate: {
-    fontSize: 12,
-    fontWeight: '700' as const,
-    letterSpacing: 1,
-    textTransform: 'uppercase' as const,
-  },
-  headerGreeting: {
-    fontSize: 25,
-    fontWeight: '800' as const,
-    letterSpacing: -0.5,
-    marginTop: 3,
-  },
-  streakPill: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    borderRadius: 20,
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    gap: 4,
-  },
-  streakText: { fontSize: 14, fontWeight: '800' as const },
-
   // Safety banner
   safetyBanner: {
     flexDirection: 'row' as const,
@@ -2205,70 +1949,6 @@ const styles = createThemedStyles((colors) => ({
   bannerSubtitle: { fontSize: 11, marginTop: 1 },
   bannerButton: { borderRadius: 12, paddingHorizontal: 11, paddingVertical: 6 },
   bannerButtonText: { fontSize: 12, fontWeight: '800' as const },
-
-  // Hero card
-  heroCard: { marginBottom: 16, borderRadius: 28 },
-
-  // Ring hero
-  ringHeroRow: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    justifyContent: 'space-between' as const,
-    gap: 24,
-  },
-  ringHeroCenter: {
-    position: 'absolute' as const,
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-  },
-  ringHeroValue: {
-    fontSize: 29,
-    fontWeight: '800' as const,
-    letterSpacing: -1,
-    lineHeight: 32,
-  },
-  ringHeroLabel: {
-    fontSize: 11,
-    fontWeight: '600' as const,
-    marginTop: 2,
-    textAlign: 'center' as const,
-  },
-  ringHeroMetrics: { flex: 1, gap: 13 },
-  heroMetric: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    gap: 10,
-  },
-  heroMetricIconBox: {
-    width: 38,
-    height: 38,
-    borderRadius: 13,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-  },
-  heroMetricLabel: { fontSize: 12, fontWeight: '600' as const },
-  heroMetricValue: { fontSize: 18, fontWeight: '800' as const, lineHeight: 22 },
-
-  // Preset chips
-  presetRow: { flexDirection: 'row' as const, gap: 10, marginBottom: 18 },
-  presetChip: {
-    flex: 1,
-    borderRadius: 16,
-    borderWidth: 1,
-    paddingVertical: 12,
-    paddingHorizontal: 4,
-    alignItems: 'center' as const,
-  },
-  presetChipActive: {},
-  presetChipText: {
-    fontSize: 12.5,
-    fontWeight: '800' as const,
-    textAlign: 'center' as const,
-  },
 
   // Macro bars
   macroBarRow: { flexDirection: 'row' as const, gap: 12, marginBottom: 16 },
