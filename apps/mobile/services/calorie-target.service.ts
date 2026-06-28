@@ -1,4 +1,5 @@
 import { apiClient } from './api';
+import type { DailyNutritionTarget } from '@calorie-ai/types';
 
 export interface MealRecommendation {
   meal_type: 'breakfast' | 'lunch' | 'dinner' | 'snack';
@@ -81,6 +82,8 @@ export interface CalorieTargetResponse {
   health_flags?: string[];
   medical_review_recommended?: boolean;
   nutrition_targets?: NutritionTargets;
+  daily_nutrition_target?: DailyNutritionTarget;
+  protein_reason?: string;
 }
 
 export type CalorieTargetRequiredField =

@@ -7,7 +7,7 @@ import { SurfaceCard } from './ui-shell';
 import { useAppTheme } from './theme';
 import { Text } from './i18n-text';
 import { I18nKey } from './i18n';
-import { formatMacro, formatNumberVi, formatPercent, roundTo, safeNumber, safePositiveNumber, safeRound, toFiniteNumber } from '../services/number-format';
+import { formatMacro, formatNumberVi, formatPercent, roundTo, safeNumber, toFiniteNumber } from '../services/number-format';
 
 type NutritionTargets = {
   fiber_g_min: number;
@@ -53,47 +53,12 @@ type CalorieTargetResponse = {
 type Props = {
   target?: CalorieTargetResponse | null;
   daily_calorie_target?: number;
+  /** Profile inputs are accepted for compatibility, but targets are never calculated on-device. */
   weight_kg?: number;
   goal?: 'lose_weight' | 'maintain' | 'gain_muscle';
 };
 
-const PROTEIN_G_PER_KG: Record<string, number> = {
-  lose_weight: 1.6,
-  maintain: 1.6,
-  gain_muscle: 1.9,
-};
-
-function computeMacros(daily: number, weightKg: number | undefined, goal?: string) {
-  const safeDaily = safePositiveNumber(daily, 0);
-  const safeWeightKg = safePositiveNumber(weightKg, 70);
-  const protein_g_per_kg = PROTEIN_G_PER_KG[goal ?? 'maintain'] ?? 1.6;
-  const protein_target_g = safeRound(protein_g_per_kg * safeWeightKg);
-  const fat_pct = 25;
-  const fat_kcal = safeRound((fat_pct / 100) * safeDaily);
-  const fat_g = safeRound(fat_kcal / 9);
-  const protein_kcal = protein_target_g * 4;
-  const remaining_kcal = Math.max(0, safeDaily - (protein_kcal + fat_kcal));
-  const carbs_g = safeRound(remaining_kcal / 4);
-  const carbs_pct = safeRound(((carbs_g * 4) / Math.max(1, safeDaily)) * 100);
-
-  return { protein_target_g, protein_g_per_kg, fat_pct, fat_g, carbs_g, carbs_pct };
-}
-
-function computeNutritionTargets(daily: number): NutritionTargets {
-  const safeDaily = safePositiveNumber(daily, 1800);
-  return {
-    fiber_g_min: safeRound((safeDaily / 1000) * 14),
-    sodium_mg_max: 2300,
-    free_sugar_g_max: safeRound((safeDaily * 0.1) / 4),
-    added_sugar_g_max: safeRound((safeDaily * 0.1) / 4),
-    saturated_fat_g_max: safeRound((safeDaily * 0.1) / 9),
-    free_sugar_pct_max: 10,
-    saturated_fat_pct_max: 10,
-    basis: 'screen.components.macrosCard.basis',
-  };
-}
-
-export default function MacrosCard({ target, daily_calorie_target, weight_kg, goal }: Props) {
+export default function MacrosCard({ target, daily_calorie_target }: Props) {
   const { colors } = useAppTheme();
   const daily = safeNumber(target?.daily_calorie_target ?? daily_calorie_target);
 
@@ -104,16 +69,6 @@ export default function MacrosCard({ target, daily_calorie_target, weight_kg, go
   let carbs_g = toFiniteNumber(target?.carbs_g);
   let carbs_pct = toFiniteNumber(target?.carbs_pct);
 
-  if ((!protein_target_g || !fat_g || !carbs_g) && daily && weight_kg) {
-    const computed = computeMacros(daily, weight_kg, goal);
-    protein_target_g = protein_target_g ?? computed.protein_target_g;
-    protein_g_per_kg = protein_g_per_kg ?? computed.protein_g_per_kg;
-    fat_pct = fat_pct ?? computed.fat_pct;
-    fat_g = fat_g ?? computed.fat_g;
-    carbs_g = carbs_g ?? computed.carbs_g;
-    carbs_pct = carbs_pct ?? computed.carbs_pct;
-  }
-
   if (!daily) {
     return (
       <SurfaceCard style={[styles.card, { borderColor: colors.borderInfo }]}>
@@ -123,7 +78,7 @@ export default function MacrosCard({ target, daily_calorie_target, weight_kg, go
     );
   }
 
-  const nutrition = target?.nutrition_targets ?? computeNutritionTargets(daily);
+  const nutrition = target?.nutrition_targets;
 
   return (
     <SurfaceCard style={[styles.card, { borderColor: colors.borderInfo }]}>
@@ -152,7 +107,7 @@ export default function MacrosCard({ target, daily_calorie_target, weight_kg, go
         </View>
       </View>
 
-      <View style={[styles.qualityBlock, { borderTopColor: colors.borderSubtle }]}>
+      {nutrition && <View style={[styles.qualityBlock, { borderTopColor: colors.borderSubtle }]}>
         <Text style={[styles.qualityTitle, { color: colors.text }]} i18nKey="screen.components.macrosCard.text.007" />
         <View style={styles.qualityGrid}>
           <Metric label="screen.components.macrosCard.label.001" value={`>= ${formatMacro(nutrition.fiber_g_min)}`} tone="good" />
@@ -161,7 +116,7 @@ export default function MacrosCard({ target, daily_calorie_target, weight_kg, go
           <Metric label="screen.components.macrosCard.label.004" value={`< ${formatMacro(nutrition.saturated_fat_g_max)}`} tone="limit" />
         </View>
         <Text style={[styles.qualityNote, { color: colors.textMuted }]} i18nKey="screen.components.macrosCard.qualityNote" />
-      </View>
+      </View>}
 
       {!!target?.medical_review_recommended && (
         <Text style={[styles.warning, { color: colors.warning }]} i18nKey="screen.components.macrosCard.medicalWarning" />

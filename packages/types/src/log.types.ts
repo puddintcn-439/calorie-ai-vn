@@ -2,6 +2,7 @@ import { AIDetectedItem } from './ai.types';
 import { ActivityLog } from './activity.types';
 import { ActivityPreference, DailyRoadmapItem } from './roadmap.types';
 import { User } from './user.types';
+import { DailyNutritionTarget } from './nutrition-target.types';
 
 export interface FoodLog {
   id: string;
@@ -68,17 +69,20 @@ export interface TodaySummary {
   activity_logs: ActivityLog[];
   daily_roadmap: DailyRoadmapItem[];
   activity_preferences: ActivityPreference[];
+  daily_nutrition_target?: DailyNutritionTarget;
   profile: Partial<Pick<
     User,
     | 'age'
     | 'gender'
     | 'height_cm'
+    | 'body_fat_pct'
     | 'weight_kg'
     | 'health_flags'
     | 'activity_level'
     | 'goal_plan'
     | 'daily_calorie_target'
     | 'goal'
+    | 'full_name'
   >> | null;
   plan: {
     target_calories: number;

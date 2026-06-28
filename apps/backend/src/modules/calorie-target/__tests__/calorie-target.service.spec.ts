@@ -169,7 +169,7 @@ describe('CalorieTargetService', () => {
       expect(result.bmi_interpretation).toBe('screening_risk_not_diagnosis');
       expect(result.safety_warnings?.[0]).toContain('screening');
       expect(result.nutrition_targets).toMatchObject({
-        sodium_mg_max: 2300,
+        sodium_mg_max: 2000,
         free_sugar_pct_max: 10,
         saturated_fat_pct_max: 10,
       });

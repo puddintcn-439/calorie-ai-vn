@@ -44,7 +44,8 @@ export interface BehaviorMemory {
   often_skips_dinner: boolean;
   low_activity_days: Array<'Sun' | 'Mon' | 'Tue' | 'Wed' | 'Thu' | 'Fri' | 'Sat'>;
   best_logging_streak: number;
-  high_protein_adherence: number;
+  /** Null when the recommendation engine cannot safely generate a protein target. */
+  high_protein_adherence: number | null;
   activity_adherence: number;
   meal_skip_rates: {
     breakfast: number;

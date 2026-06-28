@@ -17,12 +17,16 @@ import {
   InsightType,
   PriorityLevel,
 } from '@calorie-ai/types';
+import { NutritionRecommendationEngine } from '../calorie-target/nutrition-recommendation.engine';
 
 @Injectable()
 export class CoachingService {
   private readonly logger = new Logger(CoachingService.name);
 
-  constructor(private supabase: SupabaseService) {}
+  constructor(
+    private supabase: SupabaseService,
+    private nutritionEngine: NutritionRecommendationEngine = new NutritionRecommendationEngine(),
+  ) {}
 
   async recordInterventionEvent(userId: string, dto: InterventionEventInput): Promise<{ recorded: boolean }> {
     const { error } = await this.supabase.db
@@ -118,7 +122,7 @@ export class CoachingService {
         .order('sent_at', { ascending: true }),
       this.supabase.db
         .from('users')
-        .select('daily_calorie_target')
+        .select('age, gender, weight_kg, activity_level, goal, health_flags, daily_calorie_target')
         .eq('id', userId)
         .single(),
     ]);
@@ -138,17 +142,28 @@ export class CoachingService {
       ...activityDayKeys,
     ]);
     const trackedFoodDays = Object.keys(foodByDay).length;
-    const dailyTarget = Number((userRes as any).data?.daily_calorie_target) > 0
-      ? Number((userRes as any).data?.daily_calorie_target)
-      : 1800;
-    const proteinTarget = Math.max(70, Math.round((dailyTarget * 0.075) / 4));
-    const highProteinDays = Object.values(foodByDay)
-      .filter((day) => day.protein_g >= proteinTarget).length;
+    const profile = (userRes as any).data;
+    const dailyTarget = Number(profile?.daily_calorie_target) > 0
+      ? Number(profile.daily_calorie_target)
+      : undefined;
+    const nutritionTarget = this.nutritionEngine.calculate(
+      profile,
+      new Date().toISOString().slice(0, 10),
+      dailyTarget,
+    );
+    const proteinTarget = nutritionTarget.status === 'ready'
+      ? nutritionTarget.protein_g
+      : undefined;
+    const highProteinDays = proteinTarget
+      ? Object.values(foodByDay).filter((day) => day.protein_g >= proteinTarget).length
+      : 0;
     const mealSkipRates = this.calculateMealSkipRates(foodByDay);
     const lowActivityDays = this.detectLowActivityWeekdays(dayKeys, activityDayKeys);
     const bestReminderHour = this.detectBestReminderHour(reminderEvents);
     const bestLoggingStreak = this.calculateBestStreak(dayKeys, activeDayKeys);
-    const highProteinAdherence = trackedFoodDays > 0 ? this.round2(highProteinDays / trackedFoodDays) : 0;
+    const highProteinAdherence = trackedFoodDays > 0 && proteinTarget
+      ? this.round2(highProteinDays / trackedFoodDays)
+      : null;
     const activityAdherence = this.round2(activityDayKeys.size / Math.max(daysAnalyzed, 1));
     const dataQuality: BehaviorMemory['data_quality'] = activeDayKeys.size >= 30
       ? 'high'
@@ -691,7 +706,11 @@ export class CoachingService {
     if (memory.often_skips_dinner) notes.push('Dinner is frequently missing from logged days.');
     if (memory.low_activity_days.length > 0) notes.push(`Activity is usually lowest on ${memory.low_activity_days.join(', ')}.`);
     if (memory.best_reminder_hour !== null) notes.push(`Reminder responses are strongest around ${memory.best_reminder_hour}:00.`);
-    if (memory.high_protein_adherence < 0.5 && memory.data_quality !== 'low') notes.push('Protein adherence is a recurring weak point.');
+    if (
+      memory.high_protein_adherence !== null
+      && memory.high_protein_adherence < 0.5
+      && memory.data_quality !== 'low'
+    ) notes.push('Protein adherence is a recurring weak point.');
     if (memory.best_logging_streak >= 7) notes.push(`Best logging streak is ${memory.best_logging_streak} days.`);
     return notes.slice(0, 5);
   }

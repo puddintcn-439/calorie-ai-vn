@@ -195,8 +195,6 @@ describe('LogService.getTodaySummary', () => {
       { id: 'l', user_id: 'u1', quantity: 1, calories: 700, protein_g: 45, carbs_g: 78, fat_g: 20, fiber_g: 10, sugar_g: 8, saturated_fat_g: 4, sodium_mg: 700, name: 'Lunch', meal_type: 'lunch', estimated_grams: 450, unit: 'serving', source: 'manual_entry', logged_at: '2026-06-06T12:00:00Z', created_at: '2026-06-06T12:00:00Z' },
       { id: 'd', user_id: 'u1', quantity: 1, calories: 600, protein_g: 25, carbs_g: 65, fat_g: 18, fiber_g: 7, sugar_g: 7, saturated_fat_g: 5, sodium_mg: 650, name: 'Dinner', meal_type: 'dinner', estimated_grams: 400, unit: 'serving', source: 'manual_entry', logged_at: '2026-06-06T18:00:00Z', created_at: '2026-06-06T18:00:00Z' },
     ];
-    let userCalls = 0;
-
     const supabase = makeSupabase((table: string) => {
       if (table === 'food_logs') {
         return {
@@ -209,14 +207,20 @@ describe('LogService.getTodaySummary', () => {
         };
       }
       if (table === 'users') {
-        userCalls += 1;
         return {
           select: jest.fn().mockReturnThis(),
           eq: jest.fn().mockReturnThis(),
           single: jest.fn().mockResolvedValue({
-            data: userCalls === 1
-              ? { daily_calorie_target: 2000 }
-              : { daily_calorie_target: 2000, weight_kg: 70, goal: 'gain_muscle', activity_level: 'moderate' },
+            data: {
+              daily_calorie_target: 2000,
+              age: 30,
+              gender: 'male',
+              height_cm: 175,
+              weight_kg: 70,
+              goal: 'gain_muscle',
+              activity_level: 'moderate',
+              health_flags: [],
+            },
             error: null,
           }),
         };
@@ -259,6 +263,12 @@ describe('LogService.getTodaySummary', () => {
     const service = new LogService(supabase);
     const summary = await service.getTodaySummary('u1', '2026-06-06');
 
+    expect(summary.daily_nutrition_target).toMatchObject({
+      status: 'ready',
+      calories_kcal: 2000,
+      protein_g: 112,
+      algorithm_version: 'daily-nutrition-v1',
+    });
     expect(summary.health_score.overall).toBeGreaterThanOrEqual(70);
     expect(summary.health_score.label).toBe('strong');
     expect(summary.health_score.nutrition).toBeGreaterThanOrEqual(85);

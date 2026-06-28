@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { UserProfile, ActivityLevel, UserGoal, HealthFlag, HEALTH_FLAGS } from '@calorie-ai/types';
+import { NutritionRecommendationEngine } from './nutrition-recommendation.engine';
 import {
   CalculateTargetDto,
   CalorieTargetResponse,
@@ -10,6 +11,9 @@ import {
 
 @Injectable()
 export class CalorieTargetService {
+  constructor(
+    private nutritionEngine: NutritionRecommendationEngine = new NutritionRecommendationEngine(),
+  ) {}
   private calculateBMI(weight_kg: number, height_cm: number): number {
     const height_m = height_cm / 100;
     return weight_kg / (height_m * height_m);
@@ -238,30 +242,37 @@ export class CalorieTargetService {
     const meal_breakdown = this.getMealBreakdown(daily_calorie_target);
 
     // Step 5: Macros (protein, fat, carbs)
-    const PROTEIN_G_PER_KG: Record<string, number> = {
-      lose_weight: 1.6,
-      maintain: 1.6,
-      gain_muscle: 1.9,
-    };
-    const protein_g_per_kg = PROTEIN_G_PER_KG[effectiveGoal] ?? 1.6;
-    const protein_target_g = Math.round(protein_g_per_kg * weight_kg);
-
-    // Default fat percent (20-35% recommended). Use 25% as baseline.
-    const fat_pct = 25;
-    const fat_kcal = Math.round((fat_pct / 100) * daily_calorie_target);
-    const fat_g = Math.round(fat_kcal / 9);
-
-    const protein_kcal = protein_target_g * 4;
-    const remaining_kcal = Math.max(0, daily_calorie_target - (protein_kcal + fat_kcal));
-    const carbs_g = Math.round(remaining_kcal / 4);
-    const carbs_pct = Math.round(((carbs_g * 4) / daily_calorie_target) * 100);
-    if (carbs_pct < 45) {
+    const dailyNutritionTarget = this.nutritionEngine.calculate(
+      { ...dto, goal: effectiveGoal } as UserProfile,
+      new Date().toISOString().slice(0, 10),
+      daily_calorie_target,
+    );
+    const protein_g_per_kg = dailyNutritionTarget.factors.protein_g_per_kg;
+    const protein_target_g = dailyNutritionTarget.protein_g;
+    const fat_pct = dailyNutritionTarget.factors.fat_energy_pct;
+    const fat_g = dailyNutritionTarget.fat_g;
+    const carbs_g = dailyNutritionTarget.carbs_g;
+    const carbs_pct = typeof carbs_g === 'number'
+      ? Math.round(((carbs_g * 4) / daily_calorie_target) * 100)
+      : undefined;
+    if (typeof carbs_pct === 'number' && carbs_pct < 45) {
       macroWarnings.push('Carbohydrate share is below the general 45-65% AMDR range; review energy, fiber, and training needs.');
     }
-    if (carbs_g < 130) {
+    if (typeof carbs_g === 'number' && carbs_g < 130) {
       macroWarnings.push('Carbohydrate grams are below the common 130 g/day reference intake for adults.');
     }
-    const nutritionTargets = this.buildNutritionTargets(daily_calorie_target);
+    const nutritionTargets = dailyNutritionTarget.status === 'ready'
+      ? {
+          fiber_g_min: dailyNutritionTarget.fiber_g!,
+          sodium_mg_max: dailyNutritionTarget.sodium_mg_max!,
+          free_sugar_g_max: dailyNutritionTarget.free_sugar_g_max!,
+          added_sugar_g_max: dailyNutritionTarget.free_sugar_g_max!,
+          saturated_fat_g_max: dailyNutritionTarget.saturated_fat_g_max!,
+          free_sugar_pct_max: 10,
+          saturated_fat_pct_max: 10,
+          basis: `Central nutrition recommendation engine ${dailyNutritionTarget.algorithm_version}.`,
+        }
+      : this.buildNutritionTargets(daily_calorie_target);
 
     return {
       daily_calorie_target,
@@ -292,6 +303,8 @@ export class CalorieTargetService {
       health_flags: healthFlags,
       medical_review_recommended: medicalReviewRecommended,
       nutrition_targets: nutritionTargets,
+      daily_nutrition_target: dailyNutritionTarget,
+      protein_reason: dailyNutritionTarget.rationale.protein,
     };
   }
 

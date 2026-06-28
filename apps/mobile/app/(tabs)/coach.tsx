@@ -75,7 +75,7 @@ function getNextMealLabel(logs: Array<{ meal_type?: string }> = [], locale: Loca
   return tr(MEAL_LABEL_KEYS[nextMeal], locale);
 }
 
-function buildActivePlan(dailyLog: DailyLog | null, locale: Locale): ActivePlan {
+function buildActivePlan(dailyLog: DailyLog | null, locale: Locale, proteinTarget?: number): ActivePlan {
   const logs = dailyLog?.logs ?? [];
   const consumed = toFiniteNumber(dailyLog?.total_calories) ?? 0;
   const target = toFiniteNumber(dailyLog?.target_calories) ?? 1800;
@@ -83,7 +83,6 @@ function buildActivePlan(dailyLog: DailyLog | null, locale: Locale): ActivePlan 
   const remaining = target - consumed;
   const mealCount = logs.length;
   const nextMeal = getNextMealLabel(logs, locale);
-  const proteinTarget = Math.max(70, Math.round(target * 0.075 / 4));
 
   if (mealCount === 0) {
     return {
@@ -148,7 +147,7 @@ function buildActivePlan(dailyLog: DailyLog | null, locale: Locale): ActivePlan 
     };
   }
 
-  if (protein < proteinTarget * 0.65) {
+  if (proteinTarget && protein < proteinTarget * 0.65) {
     return {
       title: tr('screen.tabs.coach.active.protein.title', locale),
       body: tr('screen.tabs.coach.active.protein.body', locale),
@@ -620,7 +619,13 @@ export default function CoachScreen() {
       dynamic_intervention: dynamicIntervention ?? undefined,
     };
   }, [behaviorMemory, dailyLog, dynamicIntervention, interventionAnalytics, reminderEffectiveness, successForecast, todaySummary?.health_score]);
-  const activePlan = useMemo(() => buildActivePlan(dailyLog, locale), [dailyLog, locale]);
+  const proteinTarget = todaySummary?.daily_nutrition_target?.status === 'ready'
+    ? todaySummary.daily_nutrition_target.protein_g
+    : undefined;
+  const activePlan = useMemo(
+    () => buildActivePlan(dailyLog, locale, proteinTarget),
+    [dailyLog, locale, proteinTarget],
+  );
   const weeklyPlan = useMemo(() => buildWeeklyPlan(summary, dailyLog, locale), [summary, dailyLog, locale]);
   const summaryRecommendation = localizeInsightTextForLocale(summary?.recommended_action, locale) || t('screen.tabs.coach.summaryFallback');
 

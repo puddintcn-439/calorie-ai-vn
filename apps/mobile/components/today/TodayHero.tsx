@@ -21,7 +21,8 @@ export function TodayHero({ model, streak, waterIntakeL, waterGoalL, onPressStre
   const { width } = useWindowDimensions();
   const isWide = width >= 720;
   const isPhone = width < 600;
-  const waterProgress = Math.max(0, Math.min(1, waterIntakeL / Math.max(waterGoalL, 0.1)));
+  const hasWaterTarget = waterGoalL > 0;
+  const waterProgress = hasWaterTarget ? Math.max(0, Math.min(1, waterIntakeL / waterGoalL)) : 0;
   const calorieAnimation = useRef(new Animated.Value(0)).current;
   const waterAnimation = useRef(new Animated.Value(0)).current;
   const numberAnimation = useRef(new Animated.Value(0.96)).current;
@@ -92,18 +93,22 @@ export function TodayHero({ model, streak, waterIntakeL, waterGoalL, onPressStre
             <View style={styles.waterValueRow}>
               <Ionicons name="water" size={17} color={colors.info} />
               <Text style={[styles.waterValue, { color: colors.text }]}>
-                {waterIntakeL.toFixed(1)}
-                <Text style={[styles.waterGoal, { color: colors.textMuted }]}> / {waterGoalL.toFixed(1)} L</Text>
+                {hasWaterTarget ? waterIntakeL.toFixed(1) : '--'}
+                {hasWaterTarget && (
+                  <Text style={[styles.waterGoal, { color: colors.textMuted }]}> / {waterGoalL.toFixed(1)} L</Text>
+                )}
               </Text>
             </View>
             <Text style={[styles.waterLabel, { color: colors.textMuted }]} numberOfLines={1}>
-              {waterProgress >= 1
-                ? t('screen.tabs.index.todayHero.waterComplete' as any)
-                : waterProgress < 0.3
-                  ? t('screen.tabs.index.todayHero.waterLow' as any, {
-                      ml: Math.min(600, Math.max(0, Math.round((waterGoalL - waterIntakeL) * 1000))),
-                    })
-                  : t('screen.tabs.index.todayHero.water' as any)}
+              {!hasWaterTarget
+                ? t('screen.tabs.index.todayHero.waterGuidance' as any)
+                : waterProgress >= 1
+                  ? t('screen.tabs.index.todayHero.waterComplete' as any)
+                  : waterProgress < 0.3
+                    ? t('screen.tabs.index.todayHero.waterLow' as any, {
+                        ml: Math.min(600, Math.max(0, Math.round((waterGoalL - waterIntakeL) * 1000))),
+                      })
+                    : t('screen.tabs.index.todayHero.water' as any)}
             </Text>
             <View style={[styles.waterTrack, { backgroundColor: colors.progressBg }]}>
               <Animated.View style={[styles.waterFill, {

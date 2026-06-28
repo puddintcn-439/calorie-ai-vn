@@ -862,7 +862,7 @@ Behavior Memory (${memory.days_analyzed} days, ${memory.data_quality} confidence
 - Often skips breakfast/lunch/dinner: ${memory.often_skips_breakfast}/${memory.often_skips_lunch}/${memory.often_skips_dinner}
 - Low activity days: ${memory.low_activity_days.length > 0 ? memory.low_activity_days.join(', ') : 'none'}
 - Best logging streak: ${memory.best_logging_streak} days
-- Protein adherence: ${Math.round(memory.high_protein_adherence * 100)}%
+- Protein adherence: ${memory.high_protein_adherence === null ? 'not available' : `${Math.round(memory.high_protein_adherence * 100)}%`}
 - Activity adherence: ${Math.round(memory.activity_adherence * 100)}%
 - Meal skip rates: breakfast ${Math.round(memory.meal_skip_rates.breakfast * 100)}%, lunch ${Math.round(memory.meal_skip_rates.lunch * 100)}%, dinner ${Math.round(memory.meal_skip_rates.dinner * 100)}%
 - Memory notes: ${memory.memory_notes.length > 0 ? memory.memory_notes.join('; ') : 'none'}

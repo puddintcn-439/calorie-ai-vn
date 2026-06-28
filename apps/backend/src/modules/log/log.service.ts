@@ -15,13 +15,18 @@ import {
   TodaySummary,
   DailyRoadmapItem,
   ActivityPreference,
+  DailyNutritionTarget,
 } from '@calorie-ai/types';
+import { NutritionRecommendationEngine } from '../calorie-target/nutrition-recommendation.engine';
 
 type HealthScoreBehaviorMetrics = Pick<TodaySummary['health_score'], 'trend' | 'weekly_adherence'>;
 
 @Injectable()
 export class LogService {
-  constructor(private supabase: SupabaseService) {}
+  constructor(
+    private supabase: SupabaseService,
+    private nutritionEngine: NutritionRecommendationEngine = new NutritionRecommendationEngine(),
+  ) {}
 
   private getDayRangeByTimezone(date: string, tzOffsetMinutes: number = 0): { startIso: string; endIso: string } {
     const [y, m, d] = date.split('-').map((v) => parseInt(v, 10));
@@ -153,12 +158,14 @@ export class LogService {
       roadmap_remaining: Math.max(0, activeRoadmap.length - roadmapCompleted),
       planned_activity_kcal: activeRoadmap.reduce((sum, item) => sum + Number(item.estimated_kcal ?? 0), 0),
     };
+    const dailyNutritionTarget = this.nutritionEngine.calculate(profile as any, date, target);
     const baseHealthScore = this.buildHealthScore(
       dailyLog,
       activityLogs,
       activeRoadmap,
       plan,
       profile,
+      dailyNutritionTarget,
       undefined,
       date,
       tzOffsetMinutes,
@@ -172,6 +179,7 @@ export class LogService {
       activity_logs: activityLogs,
       daily_roadmap: dailyRoadmap,
       activity_preferences: activityPreferences,
+      daily_nutrition_target: dailyNutritionTarget,
       profile,
       plan,
       health_score: {
@@ -194,6 +202,7 @@ export class LogService {
     roadmap: DailyRoadmapItem[],
     plan: TodaySummary['plan'],
     profile: TodaySummary['profile'],
+    nutritionTarget?: DailyNutritionTarget,
     behaviorMetrics?: HealthScoreBehaviorMetrics,
     scoreDate?: string,
     tzOffsetMinutes: number = 0,
@@ -208,23 +217,27 @@ export class LogService {
     const calorieScore = expectedProgress === null
       ? null
       : clamp(100 - Math.abs((Number(dailyLog?.total_calories ?? 0) / safeTarget) - expectedProgress) * 125);
-    const proteinTarget = this.dailyProteinTarget(profile);
-    const proteinScore = clamp((Number(dailyLog?.total_protein_g ?? 0) / proteinTarget) * 100);
+    const proteinTarget = nutritionTarget
+      ? nutritionTarget.protein_g
+      : this.dailyProteinTarget(profile);
+    const proteinScore = proteinTarget
+      ? clamp((Number(dailyLog?.total_protein_g ?? 0) / proteinTarget) * 100)
+      : null;
     const qualityCoverage = dailyLog?.nutrition_quality_coverage;
     const completeCoverage = (field: 'fiber_items' | 'sodium_items' | 'saturated_fat_items') => (
       Number(qualityCoverage?.total_items ?? 0) > 0
       && Number(qualityCoverage?.[field] ?? 0) === Number(qualityCoverage?.total_items ?? 0)
     );
-    const fiberTarget = Math.max((safeTarget / 1000) * 14, 1);
-    const saturatedFatLimit = Math.max((safeTarget * 0.1) / 9, 1);
+    const fiberTarget = Math.max(nutritionTarget?.fiber_g ?? (safeTarget / 1000) * 14, 1);
+    const saturatedFatLimit = Math.max(nutritionTarget?.saturated_fat_g_max ?? (safeTarget * 0.1) / 9, 1);
     const nutritionParts: Array<{ score: number; weight: number }> = [
       ...(calorieScore === null ? [] : [{ score: calorieScore, weight: 0.3 }]),
-      { score: proteinScore, weight: 0.25 },
+      ...(proteinScore === null ? [] : [{ score: proteinScore, weight: 0.25 }]),
       ...(completeCoverage('fiber_items')
         ? [{ score: clamp((Number(dailyLog?.total_fiber_g ?? 0) / fiberTarget) * 100), weight: 0.15 }]
         : []),
       ...(completeCoverage('sodium_items')
-        ? [{ score: this.upperLimitScore(Number(dailyLog?.total_sodium_mg ?? 0), 2000), weight: 0.1 }]
+        ? [{ score: this.upperLimitScore(Number(dailyLog?.total_sodium_mg ?? 0), nutritionTarget?.sodium_mg_max ?? 2000), weight: 0.1 }]
         : []),
       ...(completeCoverage('saturated_fat_items')
         ? [{ score: this.upperLimitScore(Number(dailyLog?.total_saturated_fat_g ?? 0), saturatedFatLimit), weight: 0.1 }]
@@ -292,7 +305,17 @@ export class LogService {
       const plan = this.buildSummaryPlan(dailyLog, activityLogs, activeRoadmap, profile);
       const score = day === date
         ? currentScore
-        : this.buildHealthScore(dailyLog, activityLogs, activeRoadmap, plan, profile, undefined, day, tzOffsetMinutes);
+        : this.buildHealthScore(
+            dailyLog,
+            activityLogs,
+            activeRoadmap,
+            plan,
+            profile,
+            this.nutritionEngine.calculate(profile as any, day, plan.target_calories),
+            undefined,
+            day,
+            tzOffsetMinutes,
+          );
       return { date: day, dailyLog, activityLogs, roadmap: activeRoadmap, plan, score };
     }));
 
@@ -426,8 +449,17 @@ export class LogService {
     const missingBreakfast = days.filter((day) => !day.dailyLog.logs.some((log) => log.meal_type === 'breakfast')).length;
     const missingDinner = days.filter((day) => !day.dailyLog.logs.some((log) => log.meal_type === 'dinner')).length;
     const noActivity = days.filter((day) => day.activityLogs.length === 0).length;
-    const proteinTarget = Math.max(Number(profile?.weight_kg ?? 65) * 1.2, 60);
-    const lowProtein = loggedDays.filter((day) => Number(day.dailyLog.total_protein_g ?? 0) < proteinTarget * 0.7).length;
+    const nutritionTarget = this.nutritionEngine.calculate(
+      profile,
+      new Date().toISOString().slice(0, 10),
+      profile?.daily_calorie_target,
+    );
+    const proteinTarget = nutritionTarget.status === 'ready'
+      ? nutritionTarget.protein_g
+      : undefined;
+    const lowProtein = proteinTarget
+      ? loggedDays.filter((day) => Number(day.dailyLog.total_protein_g ?? 0) < proteinTarget * 0.7).length
+      : 0;
     const incompletePlanDays = days.filter((day) => (
       day.roadmap.length > 0 && day.roadmap.some((item) => !item.is_completed)
     )).length;
@@ -435,7 +467,7 @@ export class LogService {
     if (missingBreakfast >= 4) patterns.push(`Breakfast was missed ${missingBreakfast}/7 days`);
     if (missingDinner >= 4) patterns.push(`Dinner was not logged ${missingDinner}/7 days`);
     if (noActivity >= 4) patterns.push(`Activity was missing ${noActivity}/7 days`);
-    if (lowProtein >= 4) patterns.push(`Protein ran low ${lowProtein}/${Math.max(loggedDays.length, 1)} logged days`);
+    if (proteinTarget && lowProtein >= 4) patterns.push(`Protein ran low ${lowProtein}/${Math.max(loggedDays.length, 1)} logged days`);
     if (incompletePlanDays >= 3) patterns.push(`Daily plan was incomplete ${incompletePlanDays}/7 days`);
 
     return patterns.slice(0, 3);
@@ -562,7 +594,7 @@ export class LogService {
   private async getProfileForSummary(userId: string): Promise<TodaySummary['profile']> {
     const { data, error } = await this.supabase.db
       .from('users')
-      .select('age, gender, height_cm, weight_kg, health_flags, activity_level, goal_plan, daily_calorie_target, goal')
+      .select('full_name, age, gender, height_cm, body_fat_pct, weight_kg, health_flags, activity_level, goal_plan, daily_calorie_target, goal')
       .eq('id', userId)
       .single();
 

@@ -1548,7 +1548,7 @@ export default function ProfileScreen() {
             </View>
 
             <View style={[styles.goalPlanningGrid, isDesktop && styles.goalPlanningGridDesktop]}>
-              <View style={styles.goalPlanPanel}>
+              <View style={[styles.goalPlanPanel, isDesktop && styles.goalPlanningPanelDesktop]}>
                 <Text style={styles.label} i18nKey="screen.tabs.profile.text.017" />
                 <View style={styles.goalPlanRow}>
                   <UiInput label="screen.tabs.profile.label.005" value={String(goalPlanTargetKg ?? '')} onChangeText={(v) => setGoalPlanTargetKg(Number(v) || undefined)} keyboardType="numeric" style={{ flex: 1 }} />
@@ -1578,7 +1578,10 @@ export default function ProfileScreen() {
                 )}
               </View>
 
-              <View ref={roadmapRef} style={styles.roadmapPanel}>
+              <View
+                ref={roadmapRef}
+                style={[styles.roadmapPanel, isDesktop && styles.goalPlanningPanelDesktop]}
+              >
                 <View style={styles.roadmapHeader}>
                   <View style={styles.roadmapPanelTitleRow}>
                     <Text style={styles.label} i18nKey="screen.tabs.profile.text.019" />
@@ -2487,7 +2490,7 @@ const styles = createThemedStyles((colors, radii) => ({
   goalPlanningGrid: { gap: 12, marginTop: 8 },
   goalPlanningGridDesktop: { flexDirection: 'row', alignItems: 'stretch' },
   goalPlanPanel: {
-    flex: 1,
+    width: '100%',
     borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.border,
@@ -2495,12 +2498,16 @@ const styles = createThemedStyles((colors, radii) => ({
     padding: 12,
   },
   roadmapPanel: {
-    flex: 1,
+    width: '100%',
     borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.borderSuccess,
     backgroundColor: colors.surfaceSuccess,
     padding: 12,
+  },
+  goalPlanningPanelDesktop: {
+    flex: 1,
+    width: 'auto',
   },
   catalogOverlay: { flex: 1, backgroundColor: colors.overlay, justifyContent: 'flex-end' },
   catalogSheet: { backgroundColor: colors.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, maxHeight: '85%' },

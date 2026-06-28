@@ -88,7 +88,18 @@ describe('CoachingService.getBehaviorMemory', () => {
         return {
           select: jest.fn().mockReturnThis(),
           eq: jest.fn().mockReturnThis(),
-          single: jest.fn().mockResolvedValue({ data: { daily_calorie_target: 1800 }, error: null }),
+          single: jest.fn().mockResolvedValue({
+            data: {
+              age: 30,
+              gender: 'male',
+              weight_kg: 70,
+              activity_level: 'moderate',
+              goal: 'maintain',
+              health_flags: [],
+              daily_calorie_target: 1800,
+            },
+            error: null,
+          }),
         };
       }
       return {};

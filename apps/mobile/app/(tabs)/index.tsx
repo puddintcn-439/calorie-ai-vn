@@ -45,7 +45,7 @@ import { buildDynamicIntervention } from '../../services/dynamic-intervention.se
 import { buildInterventionEvent, recordInterventionEvent } from '../../services/intervention-memory.service';
 import { telemetryService } from '../../services/telemetry.service';
 import { TodayHero } from '../../components/today/TodayHero';
-import { getProteinTarget, useTodayHero } from '../../hooks/useTodayHero';
+import { useTodayHero } from '../../hooks/useTodayHero';
 import { TodayCoachCard } from '../../components/today/TodayCoachCard';
 import { TodayCoachSuggestion, useTodayCoach } from '../../hooks/useTodayCoach';
 import { MealRecommendation } from '../../services/calorie-target.service';
@@ -182,6 +182,7 @@ function buildDailyFocusItems(args: {
   burnedKcal: number;
   targetKcal: number;
   proteinG: number;
+  proteinTargetG?: number;
   fiberG: number;
   sodiumMg: number;
   sugarG: number;
@@ -207,7 +208,7 @@ function buildDailyFocusItems(args: {
   const netKcal = Math.max(0, consumedKcal - burnedKcal);
   const remaining = targetKcal - netKcal;
   const calorieRatio = netKcal / Math.max(targetKcal, 1);
-  const proteinTarget = getProteinTarget(args.goal, args.goalDirection, args.weightKg);
+  const proteinTarget = safePositiveNumber(args.proteinTargetG, 0);
   const proteinGap = Math.max(0, proteinTarget - proteinG);
   const locale = args.locale;
   const items: DailyFocusItem[] = [
@@ -231,13 +232,15 @@ function buildDailyFocusItems(args: {
     {
       key: 'protein',
       label: 'Protein',
-      value: `${formatNumber(proteinG)}/${proteinTarget}g`,
-      hint: proteinGap <= 0
-        ? tr('screen.tabs.index.focus.protein.good', locale)
-        : tr('screen.tabs.index.focus.protein.gap', locale, { grams: Math.round(proteinGap) }),
+      value: proteinTarget > 0 ? `${formatNumber(proteinG)}/${proteinTarget}g` : '--',
+      hint: proteinTarget <= 0
+        ? tr('screen.tabs.index.todayHero.protein.guidance', locale)
+        : proteinGap <= 0
+          ? tr('screen.tabs.index.focus.protein.good', locale)
+          : tr('screen.tabs.index.focus.protein.gap', locale, { grams: Math.round(proteinGap) }),
       icon: 'barbell-outline',
-      tone: proteinGap <= 0 ? 'good' : 'info',
-      progress: clampProgress(proteinG / Math.max(proteinTarget, 1)),
+      tone: proteinTarget <= 0 ? 'muted' : proteinGap <= 0 ? 'good' : 'info',
+      progress: proteinTarget > 0 ? clampProgress(proteinG / proteinTarget) : 0,
     },
   ];
 
@@ -304,6 +307,7 @@ function buildDailyFocusItems(args: {
 function buildNutritionNudges(
   logs: FoodLog[],
   protein: number,
+  proteinTarget: number | undefined,
   fat: number,
   calories: number,
   target: number,
@@ -329,7 +333,9 @@ function buildNutritionNudges(
   const fatCalories = safeFat * 9;
   const items: { title: string; body: string; tone: NudgeTone; icon: keyof typeof Ionicons.glyphMap }[] = [];
 
-  if (safeProtein >= 75) {
+  if (!proteinTarget) {
+    // No generic protein nudge for profiles that require individual guidance.
+  } else if (safeProtein >= proteinTarget) {
     items.push({
       title: tr('screen.tabs.index.nudge.proteinGood.title', locale),
       body: tr('screen.tabs.index.nudge.proteinGood.body', locale),
@@ -874,7 +880,16 @@ export default function DashboardScreen() {
   const sugar = safeNumber(dailyLog?.total_sugar_g);
   const sodium = safeNumber(dailyLog?.total_sodium_mg);
   const saturatedFat = safeNumber(dailyLog?.total_saturated_fat_g);
-  const qualityTargets = useMemo(() => buildNutritionTargets(target), [target]);
+  const nutritionTarget = todaySummary?.daily_nutrition_target;
+  const nutritionTargetReady = nutritionTarget?.status === 'ready';
+  const qualityTargets = useMemo(() => nutritionTargetReady
+    ? {
+        fiber_g_min: safePositiveNumber(nutritionTarget.fiber_g, 1),
+        sodium_mg_max: safePositiveNumber(nutritionTarget.sodium_mg_max, 2000),
+        sugar_g_max: safePositiveNumber(nutritionTarget.free_sugar_g_max, 1),
+        saturated_fat_g_max: safePositiveNumber(nutritionTarget.saturated_fat_g_max, 1),
+      }
+    : buildNutritionTargets(target), [nutritionTarget, nutritionTargetReady, target]);
   const qualityCoverageItems = dailyLog?.nutrition_quality_coverage
     ? Math.max(
         safeNumber(dailyLog.nutrition_quality_coverage.fiber_items),
@@ -888,6 +903,7 @@ export default function DashboardScreen() {
     burnedKcal: burned,
     targetKcal: target,
     proteinG: protein,
+    proteinTargetG: nutritionTargetReady ? nutritionTarget.protein_g : undefined,
     fiberG: fiber,
     sodiumMg: sodium,
     sugarG: sugar,
@@ -895,9 +911,6 @@ export default function DashboardScreen() {
     movementTargetMinutes: movementPlan?.daily_minutes_target ?? 25,
     qualityCoverageItems,
     qualityTargets,
-    goal: profileMeta?.goal,
-    goalDirection: profileMeta?.goal_plan?.direction,
-    weightKg: profileMeta?.weight_kg,
     locale,
   }), [
     activityMinutes,
@@ -906,9 +919,8 @@ export default function DashboardScreen() {
     fiber,
     locale,
     movementPlan?.daily_minutes_target,
-    profileMeta?.goal,
-    profileMeta?.goal_plan?.direction,
-    profileMeta?.weight_kg,
+    nutritionTarget,
+    nutritionTargetReady,
     protein,
     qualityCoverageItems,
     qualityTargets,
@@ -919,6 +931,7 @@ export default function DashboardScreen() {
   const nudges = useMemo(() => buildNutritionNudges(
     logs,
     protein,
+    nutritionTargetReady ? nutritionTarget.protein_g : undefined,
     fat,
     consumed,
     target,
@@ -930,7 +943,7 @@ export default function DashboardScreen() {
       coverage_items: qualityCoverageItems,
     },
     locale,
-  ), [consumed, fat, fiber, locale, logs, protein, qualityCoverageItems, qualityTargets, sodium, sugar, target]);
+  ), [consumed, fat, fiber, locale, logs, nutritionTarget, nutritionTargetReady, protein, qualityCoverageItems, qualityTargets, sodium, sugar, target]);
   const latestMeals = logs.slice(0, 4);
   const safetyCard = useMemo(() => {
     if (!profileMeta) return null;
@@ -1011,10 +1024,11 @@ export default function DashboardScreen() {
   const waterIntakeL = Math.max(0, safeNumber(
     todaySummary?.waterIntake ?? todaySummary?.water_intake_l,
   ));
-  const waterGoalL = safePositiveNumber(
-    todaySummary?.waterGoal ?? todaySummary?.water_goal_l,
-    2.5,
-  );
+  const waterGoalL = Math.max(0, safeNumber(
+    todaySummary?.daily_nutrition_target?.water_ml
+      ? todaySummary.daily_nutrition_target.water_ml / 1000
+      : todaySummary?.waterGoal ?? todaySummary?.water_goal_l,
+  ));
   const healthTrendDelta = healthScore?.trend.delta_vs_7d ?? null;
   const healthTrendTone = healthScore?.trend.direction === 'up'
     ? 'good'
@@ -1139,12 +1153,8 @@ export default function DashboardScreen() {
       ? t('screen.tabs.index.movement.button.logging')
       : t('screen.tabs.index.movement.button.complete');
   const firstName = profileMeta?.full_name?.trim().split(/\s+/).pop() ?? '';
-  const proteinTargetG = getProteinTarget(
-    profileMeta?.goal,
-    profileMeta?.goal_plan?.direction,
-    profileMeta?.weight_kg,
-  );
-  const proteinGapG = Math.max(0, proteinTargetG - protein);
+  const proteinTargetG = nutritionTargetReady ? nutritionTarget.protein_g : undefined;
+  const proteinGapG = proteinTargetG ? Math.max(0, proteinTargetG - protein) : 0;
   const todayHero = useTodayHero({
     consumedCalories: consumed,
     targetCalories: target,
@@ -1275,9 +1285,8 @@ export default function DashboardScreen() {
     router.push('/coach' as never);
   };
 
-  // Macro targets derived from calorie target
-  const carbsTargetG = Math.round((target * 0.5) / 4);
-  const fatTargetG = Math.round((target * 0.25) / 9);
+  const carbsTargetG = nutritionTargetReady ? nutritionTarget.carbs_g : undefined;
+  const fatTargetG = nutritionTargetReady ? nutritionTarget.fat_g : undefined;
 
   return (
     <ScreenShell contentStyle={styles.screen}>
@@ -1326,6 +1335,7 @@ export default function DashboardScreen() {
       )}
 
       {/* 5. Macro bars */}
+      {nutritionTargetReady && proteinTargetG && carbsTargetG !== undefined && fatTargetG !== undefined && (
       <View style={styles.macroBarRow}>
         <MacroBarCard
           label={t('screen.tabs.index.hifi.macro.protein' as any)}
@@ -1340,9 +1350,10 @@ export default function DashboardScreen() {
           eaten={fat} goal={fatTargetG} color={colors.accentAmber}
         />
       </View>
+      )}
 
       {/* 6. Nutrition quality card */}
-      {qualityCoverageItems > 0 && (
+      {nutritionTargetReady && qualityCoverageItems > 0 && (
         <SurfaceCard revealDelay={120} style={[styles.qualityCard, { borderRadius: 22 }]}>
           <View style={styles.qualityCardHeader}>
             <Text style={[styles.qualityCardTitle, { color: colors.text }]}>

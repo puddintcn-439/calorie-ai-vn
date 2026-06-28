@@ -1,5 +1,5 @@
 import { IsNumber, IsPositive, IsEnum, IsOptional, IsArray, IsIn } from 'class-validator';
-import { UserGoal, ActivityLevel, HealthFlag, HEALTH_FLAGS } from '@calorie-ai/types';
+import { UserGoal, ActivityLevel, HealthFlag, HEALTH_FLAGS, DailyNutritionTarget } from '@calorie-ai/types';
 
 export type BodyStatus = 'underweight' | 'normal' | 'overweight' | 'obese';
 export type WeightRecommendation = 'increase' | 'maintain' | 'decrease';
@@ -78,6 +78,8 @@ export interface CalorieTargetResponse {
   health_flags?: HealthFlag[];
   medical_review_recommended?: boolean;
   nutrition_targets?: NutritionTargets;
+  daily_nutrition_target?: DailyNutritionTarget;
+  protein_reason?: string;
 }
 
 export type CalorieTargetRequiredField =

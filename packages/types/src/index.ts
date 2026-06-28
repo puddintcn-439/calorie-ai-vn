@@ -13,3 +13,4 @@ export * from './coach.types';
 export * from './body-progress.types';
 export * from './roadmap.types';
 export * from './behavior.types';
+export * from './nutrition-target.types';

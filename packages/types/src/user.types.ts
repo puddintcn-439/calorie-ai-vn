@@ -5,6 +5,7 @@ export interface User {
   avatar_url?: string;
   weight_kg?: number;
   height_cm?: number;
+  body_fat_pct?: number;
   age?: number;
   gender?: 'male' | 'female';
   activity_level?: ActivityLevel;

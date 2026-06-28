@@ -1,5 +1,4 @@
 import { useMemo } from 'react';
-import { GoalPlan, UserGoal } from '@calorie-ai/types';
 import { Locale, tr } from '../components/i18n';
 
 export type TodayHeroTone = 'good' | 'steady' | 'near' | 'over' | 'complete';
@@ -27,7 +26,7 @@ export type TodayHeroInput = {
   consumedCalories: number;
   targetCalories: number;
   proteinG: number;
-  proteinTargetG: number;
+  proteinTargetG?: number;
   activityMinutes: number;
   activityTargetMinutes: number;
   logsCount: number;
@@ -45,25 +44,16 @@ function format(value: number, locale: Locale) {
   return Math.round(value).toLocaleString(locale === 'vi' ? 'vi-VN' : 'en-US');
 }
 
-export function getProteinTarget(
-  goal?: UserGoal,
-  direction?: GoalPlan['direction'],
-  weightKg = 65,
-) {
-  const kg = Math.max(35, finite(weightKg, 65));
-  if (goal === 'gain_muscle' || direction === 'gain') return Math.round(kg * 1.6);
-  if (goal === 'lose_weight' || direction === 'loss') return Math.round(kg * 1.4);
-  return Math.round(kg * 1.2);
-}
-
 export function buildTodayHero(input: TodayHeroInput): TodayHeroModel {
   const target = Math.max(1, finite(input.targetCalories, 1800));
   const consumed = Math.max(0, finite(input.consumedCalories));
   const remaining = target - consumed;
   const remainingRatio = remaining / target;
   const consumedPercent = Math.max(0, Math.round((consumed / target) * 100));
-  const proteinTarget = Math.max(1, finite(input.proteinTargetG, 78));
-  const proteinGap = Math.max(0, proteinTarget - Math.max(0, finite(input.proteinG)));
+  const proteinTarget = input.proteinTargetG && input.proteinTargetG > 0 ? input.proteinTargetG : null;
+  const proteinGap = proteinTarget
+    ? Math.max(0, proteinTarget - Math.max(0, finite(input.proteinG)))
+    : 0;
   const activityTarget = Math.max(1, finite(input.activityTargetMinutes, 25));
   const activityGap = Math.max(0, activityTarget - Math.max(0, finite(input.activityMinutes)));
   const hour = (input.now ?? new Date()).getHours();
@@ -89,7 +79,7 @@ export function buildTodayHero(input: TodayHeroInput): TodayHeroModel {
     statusLabel = tr('screen.tabs.index.todayHero.status.near', input.locale);
   }
 
-  const proteinReached = proteinGap <= 0;
+  const proteinReached = proteinTarget !== null && proteinGap <= 0;
   const activityReached = activityGap <= 0;
   let motivation: string;
   if (remaining < 0) {
@@ -123,12 +113,16 @@ export function buildTodayHero(input: TodayHeroInput): TodayHeroModel {
     }),
     statusLabel,
     statusTone,
-    proteinTitle: proteinReached
-      ? tr('screen.tabs.index.todayHero.protein.reached', input.locale)
-      : tr('screen.tabs.index.todayHero.protein.low', input.locale, { grams: format(proteinGap, input.locale) }),
-    proteinDetail: proteinReached
-      ? tr('screen.tabs.index.todayHero.protein.reachedDetail', input.locale)
-      : tr('screen.tabs.index.todayHero.protein.lowDetail', input.locale),
+    proteinTitle: proteinTarget === null
+      ? tr('screen.tabs.index.todayHero.protein.guidance', input.locale)
+      : proteinReached
+        ? tr('screen.tabs.index.todayHero.protein.reached', input.locale)
+        : tr('screen.tabs.index.todayHero.protein.low', input.locale, { grams: format(proteinGap, input.locale) }),
+    proteinDetail: proteinTarget === null
+      ? tr('screen.tabs.index.todayHero.protein.guidanceDetail', input.locale)
+      : proteinReached
+        ? tr('screen.tabs.index.todayHero.protein.reachedDetail', input.locale)
+        : tr('screen.tabs.index.todayHero.protein.lowDetail', input.locale),
     proteinReached,
     activityTitle: activityReached
       ? tr('screen.tabs.index.todayHero.activity.reached', input.locale)
