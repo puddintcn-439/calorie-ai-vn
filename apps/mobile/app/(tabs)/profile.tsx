@@ -9,7 +9,7 @@ import {
   TouchableOpacity,
   Modal
 } from 'react-native';
-import { Platform } from 'react-native';
+import { Linking, Platform } from 'react-native';
 import { router } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useAuthStore } from '../../store/auth.store';
@@ -20,20 +20,43 @@ import { useCalorieTargetStore } from '../../store/calorie-target.store';
 import { useInsightsStore } from '../../store/insights.store';
 import { useThemeStore } from '../../store/theme.store';
 import { apiClient } from '../../services/api';
-import { User, ActivityLevel, UserGoal, HealthFlag, GoalPlan, ReminderPreferences, ActivityType, ActivityLog, ACTIVITY_LABELS as EXERCISE_ACTIVITY_LABELS, SUBSCRIPTION_TIERS, SubscriptionFeatures, SubscriptionTier } from '@calorie-ai/types';
+import { User, ActivityLevel, UserGoal, HealthFlag, GoalPlan, ReminderPreferences, ActivityType, ActivityLog, ACTIVITY_LABELS as EXERCISE_ACTIVITY_LABELS, SUBSCRIPTION_TIERS, SubscriptionFeatures, SubscriptionTier, DailyNutritionTarget } from '@calorie-ai/types';
 import { ScreenShell, SurfaceCard } from '../../components/ui-shell';
 import { UiButton } from '../../components/ui-button';
 import { UiChip } from '../../components/ui-chip';
 import { UiInput } from '../../components/ui-input';
 import MacrosCard from '../../components/macros-card';
-import { VisualHeroCard } from '../../components/visual-hero-card';
 import { AnimatedMaterialIcon } from '../../components/animated-icon';
 import { RewardToast, RewardToastData } from '../../components/reward-toast';
 import { createThemedStyles, useAppTheme } from '../../components/theme';
 import { useI18n } from '../../components/i18n';
 import type { I18nKey } from '../../components/i18n';
+import {
+  calorieTargetService,
+  CalorieCalculationMethodology,
+  isCalorieTargetReady,
+} from '../../services/calorie-target.service';
 
-const profileHeroIllustration = require('../../assets/images/profile-hero.jpg') as number;
+const TARGET_METRIC_LABELS: Record<string, string> = {
+  calories_kcal: 'Năng lượng',
+  protein_g: 'Protein',
+  carbs_g: 'Carbohydrate',
+  fat_g: 'Chất béo',
+  fiber_g: 'Chất xơ',
+  water_ml: 'Nước',
+  sodium_mg_max: 'Natri tối đa',
+  free_sugar_g_max: 'Đường tự do tối đa',
+  saturated_fat_g_max: 'Chất béo bão hòa tối đa',
+};
+
+const EVIDENCE_LEVEL_LABELS: Record<string, string> = {
+  guideline: 'Theo hướng dẫn',
+  validated_equation: 'Phương trình đã kiểm chứng',
+  guideline_range_with_product_default: 'Mặc định trong khoảng hướng dẫn',
+  evidence_informed_heuristic: 'Ước tính có tham chiếu',
+  product_guardrail: 'Giới hạn an toàn của sản phẩm',
+  clinician_target: 'Kế hoạch chuyên gia',
+};
 
 const ACTIVITY_LABELS: Record<ActivityLevel, I18nKey> = {
   sedentary: 'profile.activityLabel.sedentary',
@@ -41,6 +64,17 @@ const ACTIVITY_LABELS: Record<ActivityLevel, I18nKey> = {
   moderate: 'profile.activityLabel.moderate',
   active: 'profile.activityLabel.active',
   very_active: 'profile.activityLabel.veryActive',
+};
+const WORK_ACTIVITY_LABELS: Record<NonNullable<User['work_activity_level']>, string> = {
+  sedentary: 'Chủ yếu ngồi',
+  light: 'Đi lại nhẹ',
+  moderate: 'Lao động vừa',
+  heavy: 'Lao động nặng',
+};
+const SWEAT_LEVEL_LABELS: Record<NonNullable<User['sweat_level']>, string> = {
+  low: 'Ít đổ mồ hôi',
+  moderate: 'Trung bình',
+  high: 'Đổ mồ hôi nhiều',
 };
 
 const GOAL_LABELS: Record<UserGoal, I18nKey> = {
@@ -89,14 +123,6 @@ type CalorieAssessment = {
 type InstantAssessmentResult = {
   assessment: CalorieAssessment | null;
   hint: string;
-};
-
-type InstantCalorieTargets = {
-  daily_calorie_target: number;
-  target_breakfast_cal: number;
-  target_lunch_cal: number;
-  target_dinner_cal: number;
-  target_snack_cal: number;
 };
 
 type ExerciseRoadmapItem = {
@@ -168,6 +194,18 @@ function getBodyStatusTone(status: BodyStatus, colors: Record<string, string>): 
 
 function round1(value: number): number {
   return Math.round(value * 10) / 10;
+}
+
+function ageFromDateOfBirth(value: string): number | undefined {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return undefined;
+  const birthDate = new Date(`${value}T00:00:00.000Z`);
+  const now = new Date();
+  if (Number.isNaN(birthDate.getTime()) || birthDate > now) return undefined;
+  let age = now.getUTCFullYear() - birthDate.getUTCFullYear();
+  const birthdayPassed = now.getUTCMonth() > birthDate.getUTCMonth()
+    || (now.getUTCMonth() === birthDate.getUTCMonth() && now.getUTCDate() >= birthDate.getUTCDate());
+  if (!birthdayPassed) age -= 1;
+  return age >= 13 && age <= 120 ? age : undefined;
 }
 
 function buildExercisePlan(
@@ -510,71 +548,6 @@ function buildInstantAssessment(profile: Partial<User>): InstantAssessmentResult
   };
 }
 
-function getActivityFactor(level: ActivityLevel): number {
-  const factors: Record<ActivityLevel, number> = {
-    sedentary: 1.2,
-    light: 1.375,
-    moderate: 1.55,
-    active: 1.725,
-    very_active: 1.9,
-  };
-  return factors[level];
-}
-
-function getGoalAdjustment(goal: UserGoal): number {
-  const adjustments: Record<UserGoal, number> = {
-    lose_weight: 0.8,
-    maintain: 1,
-    gain_muscle: 1.1,
-  };
-  return adjustments[goal];
-}
-
-function calculateInstantCalorieTargets(
-  profile: Partial<User>,
-  recommendedGoal: UserGoal,
-  recommendedActivity: ActivityLevel,
-): InstantCalorieTargets | null {
-  const weight = profile.weight_kg;
-  const height = profile.height_cm;
-  const age = profile.age;
-  const gender = profile.gender;
-
-  if (!weight || !height || !age || !gender) {
-    return null;
-  }
-
-  // Prefer Katch–McArdle if body fat is available on profile
-  const bodyFat = (profile as any).body_fat_pct;
-  let bmr: number;
-  if (typeof bodyFat === 'number' && bodyFat >= 3 && bodyFat <= 70) {
-    const lbm = weight * (1 - bodyFat / 100);
-    bmr = 370 + 21.6 * lbm;
-  } else {
-    bmr =
-      gender === 'male'
-        ? 10 * weight + 6.25 * height - 5 * age + 5
-        : 10 * weight + 6.25 * height - 5 * age - 161;
-  }
-
-  const tdee = bmr * getActivityFactor(recommendedActivity);
-  const raw = Math.round(tdee * getGoalAdjustment(recommendedGoal));
-
-  // Safety clamps (keep parity with backend)
-  const floorBySex = gender === 'female' ? 1200 : 1500;
-  const minAllowed = Math.max(floorBySex, Math.round(bmr * 1.1));
-  const minByDeficit = Math.round(tdee * (1 - 0.2));
-  const daily = Math.max(raw, minAllowed, minByDeficit);
-
-  return {
-    daily_calorie_target: daily,
-    target_breakfast_cal: Math.round(daily * 0.25),
-    target_lunch_cal: Math.round(daily * 0.35),
-    target_dinner_cal: Math.round(daily * 0.3),
-    target_snack_cal: Math.round(daily * 0.1),
-  };
-}
-
 export default function ProfileScreen() {
   const { requestedMode, colors } = useAppTheme();
   const { setThemeMode } = useThemeStore();
@@ -606,6 +579,7 @@ export default function ProfileScreen() {
   const { fetchWeeklyInsights } = useInsightsStore();
   const { width } = useWindowDimensions();
   const [profile, setProfile] = useState<Partial<User>>({});
+  const [nutritionTarget, setNutritionTarget] = useState<DailyNutritionTarget | null>(null);
   const [reminders, setReminders] = useState<Partial<ReminderPreferences>>({});
   const [previewMeal, setPreviewMeal] = useState<'breakfast' | 'lunch' | 'dinner' | 'snack'>('lunch');
   const [isLoading, setIsLoading] = useState(true);
@@ -616,6 +590,12 @@ export default function ProfileScreen() {
   const [goalCollapsed, setGoalCollapsed] = useState(true);
   const [calorieCollapsed, setCalorieCollapsed] = useState(true);
   const [subscriptionCollapsed, setSubscriptionCollapsed] = useState(true);
+  const [quickSetting, setQuickSetting] = useState<'language' | 'appearance' | null>(null);
+  const [showProfileDetails, setShowProfileDetails] = useState(false);
+  const [showTargetEvidence, setShowTargetEvidence] = useState(false);
+  const [showTargetCalculation, setShowTargetCalculation] = useState(false);
+  const [calorieMethodology, setCalorieMethodology] = useState<CalorieCalculationMethodology | null>(null);
+  const [clinicalPlanConfirmed, setClinicalPlanConfirmed] = useState(false);
   const [goalPlanTargetKg, setGoalPlanTargetKg] = useState<number | undefined>(undefined);
   const [goalPlanDurationWeeks, setGoalPlanDurationWeeks] = useState<number | undefined>(undefined);
   const [goalPlanDirection, setGoalPlanDirection] = useState<'loss' | 'maintain' | 'gain'>('loss');
@@ -771,6 +751,78 @@ export default function ProfileScreen() {
   );
   const catalogTypes = Object.keys(EXERCISE_ACTIVITY_LABELS) as ActivityType[];
   const userWeight = profile.weight_kg ?? 65;
+  const coreProfileChecks = [
+    Boolean(profile.weight_kg),
+    Boolean(profile.height_cm),
+    Boolean(profile.age),
+    Boolean(profile.gender),
+    Boolean(profile.goal),
+    Boolean(profile.work_activity_level)
+      && profile.exercise_sessions_per_week !== undefined
+      && profile.exercise_minutes_per_session !== undefined,
+    Array.isArray(profile.health_flags),
+  ];
+  const coreProfileCompleted = coreProfileChecks.filter(Boolean).length;
+  const coreProfileProgress = Math.round((coreProfileCompleted / coreProfileChecks.length) * 100);
+  const goalHeadline = nutritionTarget?.status === 'clinician_target'
+    ? profile.clinician_nutrition_targets?.verification_status === 'verified'
+      ? 'Mục tiêu chuyên gia đã xác minh'
+      : 'Mục tiêu chuyên gia do bạn khai báo'
+    : nutritionTarget?.status === 'clinician_guidance'
+    ? 'Cần tư vấn chuyên môn'
+    : profile.goal === 'lose_weight'
+      ? 'Giảm mỡ · Giữ cơ'
+      : profile.goal === 'gain_muscle'
+        ? 'Tăng cơ · Tăng năng lượng'
+        : 'Giữ dáng · Ổn định';
+  const healthNeedsAttention = nutritionTarget?.status === 'clinician_guidance'
+    || (profile.age !== undefined && profile.age < 18)
+    || selectedHealthFlags.some((flag) => ['pregnant', 'breastfeeding', 'kidney_disease', 'eating_disorder_history'].includes(flag));
+  const profileInitials = (profile.full_name || 'Bạn')
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(-2)
+    .map((part) => part[0]?.toUpperCase())
+    .join('');
+  const firstMissingProfileLabel = !profile.weight_kg
+    ? 'cân nặng'
+    : !profile.height_cm
+      ? 'chiều cao'
+      : !profile.age
+        ? 'tuổi'
+        : !profile.gender
+          ? 'giới tính sinh học'
+          : !profile.goal
+            ? 'mục tiêu'
+          : !profile.work_activity_level
+              ? 'mức vận động công việc'
+              : profile.exercise_sessions_per_week === undefined || profile.exercise_minutes_per_session === undefined
+                ? 'lịch tập luyện'
+              : !Array.isArray(profile.health_flags)
+                ? 'thông tin an toàn'
+                : null;
+  const displayedCalorieTarget = profile.daily_calorie_target ?? nutritionTarget?.calories_kcal;
+  const hasMacroTarget = (nutritionTarget?.status === 'ready' || nutritionTarget?.status === 'clinician_target')
+    && nutritionTarget.protein_g !== undefined
+    && nutritionTarget.carbs_g !== undefined
+    && nutritionTarget.fat_g !== undefined;
+  const targetMethodologyEntries = Object.entries(nutritionTarget?.methodology ?? {})
+    .filter((entry): entry is [string, NonNullable<DailyNutritionTarget['methodology'][keyof DailyNutritionTarget['methodology']]>] => Boolean(entry[1]));
+  const missingSetupKey: typeof setupSteps[number]['key'] = (
+    !profile.goal
+    || !profile.work_activity_level
+    || profile.exercise_sessions_per_week === undefined
+    || profile.exercise_minutes_per_session === undefined
+  )
+    ? 'goal'
+    : !Array.isArray(profile.health_flags)
+      ? 'safety'
+      : 'basic';
+  const activitySummary = profile.work_activity_level
+    ? `${WORK_ACTIVITY_LABELS[profile.work_activity_level]} · Tập ${profile.exercise_sessions_per_week ?? 0} buổi/tuần`
+    : profile.activity_level
+      ? tx(ACTIVITY_LABELS[profile.activity_level])
+      : 'Chưa thiết lập';
 
   // Refs for scrolling to sections
   const scrollRef = React.useRef<any>(null);
@@ -802,27 +854,28 @@ export default function ProfileScreen() {
   };
 
   const openSetupStep = (key: typeof setupSteps[number]['key']) => {
+    setShowProfileDetails(true);
     if (key === 'basic' || key === 'safety') {
       setBasicCollapsed(false);
       setAssessmentCollapsed(false);
       // allow UI to expand then scroll
-      setTimeout(() => scrollToSection(key === 'basic' ? basicRef : assessmentRef), 160);
+      setTimeout(() => scrollToSection(key === 'basic' ? basicRef : assessmentRef), 240);
       return;
     }
     if (key === 'goal' || key === 'roadmap') {
       setGoalCollapsed(false);
       // scroll to roadmap panel when roadmap requested
-      setTimeout(() => scrollToSection(key === 'goal' ? goalRef : roadmapRef), 160);
+      setTimeout(() => scrollToSection(key === 'goal' ? goalRef : roadmapRef), 240);
       return;
     }
     if (key === 'notifications') {
       setNotificationsCollapsed(false);
-      setTimeout(() => scrollToSection(notificationsRef), 160);
+      setTimeout(() => scrollToSection(notificationsRef), 240);
       return;
     }
     if (key === 'subscription') {
       setSubscriptionCollapsed(false);
-      setTimeout(() => scrollToSection(subscriptionRef), 160);
+      setTimeout(() => scrollToSection(subscriptionRef), 240);
     }
   };
 
@@ -830,6 +883,9 @@ export default function ProfileScreen() {
     Promise.all([
       apiClient.get('/user/profile').then((res) => {
         setProfile(res.data);
+        if (res.data?.nutrition_target_snapshot) {
+          setNutritionTarget(res.data.nutrition_target_snapshot);
+        }
       }).catch(() => {
         setProfile({});
       }),
@@ -843,6 +899,18 @@ export default function ProfileScreen() {
       fetchPreviewNudge('lunch').catch(() => {}),
       fetchActivityLogs().catch(() => {}),
       fetchActivityPreferences().catch(() => {}),
+      calorieTargetService.getMyTarget().then((target) => {
+        if (isCalorieTargetReady(target)) {
+          setNutritionTarget(target.daily_nutrition_target ?? null);
+          setCalorieMethodology(target.calculation_methodology ?? null);
+        } else {
+          setNutritionTarget(null);
+          setCalorieMethodology(null);
+        }
+      }).catch(() => {
+        setNutritionTarget(null);
+        setCalorieMethodology(null);
+      }),
     ]).finally(() => setIsLoading(false));
   }, []);
 
@@ -883,46 +951,6 @@ export default function ProfileScreen() {
     }
   }, [basicIncomplete, basicCollapsed, highlightAnim, useNativeHighlightDriver]);
 
-  useEffect(() => {
-    const assessment = instantAssessment.assessment;
-    if (!assessment) {
-      return;
-    }
-
-    const calorieTargets = calculateInstantCalorieTargets(
-      profile,
-      assessment.recommended_goal,
-      assessment.recommended_activity_level,
-    );
-
-    setProfile((prev) => {
-      const next: Partial<User> = {
-        ...prev,
-        goal: assessment.recommended_goal,
-        activity_level: assessment.recommended_activity_level,
-      };
-
-      if (calorieTargets) {
-        next.daily_calorie_target = calorieTargets.daily_calorie_target;
-        next.target_breakfast_cal = calorieTargets.target_breakfast_cal;
-        next.target_lunch_cal = calorieTargets.target_lunch_cal;
-        next.target_dinner_cal = calorieTargets.target_dinner_cal;
-        next.target_snack_cal = calorieTargets.target_snack_cal;
-      }
-
-      return next;
-    });
-  }, [
-    instantAssessment.assessment?.body_status,
-    instantAssessment.assessment?.recommended_goal,
-    instantAssessment.assessment?.recommended_activity_level,
-    profile.age,
-    profile.gender,
-    profile.weight_kg,
-    profile.height_cm,
-    profile.health_flags,
-  ]);
-
   const toggleHealthFlag = (flag: HealthFlag) => {
     setProfile((prev) => {
       const current = normaliseHealthFlags(prev.health_flags);
@@ -930,7 +958,13 @@ export default function ProfileScreen() {
         ? current.filter((item) => item !== flag)
         : [...current, flag];
 
-      return { ...prev, health_flags: nextFlags };
+      return {
+        ...prev,
+        health_flags: nextFlags,
+        ...(flag === 'eating_disorder_history' && !current.includes(flag)
+          ? { sensitive_nutrition_mode: true }
+          : {}),
+      };
     });
   };
 
@@ -962,6 +996,17 @@ export default function ProfileScreen() {
   };
 
   const handleSaveProfile = async () => {
+    if (
+      profile.clinician_nutrition_targets?.source
+      && !profile.clinician_nutrition_targets.confirmed_at
+      && !clinicalPlanConfirmed
+    ) {
+      Alert.alert(
+        'Xác nhận kế hoạch chuyên gia',
+        'Bạn cần xác nhận các số liệu này đến từ bác sĩ hoặc chuyên gia dinh dưỡng.',
+      );
+      return;
+    }
     setIsSaving(true);
     try {
       const goalPlanPayload = buildGoalPlanPayload();
@@ -970,15 +1015,22 @@ export default function ProfileScreen() {
         full_name: profile.full_name,
         weight_kg: profile.weight_kg ? Number(profile.weight_kg) : undefined,
         height_cm: profile.height_cm ? Number(profile.height_cm) : undefined,
+        body_fat_pct: profile.body_fat_pct ? Number(profile.body_fat_pct) : undefined,
+        date_of_birth: profile.date_of_birth || undefined,
         age: profile.age ? Number(profile.age) : undefined,
         gender: profile.gender,
-        activity_level: profile.activity_level,
+        work_activity_level: profile.work_activity_level,
+        exercise_sessions_per_week: profile.exercise_sessions_per_week,
+        exercise_minutes_per_session: profile.exercise_minutes_per_session,
+        sweat_level: profile.sweat_level,
+        pregnancy_trimester: profile.pregnancy_trimester,
+        breastfeeding_level: profile.breastfeeding_level,
+        diabetes_type: profile.diabetes_type,
+        kidney_care_status: profile.kidney_care_status,
+        athlete_level: profile.athlete_level,
+        clinician_nutrition_targets: profile.clinician_nutrition_targets,
+        sensitive_nutrition_mode: profile.sensitive_nutrition_mode,
         goal: profile.goal,
-        daily_calorie_target: profile.daily_calorie_target ? Number(profile.daily_calorie_target) : undefined,
-        target_breakfast_cal: profile.target_breakfast_cal ? Number(profile.target_breakfast_cal) : undefined,
-        target_lunch_cal: profile.target_lunch_cal ? Number(profile.target_lunch_cal) : undefined,
-        target_dinner_cal: profile.target_dinner_cal ? Number(profile.target_dinner_cal) : undefined,
-        target_snack_cal: profile.target_snack_cal ? Number(profile.target_snack_cal) : undefined,
         goal_plan: goalPlanPayload,
         health_flags: selectedHealthFlags,
       });
@@ -1006,6 +1058,9 @@ export default function ProfileScreen() {
         fetchActivityPreferences().catch(() => {}),
         fetchRecommendations().catch(() => {}),
         fetchWeeklyInsights().catch(() => {}),
+        calorieTargetService.getMyTarget().then((target) => {
+          setNutritionTarget(isCalorieTargetReady(target) ? target.daily_nutrition_target ?? null : null);
+        }).catch(() => {}),
       ]);
 
       setReward({
@@ -1262,82 +1317,295 @@ export default function ProfileScreen() {
       </Modal>
 
       <View>
-        <VisualHeroCard
-          imageSource={profileHeroIllustration}
-          eyebrow={t('profile.hero.eyebrow')}
-          title={t('profile.hero.title')}
-          body={t('profile.hero.body')}
-        />
-
-        <View style={styles.profileShortcutRow}>
-          <TouchableOpacity style={styles.profileShortcut} onPress={() => router.push('/progress' as never)}>
-            <AnimatedMaterialIcon name="monitor-weight" size={18} color={colors.accentCyan} motion="float" />
-            <Text style={styles.profileShortcutText} i18nKey="profile.shortcut.body" />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.profileShortcut} onPress={() => router.push('/insights' as never)}>
-            <AnimatedMaterialIcon name="insights" size={18} color={colors.accentCyan} motion="pulse" />
-            <Text style={styles.profileShortcutText} i18nKey="profile.shortcut.insights" />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.profileShortcut} onPress={() => router.push('/achievements' as never)}>
-            <AnimatedMaterialIcon name="emoji-events" size={18} color={colors.accentAmber} motion="float" />
-            <Text style={styles.profileShortcutText} i18nKey="profile.shortcut.achievements" />
+        <View style={styles.profileHeader}>
+          <Text style={styles.profileHeaderTitle}>Hồ sơ của bạn</Text>
+          <Text style={styles.profileHeaderSubtitle}>Cá nhân hóa mục tiêu sức khỏe</Text>
+          <View style={styles.profileIdentityRow}>
+            <View style={styles.profileAvatar}>
+              <Text style={styles.profileAvatarText}>{profileInitials}</Text>
+            </View>
+            <View style={styles.profileIdentityCopy}>
+              <Text style={styles.profileName}>{profile.full_name || 'Bạn'}</Text>
+              <Text style={styles.profileCompletionLabel}>Hồ sơ cốt lõi {coreProfileCompleted}/{coreProfileChecks.length}</Text>
+              <View style={styles.profileCompletionTrack}>
+                <View style={[styles.profileCompletionFill, { width: `${coreProfileProgress}%` as any }]} />
+              </View>
+              <Text style={[styles.profileMissingText, !firstMissingProfileLabel && styles.profileCompleteText]}>
+                {firstMissingProfileLabel ? `Còn thiếu ${firstMissingProfileLabel}` : 'Thông tin cốt lõi đã hoàn tất'}
+              </Text>
+            </View>
+          </View>
+          <TouchableOpacity
+            style={styles.profilePrimaryAction}
+            onPress={() => openSetupStep(firstMissingProfileLabel ? missingSetupKey : 'basic')}
+            activeOpacity={0.78}
+            accessibilityRole="button"
+            accessibilityLabel={firstMissingProfileLabel ? `Hoàn tất hồ sơ, còn thiếu ${firstMissingProfileLabel}` : 'Chỉnh sửa hồ sơ'}
+          >
+            <Text style={styles.profilePrimaryActionText}>
+              {firstMissingProfileLabel ? 'Hoàn tất hồ sơ' : 'Chỉnh sửa hồ sơ'}
+            </Text>
           </TouchableOpacity>
         </View>
 
-        <SurfaceCard style={styles.settingsCard}>
-          <View style={styles.settingsRow}>
-            <Text style={styles.settingsLabel}>{t('profile.language.title')}</Text>
+        <ProfileSectionLabel label="Mục tiêu hiện tại" />
+        <SurfaceCard style={[styles.aiTargetCard, healthNeedsAttention && styles.aiTargetCardWarning]}>
+          <View style={styles.aiTargetHeader}>
+            <View style={styles.aiTargetCopy}>
+              <Text style={styles.aiTargetEyebrow}>Mục tiêu calories hôm nay</Text>
+              <Text style={styles.aiTargetGoal}>{goalHeadline}</Text>
+            </View>
+            <View style={[styles.aiTargetIcon, healthNeedsAttention && styles.aiTargetIconWarning]}>
+              <MaterialIcons name={healthNeedsAttention ? 'health-and-safety' : 'auto-awesome'} size={22} color={healthNeedsAttention ? colors.warning : colors.success} />
+            </View>
+          </View>
+          {healthNeedsAttention ? (
+            <Text style={styles.aiTargetWarningText}>Calorie AI không áp dụng công thức dinh dưỡng phổ thông cho hồ sơ này.</Text>
+          ) : (
+            <>
+              <View style={styles.aiTargetNumberRow}>
+                <Text style={styles.aiTargetNumber}>{displayedCalorieTarget ? Math.round(displayedCalorieTarget).toLocaleString('vi-VN') : '--'}</Text>
+                <Text style={styles.aiTargetUnit}>kcal/ngày</Text>
+              </View>
+              {hasMacroTarget && (
+                <View style={styles.macroMiniRow}>
+                  <Text style={styles.macroMiniText}>Đạm {nutritionTarget.protein_g}g</Text>
+                  <Text style={styles.macroMiniText}>Carb {nutritionTarget.carbs_g}g</Text>
+                  <Text style={styles.macroMiniText}>Béo {nutritionTarget.fat_g}g</Text>
+                </View>
+              )}
+              <Text style={styles.aiTargetBasis}>
+                Dựa trên: {profile.weight_kg ?? '--'} kg · {profile.age ?? '--'} tuổi · {profile.activity_level ? tx(ACTIVITY_LABELS[profile.activity_level]) : 'chưa có mức vận động'}
+              </Text>
+              {!!nutritionTarget?.calculated_at && (
+                <Text style={styles.aiTargetUpdated}>
+                  Cập nhật lúc {new Date(nutritionTarget.calculated_at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })} hôm nay
+                </Text>
+              )}
+            </>
+          )}
+          <TouchableOpacity
+            onPress={() => setShowTargetCalculation((value) => !value)}
+            style={styles.aiTargetLink}
+            accessibilityRole="button"
+            accessibilityState={{ expanded: showTargetCalculation }}
+            accessibilityLabel="Xem cách tính mục tiêu dinh dưỡng"
+          >
+            <Text style={styles.aiTargetLinkText}>Xem cách tính</Text>
+            <MaterialIcons name={showTargetCalculation ? 'expand-less' : 'expand-more'} size={18} color={colors.success} />
+          </TouchableOpacity>
+          {showTargetCalculation && (
+            <View style={styles.calculationPanel}>
+              <View style={styles.calculationHeaderRow}>
+                <Text style={styles.calculationTitle}>Phiên bản {nutritionTarget?.algorithm_version ?? 'chưa có'}</Text>
+                <Text style={styles.calculationCaption}>
+                  {nutritionTarget?.status === 'clinician_target' ? 'Kế hoạch chuyên gia' : 'Ước tính sức khỏe tổng quát'}
+                </Text>
+              </View>
+              {!!calorieMethodology && (
+                <>
+                  <View style={styles.calculationItem}>
+                    <View style={styles.calculationItemHeader}>
+                      <Text style={styles.calculationMetric}>BMR</Text>
+                      <Text style={styles.calculationEvidenceBadge}>
+                        {EVIDENCE_LEVEL_LABELS[calorieMethodology.bmr.evidence_level]}
+                      </Text>
+                    </View>
+                    <Text style={styles.calculationMethod}>
+                      {calorieMethodology.bmr.method === 'mifflin_st_jeor'
+                        ? 'Phương trình Mifflin–St Jeor'
+                        : 'Phương trình Katch–McArdle từ khối nạc'}
+                    </Text>
+                    {calorieMethodology.bmr.assumptions.map((item, index) => (
+                      <Text key={`bmr-${index}`} style={styles.calculationAssumption}>• {item}</Text>
+                    ))}
+                  </View>
+                  <View style={styles.calculationItem}>
+                    <View style={styles.calculationItemHeader}>
+                      <Text style={styles.calculationMetric}>Vận động ×{calorieMethodology.activity.factor}</Text>
+                      <Text style={styles.calculationEvidenceBadge}>
+                        {EVIDENCE_LEVEL_LABELS[calorieMethodology.activity.evidence_level]}
+                      </Text>
+                    </View>
+                    {calorieMethodology.activity.assumptions.map((item, index) => (
+                      <Text key={`activity-method-${index}`} style={styles.calculationAssumption}>• {item}</Text>
+                    ))}
+                  </View>
+                  <View style={styles.calculationItem}>
+                    <View style={styles.calculationItemHeader}>
+                      <Text style={styles.calculationMetric}>Điều chỉnh mục tiêu ×{calorieMethodology.goal_adjustment.multiplier}</Text>
+                      <Text style={styles.calculationEvidenceBadge}>
+                        {EVIDENCE_LEVEL_LABELS[calorieMethodology.goal_adjustment.evidence_level]}
+                      </Text>
+                    </View>
+                    {calorieMethodology.goal_adjustment.assumptions.map((item, index) => (
+                      <Text key={`goal-adjustment-${index}`} style={styles.calculationAssumption}>• {item}</Text>
+                    ))}
+                  </View>
+                  <View style={styles.calculationItem}>
+                    <View style={styles.calculationItemHeader}>
+                      <Text style={styles.calculationMetric}>Sàn sản phẩm {calorieMethodology.calorie_floor.value_kcal} kcal</Text>
+                      <Text style={styles.calculationEvidenceBadge}>
+                        {EVIDENCE_LEVEL_LABELS[calorieMethodology.calorie_floor.evidence_level]}
+                      </Text>
+                    </View>
+                    <Text style={styles.calculationGuardrail}>Không phải giới hạn sinh lý hay chỉ định y khoa.</Text>
+                  </View>
+                  <View style={styles.calculationItem}>
+                    <View style={styles.calculationItemHeader}>
+                      <Text style={styles.calculationMetric}>Phân bổ bữa mặc định</Text>
+                      <Text style={styles.calculationEvidenceBadge}>
+                        {EVIDENCE_LEVEL_LABELS[calorieMethodology.meal_distribution.evidence_level]}
+                      </Text>
+                    </View>
+                    <Text style={styles.calculationMethod}>
+                      Sáng {calorieMethodology.meal_distribution.breakfast_pct}% · Trưa {calorieMethodology.meal_distribution.lunch_pct}% · Tối {calorieMethodology.meal_distribution.dinner_pct}% · Phụ {calorieMethodology.meal_distribution.snack_pct}%
+                    </Text>
+                  </View>
+                </>
+              )}
+              {targetMethodologyEntries.length > 0 ? targetMethodologyEntries.map(([metric, method]) => (
+                <View key={metric} style={styles.calculationItem}>
+                  <View style={styles.calculationItemHeader}>
+                    <Text style={styles.calculationMetric}>{TARGET_METRIC_LABELS[metric] ?? metric}</Text>
+                    <Text style={styles.calculationEvidenceBadge}>
+                      {EVIDENCE_LEVEL_LABELS[method.evidence_level] ?? method.evidence_level}
+                    </Text>
+                  </View>
+                  <Text style={styles.calculationMethod}>{method.method}</Text>
+                  {!!method.reference_range && (
+                    <Text style={styles.calculationAssumption}>
+                      Khoảng tham chiếu: {method.reference_range.min ?? 0}–{method.reference_range.max ?? 'không giới hạn'} {method.reference_range.unit}
+                    </Text>
+                  )}
+                  {method.assumptions.slice(0, 2).map((assumption, index) => (
+                    <Text key={`${metric}-assumption-${index}`} style={styles.calculationAssumption}>• {assumption}</Text>
+                  ))}
+                  {method.is_product_guardrail && (
+                    <Text style={styles.calculationGuardrail}>Đây là guardrail sản phẩm, không phải giới hạn sinh lý.</Text>
+                  )}
+                </View>
+              )) : (
+                <Text style={styles.calculationEmpty}>Chưa đủ dữ liệu để giải thích cách tính. Hãy hoàn tất hồ sơ trước.</Text>
+              )}
+            </View>
+          )}
+          {!!nutritionTarget?.evidence?.length && (
+            <>
+              <TouchableOpacity
+                style={styles.evidenceToggle}
+                onPress={() => setShowTargetEvidence((value) => !value)}
+                accessibilityRole="button"
+                accessibilityState={{ expanded: showTargetEvidence }}
+                accessibilityLabel="Cơ sở tham khảo cho mục tiêu dinh dưỡng"
+              >
+                <MaterialIcons name="menu-book" size={16} color={colors.textMuted} />
+                <Text style={styles.evidenceToggleText}>Cơ sở tham khảo ({nutritionTarget.evidence.length})</Text>
+                <MaterialIcons name={showTargetEvidence ? 'expand-less' : 'expand-more'} size={18} color={colors.textMuted} />
+              </TouchableOpacity>
+              {showTargetEvidence && (
+                <View style={styles.evidenceList}>
+                  {nutritionTarget.evidence.map((item) => (
+                    <TouchableOpacity key={item.id} style={styles.evidenceItem} onPress={() => void Linking.openURL(item.url)}>
+                      <Text style={styles.evidenceOrganization}>{item.organization}</Text>
+                      <Text style={styles.evidenceTitle}>{item.title}</Text>
+                      <Text style={styles.evidenceLevel}>{EVIDENCE_LEVEL_LABELS[item.evidence_level] ?? item.evidence_level}</Text>
+                      <MaterialIcons name="open-in-new" size={14} color={colors.success} />
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+            </>
+          )}
+        </SurfaceCard>
+
+        <ProfileSectionLabel label="Thông tin của bạn" />
+        <SurfaceCard style={styles.profileGroupCard}>
+          <ProfileOverviewRow icon="person-outline" label="Cơ thể" value={`${profile.height_cm ?? '--'} cm · ${profile.weight_kg ?? '--'} kg · ${profile.age ?? '--'} tuổi`} onPress={() => openSetupStep('basic')} />
+          <ProfileOverviewRow icon="directions-run" label="Hoạt động" value={activitySummary} onPress={() => openSetupStep('goal')} />
+          <ProfileOverviewRow icon="health-and-safety" label="Sức khỏe & an toàn" value={healthNeedsAttention ? 'Cần xem lại hướng dẫn' : selectedHealthFlags.length ? `${selectedHealthFlags.length} lưu ý sức khỏe` : 'Không có cảnh báo'} warning={healthNeedsAttention} onPress={() => openSetupStep('basic')} />
+          <ProfileOverviewRow icon="water-drop" label="Nước" value={(nutritionTarget?.status === 'ready' || nutritionTarget?.status === 'clinician_target') && nutritionTarget.water_ml ? `Mục tiêu ${(nutritionTarget.water_ml / 1000).toLocaleString('vi-VN')} L` : 'Cần hướng dẫn riêng'} warning={nutritionTarget?.status === 'clinician_guidance'} />
+        </SurfaceCard>
+
+        <ProfileSectionLabel label="Kế hoạch của bạn" />
+        <SurfaceCard style={styles.profileGroupCard}>
+          <ProfileOverviewRow icon="track-changes" label="Lộ trình mục tiêu" value={activeGoalPlan?.duration_weeks ? `${activeGoalPlan.direction === 'loss' ? 'Giảm' : activeGoalPlan.direction === 'gain' ? 'Tăng' : 'Duy trì'} ${activeGoalPlan.target_kg ?? 0} kg trong ${activeGoalPlan.duration_weeks} tuần` : 'Chưa thiết lập lộ trình'} onPress={() => openSetupStep('goal')} />
+          <ProfileOverviewRow icon="event-available" label="Lịch vận động" value={`${roadmap.length} bài · ${completedRoadmapCount} bài hoàn thành hôm nay`} onPress={() => openSetupStep('roadmap')} last />
+        </SurfaceCard>
+
+        <ProfileSectionLabel label="Cá nhân hóa thêm" />
+        <SurfaceCard style={styles.personalizationCard}>
+          <View style={styles.personalizationHeader}>
+            <View style={styles.personalizationIcon}>
+              <MaterialIcons name="auto-awesome" size={22} color={colors.success} />
+            </View>
+            <View style={styles.profileRowCopy}>
+              <Text style={styles.personalizationTitle}>Giúp đề xuất phù hợp hơn</Text>
+              <Text style={styles.personalizationSubtitle}>Bạn có thể bổ sung bất kỳ lúc nào.</Text>
+            </View>
+          </View>
+          <View style={styles.personalizationRows}>
+            <ProfileOverviewRow icon="accessibility-new" label="Thành phần cơ thể" value="Tùy chọn" onPress={() => router.push('/progress' as never)} />
+            <ProfileOverviewRow icon="watch" label="Kết nối thiết bị" value="Tùy chọn" onPress={() => router.push('/health-sync' as never)} last />
+          </View>
+        </SurfaceCard>
+
+        <ProfileSectionLabel label="Ứng dụng" />
+        <SurfaceCard style={styles.profileGroupCard}>
+          <ProfileOverviewRow icon="notifications-none" label="Nhắc nhở" value={(reminders.allow_push_notifications ?? true) ? 'Bật' : 'Tắt'} onPress={() => openSetupStep('notifications')} />
+          <ProfileOverviewRow icon="language" label="Ngôn ngữ" value={locale === 'vi' ? 'Tiếng Việt' : 'English'} onPress={() => setQuickSetting((value) => value === 'language' ? null : 'language')} />
+          {quickSetting === 'language' && (
             <View style={styles.settingsChips}>
               <UiChip label={t('locale.vi')} selected={locale === 'vi'} onPress={() => void setLocale('vi')} style={styles.settingsChip} />
               <UiChip label={t('locale.en')} selected={locale === 'en'} onPress={() => void setLocale('en')} style={styles.settingsChip} />
             </View>
-          </View>
-          <View style={styles.settingsDivider} />
-          <View style={styles.settingsRow}>
-            <Text style={styles.settingsLabel}>{t('profile.appearance.title')}</Text>
+          )}
+          <ProfileOverviewRow icon="palette" label="Giao diện" value={requestedMode === 'system' ? 'Theo máy' : requestedMode === 'light' ? 'Sáng' : 'Tối'} onPress={() => setQuickSetting((value) => value === 'appearance' ? null : 'appearance')} />
+          {quickSetting === 'appearance' && (
             <View style={styles.settingsChips}>
               <UiChip label={t('profile.appearance.light')} selected={requestedMode === 'light'} onPress={() => void setThemeMode('light')} style={styles.settingsChip} />
               <UiChip label={t('profile.appearance.dark')} selected={requestedMode === 'dark'} onPress={() => void setThemeMode('dark')} style={styles.settingsChip} />
               <UiChip label={t('profile.appearance.system')} selected={requestedMode === 'system'} onPress={() => void setThemeMode('system')} style={styles.settingsChip} />
             </View>
-          </View>
+          )}
+          <ProfileOverviewRow icon="privacy-tip" label="Quyền riêng tư & dữ liệu" value="Sắp có" muted last />
         </SurfaceCard>
 
-        <SurfaceCard style={styles.setupCard}>
-          <View style={styles.setupHeader}>
-            <View>
-              <Text style={styles.setupEyebrow} i18nKey="profile.setup.eyebrow" />
-              <Text style={styles.setupTitle} i18nKey="profile.setup.title" values={{ completed: completedSetupCount, total: setupSteps.length }} />
-            </View>
-            <View style={styles.setupPercentPill}>
-              <Text style={styles.setupPercentText}>{setupProgressPct}%</Text>
-            </View>
-          </View>
-          <View style={styles.setupProgressTrack}>
-            <View style={[styles.setupProgressFill, { width: `${setupProgressPct}%` as any }]} />
-          </View>
-          <View style={styles.setupStepGrid}>
-            {setupSteps.map((step) => (
-              <TouchableOpacity key={step.key} style={[styles.setupStep, step.done && styles.setupStepDone]} onPress={() => openSetupStep(step.key)}>
-                <View style={[styles.setupStepIcon, step.done && styles.setupStepIconDone]}>
-                  <MaterialIcons name={step.done ? 'check' : step.icon as any} size={16} color={step.done ? colors.textOnAccent : colors.accentCyan} />
-                </View>
-                <View style={styles.setupStepCopy}>
-                  <Text style={styles.setupStepLabel}>{step.label}</Text>
-                  <Text style={styles.setupStepDetail} numberOfLines={1}>{step.detail}</Text>
-                </View>
-              </TouchableOpacity>
-            ))}
-          </View>
-          <View style={styles.setupActionRow}>
-            <UiButton
-              label={isSaving ? 'profile.setup.saving' : 'profile.setup.save'}
-              onPress={handleSaveProfile}
-              loading={isSaving}
-              style={[styles.profileSaveButton, isDesktop && styles.setupSaveButtonDesktop]}
-            />
-          </View>
+        <ProfileSectionLabel label="Tài khoản" />
+        <SurfaceCard style={styles.profileGroupCard}>
+          <ProfileOverviewRow icon="workspace-premium" label="Gói dịch vụ" value={`${subscription?.tier === 'premium' ? 'Premium' : subscription?.tier === 'pro' ? 'Pro' : 'Free'} · ${subscription?.is_active ? 'Đang hoạt động' : 'Chưa kích hoạt'}`} onPress={() => openSetupStep('subscription')} />
+          <ProfileOverviewRow icon="help-outline" label="Trợ giúp" value="Sắp có" muted last />
         </SurfaceCard>
+        <TouchableOpacity style={styles.overviewLogoutButton} onPress={handleLogout}>
+          <Text style={styles.overviewLogoutText}>Đăng xuất</Text>
+        </TouchableOpacity>
+
+        {showProfileDetails && (
+          <>
+        <View style={styles.profileDetailsHeader}>
+          <ProfileSectionLabel label="Chi tiết hồ sơ" />
+          <View style={styles.profileDetailsActions}>
+            <TouchableOpacity
+              style={styles.profileDetailsSave}
+              onPress={handleSaveProfile}
+              disabled={isSaving}
+              accessibilityRole="button"
+              accessibilityState={{ disabled: isSaving }}
+              accessibilityLabel={isSaving ? 'Đang lưu hồ sơ' : 'Lưu hồ sơ'}
+            >
+              <Text style={styles.profileDetailsSaveText}>{isSaving ? 'Đang lưu...' : 'Lưu'}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.profileDetailsClose}
+              onPress={() => setShowProfileDetails(false)}
+              accessibilityRole="button"
+              accessibilityLabel="Đóng phần chỉnh sửa hồ sơ"
+            >
+              <MaterialIcons name="close" size={18} color={colors.textMuted} />
+              <Text style={styles.profileDetailsCloseText}>Thu gọn</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
 
         <View ref={basicRef}>
           <SurfaceCard style={[styles.sectionCard, basicCollapsed && styles.sectionCardCompact]}>
@@ -1362,7 +1630,11 @@ export default function ProfileScreen() {
                 <Field label="screen.tabs.profile.label.001" value={profile.full_name ?? ''} onChangeText={(v) => setProfile((p) => ({ ...p, full_name: v }))} placeholder="screen.tabs.profile.placeholder.001" fullWidth />
                 <Field label="screen.tabs.profile.label.002" value={String(profile.weight_kg ?? '')} onChangeText={(v) => setProfile((p) => ({ ...p, weight_kg: Number(v) || undefined }))} keyboardType="numeric" placeholder="65" />
                 <Field label="screen.tabs.profile.label.003" value={String(profile.height_cm ?? '')} onChangeText={(v) => setProfile((p) => ({ ...p, height_cm: Number(v) || undefined }))} keyboardType="numeric" placeholder="170" />
-                <Field label="screen.tabs.profile.label.004" value={String(profile.age ?? '')} onChangeText={(v) => setProfile((p) => ({ ...p, age: Number(v) || undefined }))} keyboardType="numeric" placeholder="25" />
+                <Field label="Ngày sinh" value={profile.date_of_birth ?? ''} onChangeText={(v) => setProfile((p) => ({ ...p, date_of_birth: v || undefined, age: ageFromDateOfBirth(v) ?? p.age }))} placeholder="1997-08-12" />
+                <Field label="Tỷ lệ mỡ cơ thể · Tùy chọn" value={String(profile.body_fat_pct ?? '')} onChangeText={(v) => setProfile((p) => ({ ...p, body_fat_pct: Number(v) || undefined }))} keyboardType="numeric" placeholder="20" />
+                {!profile.date_of_birth && (
+                  <Field label="screen.tabs.profile.label.004" value={String(profile.age ?? '')} onChangeText={(v) => setProfile((p) => ({ ...p, age: Number(v) || undefined }))} keyboardType="numeric" placeholder="25" />
+                )}
               </View>
 
               <Text style={styles.label} i18nKey="screen.tabs.profile.text.004" />
@@ -1385,6 +1657,130 @@ export default function ProfileScreen() {
                   />
                 ))}
               </View>
+              {selectedHealthFlags.includes('pregnant') && (
+                <>
+                  <Text style={styles.label}>Tam cá nguyệt</Text>
+                  <View style={styles.chipRow}>
+                    {([1, 2, 3] as const).map((trimester) => (
+                      <UiChip key={trimester} label={`Tam cá nguyệt ${trimester}`} selected={profile.pregnancy_trimester === trimester} onPress={() => setProfile((p) => ({ ...p, pregnancy_trimester: trimester }))} />
+                    ))}
+                  </View>
+                </>
+              )}
+              {selectedHealthFlags.includes('breastfeeding') && (
+                <>
+                  <Text style={styles.label}>Mức cho con bú</Text>
+                  <View style={styles.chipRow}>
+                    <UiChip label="Hoàn toàn" selected={profile.breastfeeding_level === 'exclusive'} onPress={() => setProfile((p) => ({ ...p, breastfeeding_level: 'exclusive' }))} />
+                    <UiChip label="Một phần" selected={profile.breastfeeding_level === 'partial'} onPress={() => setProfile((p) => ({ ...p, breastfeeding_level: 'partial' }))} />
+                  </View>
+                </>
+              )}
+              {selectedHealthFlags.includes('diabetes') && (
+                <>
+                  <Text style={styles.label}>Loại tiểu đường</Text>
+                  <View style={styles.chipRow}>
+                    {(['type_1', 'type_2', 'gestational'] as const).map((type) => (
+                      <UiChip key={type} label={type === 'type_1' ? 'Type 1' : type === 'type_2' ? 'Type 2' : 'Thai kỳ'} selected={profile.diabetes_type === type} onPress={() => setProfile((p) => ({ ...p, diabetes_type: type }))} />
+                    ))}
+                  </View>
+                </>
+              )}
+              {selectedHealthFlags.includes('kidney_disease') && (
+                <>
+                  <Text style={styles.label}>Tình trạng điều trị thận</Text>
+                  <View style={styles.chipRow}>
+                    {([
+                      ['not_on_dialysis', 'Chưa lọc máu'],
+                      ['hemodialysis', 'Chạy thận'],
+                      ['peritoneal_dialysis', 'Lọc màng bụng'],
+                      ['unknown', 'Chưa rõ'],
+                    ] as const).map(([status, label]) => (
+                      <UiChip key={status} label={label} selected={profile.kidney_care_status === status} onPress={() => setProfile((p) => ({ ...p, kidney_care_status: status }))} />
+                    ))}
+                  </View>
+                </>
+              )}
+              {selectedHealthFlags.some((flag) => ['pregnant', 'breastfeeding', 'kidney_disease', 'diabetes', 'eating_disorder_history'].includes(flag)) && (
+                <View style={styles.clinicianOverrideCard}>
+                  <Text style={styles.clinicianOverrideTitle}>Mục tiêu từ chuyên gia · Tùy chọn</Text>
+                  <Text style={styles.helperText}>Chỉ nhập số liệu đã được bác sĩ hoặc chuyên gia dinh dưỡng cung cấp.</Text>
+                  <Text style={styles.label}>Người cung cấp kế hoạch</Text>
+                  <View style={styles.chipRow}>
+                    {([
+                      ['doctor', 'Bác sĩ'],
+                      ['dietitian', 'Chuyên gia dinh dưỡng'],
+                      ['care_team', 'Nhóm chăm sóc'],
+                    ] as const).map(([type, label]) => (
+                      <UiChip key={type} label={label} selected={profile.clinician_nutrition_targets?.provider_type === type} onPress={() => setProfile((p) => ({ ...p, clinician_nutrition_targets: { ...p.clinician_nutrition_targets, source: p.clinician_nutrition_targets?.source ?? '', provider_type: type } }))} />
+                    ))}
+                  </View>
+                  <Field label="Nguồn hướng dẫn" value={profile.clinician_nutrition_targets?.source ?? ''} onChangeText={(source) => setProfile((p) => ({ ...p, clinician_nutrition_targets: { ...p.clinician_nutrition_targets, source } }))} placeholder="Bác sĩ / chuyên gia dinh dưỡng" fullWidth />
+                  <Field label="Mã hoặc tên kế hoạch · Tùy chọn" value={profile.clinician_nutrition_targets?.plan_reference ?? ''} onChangeText={(plan_reference) => setProfile((p) => ({ ...p, clinician_nutrition_targets: { ...p.clinician_nutrition_targets, source: p.clinician_nutrition_targets?.source ?? '', plan_reference } }))} placeholder="VD: CKD-plan-2026" fullWidth />
+                  <Field label="Lý do / ghi chú · Tùy chọn" value={profile.clinician_nutrition_targets?.reason ?? ''} onChangeText={(reason) => setProfile((p) => ({ ...p, clinician_nutrition_targets: { ...p.clinician_nutrition_targets, source: p.clinician_nutrition_targets?.source ?? '', reason } }))} placeholder="Theo kế hoạch điều trị hiện tại" fullWidth />
+                  <View style={styles.metricsGrid}>
+                    <Field label="Calories/ngày" value={String(profile.clinician_nutrition_targets?.calories_kcal ?? '')} onChangeText={(v) => setProfile((p) => ({ ...p, clinician_nutrition_targets: { ...p.clinician_nutrition_targets, source: p.clinician_nutrition_targets?.source ?? '', calories_kcal: Number(v) || undefined } }))} keyboardType="numeric" placeholder="2000" />
+                    <Field label="Protein (g)" value={String(profile.clinician_nutrition_targets?.protein_g ?? '')} onChangeText={(v) => setProfile((p) => ({ ...p, clinician_nutrition_targets: { ...p.clinician_nutrition_targets, source: p.clinician_nutrition_targets?.source ?? '', protein_g: Number(v) || undefined } }))} keyboardType="numeric" placeholder="80" />
+                    <Field label="Nước (ml)" value={String(profile.clinician_nutrition_targets?.water_ml ?? '')} onChangeText={(v) => setProfile((p) => ({ ...p, clinician_nutrition_targets: { ...p.clinician_nutrition_targets, source: p.clinician_nutrition_targets?.source ?? '', water_ml: Number(v) || undefined } }))} keyboardType="numeric" placeholder="2000" />
+                    <Field label="Sodium tối đa (mg)" value={String(profile.clinician_nutrition_targets?.sodium_mg_max ?? '')} onChangeText={(v) => setProfile((p) => ({ ...p, clinician_nutrition_targets: { ...p.clinician_nutrition_targets, source: p.clinician_nutrition_targets?.source ?? '', sodium_mg_max: Number(v) || undefined } }))} keyboardType="numeric" placeholder="1500" />
+                  </View>
+                  {!profile.clinician_nutrition_targets?.confirmed_at && (
+                    <TouchableOpacity
+                      style={styles.clinicalConfirmRow}
+                      onPress={() => setClinicalPlanConfirmed((value) => !value)}
+                      accessibilityRole="checkbox"
+                      accessibilityState={{ checked: clinicalPlanConfirmed }}
+                      accessibilityLabel="Xác nhận đây là kế hoạch chuyên gia do bạn tự khai báo"
+                    >
+                      <MaterialIcons name={clinicalPlanConfirmed ? 'check-box' : 'check-box-outline-blank'} size={22} color={clinicalPlanConfirmed ? colors.success : colors.textMuted} />
+                      <Text style={styles.clinicalConfirmText}>Tôi xác nhận đây là số liệu tôi nhận từ chuyên gia. Calorie AI chưa xác minh danh tính hoặc tài liệu nguồn.</Text>
+                    </TouchableOpacity>
+                  )}
+                  {!!profile.clinician_nutrition_targets?.confirmed_at && (
+                    <View style={[
+                      styles.clinicalActiveRow,
+                      profile.clinician_nutrition_targets.verification_status !== 'verified' && styles.clinicalSelfReportedRow,
+                    ]}>
+                      <MaterialIcons
+                        name={profile.clinician_nutrition_targets.verification_status === 'verified' ? 'verified-user' : 'info-outline'}
+                        size={18}
+                        color={profile.clinician_nutrition_targets.verification_status === 'verified' ? colors.success : colors.warning}
+                      />
+                      <Text style={[
+                        styles.clinicalActiveText,
+                        profile.clinician_nutrition_targets.verification_status !== 'verified' && styles.clinicalSelfReportedText,
+                      ]}>
+                        {profile.clinician_nutrition_targets.verification_status === 'verified'
+                          ? `Đã được xác minh · phiên bản ${profile.clinician_nutrition_targets.plan_version ?? 1}`
+                          : `Bạn tự khai báo · chưa được Calorie AI xác minh · phiên bản ${profile.clinician_nutrition_targets.plan_version ?? 1}`}
+                      </Text>
+                    </View>
+                  )}
+                  {!!profile.clinician_nutrition_targets && (
+                    <TouchableOpacity
+                      style={styles.clinicalRevokeButton}
+                      onPress={() => {
+                        setProfile((p) => ({ ...p, clinician_nutrition_targets: null }));
+                        setClinicalPlanConfirmed(false);
+                      }}
+                    >
+                      <Text style={styles.clinicalRevokeText}>Thu hồi kế hoạch chuyên gia</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              )}
+              {selectedHealthFlags.includes('eating_disorder_history') && (
+                <TouchableOpacity
+                  style={styles.clinicalConfirmRow}
+                  onPress={() => setProfile((p) => ({ ...p, sensitive_nutrition_mode: !(p.sensitive_nutrition_mode ?? true) }))}
+                >
+                  <MaterialIcons name={profile.sensitive_nutrition_mode ? 'visibility-off' : 'visibility'} size={22} color={colors.success} />
+                  <View style={styles.profileRowCopy}>
+                    <Text style={styles.clinicianOverrideTitle}>Chế độ dinh dưỡng nhạy cảm</Text>
+                    <Text style={styles.helperText}>Ẩn calorie và macro nổi bật trên Today, tập trung vào thói quen và hướng dẫn chăm sóc.</Text>
+                  </View>
+                </TouchableOpacity>
+              )}
             </>
           )}
           </SurfaceCard>
@@ -1502,21 +1898,6 @@ export default function ProfileScreen() {
           </SurfaceCard>
         </View>
 
-        <View style={[styles.summaryRow, isDesktop && styles.summaryRowDesktop]}>
-          <SurfaceCard style={styles.summaryCard}>
-            <Text style={styles.summaryValue}>{profile.daily_calorie_target ?? '--'}</Text>
-            <Text style={styles.summaryLabel} i18nKey="screen.tabs.profile.text.010" />
-          </SurfaceCard>
-          <SurfaceCard style={styles.summaryCard}>
-            <Text style={styles.summaryValue}>{profile.goal ? tx(GOAL_LABELS[profile.goal]) : '--'}</Text>
-            <Text style={styles.summaryLabel} i18nKey="screen.tabs.profile.text.011" />
-          </SurfaceCard>
-          <SurfaceCard style={styles.summaryCard}>
-            <Text style={styles.summaryValue}>{profile.activity_level ? tx(ACTIVITY_LABELS[profile.activity_level]) : '--'}</Text>
-            <Text style={styles.summaryLabel} i18nKey="screen.tabs.profile.text.012" />
-          </SurfaceCard>
-        </View>
-
       <View ref={goalRef}>
         <SurfaceCard style={[styles.sectionCard, goalCollapsed && styles.sectionCardCompact]}>
         <TouchableOpacity onPress={() => setGoalCollapsed((s) => !s)} activeOpacity={0.8} style={styles.sectionHeaderRow}>
@@ -1541,10 +1922,69 @@ export default function ProfileScreen() {
             </View>
 
             <Text style={styles.label} i18nKey="screen.tabs.profile.text.016" />
+            <Text style={styles.helperText}>Tách vận động trong công việc và buổi tập để AI không đánh giá sai nhu cầu năng lượng.</Text>
+            <Text style={styles.label}>Vận động trong công việc</Text>
             <View style={styles.chipRow}>
-              {(Object.keys(ACTIVITY_LABELS) as ActivityLevel[]).map((a) => (
-                <UiChip key={a} label={tx(ACTIVITY_LABELS[a])} selected={profile.activity_level === a} onPress={() => setProfile((p) => ({ ...p, activity_level: a }))} style={styles.activityChip} />
+              {(Object.keys(WORK_ACTIVITY_LABELS) as Array<NonNullable<User['work_activity_level']>>).map((level) => (
+                <UiChip
+                  key={level}
+                  label={WORK_ACTIVITY_LABELS[level]}
+                  selected={profile.work_activity_level === level}
+                  onPress={() => setProfile((p) => ({ ...p, work_activity_level: level }))}
+                  style={styles.activityChip}
+                />
               ))}
+            </View>
+            <View style={styles.goalPlanRow}>
+              <UiInput
+                label="Số buổi tập mỗi tuần"
+                value={String(profile.exercise_sessions_per_week ?? '')}
+                onChangeText={(v) => setProfile((p) => ({ ...p, exercise_sessions_per_week: Number(v) || 0 }))}
+                keyboardType="numeric"
+                style={{ flex: 1 }}
+              />
+              <UiInput
+                label="Phút mỗi buổi"
+                value={String(profile.exercise_minutes_per_session ?? '')}
+                onChangeText={(v) => setProfile((p) => ({ ...p, exercise_minutes_per_session: Number(v) || 0 }))}
+                keyboardType="numeric"
+                style={{ flex: 1 }}
+              />
+            </View>
+            <Text style={styles.label}>Mức đổ mồ hôi thường gặp</Text>
+            <View style={styles.chipRow}>
+              {(Object.keys(SWEAT_LEVEL_LABELS) as Array<NonNullable<User['sweat_level']>>).map((level) => (
+                <UiChip
+                  key={level}
+                  label={SWEAT_LEVEL_LABELS[level]}
+                  selected={profile.sweat_level === level}
+                  onPress={() => setProfile((p) => ({ ...p, sweat_level: level }))}
+                />
+              ))}
+            </View>
+            <Text style={styles.label}>Cấp độ vận động viên · Tùy chọn</Text>
+            <View style={styles.chipRow}>
+              {([
+                ['recreational', 'Phong trào'],
+                ['competitive', 'Thi đấu'],
+                ['elite', 'Chuyên nghiệp'],
+              ] as const).map(([level, label]) => (
+                <UiChip key={level} label={label} selected={profile.athlete_level === level} onPress={() => setProfile((p) => ({ ...p, athlete_level: level }))} />
+              ))}
+            </View>
+            <Text style={styles.label}>Mức vận động tổng hợp</Text>
+            <View style={styles.derivedFieldCard} accessibilityRole="summary">
+              <View style={styles.derivedFieldIcon}>
+                <MaterialIcons name="auto-graph" size={18} color={colors.success} />
+              </View>
+              <View style={styles.profileRowCopy}>
+                <Text style={styles.derivedFieldValue}>
+                  {profile.activity_level ? tx(ACTIVITY_LABELS[profile.activity_level]) : 'Sẽ được tính sau khi lưu'}
+                </Text>
+                <Text style={styles.derivedFieldHint}>
+                  Backend tính từ vận động trong công việc và số phút tập mỗi tuần. Trường này không chỉnh trực tiếp.
+                </Text>
+              </View>
             </View>
 
             <View style={[styles.goalPlanningGrid, isDesktop && styles.goalPlanningGridDesktop]}>
@@ -1669,13 +2109,36 @@ export default function ProfileScreen() {
 
         {!calorieCollapsed && (
           <>
-            <Text style={styles.helperText} i18nKey="screen.tabs.profile.text.026" />
-            <Field label="screen.tabs.profile.label.011" value={String(profile.daily_calorie_target ?? '')} onChangeText={(v) => setProfile((p) => ({ ...p, daily_calorie_target: Number(v) || undefined }))} keyboardType="numeric" placeholder="1800" fullWidth />
-            <View style={[styles.mealTargetRow, isDesktop && styles.mealTargetRowDesktop]}>
-              <MealTargetField label="screen.tabs.profile.label.012" value={String(profile.target_breakfast_cal ?? '')} onChangeText={(v) => setProfile((p) => ({ ...p, target_breakfast_cal: Number(v) || undefined }))} />
-              <MealTargetField label="screen.tabs.profile.label.013" value={String(profile.target_lunch_cal ?? '')} onChangeText={(v) => setProfile((p) => ({ ...p, target_lunch_cal: Number(v) || undefined }))} />
-              <MealTargetField label="screen.tabs.profile.label.014" value={String(profile.target_dinner_cal ?? '')} onChangeText={(v) => setProfile((p) => ({ ...p, target_dinner_cal: Number(v) || undefined }))} />
-              <MealTargetField label="screen.tabs.profile.label.015" value={String(profile.target_snack_cal ?? '')} onChangeText={(v) => setProfile((p) => ({ ...p, target_snack_cal: Number(v) || undefined }))} />
+            <Text style={styles.helperText}>
+              Các mục tiêu dưới đây do backend tính và được lưu cùng phiên bản thuật toán. Muốn thay đổi, hãy cập nhật cơ thể, mục tiêu hoặc vận động.
+            </Text>
+            <View style={styles.derivedTargetHero}>
+              <Text style={styles.derivedTargetLabel}>Mục tiêu calorie hiện tại</Text>
+              <Text style={styles.derivedTargetValue}>
+                {profile.daily_calorie_target
+                  ? `${Math.round(profile.daily_calorie_target).toLocaleString('vi-VN')} kcal/ngày`
+                  : 'Chưa đủ dữ liệu'}
+              </Text>
+              <Text style={styles.derivedTargetMeta}>
+                {profile.nutrition_algorithm_version
+                  ? `Phiên bản ${profile.nutrition_algorithm_version}`
+                  : 'Hoàn tất hồ sơ để tạo mục tiêu'}
+              </Text>
+            </View>
+            <View style={[styles.mealTargetReadOnlyGrid, isDesktop && styles.mealTargetRowDesktop]}>
+              {[
+                ['Sáng', profile.target_breakfast_cal],
+                ['Trưa', profile.target_lunch_cal],
+                ['Tối', profile.target_dinner_cal],
+                ['Bữa phụ', profile.target_snack_cal],
+              ].map(([label, value]) => (
+                <View key={String(label)} style={styles.mealTargetReadOnlyItem}>
+                  <Text style={styles.mealTargetReadOnlyLabel}>{label}</Text>
+                  <Text style={styles.mealTargetReadOnlyValue}>
+                    {typeof value === 'number' ? `${Math.round(value)} kcal` : '--'}
+                  </Text>
+                </View>
+              ))}
             </View>
             <MacrosCard daily_calorie_target={profile.daily_calorie_target} weight_kg={profile.weight_kg} goal={profile.goal} />
           </>
@@ -2021,17 +2484,8 @@ export default function ProfileScreen() {
         })()}
       </SurfaceCard>
       </View>
-
-        <SurfaceCard style={styles.accountCard}>
-          <View style={styles.accountCopy}>
-            <Text style={styles.accountTitle} i18nKey="profile.account.title" />
-            <Text style={styles.accountHint} i18nKey="profile.account.hint" />
-          </View>
-          <TouchableOpacity style={styles.profileLogoutButton} onPress={handleLogout}>
-            <MaterialIcons name="logout" size={16} color={colors.danger} />
-            <Text style={styles.profileLogoutText} i18nKey="profile.logout" />
-          </TouchableOpacity>
-        </SurfaceCard>
+          </>
+        )}
 
       </View>
       <RewardToast reward={reward} onHide={() => setReward(null)} />
@@ -2039,26 +2493,59 @@ export default function ProfileScreen() {
   );
 }
 
+function ProfileSectionLabel({ label }: { label: string }) {
+  return <Text style={styles.profileSectionLabel}>{label.toUpperCase()}</Text>;
+}
+
+function ProfileOverviewRow({
+  icon,
+  label,
+  value,
+  onPress,
+  warning = false,
+  muted = false,
+  last = false,
+}: {
+  icon: React.ComponentProps<typeof MaterialIcons>['name'];
+  label: string;
+  value: string;
+  onPress?: () => void;
+  warning?: boolean;
+  muted?: boolean;
+  last?: boolean;
+}) {
+  const { colors } = useAppTheme();
+  const content = (
+    <>
+      <View style={[styles.profileRowIcon, warning && styles.profileRowIconWarning]}>
+        <MaterialIcons name={icon} size={20} color={warning ? colors.warning : colors.success} />
+      </View>
+      <View style={styles.profileRowCopy}>
+        <Text style={styles.profileRowLabel}>{label}</Text>
+        <Text style={[styles.profileRowValue, muted && styles.profileRowValueMuted, warning && styles.profileRowValueWarning]} numberOfLines={2}>{value}</Text>
+      </View>
+      {onPress && <MaterialIcons name="chevron-right" size={22} color={colors.textMuted} />}
+    </>
+  );
+
+  if (!onPress) {
+    return <View style={[styles.profileOverviewRow, !last && styles.profileOverviewRowBorder]}>{content}</View>;
+  }
+  return (
+    <TouchableOpacity
+      style={[styles.profileOverviewRow, !last && styles.profileOverviewRowBorder]}
+      onPress={onPress}
+      activeOpacity={0.72}
+    >
+      {content}
+    </TouchableOpacity>
+  );
+}
+
 function Field({ label, value, onChangeText, keyboardType, placeholder, fullWidth }: { label: string; value: string; onChangeText: (v: string) => void; keyboardType?: any; placeholder?: string; fullWidth?: boolean }) {
   return (
     <View style={[styles.fieldContainer, fullWidth && styles.fieldContainerFull]}>
       <UiInput label={label} value={value} onChangeText={onChangeText} keyboardType={keyboardType} placeholder={placeholder} />
-    </View>
-  );
-}
-
-function MealTargetField({ label, value, onChangeText }: { label: string; value: string; onChangeText: (v: string) => void }) {
-  return (
-    <View style={styles.mealTargetField}>
-      <UiInput
-        label={label}
-        value={value}
-        onChangeText={onChangeText}
-        keyboardType="numeric"
-        placeholder="0"
-        containerStyle={{ marginBottom: 0 }}
-        style={styles.mealTargetInput}
-      />
     </View>
   );
 }
@@ -2145,6 +2632,468 @@ function ReminderTimePickerRow({
 
 const styles = createThemedStyles((colors, radii) => ({
   heroBody: { marginBottom: 18, maxWidth: 720 },
+  profileHeader: {
+    marginBottom: 18,
+    paddingHorizontal: 4,
+  },
+  profileHeaderTitle: {
+    color: colors.text,
+    fontSize: 27,
+    lineHeight: 32,
+    fontWeight: '900',
+    letterSpacing: -0.8,
+  },
+  profileHeaderSubtitle: {
+    color: colors.textMuted,
+    fontSize: 14,
+    lineHeight: 20,
+    marginTop: 3,
+  },
+  profileIdentityRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 14,
+  },
+  profileAvatar: {
+    width: 60,
+    height: 60,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surfaceSuccess,
+    borderWidth: 1,
+    borderColor: colors.borderSuccess,
+  },
+  profileAvatarText: {
+    color: colors.success,
+    fontSize: 22,
+    fontWeight: '900',
+  },
+  profileIdentityCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  profileName: {
+    color: colors.text,
+    fontSize: 19,
+    lineHeight: 23,
+    fontWeight: '900',
+  },
+  profileCompletionLabel: {
+    color: colors.textSoft,
+    fontSize: 13,
+    fontWeight: '700',
+    marginTop: 3,
+  },
+  profileCompletionTrack: {
+    height: 6,
+    borderRadius: 999,
+    overflow: 'hidden',
+    backgroundColor: colors.progressBg,
+    marginTop: 7,
+  },
+  profileCompletionFill: {
+    height: '100%',
+    borderRadius: 999,
+    backgroundColor: colors.accentMint,
+  },
+  profileMissingText: {
+    color: colors.warning,
+    fontSize: 12,
+    fontWeight: '700',
+    marginTop: 6,
+  },
+  profileCompleteText: {
+    color: colors.success,
+  },
+  profilePrimaryAction: {
+    alignSelf: 'flex-start',
+    minHeight: 42,
+    marginTop: 12,
+    paddingHorizontal: 16,
+    borderRadius: 13,
+    backgroundColor: colors.accentMint,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  profilePrimaryActionText: {
+    color: colors.textOnAccent,
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  profileSectionLabel: {
+    color: colors.textMuted,
+    fontSize: 12,
+    lineHeight: 16,
+    fontWeight: '900',
+    letterSpacing: 0.7,
+    marginHorizontal: 4,
+    marginBottom: 7,
+    marginTop: 4,
+  },
+  aiTargetCard: {
+    marginBottom: 18,
+    borderColor: colors.borderSuccess,
+    backgroundColor: colors.surfaceSuccess,
+  },
+  aiTargetCardWarning: {
+    borderColor: colors.borderWarning,
+    backgroundColor: colors.surfaceWarning,
+  },
+  aiTargetHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  aiTargetCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  aiTargetEyebrow: {
+    color: colors.textMuted,
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: '800',
+    marginBottom: 5,
+  },
+  aiTargetGoal: {
+    color: colors.text,
+    fontSize: 19,
+    lineHeight: 23,
+    fontWeight: '900',
+    letterSpacing: -0.3,
+  },
+  aiTargetIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  aiTargetIconWarning: {
+    backgroundColor: colors.surfaceWarning,
+  },
+  aiTargetNumberRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 7,
+    marginTop: 13,
+  },
+  aiTargetNumber: {
+    color: colors.text,
+    fontSize: 35,
+    lineHeight: 40,
+    fontWeight: '900',
+    letterSpacing: -1.2,
+    fontVariant: ['tabular-nums'],
+  },
+  aiTargetUnit: {
+    color: colors.textSoft,
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  macroMiniRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 7,
+    marginTop: 10,
+  },
+  macroMiniText: {
+    color: colors.success,
+    backgroundColor: colors.surface,
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  aiTargetBasis: {
+    color: colors.textMuted,
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 11,
+  },
+  aiTargetUpdated: {
+    color: colors.textMuted,
+    fontSize: 11,
+    lineHeight: 16,
+    marginTop: 3,
+  },
+  aiTargetWarningText: {
+    color: colors.warning,
+    fontSize: 13,
+    lineHeight: 19,
+    fontWeight: '700',
+    marginTop: 13,
+  },
+  aiTargetLink: {
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    minHeight: 44,
+    marginTop: 4,
+  },
+  aiTargetLinkText: {
+    color: colors.success,
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  calculationPanel: {
+    gap: 9,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.borderSuccess,
+    backgroundColor: colors.surfaceSuccess,
+    padding: 11,
+    marginBottom: 6,
+  },
+  calculationHeaderRow: {
+    gap: 2,
+  },
+  calculationTitle: {
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  calculationCaption: {
+    color: colors.textMuted,
+    fontSize: 11,
+  },
+  calculationItem: {
+    borderTopWidth: 1,
+    borderTopColor: colors.borderSubtle,
+    paddingTop: 8,
+    gap: 3,
+  },
+  calculationItemHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  calculationMetric: {
+    flex: 1,
+    color: colors.text,
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  calculationEvidenceBadge: {
+    color: colors.success,
+    fontSize: 9,
+    fontWeight: '900',
+    textAlign: 'right',
+  },
+  calculationMethod: {
+    color: colors.text,
+    fontSize: 11,
+    lineHeight: 16,
+  },
+  calculationAssumption: {
+    color: colors.textMuted,
+    fontSize: 10,
+    lineHeight: 15,
+  },
+  calculationGuardrail: {
+    color: colors.warning,
+    fontSize: 10,
+    lineHeight: 15,
+    fontWeight: '800',
+  },
+  calculationEmpty: {
+    color: colors.textMuted,
+    fontSize: 11,
+    lineHeight: 16,
+  },
+  evidenceToggle: {
+    minHeight: 40,
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 6,
+  },
+  evidenceToggleText: {
+    color: colors.textMuted,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  evidenceList: {
+    gap: 7,
+    marginTop: 3,
+  },
+  evidenceItem: {
+    minHeight: 48,
+    borderRadius: 11,
+    borderWidth: 1,
+    borderColor: colors.borderSuccess,
+    backgroundColor: colors.surface,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  evidenceOrganization: {
+    color: colors.success,
+    fontSize: 10,
+    fontWeight: '900',
+  },
+  evidenceTitle: {
+    color: colors.text,
+    fontSize: 11,
+    lineHeight: 16,
+    fontWeight: '700',
+    paddingRight: 18,
+  },
+  evidenceLevel: {
+    color: colors.textMuted,
+    fontSize: 9,
+    fontWeight: '800',
+    marginTop: 2,
+  },
+  profileGroupCard: {
+    marginBottom: 18,
+    paddingVertical: 2,
+    paddingHorizontal: 14,
+  },
+  profileOverviewRow: {
+    minHeight: 58,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 11,
+    paddingVertical: 8,
+  },
+  profileOverviewRowBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderSubtle,
+  },
+  profileRowIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    backgroundColor: colors.surfaceSuccess,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  profileRowIconWarning: {
+    backgroundColor: colors.surfaceWarning,
+  },
+  profileRowCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  profileRowLabel: {
+    color: colors.text,
+    fontSize: 14,
+    lineHeight: 18,
+    fontWeight: '800',
+  },
+  profileRowValue: {
+    color: colors.textMuted,
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 2,
+  },
+  profileRowValueMuted: {
+    color: colors.textMuted,
+  },
+  profileRowValueWarning: {
+    color: colors.warning,
+    fontWeight: '700',
+  },
+  personalizationCard: {
+    marginBottom: 18,
+    padding: 12,
+    borderColor: colors.borderSuccess,
+    backgroundColor: colors.surfaceSuccess,
+  },
+  personalizationHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 11,
+    paddingHorizontal: 2,
+    paddingBottom: 10,
+  },
+  personalizationIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surface,
+  },
+  personalizationTitle: {
+    color: colors.text,
+    fontSize: 14,
+    lineHeight: 18,
+    fontWeight: '900',
+  },
+  personalizationSubtitle: {
+    color: colors.textMuted,
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 2,
+  },
+  personalizationRows: {
+    borderWidth: 1,
+    borderColor: colors.borderSuccess,
+    borderRadius: 14,
+    paddingHorizontal: 10,
+    backgroundColor: colors.surface,
+    overflow: 'hidden',
+  },
+  overviewLogoutButton: {
+    minHeight: 48,
+    borderWidth: 1,
+    borderColor: colors.borderDanger,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 24,
+    backgroundColor: colors.surface,
+  },
+  overviewLogoutText: {
+    color: colors.danger,
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  profileDetailsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 4,
+    marginBottom: 8,
+  },
+  profileDetailsActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  profileDetailsSave: {
+    minHeight: 38,
+    borderRadius: 11,
+    paddingHorizontal: 13,
+    backgroundColor: colors.accentMint,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  profileDetailsSaveText: {
+    color: colors.textOnAccent,
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  profileDetailsClose: {
+    minHeight: 40,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+  },
+  profileDetailsCloseText: {
+    color: colors.textMuted,
+    fontSize: 12,
+    fontWeight: '700',
+  },
   profileShortcutRow: { flexDirection: 'row', gap: 8, marginBottom: 14 },
   profileShortcut: {
     flex: 1,
@@ -2486,7 +3435,100 @@ const styles = createThemedStyles((colors, radii) => ({
   },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 4 },
   activityChip: { marginBottom: 8 },
+  derivedFieldCard: {
+    minHeight: 68,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderRadius: 14,
+    backgroundColor: colors.surfaceSuccess,
+    borderWidth: 1,
+    borderColor: colors.borderSuccess,
+    padding: 12,
+    marginBottom: 8,
+  },
+  derivedFieldIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surface,
+  },
+  derivedFieldValue: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  derivedFieldHint: {
+    color: colors.textMuted,
+    fontSize: 11,
+    lineHeight: 16,
+    marginTop: 2,
+  },
   healthChip: { marginBottom: 6 },
+  clinicianOverrideCard: {
+    marginTop: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.borderWarning,
+    backgroundColor: colors.surfaceWarning,
+    padding: 12,
+  },
+  clinicianOverrideTitle: {
+    color: colors.text,
+    fontSize: 14,
+    lineHeight: 18,
+    fontWeight: '900',
+    marginBottom: 4,
+  },
+  clinicalConfirmRow: {
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 9,
+    marginTop: 8,
+  },
+  clinicalConfirmText: {
+    flex: 1,
+    color: colors.textSoft,
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '700',
+  },
+  clinicalActiveRow: {
+    minHeight: 42,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 8,
+  },
+  clinicalActiveText: {
+    color: colors.success,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  clinicalSelfReportedRow: {
+    borderRadius: 12,
+    backgroundColor: colors.surfaceWarning,
+    paddingHorizontal: 10,
+  },
+  clinicalSelfReportedText: {
+    flex: 1,
+    color: colors.warning,
+    lineHeight: 17,
+  },
+  clinicalRevokeButton: {
+    alignSelf: 'flex-start',
+    minHeight: 40,
+    justifyContent: 'center',
+    marginTop: 4,
+  },
+  clinicalRevokeText: {
+    color: colors.danger,
+    fontSize: 12,
+    fontWeight: '800',
+  },
   goalPlanningGrid: { gap: 12, marginTop: 8 },
   goalPlanningGridDesktop: { flexDirection: 'row', alignItems: 'stretch' },
   goalPlanPanel: {
@@ -2561,6 +3603,57 @@ const styles = createThemedStyles((colors, radii) => ({
     marginTop: 12,
     marginBottom: 4,
   },
+  derivedTargetHero: {
+    borderRadius: 16,
+    backgroundColor: colors.surfaceSuccess,
+    borderWidth: 1,
+    borderColor: colors.borderSuccess,
+    padding: 14,
+    gap: 3,
+    marginTop: 8,
+  },
+  derivedTargetLabel: {
+    color: colors.textMuted,
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  derivedTargetValue: {
+    color: colors.text,
+    fontSize: 23,
+    fontWeight: '900',
+    letterSpacing: -0.5,
+  },
+  derivedTargetMeta: {
+    color: colors.success,
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  mealTargetReadOnlyGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 10,
+    marginBottom: 8,
+  },
+  mealTargetReadOnlyItem: {
+    width: '48%',
+    minHeight: 54,
+    borderRadius: 12,
+    backgroundColor: colors.surfaceAlt,
+    paddingHorizontal: 11,
+    paddingVertical: 9,
+  },
+  mealTargetReadOnlyLabel: {
+    color: colors.textMuted,
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  mealTargetReadOnlyValue: {
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: '900',
+    marginTop: 3,
+  },
   goalPlanRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -2602,10 +3695,6 @@ const styles = createThemedStyles((colors, radii) => ({
   mealTargetRowDesktop: {
     gap: 14,
   },
-  mealTargetField: {
-    width: '48%',
-  },
-  mealTargetInput: { color: colors.success, fontWeight: '800', fontSize: 18, textAlign: 'center' },
   actionRow: { gap: 10, marginTop: 4, marginBottom: 10 },
   actionRowDesktop: { flexDirection: 'row', alignItems: 'stretch' },
   saveButton: { flex: 1 },

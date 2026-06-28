@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { SupabaseService } from '../../common/supabase/supabase.service';
 import { UserProfile } from '@calorie-ai/types';
 import { ConfigService } from '@nestjs/config';
@@ -103,7 +103,10 @@ export class RecommendationService {
     user_id: string,
     profile: UserProfile,
   ): Promise<WeeklyRecommendations> {
-    const dailyTarget = profile.daily_calorie_target || 2000;
+    const dailyTarget = Number(profile.daily_calorie_target);
+    if (!Number.isFinite(dailyTarget) || dailyTarget <= 0) {
+      throw new BadRequestException('Complete the profile before generating calorie-based meal recommendations.');
+    }
 
     // Get today's logs (between start of today and start of tomorrow)
     const today = new Date();
@@ -284,7 +287,10 @@ export class RecommendationService {
     week_end: string;
     daily_plans: WeeklyRecommendations[];
   }> {
-    const dailyTarget = profile.daily_calorie_target || 2000;
+    const dailyTarget = Number(profile.daily_calorie_target);
+    if (!Number.isFinite(dailyTarget) || dailyTarget <= 0) {
+      throw new BadRequestException('Complete the profile before generating a calorie-based weekly meal plan.');
+    }
 
     // Fetch foods pool once to reuse across all 7 days
     const { data: foodPool } = await this.supabaseService.db

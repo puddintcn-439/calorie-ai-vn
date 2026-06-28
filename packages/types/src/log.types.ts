@@ -72,6 +72,7 @@ export interface TodaySummary {
   daily_nutrition_target?: DailyNutritionTarget;
   profile: Partial<Pick<
     User,
+    | 'date_of_birth'
     | 'age'
     | 'gender'
     | 'height_cm'
@@ -79,6 +80,17 @@ export interface TodaySummary {
     | 'weight_kg'
     | 'health_flags'
     | 'activity_level'
+    | 'work_activity_level'
+    | 'exercise_sessions_per_week'
+    | 'exercise_minutes_per_session'
+    | 'sweat_level'
+    | 'pregnancy_trimester'
+    | 'breastfeeding_level'
+    | 'diabetes_type'
+    | 'kidney_care_status'
+    | 'athlete_level'
+    | 'clinician_nutrition_targets'
+    | 'sensitive_nutrition_mode'
     | 'goal_plan'
     | 'daily_calorie_target'
     | 'goal'

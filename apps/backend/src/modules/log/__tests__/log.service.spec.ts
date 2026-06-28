@@ -105,7 +105,7 @@ describe('LogService.getDailyLog', () => {
     expect(daily.logs).toHaveLength(2);
   });
 
-  it('defaults to 1800 target when user has no target set', async () => {
+  it('returns an unavailable zero target instead of inventing a default', async () => {
     const supabase = makeSupabase((table: string) => {
       if (table === 'food_logs') {
         return {
@@ -129,9 +129,9 @@ describe('LogService.getDailyLog', () => {
 
     const service = new LogService(supabase);
     const daily = await service.getDailyLog('u1', '2026-05-09');
-    expect(daily.target_calories).toBe(1800);
+    expect(daily.target_calories).toBe(0);
     expect(daily.total_calories).toBe(0);
-    expect(daily.remaining_calories).toBe(1800);
+    expect(daily.remaining_calories).toBe(0);
   });
 
   it('throws when food_logs query fails', async () => {
@@ -267,7 +267,7 @@ describe('LogService.getTodaySummary', () => {
       status: 'ready',
       calories_kcal: 2000,
       protein_g: 112,
-      algorithm_version: 'daily-nutrition-v1',
+      algorithm_version: 'daily-nutrition-v2',
     });
     expect(summary.health_score.overall).toBeGreaterThanOrEqual(70);
     expect(summary.health_score.label).toBe('strong');

@@ -1,7 +1,7 @@
 import { InsightsService } from '../insights.service';
 import { SupabaseService } from '../../../common/supabase/supabase.service';
 
-function makeDb(logs: unknown[], lastWeekLogs: unknown[] = [], dailyTarget = 1800) {
+function makeDb(logs: unknown[], lastWeekLogs: unknown[] = [], dailyTarget: number | null = 1800) {
   let callCount = 0;
   const db = {
     from: jest.fn().mockImplementation((table: string) => {
@@ -28,6 +28,17 @@ function makeDb(logs: unknown[], lastWeekLogs: unknown[] = [], dailyTarget = 180
 }
 
 describe('InsightsService.getWeeklyInsights', () => {
+  it('returns null adherence instead of using a fabricated calorie target', async () => {
+    const supabase = makeDb([], [], null);
+    const service = new InsightsService(supabase);
+    const result = await service.getWeeklyInsights('u1', '2026-05-05');
+
+    expect(result.target_status).toBe('needs_profile');
+    expect(result.weekly_calorie_target).toBeNull();
+    expect(result.weekly_adherence_percentage).toBeNull();
+    expect(result.daily_insights[0].calorie_target).toBeNull();
+  });
+
   it('returns zeroed weekly insights for empty logs', async () => {
     const supabase = makeDb([]);
     const service = new InsightsService(supabase);

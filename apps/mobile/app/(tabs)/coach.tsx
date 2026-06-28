@@ -45,7 +45,7 @@ type ActivePlan = {
   tone: 'good' | 'warn' | 'info';
   steps: string[];
   prompts: string[];
-  primaryRoute: '/scan' | '/log' | '/progress';
+  primaryRoute: '/scan' | '/log' | '/progress' | '/profile';
   primaryLabel: string;
 };
 
@@ -78,11 +78,31 @@ function getNextMealLabel(logs: Array<{ meal_type?: string }> = [], locale: Loca
 function buildActivePlan(dailyLog: DailyLog | null, locale: Locale, proteinTarget?: number): ActivePlan {
   const logs = dailyLog?.logs ?? [];
   const consumed = toFiniteNumber(dailyLog?.total_calories) ?? 0;
-  const target = toFiniteNumber(dailyLog?.target_calories) ?? 1800;
+  const parsedTarget = toFiniteNumber(dailyLog?.target_calories);
+  const target = parsedTarget !== null && parsedTarget > 0 ? parsedTarget : null;
   const protein = toFiniteNumber(dailyLog?.total_protein_g) ?? 0;
-  const remaining = target - consumed;
+  const remaining = target === null ? 0 : target - consumed;
   const mealCount = logs.length;
   const nextMeal = getNextMealLabel(logs, locale);
+
+  if (target === null) {
+    return {
+      title: locale === 'vi' ? 'Hoàn tất hồ sơ' : 'Complete your profile',
+      body: locale === 'vi'
+        ? 'Coach chưa có mục tiêu calorie đã được backend xác nhận.'
+        : 'Coach does not have a backend-confirmed calorie target yet.',
+      status: locale === 'vi' ? 'Không tự suy đoán mục tiêu' : 'No invented target',
+      tone: 'info',
+      steps: [
+        locale === 'vi' ? 'Bổ sung thông tin cơ thể và mục tiêu.' : 'Add body and goal information.',
+        locale === 'vi' ? 'Xác nhận mức vận động và thông tin an toàn.' : 'Confirm activity and safety information.',
+        locale === 'vi' ? 'Quay lại để nhận đề xuất cá nhân hóa.' : 'Return for personalized recommendations.',
+      ],
+      prompts: [],
+      primaryRoute: '/profile',
+      primaryLabel: locale === 'vi' ? 'Mở hồ sơ' : 'Open profile',
+    };
+  }
 
   if (mealCount === 0) {
     return {
@@ -191,7 +211,8 @@ function buildWeeklyPlan(summary: CoachingSummary | null, dailyLog: DailyLog | n
   const logsCount = toFiniteNumber(summary?.logs_count) ?? 0;
   const adherence = toFiniteNumber(summary?.adherence_percentage);
   const averageDailyCalories = toFiniteNumber(summary?.average_daily_calories);
-  const target = toFiniteNumber(dailyLog?.target_calories) ?? 1800;
+  const parsedTarget = toFiniteNumber(dailyLog?.target_calories);
+  const target = parsedTarget !== null && parsedTarget > 0 ? parsedTarget : null;
   const todayLogs = dailyLog?.logs?.length ?? 0;
 
   if (!summary || logsCount < 7) {
@@ -225,7 +246,7 @@ function buildWeeklyPlan(summary: CoachingSummary | null, dailyLog: DailyLog | n
     };
   }
 
-  if (adherence !== null && adherence > 115) {
+  if (target !== null && adherence !== null && adherence > 115) {
     return {
       title: tr('screen.tabs.coach.week.reduce.title', locale),
       body: tr('screen.tabs.coach.week.reduce.body', locale),
@@ -251,7 +272,7 @@ function buildWeeklyPlan(summary: CoachingSummary | null, dailyLog: DailyLog | n
     };
   }
 
-  if (adherence !== null && adherence < 80) {
+  if (target !== null && adherence !== null && adherence < 80) {
     return {
       title: tr('screen.tabs.coach.week.enough.title', locale),
       body: tr('screen.tabs.coach.week.enough.body', locale),
@@ -420,8 +441,9 @@ function deriveCoachActions(
   const actions: AICoachAction[] = Array.isArray(responseActions) ? [...responseActions] : [];
   const lower = message.toLowerCase();
   const consumed = toFiniteNumber(dailyLog?.total_calories) ?? 0;
-  const target = toFiniteNumber(dailyLog?.target_calories) ?? 1800;
-  const remaining = target - consumed;
+  const parsedTarget = toFiniteNumber(dailyLog?.target_calories);
+  const target = parsedTarget !== null && parsedTarget > 0 ? parsedTarget : null;
+  const remaining = target === null ? 0 : target - consumed;
 
   const addUnique = (action: AICoachAction) => {
     if (!actions.some((item) => item.type === action.type && item.label === action.label)) {
@@ -429,11 +451,11 @@ function deriveCoachActions(
     }
   };
 
-  if (remaining > 250 || lower.includes('ăn') || lower.includes('meal') || lower.includes('food')) {
+  if ((target !== null && remaining > 250) || lower.includes('ăn') || lower.includes('meal') || lower.includes('food')) {
     addUnique({ type: 'open_scan', label: tr('screen.tabs.coach.action.scan', locale) });
   }
 
-  if (lower.includes('log') || lower.includes('sửa') || lower.includes('nhật ký') || consumed > target + 150) {
+  if (lower.includes('log') || lower.includes('sửa') || lower.includes('nhật ký') || (target !== null && consumed > target + 150)) {
     addUnique({ type: 'open_log', label: tr('screen.tabs.coach.action.log', locale) });
   }
 
@@ -441,7 +463,7 @@ function deriveCoachActions(
     addUnique({ type: 'open_progress', label: tr('screen.tabs.coach.action.progress', locale) });
   }
 
-  if (consumed > target + 150 || lower.includes('đi bộ') || lower.includes('walk')) {
+  if ((target !== null && consumed > target + 150) || lower.includes('đi bộ') || lower.includes('walk')) {
     addUnique({
       type: 'add_activity',
       label: tr('screen.tabs.coach.action.walk', locale),
@@ -607,7 +629,8 @@ export default function CoachScreen() {
 
   const context = useMemo(() => {
     const consumed = dailyLog?.total_calories ?? 0;
-    const target = dailyLog?.target_calories ?? 1800;
+    const rawTarget = Number(dailyLog?.target_calories);
+    const target = Number.isFinite(rawTarget) && rawTarget > 0 ? rawTarget : undefined;
     return {
       today_calories: consumed,
       target_calories: target,
@@ -619,7 +642,10 @@ export default function CoachScreen() {
       dynamic_intervention: dynamicIntervention ?? undefined,
     };
   }, [behaviorMemory, dailyLog, dynamicIntervention, interventionAnalytics, reminderEffectiveness, successForecast, todaySummary?.health_score]);
-  const proteinTarget = todaySummary?.daily_nutrition_target?.status === 'ready'
+  const proteinTarget = (
+    todaySummary?.daily_nutrition_target?.status === 'ready'
+    || todaySummary?.daily_nutrition_target?.status === 'clinician_target'
+  )
     ? todaySummary.daily_nutrition_target.protein_g
     : undefined;
   const activePlan = useMemo(
@@ -1009,10 +1035,18 @@ export default function CoachScreen() {
         <SurfaceCard style={styles.contextCard}>
           <Text style={styles.contextTitle} i18nKey="screen.tabs.coach.text.006" />
           <Text style={styles.contextLine}>{t('screen.tabs.coach.context.consumedLine', { kcal: context.today_calories })}</Text>
-          <Text style={styles.contextLine}>{t('screen.tabs.coach.context.targetLine', { kcal: context.target_calories })}</Text>
-          <Text style={styles.contextLine}>
-            {t('screen.tabs.coach.context.remainingLine', { kcal: context.target_calories - context.today_calories })}
-          </Text>
+          {context.target_calories !== undefined ? (
+            <>
+              <Text style={styles.contextLine}>{t('screen.tabs.coach.context.targetLine', { kcal: context.target_calories })}</Text>
+              <Text style={styles.contextLine}>
+                {t('screen.tabs.coach.context.remainingLine', { kcal: context.target_calories - context.today_calories })}
+              </Text>
+            </>
+          ) : (
+            <Text style={styles.contextLine}>
+              {locale === 'vi' ? 'Mục tiêu: cần hoàn tất hồ sơ' : 'Target: complete your profile'}
+            </Text>
+          )}
           <View style={styles.contextActions}>
             <UiButton
               label="screen.tabs.coach.action.logMeal"

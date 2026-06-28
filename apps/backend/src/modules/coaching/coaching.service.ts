@@ -122,7 +122,7 @@ export class CoachingService {
         .order('sent_at', { ascending: true }),
       this.supabase.db
         .from('users')
-        .select('age, gender, weight_kg, activity_level, goal, health_flags, daily_calorie_target')
+        .select('date_of_birth, age, gender, weight_kg, activity_level, work_activity_level, exercise_sessions_per_week, exercise_minutes_per_session, sweat_level, pregnancy_trimester, breastfeeding_level, diabetes_type, kidney_care_status, athlete_level, clinician_nutrition_targets, goal, health_flags, daily_calorie_target')
         .eq('id', userId)
         .single(),
     ]);
@@ -151,7 +151,7 @@ export class CoachingService {
       new Date().toISOString().slice(0, 10),
       dailyTarget,
     );
-    const proteinTarget = nutritionTarget.status === 'ready'
+    const proteinTarget = (nutritionTarget.status === 'ready' || nutritionTarget.status === 'clinician_target')
       ? nutritionTarget.protein_g
       : undefined;
     const highProteinDays = proteinTarget
@@ -223,7 +223,10 @@ export class CoachingService {
         .eq('id', userId)
         .single();
 
-      const dailyGoal = userProfile?.daily_calorie_target ?? 2000;
+      const persistedTarget = Number(userProfile?.daily_calorie_target);
+      const dailyGoal = Number.isFinite(persistedTarget) && persistedTarget > 0
+        ? persistedTarget
+        : 0;
 
       // Organize logs by day
       const dailyData = this.organizeDailyData(logs, dailyGoal);
@@ -235,17 +238,21 @@ export class CoachingService {
       const skippedPattern = this.detectSkippedMeals(dailyData, userId);
       if (skippedPattern) patterns.push(skippedPattern);
 
-      // 2. Binge episodes
-      const bingePattern = this.detectBingeEpisodes(dailyData, userId, dailyGoal);
-      if (bingePattern) patterns.push(bingePattern);
+      // 2. High-intake days. Calorie totals cannot diagnose binge eating.
+      if (dailyGoal > 0) {
+        const highIntakePattern = this.detectHighIntakeDays(dailyData, userId, dailyGoal);
+        if (highIntakePattern) patterns.push(highIntakePattern);
+      }
 
       // 3. Night eating
       const nightEatingPattern = this.detectNightEating(logs, userId);
       if (nightEatingPattern) patterns.push(nightEatingPattern);
 
       // 4. Weekend variance
-      const weekendPattern = this.detectWeekendVariance(dailyData, userId, dailyGoal);
-      if (weekendPattern) patterns.push(weekendPattern);
+      if (dailyGoal > 0) {
+        const weekendPattern = this.detectWeekendVariance(dailyData, userId, dailyGoal);
+        if (weekendPattern) patterns.push(weekendPattern);
+      }
 
       // 5. Inconsistent logging
       const inconsistentPattern = this.detectInconsistentLogging(dailyData, userId);
@@ -333,9 +340,11 @@ export class CoachingService {
         .eq('id', userId)
         .single();
 
-      const dailyGoal = Number(userProfile?.daily_calorie_target) > 0
-        ? Number(userProfile?.daily_calorie_target)
-        : 2000;
+      const persistedTarget = Number(userProfile?.daily_calorie_target);
+      const dailyGoal = Number.isFinite(persistedTarget) && persistedTarget > 0
+        ? persistedTarget
+        : 0;
+      const hasTarget = dailyGoal > 0;
 
       if (error) {
         this.logger.error(`Failed to fetch logs for weekly summary: ${error}`);
@@ -356,11 +365,13 @@ export class CoachingService {
       let daysAbove = 0,
         daysBelow = 0,
         daysOn = 0;
-      for (const day of Object.values(dailyData)) {
-        const dayCalories = (day as any).total_calories;
-        if (dayCalories > dailyGoal * 1.1) daysAbove++;
-        else if (dayCalories < dailyGoal * 0.9) daysBelow++;
-        else daysOn++;
+      if (hasTarget) {
+        for (const day of Object.values(dailyData)) {
+          const dayCalories = (day as any).total_calories;
+          if (dayCalories > dailyGoal * 1.1) daysAbove++;
+          else if (dayCalories < dailyGoal * 0.9) daysBelow++;
+          else daysOn++;
+        }
       }
 
       // Get active patterns
@@ -368,12 +379,13 @@ export class CoachingService {
       const primaryPattern = patterns.length > 0 ? patterns[0].pattern_type : undefined;
 
       // Calculate adherence
-      const adherencePercentage = Math.round(
-        (daysOn / Math.max(Object.keys(dailyData).length, 1)) * 100,
-      );
+      const adherencePercentage = hasTarget
+        ? Math.round((daysOn / Math.max(Object.keys(dailyData).length, 1)) * 100)
+        : null;
 
       // Determine priority
-      const priority = adherencePercentage < 40 ? PriorityLevel.CRITICAL
+      const priority = adherencePercentage === null ? PriorityLevel.MEDIUM
+                     : adherencePercentage < 40 ? PriorityLevel.CRITICAL
                      : adherencePercentage < 60 ? PriorityLevel.HIGH
                      : adherencePercentage < 80 ? PriorityLevel.MEDIUM
                      : PriorityLevel.LOW;
@@ -384,7 +396,8 @@ export class CoachingService {
         week_start_date: weekStart.toISOString().split('T')[0],
         logs_count: logs.length,
         adherence_percentage: adherencePercentage,
-        consistency_score: Math.min(adherencePercentage / 100, 1),
+        target_status: hasTarget ? 'ready' : 'needs_profile',
+        consistency_score: adherencePercentage === null ? 0 : Math.min(adherencePercentage / 100, 1),
         primary_pattern: primaryPattern,
         secondary_patterns: patterns.slice(1).map((p) => p.pattern_type),
         insights_generated: patterns.length,
@@ -394,7 +407,9 @@ export class CoachingService {
         days_above_target: daysAbove,
         days_below_target: daysBelow,
         days_on_target: daysOn,
-        recommended_action: this.generateRecommendation(primaryPattern, adherencePercentage),
+        recommended_action: adherencePercentage === null
+          ? 'Complete the profile before Coach evaluates calorie adherence. Logging patterns remain available.'
+          : this.generateRecommendation(primaryPattern, adherencePercentage),
         priority_level: priority,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
@@ -721,7 +736,8 @@ export class CoachingService {
       user_id: userId,
       week_start_date: weekStart.toISOString().split('T')[0],
       logs_count: 0,
-      adherence_percentage: 0,
+      adherence_percentage: dailyGoal > 0 ? 0 : null,
+      target_status: dailyGoal > 0 ? 'ready' : 'needs_profile',
       consistency_score: 0,
       primary_pattern: PatternType.INCONSISTENT_LOGGING,
       secondary_patterns: [],
@@ -779,19 +795,19 @@ export class CoachingService {
     return null;
   }
 
-  private detectBingeEpisodes(dailyData: Record<string, DailyNutritionData>, userId: string, dailyGoal: number): BehavioralPattern | null {
-    const bingeThreshold = dailyGoal * 1.5; // 150% of daily goal = binge
-    const bingeEpisodes = Object.values(dailyData).filter((day) => day.total_calories > bingeThreshold);
+  private detectHighIntakeDays(dailyData: Record<string, DailyNutritionData>, userId: string, dailyGoal: number): BehavioralPattern | null {
+    const highIntakeThreshold = dailyGoal * 1.2;
+    const highIntakeDays = Object.values(dailyData).filter((day) => day.total_calories > highIntakeThreshold);
 
-    if (bingeEpisodes.length >= 2) {
+    if (highIntakeDays.length >= 2) {
       return {
         id: 0,
         user_id: userId,
-        pattern_type: PatternType.BINGE_EPISODES,
-        severity_level: bingeEpisodes.length >= 4 ? 5 : bingeEpisodes.length >= 3 ? 4 : 3,
+        pattern_type: PatternType.HIGH_INTAKE_DAYS,
+        severity_level: highIntakeDays.length >= 4 ? 4 : highIntakeDays.length >= 3 ? 3 : 2,
         first_detected_at: new Date().toISOString(),
         last_detected_at: new Date().toISOString(),
-        frequency_score: bingeEpisodes.length / Object.keys(dailyData).length,
+        frequency_score: highIntakeDays.length / Object.keys(dailyData).length,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };
@@ -915,6 +931,12 @@ export class CoachingService {
         action: 'Note the context, such as stress, poor sleep, or social meals, and plan a lighter fallback for next time.',
         emoji: '🍽️',
       },
+      [PatternType.HIGH_INTAKE_DAYS]: {
+        title: 'Higher-intake days',
+        description: 'A few logged days were above the current calorie target. This is an observed log pattern, not a diagnosis.',
+        action: 'Review portions and context, then decide whether any practical adjustment is useful.',
+        emoji: '🍽️',
+      },
       [PatternType.NIGHT_EATING]: {
         title: 'Late-night eating',
         description: 'A large share of calories is landing late in the day, which may affect sleep and next-day hunger.',
@@ -971,6 +993,7 @@ export class CoachingService {
     const recommendations: Record<PatternType, string> = {
       [PatternType.SKIPPED_MEALS]: 'Prioritize small, regular meals to avoid getting overly hungry late in the day.',
       [PatternType.BINGE_EPISODES]: 'Identify triggers and prepare an easier fallback meal before the next high-risk moment.',
+      [PatternType.HIGH_INTAKE_DAYS]: 'Review higher-intake days without labeling them; adjust portions only if the pattern conflicts with your goal.',
       [PatternType.NIGHT_EATING]: 'Try finishing your last main meal about 2 hours before bed to support better sleep.',
       [PatternType.WEEKEND_VARIANCE]: 'Plan a few weekend choices in advance so you can enjoy flexibility without drifting too far.',
       [PatternType.STRESS_EATING]: 'Use one short stress-reduction action before deciding to eat more.',
@@ -994,6 +1017,12 @@ export class CoachingService {
         title: '🍽️ Ngày ăn vượt nhiều',
         description: 'Dữ liệu có vài ngày calo tăng vọt, khiến mục tiêu tuần khó ổn định.',
         action: 'Ghi lại bối cảnh như stress, thiếu ngủ hoặc tiệc để chuẩn bị phương án nhẹ hơn lần sau.',
+        emoji: '🍽️',
+      },
+      [PatternType.HIGH_INTAKE_DAYS]: {
+        title: '🍽️ Một số ngày ăn cao hơn mục tiêu',
+        description: 'Một vài ngày đã ghi nhận lượng calorie cao hơn target. Đây là quan sát dữ liệu, không phải chẩn đoán.',
+        action: 'Xem lại khẩu phần và bối cảnh trước khi quyết định có cần điều chỉnh hay không.',
         emoji: '🍽️',
       },
       [PatternType.NIGHT_EATING]: {
@@ -1071,6 +1100,7 @@ export class CoachingService {
     const recommendations: Record<PatternType, string> = {
       [PatternType.SKIPPED_MEALS]: 'Ưu tiên bữa nhỏ đều hơn để tránh đói quá mức vào cuối ngày.',
       [PatternType.BINGE_EPISODES]: 'Nhận diện trigger và chuẩn bị trước bữa thay thế dễ kiểm soát hơn.',
+      [PatternType.HIGH_INTAKE_DAYS]: 'Xem lại các ngày ăn cao hơn target mà không gắn nhãn bệnh lý; chỉ điều chỉnh nếu thực sự lệch mục tiêu.',
       [PatternType.NIGHT_EATING]: 'Thử chốt bữa trước giờ ngủ khoảng 2 tiếng để ngủ tốt hơn.',
       [PatternType.WEEKEND_VARIANCE]: 'Lên trước vài lựa chọn cuối tuần để vẫn vui mà không lệch quá xa.',
       [PatternType.STRESS_EATING]: 'Dùng một hành động giảm stress ngắn trước khi quyết định ăn thêm.',

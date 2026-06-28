@@ -8,12 +8,24 @@ import {
   WeightRecommendation,
   NutritionTargets,
 } from './dto/calorie-target.dto';
+import {
+  calculateDefaultMealTargets,
+  DEFAULT_MEAL_ENERGY_DISTRIBUTION,
+} from './meal-target.policy';
 
 @Injectable()
 export class CalorieTargetService {
   constructor(
     private nutritionEngine: NutritionRecommendationEngine = new NutritionRecommendationEngine(),
   ) {}
+
+  calculateDailyNutritionTarget(
+    profile: Partial<UserProfile>,
+    date: string,
+    calorieTarget?: number,
+  ) {
+    return this.nutritionEngine.calculate(profile, date, calorieTarget);
+  }
   private calculateBMI(weight_kg: number, height_cm: number): number {
     const height_m = height_cm / 100;
     return weight_kg / (height_m * height_m);
@@ -74,13 +86,13 @@ export class CalorieTargetService {
   private buildNutritionTargets(dailyCalories: number): NutritionTargets {
     return {
       fiber_g_min: Math.round((dailyCalories / 1000) * 14),
-      sodium_mg_max: 2300,
+      sodium_mg_max: 2000,
       free_sugar_g_max: Math.round((dailyCalories * 0.1) / 4),
       added_sugar_g_max: Math.round((dailyCalories * 0.1) / 4),
       saturated_fat_g_max: Math.round((dailyCalories * 0.1) / 9),
       free_sugar_pct_max: 10,
       saturated_fat_pct_max: 10,
-      basis: 'General wellness targets: fiber 14 g/1000 kcal; sodium <2300 mg/day; free or added sugar <10% kcal; saturated fat <10% kcal. These are not disease-specific limits.',
+      basis: 'General wellness targets: fiber 14 g/1000 kcal; sodium <2000 mg/day; free or added sugar <10% kcal; saturated fat <10% kcal. These are not disease-specific limits.',
     };
   }
 
@@ -131,26 +143,6 @@ export class CalorieTargetService {
   }
 
   /**
-   * Meal breakdown distribution
-   * Breakfast: 25%, Lunch: 35%, Dinner: 30%, Snack: 10%
-   */
-  private getMealBreakdown(
-    total_calories: number,
-  ): {
-    breakfast: number;
-    lunch: number;
-    dinner: number;
-    snack: number;
-  } {
-    return {
-      breakfast: Math.round(total_calories * 0.25),
-      lunch: Math.round(total_calories * 0.35),
-      dinner: Math.round(total_calories * 0.3),
-      snack: Math.round(total_calories * 0.1),
-    };
-  }
-
-  /**
    * Calculate daily calorie target based on user profile
    */
   calculateTarget(dto: CalculateTargetDto): CalorieTargetResponse {
@@ -185,7 +177,9 @@ export class CalorieTargetService {
 
     // Safety clamps / floors
     const floor_by_sex = gender === 'female' ? 1200 : 1500;
-    const min_allowed = Math.max(floor_by_sex, Math.round(bmr * 1.1));
+    // Sex-based floors are retained as product guardrails for the current adult
+    // workflow. BMR × 1.1 was removed because it has no defensible guideline basis.
+    const min_allowed = floor_by_sex;
     const max_deficit_pct = 0.2; // do not allow deficit >20% of TDEE
     const min_by_deficit = Math.round(tdee * (1 - max_deficit_pct));
 
@@ -239,7 +233,7 @@ export class CalorieTargetService {
     }
 
     // Step 4: Calculate meal targets
-    const meal_breakdown = this.getMealBreakdown(daily_calorie_target);
+    const meal_breakdown = calculateDefaultMealTargets(daily_calorie_target);
 
     // Step 5: Macros (protein, fat, carbs)
     const dailyNutritionTarget = this.nutritionEngine.calculate(
@@ -261,7 +255,7 @@ export class CalorieTargetService {
     if (typeof carbs_g === 'number' && carbs_g < 130) {
       macroWarnings.push('Carbohydrate grams are below the common 130 g/day reference intake for adults.');
     }
-    const nutritionTargets = dailyNutritionTarget.status === 'ready'
+    const nutritionTargets = (dailyNutritionTarget.status === 'ready' || dailyNutritionTarget.status === 'clinician_target')
       ? {
           fiber_g_min: dailyNutritionTarget.fiber_g!,
           sodium_mg_max: dailyNutritionTarget.sodium_mg_max!,
@@ -273,6 +267,9 @@ export class CalorieTargetService {
           basis: `Central nutrition recommendation engine ${dailyNutritionTarget.algorithm_version}.`,
         }
       : this.buildNutritionTargets(daily_calorie_target);
+    const usedBodyFatEquation = typeof body_fat_pct === 'number'
+      && body_fat_pct >= 3
+      && body_fat_pct <= 70;
 
     return {
       daily_calorie_target,
@@ -305,6 +302,46 @@ export class CalorieTargetService {
       nutrition_targets: nutritionTargets,
       daily_nutrition_target: dailyNutritionTarget,
       protein_reason: dailyNutritionTarget.rationale.protein,
+      calculation_methodology: {
+        bmr: {
+          method: usedBodyFatEquation ? 'katch_mcardle' : 'mifflin_st_jeor',
+          evidence_level: usedBodyFatEquation ? 'evidence_informed_heuristic' : 'validated_equation',
+          source_url: usedBodyFatEquation
+            ? undefined
+            : 'https://pubmed.ncbi.nlm.nih.gov/2305711/',
+          assumptions: usedBodyFatEquation
+            ? ['Body-fat percentage is accurate enough to estimate lean mass.']
+            : ['The adult population equation estimates resting expenditure; individual error remains possible.'],
+        },
+        activity: {
+          factor: activity_factor,
+          evidence_level: 'evidence_informed_heuristic',
+          assumptions: [
+            'The five discrete activity factors are calculator conventions, not a validated five-point clinical scale.',
+            'The selected level approximates both occupational and exercise expenditure.',
+          ],
+        },
+        goal_adjustment: {
+          multiplier: goal_adjustment,
+          evidence_level: 'evidence_informed_heuristic',
+          assumptions: ['A 20% deficit or 10% surplus is a conservative product default, not a universal prescription.'],
+        },
+        calorie_floor: {
+          value_kcal: floor_by_sex,
+          evidence_level: 'product_guardrail',
+          is_product_guardrail: true,
+          assumptions: ['1200/1500 kcal are workflow guardrails, not physiological or medical lower limits.'],
+        },
+        meal_distribution: {
+          breakfast_pct: DEFAULT_MEAL_ENERGY_DISTRIBUTION.breakfast * 100,
+          lunch_pct: DEFAULT_MEAL_ENERGY_DISTRIBUTION.lunch * 100,
+          dinner_pct: DEFAULT_MEAL_ENERGY_DISTRIBUTION.dinner * 100,
+          snack_pct: DEFAULT_MEAL_ENERGY_DISTRIBUTION.snack * 100,
+          evidence_level: 'product_guardrail',
+          is_user_adjustable: true,
+          assumptions: ['Meal percentages are a planning default without evidence of an optimal universal distribution.'],
+        },
+      },
     };
   }
 

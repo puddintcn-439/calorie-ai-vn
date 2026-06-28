@@ -7,8 +7,8 @@ export interface DailyInsight {
   protein_g: number;
   carbs_g: number;
   fat_g: number;
-  calorie_target: number;
-  adherence_percentage: number;
+  calorie_target: number | null;
+  adherence_percentage: number | null;
   meal_count: number;
 }
 
@@ -40,8 +40,9 @@ export interface WeeklyInsights {
   
   // Weekly aggregates
   weekly_calories_total: number;
-  weekly_calorie_target: number;
-  weekly_adherence_percentage: number; // average adherence across all days
+  weekly_calorie_target: number | null;
+  weekly_adherence_percentage: number | null; // null until a backend target exists
+  target_status: 'ready' | 'needs_profile';
   total_meals_logged: number;
   average_calories_per_day: number;
   
@@ -66,8 +67,9 @@ export interface WeeklyInsightsDto {
   week_end_date: string;
   daily_insights: DailyInsight[];
   weekly_calories_total: number;
-  weekly_calorie_target: number;
-  weekly_adherence_percentage: number;
+  weekly_calorie_target: number | null;
+  weekly_adherence_percentage: number | null;
+  target_status: 'ready' | 'needs_profile';
   total_meals_logged: number;
   average_calories_per_day: number;
   macro_breakdown: MacroBreakdown;

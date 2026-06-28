@@ -50,6 +50,13 @@ describe('RecommendationService', () => {
   });
 
   describe('getWeeklyRecommendations', () => {
+    it('refuses to invent a calorie target for an incomplete profile', async () => {
+      await expect(service.getWeeklyRecommendations('user123', {
+        id: 'user123',
+        email: 'test@example.com',
+      } as any)).rejects.toThrow('Complete the profile');
+    });
+
     it('should return recommendations with all meal types', async () => {
       const profile = {
         id: 'user123',

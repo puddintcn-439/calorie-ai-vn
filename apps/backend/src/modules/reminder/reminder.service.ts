@@ -53,6 +53,32 @@ export class ReminderService {
     } as ReminderPreferences;
   }
 
+  private buildMissingTargetNudge(
+    mealType: NudgeMessage['mealType'],
+    currentStreak = 0,
+    longestStreak = 0,
+    nextMilestone: number | null = null,
+  ): NudgeMessage {
+    const labels = {
+      breakfast: 'Bữa sáng',
+      lunch: 'Bữa trưa',
+      dinner: 'Bữa tối',
+      snack: 'Bữa phụ',
+    };
+    return {
+      title: labels[mealType],
+      body: 'Hãy hoàn tất hồ sơ để Calorie AI tính mục tiêu phù hợp. Bạn vẫn có thể ghi lại bữa ăn này.',
+      type: 'reminder',
+      mealType,
+      emoji: '📝',
+      streakContext: {
+        currentStreak,
+        longestStreak,
+        nextMilestone,
+      },
+    };
+  }
+
   /**
    * Get reminder preferences for a user (or create defaults if not exists)
    */
@@ -507,7 +533,15 @@ export class ReminderService {
         .single(),
     ]);
 
-    const dailyTarget = userTargetRes.data?.daily_calorie_target ?? 1800;
+    const dailyTarget = Number(userTargetRes.data?.daily_calorie_target);
+    if (!Number.isFinite(dailyTarget) || dailyTarget <= 0) {
+      return this.buildMissingTargetNudge(
+        mealType,
+        summary.current_streak,
+        summary.longest_streak,
+        summary.next_streak_milestone,
+      );
+    }
     const mealTarget = dailyTarget / 4;
     const resolvedCalories = caloriesLogged ?? Math.random() * (mealTarget * 1.5);
 
@@ -573,7 +607,15 @@ export class ReminderService {
       .eq('id', userId)
       .single();
 
-    const dailyTarget = userData?.daily_calorie_target ?? 1800;
+    const dailyTarget = Number(userData?.daily_calorie_target);
+    if (!Number.isFinite(dailyTarget) || dailyTarget <= 0) {
+      return this.buildMissingTargetNudge(
+        meal,
+        summary.current_streak,
+        summary.longest_streak,
+        summary.next_streak_milestone,
+      );
+    }
     const mealTarget = dailyTarget / 4;
 
     return this.generateNudgeMessage({

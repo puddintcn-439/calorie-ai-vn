@@ -153,10 +153,11 @@ export class CoachMessageDto {
   @Min(0)
   today_calories: number;
 
-  @ApiProperty({ example: 1800 })
+  @ApiProperty({ example: 1800, required: false })
+  @IsOptional()
   @IsNumber()
   @Min(500)
-  target_calories: number;
+  target_calories?: number;
 
   @ApiProperty({
     required: false,

@@ -1,7 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { SupabaseService } from '../../common/supabase/supabase.service';
 import { CalorieTargetService } from '../calorie-target/calorie-target.service';
 import { UserProfile } from '@calorie-ai/types';
+import { calculateDefaultMealTargets } from './meal-target.policy';
 
 export interface WeeklyAdaptiveResult {
   user_id: string;
@@ -15,6 +16,8 @@ export interface WeeklyAdaptiveResult {
   algorithm_version?: string;
   clamp_reason?: string | null;
   actual_tdee?: number | null;
+  actual_tdee_method?: 'static_7700_weight_change_estimate' | null;
+  actual_tdee_evidence_level?: 'evidence_informed_heuristic' | null;
   days_logged?: number;
   weight_logs?: number;
 }
@@ -187,7 +190,10 @@ export class WeeklyAdaptiveService {
     profile: UserProfile,
   ): Promise<WeeklyAdaptiveResult> {
     // Get current target
-    const currentTarget = profile.daily_calorie_target || 2000;
+    const currentTarget = Number(profile.daily_calorie_target);
+    if (!Number.isFinite(currentTarget) || currentTarget <= 0) {
+      throw new BadRequestException('A backend-generated calorie target is required before adaptive adjustment.');
+    }
 
     // Get recent logs and weights
     const logs = await this.getLastNDaysLogs(user_id, this.SMOOTHING_WINDOW_DAYS);
@@ -274,7 +280,7 @@ export class WeeklyAdaptiveService {
         health_flags: profile.health_flags,
       } as any;
       const baseline = this.calorieTargetService.calculateTarget(dto);
-      const min_allowed = Math.max(baseline.bmr ? Math.round(baseline.bmr * 1.1) : 1200, profile.gender === 'female' ? 1200 : 1500);
+      const min_allowed = profile.gender === 'female' ? 1200 : 1500;
       const min_by_deficit = Math.round((baseline.tdee || proposed) * (1 - this.MAX_DEFICIT_PCT));
 
       if (proposed < min_allowed) {
@@ -315,7 +321,7 @@ export class WeeklyAdaptiveService {
         ? 1
         : this.getAdjustmentFactor(adherence);
       const rawAdjusted = Math.round(currentTarget * adjustmentFactor);
-      const min_allowed = Math.max(baseline.bmr ? Math.round(baseline.bmr * 1.1) : 1200, profile.gender === 'female' ? 1200 : 1500);
+      const min_allowed = profile.gender === 'female' ? 1200 : 1500;
       const min_by_deficit = Math.round((baseline.tdee || rawAdjusted) * (1 - this.MAX_DEFICIT_PCT));
       let proposed = Math.max(rawAdjusted, min_allowed, min_by_deficit);
       const delta = proposed - currentTarget;
@@ -337,6 +343,8 @@ export class WeeklyAdaptiveService {
       algorithm_version: this.ALGORITHM_VERSION,
       clamp_reason,
       actual_tdee: actualTDEE,
+      actual_tdee_method: actualTDEE === null ? null : 'static_7700_weight_change_estimate',
+      actual_tdee_evidence_level: actualTDEE === null ? null : 'evidence_informed_heuristic',
       days_logged: daysLogged,
       weight_logs: weightLogs,
     };
@@ -352,7 +360,15 @@ export class WeeklyAdaptiveService {
     const adjustment = await this.calculateWeeklyAdjustment(user_id, profile);
 
     // Update user profile with new target
-    const mealBreakdown = this.getMealBreakdown(adjustment.adjusted_daily_target);
+    const mealBreakdown = calculateDefaultMealTargets(adjustment.adjusted_daily_target);
+    const nutritionTarget = this.calorieTargetService.calculateDailyNutritionTarget(
+      {
+        ...profile,
+        daily_calorie_target: adjustment.adjusted_daily_target,
+      },
+      new Date().toISOString().split('T')[0],
+      adjustment.adjusted_daily_target,
+    );
 
     await this.supabaseService.db
       .from('users')
@@ -362,29 +378,13 @@ export class WeeklyAdaptiveService {
         target_lunch_cal: mealBreakdown.lunch,
         target_dinner_cal: mealBreakdown.dinner,
         target_snack_cal: mealBreakdown.snack,
+        nutrition_target_snapshot: nutritionTarget,
+        nutrition_algorithm_version: nutritionTarget.algorithm_version,
+        nutrition_target_calculated_at: nutritionTarget.calculated_at,
         updated_at: new Date().toISOString(),
       })
       .eq('id', user_id);
 
     return adjustment;
-  }
-
-  /**
-   * Get meal breakdown distribution (same as CalorieTargetService)
-   */
-  private getMealBreakdown(
-    total_calories: number,
-  ): {
-    breakfast: number;
-    lunch: number;
-    dinner: number;
-    snack: number;
-  } {
-    return {
-      breakfast: Math.round(total_calories * 0.25),
-      lunch: Math.round(total_calories * 0.35),
-      dinner: Math.round(total_calories * 0.3),
-      snack: Math.round(total_calories * 0.1),
-    };
   }
 }

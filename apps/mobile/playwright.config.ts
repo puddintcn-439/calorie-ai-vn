@@ -21,6 +21,9 @@ export default defineConfig({
     baseURL: 'http://localhost:19006',
     viewport: { width: 1280, height: 800 },
     ignoreHTTPSErrors: true,
+    launchOptions: process.env.PLAYWRIGHT_EXECUTABLE_PATH
+      ? { executablePath: process.env.PLAYWRIGHT_EXECUTABLE_PATH }
+      : undefined,
   },
   projects: [
     {

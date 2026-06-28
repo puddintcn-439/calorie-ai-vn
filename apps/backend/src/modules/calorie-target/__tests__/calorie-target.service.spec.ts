@@ -27,6 +27,24 @@ describe('CalorieTargetService', () => {
       expect(result.bmr).toBe(1780);
       expect(result.tdee).toBe(2136);
       expect(result.daily_calorie_target).toBe(2136);
+      expect(result.calculation_methodology).toMatchObject({
+        bmr: {
+          method: 'mifflin_st_jeor',
+          evidence_level: 'validated_equation',
+        },
+        activity: {
+          factor: 1.2,
+          evidence_level: 'evidence_informed_heuristic',
+        },
+        calorie_floor: {
+          value_kcal: 1500,
+          evidence_level: 'product_guardrail',
+        },
+        meal_distribution: {
+          evidence_level: 'product_guardrail',
+          is_user_adjustable: true,
+        },
+      });
     });
 
     it('should calculate correct target for female, moderate, maintain goal', () => {

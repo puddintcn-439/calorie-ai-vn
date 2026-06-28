@@ -85,7 +85,10 @@ export class LogService {
       .eq('id', userId)
       .single();
 
-    const target_calories = userRow?.daily_calorie_target ?? 1800;
+    const persistedTarget = Number(userRow?.daily_calorie_target);
+    const target_calories = Number.isFinite(persistedTarget) && persistedTarget > 0
+      ? persistedTarget
+      : 0;
 
     return {
       date,
@@ -143,7 +146,9 @@ export class LogService {
     ]);
 
     const consumed = dailyLog?.total_calories ?? 0;
-    const target = dailyLog?.target_calories ?? Number((profile as any)?.daily_calorie_target ?? 1800);
+    const target = Number(dailyLog?.target_calories)
+      || Number((profile as any)?.daily_calorie_target)
+      || 0;
     const burned = activityLogs.reduce((sum, item) => sum + Number(item.calories_burned ?? 0), 0);
     const activeRoadmap = dailyRoadmap.filter((item) => !item.is_removed);
     const roadmapCompleted = activeRoadmap.filter((item) => item.is_completed).length;
@@ -208,13 +213,14 @@ export class LogService {
     tzOffsetMinutes: number = 0,
   ): TodaySummary['health_score'] {
     const clamp = (value: number, min = 0, max = 100) => Math.max(min, Math.min(max, Math.round(value)));
-    const safeTarget = Math.max(Number(plan.target_calories || profile?.daily_calorie_target || 1800), 1);
+    const configuredTarget = Number(plan.target_calories || profile?.daily_calorie_target || 0);
+    const safeTarget = Math.max(configuredTarget, 1);
     const logs = dailyLog?.logs ?? [];
     const coreMealTypes = new Set(logs.map((log) => log.meal_type).filter((type) => type !== 'snack'));
     const mealTypesLogged = coreMealTypes.size;
     const activityMinutes = activityLogs.reduce((sum, item) => sum + Number(item.duration_min ?? 0), 0);
     const expectedProgress = this.expectedDailyProgress(scoreDate, tzOffsetMinutes, logs);
-    const calorieScore = expectedProgress === null
+    const calorieScore = expectedProgress === null || configuredTarget <= 0
       ? null
       : clamp(100 - Math.abs((Number(dailyLog?.total_calories ?? 0) / safeTarget) - expectedProgress) * 125);
     const proteinTarget = nutritionTarget
@@ -396,7 +402,9 @@ export class LogService {
     profile: TodaySummary['profile'],
   ): TodaySummary['plan'] {
     const consumed = dailyLog?.total_calories ?? 0;
-    const target = dailyLog?.target_calories ?? Number(profile?.daily_calorie_target ?? 1800);
+    const target = Number(dailyLog?.target_calories)
+      || Number(profile?.daily_calorie_target)
+      || 0;
     const burned = activityLogs.reduce((sum, item) => sum + Number(item.calories_burned ?? 0), 0);
     const roadmapCompleted = activeRoadmap.filter((item) => item.is_completed).length;
     return {
@@ -454,7 +462,7 @@ export class LogService {
       new Date().toISOString().slice(0, 10),
       profile?.daily_calorie_target,
     );
-    const proteinTarget = nutritionTarget.status === 'ready'
+    const proteinTarget = (nutritionTarget.status === 'ready' || nutritionTarget.status === 'clinician_target')
       ? nutritionTarget.protein_g
       : undefined;
     const lowProtein = proteinTarget
@@ -594,7 +602,7 @@ export class LogService {
   private async getProfileForSummary(userId: string): Promise<TodaySummary['profile']> {
     const { data, error } = await this.supabase.db
       .from('users')
-      .select('full_name, age, gender, height_cm, body_fat_pct, weight_kg, health_flags, activity_level, goal_plan, daily_calorie_target, goal')
+      .select('full_name, date_of_birth, age, gender, height_cm, body_fat_pct, weight_kg, health_flags, activity_level, work_activity_level, exercise_sessions_per_week, exercise_minutes_per_session, sweat_level, pregnancy_trimester, breastfeeding_level, diabetes_type, kidney_care_status, athlete_level, clinician_nutrition_targets, sensitive_nutrition_mode, goal_plan, daily_calorie_target, goal')
       .eq('id', userId)
       .single();
 

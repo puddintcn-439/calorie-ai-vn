@@ -24,7 +24,7 @@ interface WebEvidence {
 
 type CoachContext = {
   today_calories: number;
-  target_calories: number;
+  target_calories?: number;
   health_score?: TodaySummary['health_score'];
   reminder_effectiveness?: ReminderEffectivenessSummary;
   success_forecast?: SuccessForecast;
@@ -640,13 +640,18 @@ Yeu cau bo sung:
   ): Promise<AICoachResponse> {
     this.logger.log(`[AI-AUDIT] getCoachReply user_id=${userId ?? 'unknown'}`);
     const model = this.createDeterministicModel();
+    const hasCalorieTarget = Number.isFinite(context.target_calories)
+      && Number(context.target_calories) > 0;
+    const calorieTargetLine = hasCalorieTarget
+      ? `- Mục tiêu: ${context.target_calories} kcal
+- Còn lại: ${Number(context.target_calories) - context.today_calories} kcal`
+      : '- Mục tiêu: chưa có; không được tự tạo hoặc suy đoán mục tiêu calorie';
 
     const prompt = `${COACH_SYSTEM_PROMPT}
 
 Thông tin người dùng hôm nay:
 - Đã ăn: ${context.today_calories} kcal
-- Mục tiêu: ${context.target_calories} kcal
-- Còn lại: ${context.target_calories - context.today_calories} kcal
+${calorieTargetLine}
 ${this.formatCoachHealthScoreContext(context)}
 ${this.formatCoachReminderEffectivenessContext(context)}
 ${this.formatCoachSuccessForecastContext(context)}
@@ -674,11 +679,14 @@ Trả lời ngắn gọn, thân thiện bằng tiếng Việt. Không quá 3 câ
       const isTimeout = String(error ?? '').includes('AI_TIMEOUT');
       // Prevent UI-breaking 500 responses when Gemini key is valid but quota is unavailable or timeout
       if (isTimeout || this.isQuotaOrRateLimitError(error)) {
+        const remainingSuggestion = hasCalorieTarget
+          ? [`Con lai ${Math.max(0, Number(context.target_calories) - context.today_calories)} kcal hom nay`]
+          : ['Hoan tat ho so de nhan muc tieu calorie ca nhan hoa'];
         return {
           message: AiService.AI_FALLBACK_MESSAGE,
           suggestions: [
             'Mon uu tien: uc ga, trung, dau hu + rau luoc',
-            `Con lai ${Math.max(0, context.target_calories - context.today_calories)} kcal hom nay`,
+            ...remainingSuggestion,
           ],
           actions: this.deriveCoachActions(message, context),
         };
@@ -714,17 +722,19 @@ Trả lời ngắn gọn, thân thiện bằng tiếng Việt. Không quá 3 câ
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '')
       .toLowerCase();
-    const remaining = context.target_calories - context.today_calories;
+    const target = Number(context.target_calories);
+    const hasTarget = Number.isFinite(target) && target > 0;
+    const remaining = hasTarget ? target - context.today_calories : null;
     const actions: NonNullable<AICoachResponse['actions']> = [];
     const add = (action: NonNullable<AICoachResponse['actions']>[number]) => {
       if (!actions.some((item) => item.type === action.type)) actions.push(action);
     };
 
-    if (remaining > 250 || /(an|meal|mon|food|scan|chup|bua)/.test(normalized)) {
+    if ((remaining !== null && remaining > 250) || /(an|meal|mon|food|scan|chup|bua)/.test(normalized)) {
       add({ type: 'open_scan', label: 'Scan/log meal', description: 'Open scanner to capture the next meal.' });
     }
 
-    if (/(log|nhat ky|sua|edit|ghi lai)/.test(normalized) || context.today_calories > context.target_calories + 150) {
+    if (/(log|nhat ky|sua|edit|ghi lai)/.test(normalized) || (hasTarget && context.today_calories > target + 150)) {
       add({ type: 'open_log', label: 'Review log', description: 'Open food log to adjust entries.' });
     }
 
@@ -736,7 +746,7 @@ Trả lời ngắn gọn, thân thiện bằng tiếng Việt. Không quá 3 câ
       add({ type: 'open_reminders', label: 'Set reminders', description: 'Open reminder settings.' });
     }
 
-    if (context.today_calories > context.target_calories || /(di bo|walk|van dong|activity|tap)/.test(normalized)) {
+    if ((hasTarget && context.today_calories > target) || /(di bo|walk|van dong|activity|tap)/.test(normalized)) {
       add({
         type: 'add_activity',
         label: 'Add 15 min walk',

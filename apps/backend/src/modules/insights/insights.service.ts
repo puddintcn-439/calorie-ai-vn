@@ -38,7 +38,10 @@ export class InsightsService {
       .eq('id', userId)
       .single();
 
-    const dailyTarget = userData?.daily_calorie_target ?? 1800;
+    const persistedTarget = Number(userData?.daily_calorie_target);
+    const dailyTarget = Number.isFinite(persistedTarget) && persistedTarget > 0
+      ? persistedTarget
+      : null;
 
     // Fetch all logs for the week
     const { data: logs, error } = await this.supabase.db
@@ -103,7 +106,7 @@ export class InsightsService {
       const dayProtein = dayLogs.reduce((s, l) => s + l.protein_g, 0);
       const dayCarbs = dayLogs.reduce((s, l) => s + l.carbs_g, 0);
       const dayFat = dayLogs.reduce((s, l) => s + l.fat_g, 0);
-      const adherence = (dayCalories / dailyTarget) * 100;
+      const adherence = dailyTarget === null ? null : (dayCalories / dailyTarget) * 100;
 
       dailyInsights.push({
         date: dateStr,
@@ -113,7 +116,7 @@ export class InsightsService {
         carbs_g: dayCarbs,
         fat_g: dayFat,
         calorie_target: dailyTarget,
-        adherence_percentage: Math.round(adherence),
+        adherence_percentage: adherence === null ? null : Math.round(adherence),
         meal_count: dayLogs.length,
       });
 
@@ -130,7 +133,7 @@ export class InsightsService {
       }
 
       // Count days on target (within 90-110% of target)
-      if (adherence >= 90 && adherence <= 110) {
+      if (adherence !== null && adherence >= 90 && adherence <= 110) {
         daysOnTarget++;
       }
 
@@ -186,8 +189,11 @@ export class InsightsService {
       week_end_date: endISO,
       daily_insights: dailyInsights,
       weekly_calories_total: totalWeeklyCalories,
-      weekly_calorie_target: dailyTarget * 7,
-      weekly_adherence_percentage: Math.round((totalWeeklyCalories / (dailyTarget * 7)) * 100),
+      weekly_calorie_target: dailyTarget === null ? null : dailyTarget * 7,
+      weekly_adherence_percentage: dailyTarget === null
+        ? null
+        : Math.round((totalWeeklyCalories / (dailyTarget * 7)) * 100),
+      target_status: dailyTarget === null ? 'needs_profile' : 'ready',
       total_meals_logged: totalMealsLogged,
       average_calories_per_day: Math.round(currentWeekAvg),
       macro_breakdown: macroBreakdown,

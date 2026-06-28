@@ -194,7 +194,7 @@ export async function askCoach(
   message: string,
   context: {
     today_calories: number;
-    target_calories: number;
+    target_calories?: number;
     health_score?: TodaySummary['health_score'];
     reminder_effectiveness?: ReminderEffectivenessSummary;
     success_forecast?: SuccessForecast;

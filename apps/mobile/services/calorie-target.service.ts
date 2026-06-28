@@ -1,5 +1,39 @@
 import { apiClient } from './api';
-import type { DailyNutritionTarget } from '@calorie-ai/types';
+import type { DailyNutritionTarget, NutritionEvidenceLevel } from '@calorie-ai/types';
+
+export interface CalorieCalculationMethodology {
+  bmr: {
+    method: 'mifflin_st_jeor' | 'katch_mcardle';
+    evidence_level: NutritionEvidenceLevel;
+    source_url?: string;
+    assumptions: string[];
+  };
+  activity: {
+    factor: number;
+    evidence_level: NutritionEvidenceLevel;
+    assumptions: string[];
+  };
+  goal_adjustment: {
+    multiplier: number;
+    evidence_level: NutritionEvidenceLevel;
+    assumptions: string[];
+  };
+  calorie_floor: {
+    value_kcal: number;
+    evidence_level: NutritionEvidenceLevel;
+    is_product_guardrail: true;
+    assumptions: string[];
+  };
+  meal_distribution: {
+    breakfast_pct: number;
+    lunch_pct: number;
+    dinner_pct: number;
+    snack_pct: number;
+    evidence_level: NutritionEvidenceLevel;
+    is_user_adjustable: true;
+    assumptions: string[];
+  };
+}
 
 export interface MealRecommendation {
   meal_type: 'breakfast' | 'lunch' | 'dinner' | 'snack';
@@ -84,6 +118,7 @@ export interface CalorieTargetResponse {
   nutrition_targets?: NutritionTargets;
   daily_nutrition_target?: DailyNutritionTarget;
   protein_reason?: string;
+  calculation_methodology?: CalorieCalculationMethodology;
 }
 
 export type CalorieTargetRequiredField =

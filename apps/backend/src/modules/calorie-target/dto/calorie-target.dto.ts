@@ -1,5 +1,12 @@
 import { IsNumber, IsPositive, IsEnum, IsOptional, IsArray, IsIn } from 'class-validator';
-import { UserGoal, ActivityLevel, HealthFlag, HEALTH_FLAGS, DailyNutritionTarget } from '@calorie-ai/types';
+import {
+  UserGoal,
+  ActivityLevel,
+  HealthFlag,
+  HEALTH_FLAGS,
+  DailyNutritionTarget,
+  NutritionEvidenceLevel,
+} from '@calorie-ai/types';
 
 export type BodyStatus = 'underweight' | 'normal' | 'overweight' | 'obese';
 export type WeightRecommendation = 'increase' | 'maintain' | 'decrease';
@@ -80,6 +87,39 @@ export interface CalorieTargetResponse {
   nutrition_targets?: NutritionTargets;
   daily_nutrition_target?: DailyNutritionTarget;
   protein_reason?: string;
+  calculation_methodology?: {
+    bmr: {
+      method: 'mifflin_st_jeor' | 'katch_mcardle';
+      evidence_level: NutritionEvidenceLevel;
+      source_url?: string;
+      assumptions: string[];
+    };
+    activity: {
+      factor: number;
+      evidence_level: NutritionEvidenceLevel;
+      assumptions: string[];
+    };
+    goal_adjustment: {
+      multiplier: number;
+      evidence_level: NutritionEvidenceLevel;
+      assumptions: string[];
+    };
+    calorie_floor: {
+      value_kcal: number;
+      evidence_level: NutritionEvidenceLevel;
+      is_product_guardrail: true;
+      assumptions: string[];
+    };
+    meal_distribution: {
+      breakfast_pct: number;
+      lunch_pct: number;
+      dinner_pct: number;
+      snack_pct: number;
+      evidence_level: NutritionEvidenceLevel;
+      is_user_adjustable: true;
+      assumptions: string[];
+    };
+  };
 }
 
 export type CalorieTargetRequiredField =

@@ -134,12 +134,18 @@ export function TodayHero({ model, streak, waterIntakeL, waterGoalL, onPressStre
                   { transform: [{ scale: numberAnimation }] },
                 ]}
               >
-                {displayCalories.toLocaleString(locale === 'vi' ? 'vi-VN' : 'en-US')} <Text style={styles.calorieUnit}>kcal</Text>
+                {model.sensitiveNutritionMode
+                  ? 'Hôm nay'
+                  : model.calorieTargetAvailable
+                    ? <>{displayCalories.toLocaleString(locale === 'vi' ? 'vi-VN' : 'en-US')} <Text style={styles.calorieUnit}>kcal</Text></>
+                    : '--'}
               </Animated.Text>
-              <Text style={[styles.calorieLabel, { color: colors.textMuted }]}>{model.calorieLabel}</Text>
+              <Text style={[styles.calorieLabel, { color: colors.textMuted }]}>
+                {model.sensitiveNutritionMode ? 'Tập trung vào chăm sóc đều đặn' : model.calorieLabel}
+              </Text>
             </View>
           </View>
-          <View style={styles.progressRow}>
+          {!model.sensitiveNutritionMode && model.calorieTargetAvailable && <View style={styles.progressRow}>
             <View style={[styles.progressTrack, { backgroundColor: colors.progressBg }]}>
               <Animated.View
                 style={[
@@ -152,10 +158,10 @@ export function TodayHero({ model, streak, waterIntakeL, waterGoalL, onPressStre
               />
             </View>
             <Text style={[styles.progressPercent, { color: progressColor }]}>{model.progressLabel}</Text>
-          </View>
-          <Text style={[styles.progressDetail, { color: colors.textMuted }]}>
+          </View>}
+          {!model.sensitiveNutritionMode && <Text style={[styles.progressDetail, { color: colors.textMuted }]}>
             {model.calorieProgressDetail}
-          </Text>
+          </Text>}
         </View>
 
         <View style={[styles.signalGroup, { backgroundColor: colors.surfaceMuted }, isWide && styles.signalGroupWide]}>

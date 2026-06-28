@@ -35,7 +35,7 @@ describe('CalorieTargetService - Katch & clamps', () => {
     for (const c of cases) {
       const dto: any = { ...c };
       const res = service.calculateTarget(dto);
-      const minAllowed = Math.max(c.gender === 'female' ? 1200 : 1500, Math.round(res.bmr * 1.1));
+      const minAllowed = c.gender === 'female' ? 1200 : 1500;
       const minByDeficit = Math.round(res.tdee * (1 - 0.2));
       expect(res.daily_calorie_target).toBeGreaterThanOrEqual(minAllowed);
       expect(res.daily_calorie_target).toBeGreaterThanOrEqual(minByDeficit);

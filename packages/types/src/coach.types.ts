@@ -3,6 +3,8 @@
 export enum PatternType {
   STRESS_EATING = 'stress_eating',
   SKIPPED_MEALS = 'skipped_meals',
+  HIGH_INTAKE_DAYS = 'high_intake_days',
+  /** @deprecated Legacy records only. Do not infer binge eating from calorie totals. */
   BINGE_EPISODES = 'binge_episodes',
   TIMING_PREFERENCE = 'timing_preference',
   WEEKEND_VARIANCE = 'weekend_variance',
@@ -60,7 +62,8 @@ export interface CoachingSummary {
   user_id: string;
   week_start_date: string;
   logs_count: number;
-  adherence_percentage: number; // 0-100
+  adherence_percentage: number | null; // null until a backend target exists
+  target_status?: 'ready' | 'needs_profile';
   consistency_score: number; // 0-1
   primary_pattern?: PatternType;
   secondary_patterns?: PatternType[];

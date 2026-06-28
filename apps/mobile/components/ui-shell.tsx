@@ -24,7 +24,7 @@ export function useBottomNavContentPadding(extraGap = 24) {
   const isCompact = width < 480;
   const isDesktop = width >= 900;
   const bottomInset = insets?.bottom ?? 0;
-  const tabHeight = isDesktop ? 52 : isCompact ? 62 : 64;
+  const tabHeight = isDesktop ? 52 : isCompact ? 70 : 66;
   const bottomOffset = isDesktop ? 12 : isCompact ? 8 : 10;
   const desktopGap = Math.min(extraGap, 20);
 

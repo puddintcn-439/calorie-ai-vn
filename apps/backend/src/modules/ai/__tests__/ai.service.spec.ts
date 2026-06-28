@@ -369,6 +369,25 @@ describe('AiService.getCoachReply', () => {
     expect(result.suggestions).toEqual([]);
   });
 
+  it('does not invent a calorie target when the profile has no confirmed target', async () => {
+    let prompt = '';
+    const { GoogleGenerativeAI } = require('@google/generative-ai');
+    (GoogleGenerativeAI as jest.Mock).mockImplementation(() => ({
+      getGenerativeModel: jest.fn().mockReturnValue({
+        generateContent: jest.fn().mockImplementation((input: string) => {
+          prompt = input;
+          return Promise.resolve({ response: { text: () => 'Hãy hoàn tất hồ sơ trước.' } });
+        }),
+      }),
+    }));
+
+    const svc = makeService();
+    await svc.getCoachReply('Tôi nên ăn bao nhiêu?', { today_calories: 500 });
+
+    expect(prompt).toContain('không được tự tạo hoặc suy đoán mục tiêu calorie');
+    expect(prompt).not.toContain('Mục tiêu: 1800');
+  });
+
   it('normalizes JSON coach responses', async () => {
     const { GoogleGenerativeAI } = require('@google/generative-ai');
     (GoogleGenerativeAI as jest.Mock).mockImplementation(() => ({

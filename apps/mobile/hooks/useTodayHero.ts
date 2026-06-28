@@ -5,6 +5,7 @@ export type TodayHeroTone = 'good' | 'steady' | 'near' | 'over' | 'complete';
 
 export type TodayHeroModel = {
   greeting: string;
+  calorieTargetAvailable: boolean;
   remainingCalories: number;
   remainingCaloriesLabel: string;
   calorieLabel: string;
@@ -20,6 +21,7 @@ export type TodayHeroModel = {
   activityDetail: string;
   activityReached: boolean;
   motivation: string;
+  sensitiveNutritionMode: boolean;
 };
 
 export type TodayHeroInput = {
@@ -34,6 +36,7 @@ export type TodayHeroInput = {
   firstName?: string;
   locale: Locale;
   now?: Date;
+  sensitiveNutritionMode?: boolean;
 };
 
 function finite(value: number, fallback = 0) {
@@ -45,11 +48,15 @@ function format(value: number, locale: Locale) {
 }
 
 export function buildTodayHero(input: TodayHeroInput): TodayHeroModel {
-  const target = Math.max(1, finite(input.targetCalories, 1800));
+  const rawTarget = finite(input.targetCalories, 0);
+  const calorieTargetAvailable = rawTarget > 0;
+  const target = calorieTargetAvailable ? rawTarget : 0;
   const consumed = Math.max(0, finite(input.consumedCalories));
-  const remaining = target - consumed;
-  const remainingRatio = remaining / target;
-  const consumedPercent = Math.max(0, Math.round((consumed / target) * 100));
+  const remaining = calorieTargetAvailable ? target - consumed : 0;
+  const remainingRatio = calorieTargetAvailable ? remaining / target : 0;
+  const consumedPercent = calorieTargetAvailable
+    ? Math.max(0, Math.round((consumed / target) * 100))
+    : 0;
   const proteinTarget = input.proteinTargetG && input.proteinTargetG > 0 ? input.proteinTargetG : null;
   const proteinGap = proteinTarget
     ? Math.max(0, proteinTarget - Math.max(0, finite(input.proteinG)))
@@ -62,7 +69,10 @@ export function buildTodayHero(input: TodayHeroInput): TodayHeroModel {
 
   let statusTone: TodayHeroTone;
   let statusLabel: string;
-  if (remaining < 0) {
+  if (!calorieTargetAvailable) {
+    statusTone = 'steady';
+    statusLabel = input.locale === 'vi' ? 'Cần hoàn tất hồ sơ' : 'Complete your profile';
+  } else if (remaining < 0) {
     statusTone = 'over';
     statusLabel = tr('screen.tabs.index.todayHero.status.over', input.locale);
   } else if (remaining === 0 && consumed > 0) {
@@ -82,7 +92,11 @@ export function buildTodayHero(input: TodayHeroInput): TodayHeroModel {
   const proteinReached = proteinTarget !== null && proteinGap <= 0;
   const activityReached = activityGap <= 0;
   let motivation: string;
-  if (remaining < 0) {
+  if (!calorieTargetAvailable) {
+    motivation = input.locale === 'vi'
+      ? 'Hoàn tất hồ sơ để AI tính mục tiêu phù hợp.'
+      : 'Complete your profile for a personalized target.';
+  } else if (remaining < 0) {
     motivation = tr('screen.tabs.index.todayHero.motivation.over', input.locale);
   } else if (input.logsCount === 0) {
     motivation = tr('screen.tabs.index.todayHero.motivation.firstMeal', input.locale);
@@ -100,17 +114,22 @@ export function buildTodayHero(input: TodayHeroInput): TodayHeroModel {
 
   return {
     greeting: tr(`screen.tabs.index.todayHero.greeting.${dayPart}` as any, input.locale, { name }),
+    calorieTargetAvailable,
     remainingCalories: remaining,
-    remainingCaloriesLabel: format(remaining, input.locale),
-    calorieLabel: remaining < 0
+    remainingCaloriesLabel: calorieTargetAvailable ? format(remaining, input.locale) : '--',
+    calorieLabel: !calorieTargetAvailable
+      ? (input.locale === 'vi' ? 'Chưa có mục tiêu calorie' : 'No calorie target yet')
+      : remaining < 0
       ? tr('screen.tabs.index.todayHero.exceededBy', input.locale, { kcal: format(Math.abs(remaining), input.locale) })
       : tr('screen.tabs.index.todayHero.remaining', input.locale),
     progressPercent: consumedPercent,
-    progressLabel: `${consumedPercent}%`,
-    calorieProgressDetail: tr('screen.tabs.index.todayHero.progressDetail', input.locale, {
-      consumed: format(consumed, input.locale),
-      target: format(target, input.locale),
-    }),
+    progressLabel: calorieTargetAvailable ? `${consumedPercent}%` : '--',
+    calorieProgressDetail: calorieTargetAvailable
+      ? tr('screen.tabs.index.todayHero.progressDetail', input.locale, {
+          consumed: format(consumed, input.locale),
+          target: format(target, input.locale),
+        })
+      : (input.locale === 'vi' ? 'Bổ sung hồ sơ để bắt đầu theo dõi tiến độ.' : 'Complete your profile to track progress.'),
     statusLabel,
     statusTone,
     proteinTitle: proteinTarget === null
@@ -132,6 +151,7 @@ export function buildTodayHero(input: TodayHeroInput): TodayHeroModel {
       : tr('screen.tabs.index.todayHero.activity.lowDetail', input.locale),
     activityReached,
     motivation,
+    sensitiveNutritionMode: Boolean(input.sensitiveNutritionMode),
   };
 }
 
@@ -150,6 +170,7 @@ export function useTodayHero(input: TodayHeroInput) {
       input.proteinTargetG,
       input.streak,
       input.targetCalories,
+      input.sensitiveNutritionMode,
     ],
   );
 }

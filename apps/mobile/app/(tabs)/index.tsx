@@ -156,7 +156,7 @@ function hasVeg(logs: FoodLog[]) {
 }
 
 function buildNutritionTargets(target: number) {
-  const safeTarget = safePositiveNumber(target, 1800);
+  const safeTarget = safePositiveNumber(target, 0);
   return {
     fiber_g_min: Math.round((safeTarget / 1000) * 14),
     sodium_mg_max: 2000,
@@ -197,7 +197,7 @@ function buildDailyFocusItems(args: {
 }): DailyFocusItem[] {
   const consumedKcal = safeNumber(args.consumedKcal);
   const burnedKcal = safeNumber(args.burnedKcal);
-  const targetKcal = safePositiveNumber(args.targetKcal, 1800);
+  const targetKcal = safePositiveNumber(args.targetKcal, 0);
   const proteinG = safeNumber(args.proteinG);
   const fiberG = safeNumber(args.fiberG);
   const sodiumMg = safeNumber(args.sodiumMg);
@@ -212,7 +212,7 @@ function buildDailyFocusItems(args: {
   const proteinGap = Math.max(0, proteinTarget - proteinG);
   const locale = args.locale;
   const items: DailyFocusItem[] = [
-    {
+    targetKcal > 0 ? {
       key: 'calories',
       label: 'Net kcal',
       value: remaining >= 0
@@ -228,6 +228,14 @@ function buildDailyFocusItems(args: {
       icon: remaining >= 0 ? 'pulse-outline' : 'alert-circle-outline',
       tone: remaining < 0 ? 'warn' : calorieRatio >= 0.75 ? 'good' : 'info',
       progress: clampProgress(calorieRatio),
+    } : {
+      key: 'calories',
+      label: 'Net kcal',
+      value: '--',
+      hint: locale === 'vi' ? 'Hoàn tất hồ sơ để có mục tiêu.' : 'Complete your profile to get a target.',
+      icon: 'person-outline',
+      tone: 'muted',
+      progress: 0,
     },
     {
       key: 'protein',
@@ -323,7 +331,7 @@ function buildNutritionNudges(
   const safeProtein = safeNumber(protein);
   const safeFat = safeNumber(fat);
   const safeCalories = safeNumber(calories);
-  const safeTarget = safePositiveNumber(target, 1800);
+  const safeTarget = safePositiveNumber(target, 0);
   const safeQuality = {
     fiber_g: safeNumber(quality.fiber_g),
     sugar_g: safeNumber(quality.sugar_g),
@@ -387,7 +395,7 @@ function buildNutritionNudges(
     });
   }
 
-  if (safeQuality.coverage_items > 0 && safeCalories > safeTarget * 0.45 && safeQuality.fiber_g < quality.targets.fiber_g_min * 0.45) {
+  if (safeTarget > 0 && safeQuality.coverage_items > 0 && safeCalories > safeTarget * 0.45 && safeQuality.fiber_g < quality.targets.fiber_g_min * 0.45) {
     items.push({
       title: tr('screen.tabs.index.nudge.lowFiber.title', locale),
       body: tr('screen.tabs.index.nudge.lowFiber.body', locale),
@@ -396,7 +404,7 @@ function buildNutritionNudges(
     });
   }
 
-  if (safeTarget - safeCalories > 350) {
+  if (safeTarget > 0 && safeTarget - safeCalories > 350) {
     items.push({
       title: tr('screen.tabs.index.nudge.calorieRoom.title', locale),
       body: tr('screen.tabs.index.nudge.calorieRoom.body', locale),
@@ -417,7 +425,7 @@ function CaloriesRing({ consumed, burned, target, compact = false }: { consumed:
   const circumference = 2 * Math.PI * radius;
   const safeConsumed = safeNumber(consumed);
   const safeBurned = safeNumber(burned);
-  const safeTarget = safePositiveNumber(target, 1800);
+  const safeTarget = safePositiveNumber(target, 0);
   const net = Math.max(0, safeConsumed - safeBurned);
   const progress = clampProgress(net / Math.max(safeTarget, 1));
   const remaining = safeTarget - net;
@@ -452,11 +460,6 @@ function CaloriesRing({ consumed, burned, target, compact = false }: { consumed:
   );
 }
 
-function computeDailyDelta(kgPerWeek: number) {
-  const KCAL_PER_KG = 7700; // approximate kcal per 1 kg of fat
-  return Math.round((kgPerWeek * KCAL_PER_KG) / 7);
-}
-
 type QuickGoalOption = {
   key: string;
   labelKey: Parameters<typeof tr>[0];
@@ -476,7 +479,7 @@ function formatQuickGoalLabel(option: QuickGoalOption, locale: Locale) {
   return tr(option.labelKey, locale);
 }
 
-type DashboardProfileMeta = Pick<User, 'age' | 'gender' | 'height_cm' | 'weight_kg' | 'health_flags' | 'activity_level' | 'goal_plan' | 'daily_calorie_target' | 'goal' | 'full_name'>;
+type DashboardProfileMeta = Pick<User, 'age' | 'gender' | 'height_cm' | 'weight_kg' | 'health_flags' | 'activity_level' | 'goal_plan' | 'daily_calorie_target' | 'goal' | 'full_name' | 'sensitive_nutrition_mode'>;
 
 function goalFromQuickOption(type: QuickGoalOption['type']): UserGoal {
   if (type === 'loss') return 'lose_weight';
@@ -637,11 +640,12 @@ function buildMovementPlan(
   const safeCompletedMin = safeNumber(completedMin);
   const safeConsumedKcal = safeNumber(consumedKcal);
   const safeBurnedKcal = safeNumber(burnedKcal);
-  const safeTargetKcal = safePositiveNumber(targetKcal, 1800);
+  const safeTargetKcal = safePositiveNumber(targetKcal, 0);
+  const hasCalorieTarget = safeTargetKcal > 0;
   const remainingToBase = Math.max(0, dailyRecommendation.minutes - safeCompletedMin);
   const netKcal = safeConsumedKcal - safeBurnedKcal;
-  const gapToTarget = safeTargetKcal - netKcal;
-  const overTarget = Math.max(0, -gapToTarget);
+  const gapToTarget = hasCalorieTarget ? safeTargetKcal - netKcal : 0;
+  const overTarget = hasCalorieTarget ? Math.max(0, -gapToTarget) : 0;
   const surplusBurnTarget = overTarget > 75
     ? Math.min(overTarget, effectiveGoal === 'lose_weight' ? 320 : 220)
     : 0;
@@ -651,7 +655,9 @@ function buildMovementPlan(
   let durationMin = remainingToBase > 0 ? Math.max(15, Math.min(30, remainingToBase)) : 15;
   let title = tr('screen.tabs.index.movement.maintenanceWalk.title', locale);
   let detail = tr('screen.tabs.index.movement.maintenanceWalk.detail', locale);
-  let calorieStatus = gapToTarget >= 0
+  let calorieStatus = !hasCalorieTarget
+    ? (locale === 'vi' ? 'Chưa có mục tiêu calorie' : 'No calorie target yet')
+    : gapToTarget >= 0
     ? tr('screen.tabs.index.movement.status.left', locale, { kcal: formatNumber(gapToTarget) })
     : tr('screen.tabs.index.movement.status.over', locale, { kcal: formatNumber(overTarget) });
   let tone: MovementPlan['tone'] = 'normal';
@@ -848,7 +854,7 @@ export default function DashboardScreen() {
   const consumed = safeNumber(dailyLog?.total_calories);
   const burned = activityLogs.reduce((sum, item) => sum + safeNumber(item.calories_burned), 0);
   const activityMinutes = activityLogs.reduce((sum, item) => sum + safeNumber(item.duration_min), 0);
-  const target = safePositiveNumber(dailyLog?.target_calories, 1800);
+  const target = safePositiveNumber(dailyLog?.target_calories, 0);
   const completedActivityPreferenceIds = useMemo(() => {
     const ids = new Set<string>();
     activityLogs.forEach((log) => {
@@ -881,7 +887,7 @@ export default function DashboardScreen() {
   const sodium = safeNumber(dailyLog?.total_sodium_mg);
   const saturatedFat = safeNumber(dailyLog?.total_saturated_fat_g);
   const nutritionTarget = todaySummary?.daily_nutrition_target;
-  const nutritionTargetReady = nutritionTarget?.status === 'ready';
+  const nutritionTargetReady = nutritionTarget?.status === 'ready' || nutritionTarget?.status === 'clinician_target';
   const qualityTargets = useMemo(() => nutritionTargetReady
     ? {
         fiber_g_min: safePositiveNumber(nutritionTarget.fiber_g, 1),
@@ -987,7 +993,6 @@ export default function DashboardScreen() {
 
   const selectedGoalOption = QUICK_GOAL_OPTIONS.find((goal) => goal.key === selectedGoal) ?? QUICK_GOAL_OPTIONS[1];
   const selectedGoalPlan = buildQuickGoalPlan(selectedGoalOption);
-  const selectedDailyDelta = computeDailyDelta(selectedGoalOption.kgPerWeek);
   const activeGoalPlan = profileMeta?.goal_plan ?? null;
   const netCalories = Math.max(0, consumed - burned);
   const planRemaining = target - netCalories;
@@ -1166,10 +1171,11 @@ export default function DashboardScreen() {
     streak: displayStreak,
     firstName,
     locale,
+    sensitiveNutritionMode: Boolean(profileMeta?.sensitive_nutrition_mode),
   });
   const todayCoach = useTodayCoach({
     logsCount: logs.length,
-    remainingCalories: target - consumed,
+    remainingCalories: target > 0 ? target - consumed : 0,
     proteinGapG,
     activityGapMinutes: Math.max(0, (movementPlan?.daily_minutes_target ?? 25) - activityMinutes),
     locale,
@@ -1335,7 +1341,7 @@ export default function DashboardScreen() {
       )}
 
       {/* 5. Macro bars */}
-      {nutritionTargetReady && proteinTargetG && carbsTargetG !== undefined && fatTargetG !== undefined && (
+      {!profileMeta?.sensitive_nutrition_mode && nutritionTargetReady && proteinTargetG && carbsTargetG !== undefined && fatTargetG !== undefined && (
       <View style={styles.macroBarRow}>
         <MacroBarCard
           label={t('screen.tabs.index.hifi.macro.protein' as any)}
@@ -1353,7 +1359,7 @@ export default function DashboardScreen() {
       )}
 
       {/* 6. Nutrition quality card */}
-      {nutritionTargetReady && qualityCoverageItems > 0 && (
+      {!profileMeta?.sensitive_nutrition_mode && nutritionTargetReady && qualityCoverageItems > 0 && (
         <SurfaceCard revealDelay={120} style={[styles.qualityCard, { borderRadius: 22 }]}>
           <View style={styles.qualityCardHeader}>
             <Text style={[styles.qualityCardTitle, { color: colors.text }]}>
