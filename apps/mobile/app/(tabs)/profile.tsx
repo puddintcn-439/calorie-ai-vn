@@ -83,6 +83,27 @@ const GOAL_LABELS: Record<UserGoal, I18nKey> = {
   gain_muscle: 'profile.goalLabel.gainMuscle',
 };
 
+type ProfileDetailAnchor =
+  | 'body'
+  | 'health'
+  | 'water'
+  | 'activity'
+  | 'goalPlan'
+  | 'roadmap'
+  | 'notifications'
+  | 'subscription';
+
+const PROFILE_DETAIL_TITLES: Record<ProfileDetailAnchor, string> = {
+  body: 'Chi tiết: Cơ thể',
+  health: 'Chi tiết: Sức khỏe & an toàn',
+  water: 'Chi tiết: Nước',
+  activity: 'Chi tiết: Hoạt động',
+  goalPlan: 'Chi tiết: Lộ trình mục tiêu',
+  roadmap: 'Chi tiết: Lịch vận động',
+  notifications: 'Chi tiết: Nhắc nhở',
+  subscription: 'Chi tiết: Gói dịch vụ',
+};
+
 const HEALTH_FLAG_LABELS: Record<HealthFlag, I18nKey> = {
   pregnant: 'profile.healthFlag.pregnant',
   breastfeeding: 'profile.healthFlag.breastfeeding',
@@ -613,6 +634,7 @@ export default function ProfileScreen() {
   const [subscriptionCollapsed, setSubscriptionCollapsed] = useState(true);
   const [quickSetting, setQuickSetting] = useState<'language' | 'appearance' | null>(null);
   const [showProfileDetails, setShowProfileDetails] = useState(false);
+  const [activeProfileDetailAnchor, setActiveProfileDetailAnchor] = useState<ProfileDetailAnchor>('body');
   const [showTargetEvidence, setShowTargetEvidence] = useState(false);
   const [showTargetCalculation, setShowTargetCalculation] = useState(false);
   const [calorieMethodology, setCalorieMethodology] = useState<CalorieCalculationMethodology | null>(null);
@@ -904,17 +926,41 @@ export default function ProfileScreen() {
     : profile.activity_level
       ? tx(ACTIVITY_LABELS[profile.activity_level])
       : 'Chưa thiết lập';
+  const hasClinicianNutritionContext = selectedHealthFlags.some((flag) => ['pregnant', 'breastfeeding', 'kidney_disease', 'diabetes', 'eating_disorder_history'].includes(flag));
+  const isBodyDetail = activeProfileDetailAnchor === 'body';
+  const isHealthDetail = activeProfileDetailAnchor === 'health';
+  const isWaterDetail = activeProfileDetailAnchor === 'water';
+  const isActivityDetail = activeProfileDetailAnchor === 'activity';
+  const isGoalPlanDetail = activeProfileDetailAnchor === 'goalPlan';
+  const isRoadmapDetail = activeProfileDetailAnchor === 'roadmap';
+  const isNotificationsDetail = activeProfileDetailAnchor === 'notifications';
+  const isSubscriptionDetail = activeProfileDetailAnchor === 'subscription';
+  const profileDetailTabs: Array<{ key: ProfileDetailAnchor; label: string; icon: keyof typeof MaterialIcons.glyphMap }> = [
+    { key: 'body', label: 'Cơ thể', icon: 'person-outline' },
+    { key: 'activity', label: 'Hoạt động', icon: 'directions-run' },
+    { key: 'health', label: 'Sức khỏe', icon: 'health-and-safety' },
+    { key: 'water', label: 'Nước', icon: 'water-drop' },
+    { key: 'goalPlan', label: 'Lộ trình', icon: 'track-changes' },
+    { key: 'roadmap', label: 'Lịch tập', icon: 'event-available' },
+  ];
 
   // Refs for scrolling to sections
   const scrollRef = React.useRef<any>(null);
   const detailScrollRef = React.useRef<any>(null);
   const profileOverviewRef = React.useRef<any>(null);
   const basicRef = React.useRef<any>(null);
+  const bodyFieldsRef = React.useRef<any>(null);
+  const healthFieldsRef = React.useRef<any>(null);
+  const waterFieldsRef = React.useRef<any>(null);
   const assessmentRef = React.useRef<any>(null);
   const goalRef = React.useRef<any>(null);
+  const activityFieldsRef = React.useRef<any>(null);
+  const goalPlanRef = React.useRef<any>(null);
   const roadmapRef = React.useRef<any>(null);
   const notificationsRef = React.useRef<any>(null);
   const subscriptionRef = React.useRef<any>(null);
+  const detailAnchorOffsetsRef = React.useRef<Partial<Record<ProfileDetailAnchor, number>>>({});
+  const pendingDetailAnchorRef = React.useRef<ProfileDetailAnchor | null>(null);
 
   const scrollToSection = (ref: any) => {
     if (!ref || !ref.current || !scrollRef.current) return;
@@ -940,24 +986,76 @@ export default function ProfileScreen() {
     setTimeout(() => scrollToSection(profileOverviewRef), 80);
   };
 
-  const openSetupStep = (key: typeof setupSteps[number]['key']) => {
+  const scrollToDetailAnchor = (anchor: ProfileDetailAnchor) => {
+    const y = detailAnchorOffsetsRef.current[anchor];
+    const scrollNode = detailScrollRef.current as any;
+    if (typeof y !== 'number' || !scrollNode?.scrollTo) return false;
+    scrollNode.scrollTo({ y: Math.max(0, y - 12), animated: true });
+    return true;
+  };
+
+  const requestDetailAnchorScroll = (anchor: ProfileDetailAnchor, attempt = 0) => {
+    pendingDetailAnchorRef.current = anchor;
+    setTimeout(() => {
+      if (scrollToDetailAnchor(anchor)) {
+        pendingDetailAnchorRef.current = null;
+        return;
+      }
+      if (attempt < 6) {
+        requestDetailAnchorScroll(anchor, attempt + 1);
+      }
+    }, attempt === 0 ? 220 : 120);
+  };
+
+  const registerDetailAnchor = (anchor: ProfileDetailAnchor) => (event: any) => {
+    detailAnchorOffsetsRef.current[anchor] = event.nativeEvent.layout.y;
+    if (pendingDetailAnchorRef.current === anchor) {
+      requestDetailAnchorScroll(anchor);
+    }
+  };
+
+  const openProfileDetailAnchor = (anchor: ProfileDetailAnchor) => {
+    setActiveProfileDetailAnchor(anchor);
     setShowProfileDetails(true);
-    if (key === 'basic' || key === 'safety') {
+    if (anchor === 'body' || anchor === 'health' || anchor === 'water') {
       setBasicCollapsed(false);
       setAssessmentCollapsed(false);
+    }
+    if (anchor === 'activity' || anchor === 'goalPlan' || anchor === 'roadmap') {
+      setGoalCollapsed(false);
+    }
+    if (anchor === 'notifications') {
+      setNotificationsCollapsed(false);
+    }
+    if (anchor === 'subscription') {
+      setSubscriptionCollapsed(false);
+    }
+
+    requestDetailAnchorScroll(anchor);
+  };
+
+  const openSetupStep = (key: typeof setupSteps[number]['key']) => {
+    if (key === 'basic') {
+      openProfileDetailAnchor('body');
       return;
     }
-    if (key === 'goal' || key === 'roadmap') {
-      setGoalCollapsed(false);
+    if (key === 'safety') {
+      openProfileDetailAnchor('health');
+      return;
+    }
+    if (key === 'goal') {
+      openProfileDetailAnchor('goalPlan');
+      return;
+    }
+    if (key === 'roadmap') {
+      openProfileDetailAnchor('roadmap');
       return;
     }
     if (key === 'notifications') {
-      setNotificationsCollapsed(false);
+      openProfileDetailAnchor('notifications');
       return;
     }
-    if (key === 'subscription') {
-      setSubscriptionCollapsed(false);
-    }
+    openProfileDetailAnchor('subscription');
   };
 
   useEffect(() => {
@@ -1612,16 +1710,16 @@ export default function ProfileScreen() {
         <View ref={profileOverviewRef} collapsable={false} testID="profile-completion-overview">
           <ProfileSectionLabel label="Thông tin của bạn" />
           <SurfaceCard style={styles.profileGroupCard}>
-            <ProfileOverviewRow icon="person-outline" label="Cơ thể" value={`${profile.height_cm ?? '--'} cm · ${profile.weight_kg ?? '--'} kg · ${profile.age ?? '--'} tuổi`} completionStatus={bodyCompletionStatus} completionTestID="profile-incomplete-body" onPress={() => openSetupStep('basic')} />
-            <ProfileOverviewRow icon="directions-run" label="Hoạt động" value={activitySummary} completionStatus={activityCompletionStatus} completionTestID="profile-incomplete-activity" onPress={() => openSetupStep('goal')} />
-            <ProfileOverviewRow icon="health-and-safety" label="Sức khỏe & an toàn" value={healthNeedsAttention ? 'Cần xem lại hướng dẫn' : selectedHealthFlags.length ? `${selectedHealthFlags.length} lưu ý sức khỏe` : 'Không có cảnh báo'} warning={healthNeedsAttention} completionStatus={safetyCompletionStatus} completionTestID="profile-incomplete-safety" onPress={() => openSetupStep('basic')} />
-            <ProfileOverviewRow icon="water-drop" label="Nước" value={(nutritionTarget?.status === 'ready' || nutritionTarget?.status === 'clinician_target') && nutritionTarget.water_ml ? `Mục tiêu ${(nutritionTarget.water_ml / 1000).toLocaleString('vi-VN')} L` : 'Cần hướng dẫn riêng'} warning={nutritionTarget?.status === 'clinician_guidance'} />
+            <ProfileOverviewRow icon="person-outline" label="Cơ thể" value={`${profile.height_cm ?? '--'} cm · ${profile.weight_kg ?? '--'} kg · ${profile.age ?? '--'} tuổi`} completionStatus={bodyCompletionStatus} completionTestID="profile-incomplete-body" onPress={() => openProfileDetailAnchor('body')} />
+            <ProfileOverviewRow icon="directions-run" label="Hoạt động" value={activitySummary} completionStatus={activityCompletionStatus} completionTestID="profile-incomplete-activity" onPress={() => openProfileDetailAnchor('activity')} />
+            <ProfileOverviewRow icon="health-and-safety" label="Sức khỏe & an toàn" value={healthNeedsAttention ? 'Cần xem lại hướng dẫn' : selectedHealthFlags.length ? `${selectedHealthFlags.length} lưu ý sức khỏe` : 'Không có cảnh báo'} warning={healthNeedsAttention} completionStatus={safetyCompletionStatus} completionTestID="profile-incomplete-safety" onPress={() => openProfileDetailAnchor('health')} />
+            <ProfileOverviewRow icon="water-drop" label="Nước" value={(nutritionTarget?.status === 'ready' || nutritionTarget?.status === 'clinician_target') && nutritionTarget.water_ml ? `Mục tiêu ${(nutritionTarget.water_ml / 1000).toLocaleString('vi-VN')} L` : 'Cần hướng dẫn riêng'} warning={nutritionTarget?.status === 'clinician_guidance'} onPress={() => openProfileDetailAnchor('water')} />
           </SurfaceCard>
 
           <ProfileSectionLabel label="Kế hoạch của bạn" />
           <SurfaceCard style={styles.profileGroupCard}>
-            <ProfileOverviewRow icon="track-changes" label="Lộ trình mục tiêu" value={activeGoalPlan?.duration_weeks ? `${activeGoalPlan.direction === 'loss' ? 'Giảm' : activeGoalPlan.direction === 'gain' ? 'Tăng' : 'Duy trì'} ${activeGoalPlan.target_kg ?? 0} kg trong ${activeGoalPlan.duration_weeks} tuần` : 'Chưa thiết lập lộ trình'} completionStatus={goalPlanCompletionStatus} completionTestID="profile-incomplete-goal-plan" onPress={() => openSetupStep('goal')} />
-            <ProfileOverviewRow icon="event-available" label="Lịch vận động" value={`${roadmap.length} bài · ${completedRoadmapCount} bài hoàn thành hôm nay`} completionStatus={movementCompletionStatus} completionTestID="profile-incomplete-movement" onPress={() => openSetupStep('roadmap')} last />
+            <ProfileOverviewRow icon="track-changes" label="Lộ trình mục tiêu" value={activeGoalPlan?.duration_weeks ? `${activeGoalPlan.direction === 'loss' ? 'Giảm' : activeGoalPlan.direction === 'gain' ? 'Tăng' : 'Duy trì'} ${activeGoalPlan.target_kg ?? 0} kg trong ${activeGoalPlan.duration_weeks} tuần` : 'Chưa thiết lập lộ trình'} completionStatus={goalPlanCompletionStatus} completionTestID="profile-incomplete-goal-plan" onPress={() => openProfileDetailAnchor('goalPlan')} />
+            <ProfileOverviewRow icon="event-available" label="Lịch vận động" value={`${roadmap.length} bài · ${completedRoadmapCount} bài hoàn thành hôm nay`} completionStatus={movementCompletionStatus} completionTestID="profile-incomplete-movement" onPress={() => openProfileDetailAnchor('roadmap')} last />
           </SurfaceCard>
         </View>
 
@@ -1687,7 +1785,7 @@ export default function ProfileScreen() {
               >
                 <MaterialIcons name="arrow-back" size={22} color={colors.text} />
               </TouchableOpacity>
-              <Text style={styles.detailModalTitle}>Chi tiết hồ sơ</Text>
+              <Text style={styles.detailModalTitle}>{PROFILE_DETAIL_TITLES[activeProfileDetailAnchor]}</Text>
               <TouchableOpacity
                 style={styles.profileDetailsSave}
                 onPress={handleSaveProfile}
@@ -1700,13 +1798,33 @@ export default function ProfileScreen() {
               </TouchableOpacity>
             </View>
             <ScrollView ref={detailScrollRef} showsVerticalScrollIndicator={false} style={styles.detailModalContent} contentContainerStyle={styles.detailModalContentContainer}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.detailTabScroll} contentContainerStyle={styles.detailTabRow}>
+                {profileDetailTabs.map((tab) => {
+                  const selected = activeProfileDetailAnchor === tab.key;
+                  return (
+                    <TouchableOpacity
+                      key={tab.key}
+                      style={[styles.detailTab, selected && styles.detailTabActive]}
+                      onPress={() => openProfileDetailAnchor(tab.key)}
+                      accessibilityRole="tab"
+                      accessibilityState={{ selected }}
+                    >
+                      <MaterialIcons name={tab.icon as any} size={15} color={selected ? colors.textOnAccent : colors.textMuted} />
+                      <Text style={[styles.detailTabText, selected && styles.detailTabTextActive]}>{tab.label}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
 
+        {(isBodyDetail || isHealthDetail || isWaterDetail) && (
         <View ref={basicRef}>
           <SurfaceCard style={[styles.sectionCard, basicCollapsed && styles.sectionCardCompact]}>
           <Animated.View style={[styles.highlightOverlay, styles.pointerEventsNone, { opacity: highlightAnim }]} />
           <TouchableOpacity onPress={() => setBasicCollapsed((s) => !s)} activeOpacity={0.8} style={styles.sectionHeaderRow}>
             <View>
-              <Text style={styles.sectionTitle} i18nKey="screen.tabs.profile.text.003" />
+              <Text style={styles.sectionTitle}>
+                {isBodyDetail ? 'Cơ thể' : isHealthDetail ? 'Sức khỏe & an toàn' : 'Nước'}
+              </Text>
               {basicCollapsed && (
                 <Text style={styles.sectionSubtitle}>
                   {profile.weight_kg
@@ -1718,9 +1836,11 @@ export default function ProfileScreen() {
             <MaterialIcons name={basicCollapsed ? 'expand-more' : 'expand-less'} size={26} color={colors.textMuted} />
           </TouchableOpacity>
 
-          {!basicCollapsed && (
+          {(isBodyDetail || isHealthDetail || isWaterDetail) && (
             <>
-              <View style={[styles.metricsGrid, isDesktop && styles.metricsGridDesktop]}>
+              {isBodyDetail && (
+              <>
+              <View ref={bodyFieldsRef} onLayout={registerDetailAnchor('body')} style={[styles.metricsGrid, isDesktop && styles.metricsGridDesktop]}>
                 <Field label="screen.tabs.profile.label.001" value={profile.full_name ?? ''} onChangeText={(v) => setProfile((p) => ({ ...p, full_name: v }))} placeholder="screen.tabs.profile.placeholder.001" fullWidth />
                 <Field label="screen.tabs.profile.label.002" value={String(profile.weight_kg ?? '')} onChangeText={(v) => setProfile((p) => ({ ...p, weight_kg: Number(v) || undefined }))} keyboardType="numeric" placeholder="65" />
                 <Field label="screen.tabs.profile.label.003" value={String(profile.height_cm ?? '')} onChangeText={(v) => setProfile((p) => ({ ...p, height_cm: Number(v) || undefined }))} keyboardType="numeric" placeholder="170" />
@@ -1737,9 +1857,15 @@ export default function ProfileScreen() {
                   <UiChip key={g} label={g === 'male' ? t('profile.gender.male') : t('profile.gender.female')} selected={profile.gender === g} onPress={() => setProfile((p) => ({ ...p, gender: g }))} />
                 ))}
               </View>
+              </>
+              )}
 
-              <Text style={styles.label} i18nKey="screen.tabs.profile.text.005" />
-              <Text style={styles.helperText} i18nKey="profile.health.helper" />
+              {isHealthDetail && (
+              <>
+              <View ref={healthFieldsRef} onLayout={registerDetailAnchor('health')}>
+                <Text style={styles.label} i18nKey="screen.tabs.profile.text.005" />
+                <Text style={styles.helperText} i18nKey="profile.health.helper" />
+              </View>
               <View style={styles.chipRow}>
                 {HEALTH_FLAGS.map((flag) => (
                   <UiChip
@@ -1795,8 +1921,13 @@ export default function ProfileScreen() {
                   </View>
                 </>
               )}
-              {selectedHealthFlags.some((flag) => ['pregnant', 'breastfeeding', 'kidney_disease', 'diabetes', 'eating_disorder_history'].includes(flag)) && (
-                <View style={styles.clinicianOverrideCard}>
+              </>
+              )}
+
+              {isWaterDetail && (
+              <>
+              {hasClinicianNutritionContext ? (
+                <View ref={waterFieldsRef} onLayout={registerDetailAnchor('water')} style={styles.clinicianOverrideCard}>
                   <Text style={styles.clinicianOverrideTitle}>Mục tiêu từ chuyên gia · Tùy chọn</Text>
                   <Text style={styles.helperText}>Chỉ nhập số liệu đã được bác sĩ hoặc chuyên gia dinh dưỡng cung cấp.</Text>
                   <Text style={styles.label}>Người cung cấp kế hoạch</Text>
@@ -1862,8 +1993,26 @@ export default function ProfileScreen() {
                     </TouchableOpacity>
                   )}
                 </View>
+              ) : (
+                <View ref={waterFieldsRef} onLayout={registerDetailAnchor('water')} style={styles.clinicianOverrideCard}>
+                  <Text style={styles.clinicianOverrideTitle}>Mục tiêu nước</Text>
+                  <Text style={styles.helperText}>
+                    Mục tiêu nước hiện được tính tự động từ cơ thể, vận động và tình trạng sức khỏe.
+                    Nếu bạn có chỉ định riêng từ bác sĩ/chuyên gia, hãy chọn cờ sức khỏe phù hợp ở tab Sức khỏe rồi nhập mục tiêu nước chuyên gia.
+                  </Text>
+                  <View style={styles.derivedTargetHero}>
+                    <Text style={styles.derivedTargetLabel}>Mục tiêu hiện tại</Text>
+                    <Text style={styles.derivedTargetValue}>
+                      {(nutritionTarget?.status === 'ready' || nutritionTarget?.status === 'clinician_target') && nutritionTarget.water_ml
+                        ? `${(nutritionTarget.water_ml / 1000).toLocaleString('vi-VN')} L/ngày`
+                        : 'Chưa đủ dữ liệu'}
+                    </Text>
+                  </View>
+                </View>
               )}
-              {selectedHealthFlags.includes('eating_disorder_history') && (
+              </>
+              )}
+              {isHealthDetail && selectedHealthFlags.includes('eating_disorder_history') && (
                 <TouchableOpacity
                   style={styles.clinicalConfirmRow}
                   onPress={() => setProfile((p) => ({ ...p, sensitive_nutrition_mode: !(p.sensitive_nutrition_mode ?? true) }))}
@@ -1879,7 +2028,9 @@ export default function ProfileScreen() {
           )}
           </SurfaceCard>
         </View>
+        )}
 
+        {false && (
         <View ref={assessmentRef}>
           <SurfaceCard style={[styles.sectionCard, assessmentCollapsed && styles.sectionCardCompact]}>
           <TouchableOpacity onPress={() => setAssessmentCollapsed((s) => !s)} activeOpacity={0.8} style={styles.sectionHeaderRow}>
@@ -1991,12 +2142,16 @@ export default function ProfileScreen() {
           )}
           </SurfaceCard>
         </View>
+        )}
 
+      {(isActivityDetail || isGoalPlanDetail || isRoadmapDetail) && (
       <View ref={goalRef}>
         <SurfaceCard style={[styles.sectionCard, goalCollapsed && styles.sectionCardCompact]}>
         <TouchableOpacity onPress={() => setGoalCollapsed((s) => !s)} activeOpacity={0.8} style={styles.sectionHeaderRow}>
           <View>
-            <Text style={styles.sectionTitle} i18nKey="screen.tabs.profile.text.013" />
+            <Text style={styles.sectionTitle}>
+              {isActivityDetail ? 'Hoạt động' : isGoalPlanDetail ? 'Lộ trình mục tiêu' : 'Lịch vận động'}
+            </Text>
             {goalCollapsed && (
               <Text style={styles.sectionSubtitle}>{profile.goal ? tx(GOAL_LABELS[profile.goal]) : t('profile.setup.goalMissing')} · {profile.activity_level ? tx(ACTIVITY_LABELS[profile.activity_level]) : '...'}</Text>
             )}
@@ -2004,20 +2159,28 @@ export default function ProfileScreen() {
           <MaterialIcons name={goalCollapsed ? 'expand-more' : 'expand-less'} size={26} color={colors.textMuted} />
         </TouchableOpacity>
 
-        {!goalCollapsed && (
+        {(isActivityDetail || isGoalPlanDetail || isRoadmapDetail) && (
           <>
             <Text style={styles.helperText} i18nKey="screen.tabs.profile.text.014" />
 
+            {isGoalPlanDetail && (
+            <>
             <Text style={styles.label} i18nKey="screen.tabs.profile.text.015" />
             <View style={styles.chipRow}>
               {(Object.keys(GOAL_LABELS) as UserGoal[]).map((g) => (
                 <UiChip key={g} label={tx(GOAL_LABELS[g])} selected={profile.goal === g} onPress={() => setProfile((p) => ({ ...p, goal: g }))} />
               ))}
             </View>
+            </>
+            )}
 
-            <Text style={styles.label} i18nKey="screen.tabs.profile.text.016" />
-            <Text style={styles.helperText}>Tách vận động trong công việc và buổi tập để AI không đánh giá sai nhu cầu năng lượng.</Text>
-            <Text style={styles.label}>Vận động trong công việc</Text>
+            {isActivityDetail && (
+            <>
+            <View ref={activityFieldsRef} onLayout={registerDetailAnchor('activity')}>
+              <Text style={styles.label} i18nKey="screen.tabs.profile.text.016" />
+              <Text style={styles.helperText}>Tách vận động trong công việc và buổi tập để AI không đánh giá sai nhu cầu năng lượng.</Text>
+              <Text style={styles.label}>Vận động trong công việc</Text>
+            </View>
             <View style={styles.chipRow}>
               {(Object.keys(WORK_ACTIVITY_LABELS) as Array<NonNullable<User['work_activity_level']>>).map((level) => (
                 <UiChip
@@ -2080,9 +2243,13 @@ export default function ProfileScreen() {
                 </Text>
               </View>
             </View>
+            </>
+            )}
 
+            {(isGoalPlanDetail || isRoadmapDetail) && (
             <View style={[styles.goalPlanningGrid, isDesktop && styles.goalPlanningGridDesktop]}>
-              <View style={[styles.goalPlanPanel, isDesktop && styles.goalPlanningPanelDesktop]}>
+              {isGoalPlanDetail && (
+              <View ref={goalPlanRef} onLayout={registerDetailAnchor('goalPlan')} style={[styles.goalPlanPanel, isDesktop && styles.goalPlanningPanelDesktop]}>
                 <Text style={styles.label} i18nKey="screen.tabs.profile.text.017" />
                 <View style={styles.goalPlanRow}>
                   <UiInput label="screen.tabs.profile.label.005" value={String(goalPlanTargetKg ?? '')} onChangeText={(v) => setGoalPlanTargetKg(Number(v) || undefined)} keyboardType="numeric" style={{ flex: 1 }} />
@@ -2111,9 +2278,12 @@ export default function ProfileScreen() {
                   <UiButton label="screen.tabs.profile.label.010" variant="ghost" onPress={clearGoalPlan} style={styles.clearGoalPlanButton} />
                 )}
               </View>
+              )}
 
+              {isRoadmapDetail && (
               <View
                 ref={roadmapRef}
+                onLayout={registerDetailAnchor('roadmap')}
                 style={[styles.roadmapPanel, isDesktop && styles.goalPlanningPanelDesktop]}
               >
                 <View style={styles.roadmapHeader}>
@@ -2184,12 +2354,16 @@ export default function ProfileScreen() {
                   </View>
                 )}
               </View>
+              )}
             </View>
+            )}
           </>
         )}
         </SurfaceCard>
       </View>
+      )}
 
+      {false && (
       <SurfaceCard style={[styles.sectionCard, calorieCollapsed && styles.sectionCardCompact]}>
         <TouchableOpacity onPress={() => setCalorieCollapsed((s) => !s)} activeOpacity={0.8} style={styles.sectionHeaderRow}>
           <View>
@@ -2238,8 +2412,10 @@ export default function ProfileScreen() {
           </>
         )}
       </SurfaceCard>
+      )}
 
-      <View ref={notificationsRef}>
+      {isNotificationsDetail && (
+      <View ref={notificationsRef} onLayout={registerDetailAnchor('notifications')}>
         <SurfaceCard style={[styles.sectionCard, notificationsCollapsed && styles.sectionCardCompact]}>
         <View style={styles.sectionHeaderRow}>
           <TouchableOpacity onPress={() => setNotificationsCollapsed((s) => !s)} activeOpacity={0.8} style={{ flex: 1 }}>
@@ -2420,8 +2596,10 @@ export default function ProfileScreen() {
         )}
         </SurfaceCard>
       </View>
+      )}
 
-      <View ref={subscriptionRef}>
+      {isSubscriptionDetail && (
+      <View ref={subscriptionRef} onLayout={registerDetailAnchor('subscription')}>
       <SurfaceCard style={[styles.sectionCard, subscriptionCollapsed && styles.sectionCardCompact]}>
         <TouchableOpacity onPress={() => setSubscriptionCollapsed((s) => !s)} activeOpacity={0.8} style={styles.sectionHeaderRow}>
           <View>
@@ -2578,6 +2756,7 @@ export default function ProfileScreen() {
         })()}
       </SurfaceCard>
       </View>
+      )}
             </ScrollView>
           </View>
         </Modal>
@@ -3297,6 +3476,40 @@ const styles = createThemedStyles((colors, radii) => ({
   detailModalTitle: { flex: 1, fontSize: 17, fontWeight: '800', color: colors.text },
   detailModalContent: { flex: 1 },
   detailModalContentContainer: { paddingHorizontal: 16, paddingBottom: 60 },
+  detailTabScroll: {
+    marginHorizontal: -16,
+    marginBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  detailTabRow: {
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  detailTab: {
+    minHeight: 36,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  detailTabActive: {
+    borderColor: colors.accentMint,
+    backgroundColor: colors.accentMint,
+  },
+  detailTabText: {
+    color: colors.textMuted,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  detailTabTextActive: {
+    color: colors.textOnAccent,
+  },
   profileDetailsHeader: {
     flexDirection: 'row',
     alignItems: 'center',

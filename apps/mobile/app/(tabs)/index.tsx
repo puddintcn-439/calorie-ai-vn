@@ -1874,9 +1874,10 @@ function CompactHealthScoreCard({
   const overall = safeNumber(score.overall);
   const hasScore = score.label !== 'needs_data';
   const ringScale = useRef(new Animated.Value(0.9)).current;
+  const useNativeDriver = Platform.OS !== 'web';
   useEffect(() => {
-    Animated.spring(ringScale, { toValue: 1, speed: 18, bounciness: 3, useNativeDriver: true }).start();
-  }, [overall, ringScale]);
+    Animated.spring(ringScale, { toValue: 1, speed: 18, bounciness: 3, useNativeDriver }).start();
+  }, [overall, ringScale, useNativeDriver]);
   const level = overall >= 85 ? 'excellent' : overall >= 70 ? 'good' : overall >= 50 ? 'building' : 'improve';
   const levelColor = level === 'excellent' || level === 'good'
     ? colors.success

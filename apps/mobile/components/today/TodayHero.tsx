@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Animated, TouchableOpacity, useWindowDimensions, View } from 'react-native';
+import { Animated, Platform, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from '../i18n-text';
 import { useI18n } from '../i18n';
@@ -28,16 +28,17 @@ export function TodayHero({ model, streak, waterIntakeL, waterGoalL, onPressStre
   const numberAnimation = useRef(new Animated.Value(0.96)).current;
   const calorieCount = useRef(new Animated.Value(model.remainingCalories)).current;
   const [displayCalories, setDisplayCalories] = useState(model.remainingCalories);
+  const useNativeDriver = Platform.OS !== 'web';
   useEffect(() => {
     const listener = calorieCount.addListener(({ value }) => setDisplayCalories(Math.round(value)));
     Animated.parallel([
       Animated.timing(calorieAnimation, { toValue: Math.min(1, model.progressPercent / 100), duration: 380, useNativeDriver: false }),
       Animated.timing(waterAnimation, { toValue: waterProgress, duration: 380, useNativeDriver: false }),
-      Animated.spring(numberAnimation, { toValue: 1, speed: 18, bounciness: 2, useNativeDriver: true }),
+      Animated.spring(numberAnimation, { toValue: 1, speed: 18, bounciness: 2, useNativeDriver }),
       Animated.timing(calorieCount, { toValue: model.remainingCalories, duration: 360, useNativeDriver: false }),
     ]).start();
     return () => calorieCount.removeListener(listener);
-  }, [calorieAnimation, calorieCount, model.progressPercent, model.remainingCalories, numberAnimation, waterAnimation, waterProgress]);
+  }, [calorieAnimation, calorieCount, model.progressPercent, model.remainingCalories, numberAnimation, useNativeDriver, waterAnimation, waterProgress]);
   const statusColors: Record<TodayHeroTone, { background: string; foreground: string; dot: string }> = {
     good: { background: colors.surfaceSuccess, foreground: colors.success, dot: colors.success },
     steady: { background: colors.surfaceWarning, foreground: colors.warning, dot: colors.accentAmber },
