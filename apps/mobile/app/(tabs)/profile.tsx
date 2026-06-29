@@ -3581,13 +3581,16 @@ const styles = createThemedStyles((colors, radii) => ({
   },
   settingsChips: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
+    justifyContent: 'flex-start',
     flexWrap: 'wrap',
-    gap: 6,
+    gap: 8,
     flex: 1,
+    paddingHorizontal: 12,
+    paddingBottom: 10,
   },
   settingsChip: {
-    marginVertical: 0,
+    marginTop: 2,
+    marginBottom: 0,
   },
   settingsDivider: {
     height: 1,
