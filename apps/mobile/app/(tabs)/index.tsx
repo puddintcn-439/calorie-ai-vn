@@ -1263,9 +1263,18 @@ export default function DashboardScreen() {
       primaryLabel: t('screen.tabs.index.next.openJournal'),
     };
   }, [logs.length, movementButtonLabel, movementPlan, movementPlanCompleted, nudges, proteinGapG, safetyCard, t]);
+  const openProfileCompletion = () => {
+    router.push({
+      pathname: '/profile',
+      params: {
+        focus: 'completion',
+        focusAt: String(Date.now()),
+      },
+    } as never);
+  };
   const handleNextActionPress = () => {
     if (nextAction.kind === 'profile') {
-      router.push('/profile' as never);
+      openProfileCompletion();
       return;
     }
     if (nextAction.kind === 'scan') {
@@ -1333,7 +1342,7 @@ export default function DashboardScreen() {
           </View>
           <TouchableOpacity
             style={[styles.bannerButton, { backgroundColor: colors.accentAmber }]}
-            onPress={() => { setBannerDismissed(true); router.push('/profile' as never); }}
+            onPress={() => { setBannerDismissed(true); openProfileCompletion(); }}
           >
             <Text style={[styles.bannerButtonText, { color: colors.textOnAccent }]}>{safetyCard.action}</Text>
           </TouchableOpacity>

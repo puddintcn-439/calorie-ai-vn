@@ -39,7 +39,9 @@ function resolveLoopbackForPlatform(url: string): string {
   if (Platform.OS === 'web') {
     const browserHost = globalThis.location?.hostname;
     if (browserHost && /localhost|127\.0\.0\.1/i.test(browserHost) && /localhost|127\.0\.0\.1/i.test(url)) {
-      return url.replace(/\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?/i, `//${browserHost}:3000`);
+      const portMatch = url.match(/:(\d+)/);
+      const port = portMatch ? `:${portMatch[1]}` : '';
+      return url.replace(/\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?/i, `//${browserHost}${port}`);
     }
 
     return url;
@@ -49,7 +51,10 @@ function resolveLoopbackForPlatform(url: string): string {
   if (!isLoopback) return url;
 
   const expoHost = extractExpoHost();
-  return expoHost ? url.replace(/\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?/i, `//${expoHost}:3000`) : url;
+  if (!expoHost) return url;
+  const portMatch = url.match(/:(\d+)/);
+  const port = portMatch ? `:${portMatch[1]}` : '';
+  return url.replace(/\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?/i, `//${expoHost}${port}`);
 }
 
 function resolveApiUrls(): string[] {

@@ -84,6 +84,17 @@ test.describe('Profile flows', () => {
     await gotoApp(page, '/profile');
 
     await page.getByText('Hồ sơ của bạn').waitFor({ state: 'visible', timeout: 5000 });
+    await page.getByText('Hoàn tất hồ sơ', { exact: true }).click();
+    await page.waitForTimeout(350);
+    const overviewBox = await page.getByTestId('profile-completion-overview').boundingBox();
+    expect(overviewBox?.y).toBeGreaterThanOrEqual(0);
+    expect(overviewBox?.y).toBeLessThan(220);
+
+    await expect(page.getByTestId('profile-incomplete-body')).toContainText('Đã hoàn thiện');
+    await expect(page.getByTestId('profile-incomplete-activity')).toContainText('Cần hoàn thiện');
+    await expect(page.getByTestId('profile-incomplete-safety')).toContainText('Cần hoàn thiện');
+    await expect(page.getByTestId('profile-incomplete-goal-plan')).toContainText('Cần hoàn thiện');
+    await expect(page.getByTestId('profile-incomplete-movement')).toContainText('Cần hoàn thiện');
     await page.getByText('Cơ thể', { exact: true }).click();
 
     // Wait for inputs to appear after expansion
@@ -91,10 +102,12 @@ test.describe('Profile flows', () => {
     await page.getByPlaceholder('65').fill('70');
     await page.getByPlaceholder('170').fill('175');
     await page.getByPlaceholder('25').fill('30');
+    await expect(page.getByTestId('profile-incomplete-body')).toContainText('Thiếu thông tin');
 
     await page.getByText('Lưu', { exact: true }).click();
 
     await page.waitForTimeout(300);
     expect(patchCalled).toBeTruthy();
+    await expect(page.getByTestId('profile-incomplete-body')).toContainText('Đã hoàn thiện');
   });
 });

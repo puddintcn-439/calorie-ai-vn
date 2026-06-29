@@ -10,7 +10,7 @@ import {
   Modal
 } from 'react-native';
 import { Linking, Platform } from 'react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useAuthStore } from '../../store/auth.store';
 import { useReminderStore } from '../../store/reminder.store';
@@ -124,6 +124,25 @@ type InstantAssessmentResult = {
   assessment: CalorieAssessment | null;
   hint: string;
 };
+
+type ProfileCompletionStatus = 'required' | 'partial' | 'complete';
+
+function getProfileCompletionStatus(
+  currentChecks: boolean[],
+  savedChecks: boolean[],
+  matchesSaved: boolean,
+): ProfileCompletionStatus {
+  const hasCurrentData = currentChecks.some(Boolean);
+  const currentComplete = currentChecks.every(Boolean);
+  const savedComplete = savedChecks.every(Boolean);
+
+  if (currentComplete && savedComplete && matchesSaved) return 'complete';
+  return hasCurrentData ? 'partial' : 'required';
+}
+
+function valuesMatch(current: unknown[], saved: unknown[]): boolean {
+  return JSON.stringify(current) === JSON.stringify(saved);
+}
 
 type ExerciseRoadmapItem = {
   id: string;
@@ -550,6 +569,7 @@ function buildInstantAssessment(profile: Partial<User>): InstantAssessmentResult
 
 export default function ProfileScreen() {
   const { requestedMode, colors } = useAppTheme();
+  const completionParams = useLocalSearchParams<{ focus?: string; focusAt?: string }>();
   const { setThemeMode } = useThemeStore();
   const { logout } = useAuthStore();
   const { locale, setLocale, t, tx } = useI18n();
@@ -579,6 +599,7 @@ export default function ProfileScreen() {
   const { fetchWeeklyInsights } = useInsightsStore();
   const { width } = useWindowDimensions();
   const [profile, setProfile] = useState<Partial<User>>({});
+  const [savedProfile, setSavedProfile] = useState<Partial<User>>({});
   const [nutritionTarget, setNutritionTarget] = useState<DailyNutritionTarget | null>(null);
   const [reminders, setReminders] = useState<Partial<ReminderPreferences>>({});
   const [previewMeal, setPreviewMeal] = useState<'breakfast' | 'lunch' | 'dinner' | 'snack'>('lunch');
@@ -608,10 +629,69 @@ export default function ProfileScreen() {
   const highlightAnim = React.useRef(new Animated.Value(0)).current;
   const highlightLoopRef = React.useRef<Animated.CompositeAnimation | null>(null);
   const useNativeHighlightDriver = Platform.OS !== 'web';
-  const basicIncomplete = !profile.weight_kg || !profile.height_cm || !profile.age || !profile.gender;
   const isDesktop = width >= 900;
   const selectedHealthFlags = normaliseHealthFlags(profile.health_flags);
+  const savedHealthFlags = normaliseHealthFlags(savedProfile.health_flags);
   const activeGoalPlan = profile.goal_plan ?? null;
+  const bodyCompletionStatus = getProfileCompletionStatus(
+    [Boolean(profile.weight_kg), Boolean(profile.height_cm), Boolean(profile.age), Boolean(profile.gender)],
+    [Boolean(savedProfile.weight_kg), Boolean(savedProfile.height_cm), Boolean(savedProfile.age), Boolean(savedProfile.gender)],
+    valuesMatch(
+      [profile.weight_kg, profile.height_cm, profile.age, profile.gender],
+      [savedProfile.weight_kg, savedProfile.height_cm, savedProfile.age, savedProfile.gender],
+    ),
+  );
+  const activityCompletionStatus = getProfileCompletionStatus(
+    [
+      Boolean(profile.work_activity_level),
+      profile.exercise_sessions_per_week !== undefined,
+      profile.exercise_minutes_per_session !== undefined,
+    ],
+    [
+      Boolean(savedProfile.work_activity_level),
+      savedProfile.exercise_sessions_per_week !== undefined,
+      savedProfile.exercise_minutes_per_session !== undefined,
+    ],
+    valuesMatch(
+      [profile.work_activity_level, profile.exercise_sessions_per_week, profile.exercise_minutes_per_session],
+      [savedProfile.work_activity_level, savedProfile.exercise_sessions_per_week, savedProfile.exercise_minutes_per_session],
+    ),
+  );
+  const safetyCompletionStatus = getProfileCompletionStatus(
+    [Array.isArray(profile.health_flags)],
+    [Array.isArray(savedProfile.health_flags)],
+    valuesMatch(selectedHealthFlags, savedHealthFlags),
+  );
+  const currentGoalPlanComplete = Boolean(profile.goal)
+    && Boolean(goalPlanDurationWeeks && goalPlanDurationWeeks > 0)
+    && (goalPlanDirection === 'maintain' || Boolean(goalPlanTargetKg && goalPlanTargetKg > 0));
+  const savedGoalPlanComplete = Boolean(savedProfile.goal)
+    && Boolean(savedProfile.goal_plan?.duration_weeks)
+    && (savedProfile.goal_plan?.direction === 'maintain' || Boolean(savedProfile.goal_plan?.target_kg));
+  const goalPlanCompletionStatus = getProfileCompletionStatus(
+    [
+      Boolean(profile.goal),
+      Boolean(goalPlanDurationWeeks && goalPlanDurationWeeks > 0),
+      goalPlanDirection === 'maintain' || Boolean(goalPlanTargetKg && goalPlanTargetKg > 0),
+    ],
+    [
+      Boolean(savedProfile.goal),
+      Boolean(savedProfile.goal_plan?.duration_weeks),
+      savedProfile.goal_plan?.direction === 'maintain' || Boolean(savedProfile.goal_plan?.target_kg),
+    ],
+    currentGoalPlanComplete
+      && savedGoalPlanComplete
+      && valuesMatch(
+        [profile.goal, goalPlanDirection, goalPlanTargetKg ?? 0, goalPlanDurationWeeks],
+        [
+          savedProfile.goal,
+          savedProfile.goal_plan?.direction,
+          savedProfile.goal_plan?.target_kg ?? 0,
+          savedProfile.goal_plan?.duration_weeks,
+        ],
+      ),
+  );
+  const basicIncomplete = bodyCompletionStatus !== 'complete';
   const instantAssessment = useMemo(() => buildInstantAssessment(profile), [
     profile.weight_kg,
     profile.height_cm,
@@ -643,6 +723,11 @@ export default function ProfileScreen() {
       persisted_item_id: item.id,
     }));
   }, [activityPreferences, profile.weight_kg]);
+  const movementCompletionStatus: ProfileCompletionStatus = roadmap.length > 0
+    ? 'complete'
+    : roadmapCatalogType
+      ? 'partial'
+      : 'required';
 
   const roadmapActivityByTaskId = useMemo(() => {
     const map: Record<string, ActivityLog> = {};
@@ -784,23 +869,29 @@ export default function ProfileScreen() {
     .slice(-2)
     .map((part) => part[0]?.toUpperCase())
     .join('');
-  const firstMissingProfileLabel = !profile.weight_kg
-    ? 'cân nặng'
-    : !profile.height_cm
-      ? 'chiều cao'
-      : !profile.age
-        ? 'tuổi'
-        : !profile.gender
-          ? 'giới tính sinh học'
-          : !profile.goal
-            ? 'mục tiêu'
-          : !profile.work_activity_level
-              ? 'mức vận động công việc'
-              : profile.exercise_sessions_per_week === undefined || profile.exercise_minutes_per_session === undefined
-                ? 'lịch tập luyện'
-              : !Array.isArray(profile.health_flags)
-                ? 'thông tin an toàn'
-                : null;
+  const firstMissingProfileLabel = bodyCompletionStatus !== 'complete'
+    ? !profile.weight_kg
+      ? 'cân nặng'
+      : !profile.height_cm
+        ? 'chiều cao'
+        : !profile.age
+          ? 'tuổi'
+          : !profile.gender
+            ? 'giới tính sinh học'
+            : 'thông tin cơ thể chưa lưu'
+    : activityCompletionStatus !== 'complete'
+      ? !profile.work_activity_level
+        ? 'mức vận động công việc'
+        : profile.exercise_sessions_per_week === undefined || profile.exercise_minutes_per_session === undefined
+          ? 'lịch tập luyện'
+          : 'thông tin vận động chưa lưu'
+      : safetyCompletionStatus !== 'complete'
+        ? Array.isArray(profile.health_flags) ? 'thông tin an toàn chưa lưu' : 'thông tin an toàn'
+        : goalPlanCompletionStatus !== 'complete'
+          ? 'lộ trình mục tiêu'
+          : movementCompletionStatus !== 'complete'
+            ? 'lịch vận động'
+            : null;
   const displayedCalorieTarget = profile.daily_calorie_target ?? nutritionTarget?.calories_kcal;
   const hasMacroTarget = (nutritionTarget?.status === 'ready' || nutritionTarget?.status === 'clinician_target')
     && nutritionTarget.protein_g !== undefined
@@ -808,16 +899,6 @@ export default function ProfileScreen() {
     && nutritionTarget.fat_g !== undefined;
   const targetMethodologyEntries = Object.entries(nutritionTarget?.methodology ?? {})
     .filter((entry): entry is [string, NonNullable<DailyNutritionTarget['methodology'][keyof DailyNutritionTarget['methodology']]>] => Boolean(entry[1]));
-  const missingSetupKey: typeof setupSteps[number]['key'] = (
-    !profile.goal
-    || !profile.work_activity_level
-    || profile.exercise_sessions_per_week === undefined
-    || profile.exercise_minutes_per_session === undefined
-  )
-    ? 'goal'
-    : !Array.isArray(profile.health_flags)
-      ? 'safety'
-      : 'basic';
   const activitySummary = profile.work_activity_level
     ? `${WORK_ACTIVITY_LABELS[profile.work_activity_level]} · Tập ${profile.exercise_sessions_per_week ?? 0} buổi/tuần`
     : profile.activity_level
@@ -826,6 +907,8 @@ export default function ProfileScreen() {
 
   // Refs for scrolling to sections
   const scrollRef = React.useRef<any>(null);
+  const detailScrollRef = React.useRef<any>(null);
+  const profileOverviewRef = React.useRef<any>(null);
   const basicRef = React.useRef<any>(null);
   const assessmentRef = React.useRef<any>(null);
   const goalRef = React.useRef<any>(null);
@@ -853,29 +936,27 @@ export default function ProfileScreen() {
     }
   };
 
+  const scrollToProfileOverview = () => {
+    setTimeout(() => scrollToSection(profileOverviewRef), 80);
+  };
+
   const openSetupStep = (key: typeof setupSteps[number]['key']) => {
     setShowProfileDetails(true);
     if (key === 'basic' || key === 'safety') {
       setBasicCollapsed(false);
       setAssessmentCollapsed(false);
-      // allow UI to expand then scroll
-      setTimeout(() => scrollToSection(key === 'basic' ? basicRef : assessmentRef), 240);
       return;
     }
     if (key === 'goal' || key === 'roadmap') {
       setGoalCollapsed(false);
-      // scroll to roadmap panel when roadmap requested
-      setTimeout(() => scrollToSection(key === 'goal' ? goalRef : roadmapRef), 240);
       return;
     }
     if (key === 'notifications') {
       setNotificationsCollapsed(false);
-      setTimeout(() => scrollToSection(notificationsRef), 240);
       return;
     }
     if (key === 'subscription') {
       setSubscriptionCollapsed(false);
-      setTimeout(() => scrollToSection(subscriptionRef), 240);
     }
   };
 
@@ -883,11 +964,13 @@ export default function ProfileScreen() {
     Promise.all([
       apiClient.get('/user/profile').then((res) => {
         setProfile(res.data);
+        setSavedProfile(res.data);
         if (res.data?.nutrition_target_snapshot) {
           setNutritionTarget(res.data.nutrition_target_snapshot);
         }
       }).catch(() => {
         setProfile({});
+        setSavedProfile({});
       }),
       fetchReminders().then(() => {
         if (reminderPrefs) setReminders(reminderPrefs);
@@ -913,6 +996,12 @@ export default function ProfileScreen() {
       }),
     ]).finally(() => setIsLoading(false));
   }, []);
+
+  useEffect(() => {
+    if (isLoading || completionParams.focus !== 'completion') return;
+    const timer = setTimeout(() => scrollToSection(profileOverviewRef), 320);
+    return () => clearTimeout(timer);
+  }, [completionParams.focus, completionParams.focusAt, isLoading]);
 
   // Sync local goal plan inputs when profile is loaded
   useEffect(() => {
@@ -1035,6 +1124,7 @@ export default function ProfileScreen() {
         health_flags: selectedHealthFlags,
       });
       setProfile(profileRes.data);
+      setSavedProfile(profileRes.data);
 
       // Save reminders if changed
       const reminderUpdates = {
@@ -1337,7 +1427,7 @@ export default function ProfileScreen() {
           </View>
           <TouchableOpacity
             style={styles.profilePrimaryAction}
-            onPress={() => openSetupStep(firstMissingProfileLabel ? missingSetupKey : 'basic')}
+            onPress={firstMissingProfileLabel ? scrollToProfileOverview : () => openSetupStep('basic')}
             activeOpacity={0.78}
             accessibilityRole="button"
             accessibilityLabel={firstMissingProfileLabel ? `Hoàn tất hồ sơ, còn thiếu ${firstMissingProfileLabel}` : 'Chỉnh sửa hồ sơ'}
@@ -1519,19 +1609,21 @@ export default function ProfileScreen() {
           )}
         </SurfaceCard>
 
-        <ProfileSectionLabel label="Thông tin của bạn" />
-        <SurfaceCard style={styles.profileGroupCard}>
-          <ProfileOverviewRow icon="person-outline" label="Cơ thể" value={`${profile.height_cm ?? '--'} cm · ${profile.weight_kg ?? '--'} kg · ${profile.age ?? '--'} tuổi`} onPress={() => openSetupStep('basic')} />
-          <ProfileOverviewRow icon="directions-run" label="Hoạt động" value={activitySummary} onPress={() => openSetupStep('goal')} />
-          <ProfileOverviewRow icon="health-and-safety" label="Sức khỏe & an toàn" value={healthNeedsAttention ? 'Cần xem lại hướng dẫn' : selectedHealthFlags.length ? `${selectedHealthFlags.length} lưu ý sức khỏe` : 'Không có cảnh báo'} warning={healthNeedsAttention} onPress={() => openSetupStep('basic')} />
-          <ProfileOverviewRow icon="water-drop" label="Nước" value={(nutritionTarget?.status === 'ready' || nutritionTarget?.status === 'clinician_target') && nutritionTarget.water_ml ? `Mục tiêu ${(nutritionTarget.water_ml / 1000).toLocaleString('vi-VN')} L` : 'Cần hướng dẫn riêng'} warning={nutritionTarget?.status === 'clinician_guidance'} />
-        </SurfaceCard>
+        <View ref={profileOverviewRef} collapsable={false} testID="profile-completion-overview">
+          <ProfileSectionLabel label="Thông tin của bạn" />
+          <SurfaceCard style={styles.profileGroupCard}>
+            <ProfileOverviewRow icon="person-outline" label="Cơ thể" value={`${profile.height_cm ?? '--'} cm · ${profile.weight_kg ?? '--'} kg · ${profile.age ?? '--'} tuổi`} completionStatus={bodyCompletionStatus} completionTestID="profile-incomplete-body" onPress={() => openSetupStep('basic')} />
+            <ProfileOverviewRow icon="directions-run" label="Hoạt động" value={activitySummary} completionStatus={activityCompletionStatus} completionTestID="profile-incomplete-activity" onPress={() => openSetupStep('goal')} />
+            <ProfileOverviewRow icon="health-and-safety" label="Sức khỏe & an toàn" value={healthNeedsAttention ? 'Cần xem lại hướng dẫn' : selectedHealthFlags.length ? `${selectedHealthFlags.length} lưu ý sức khỏe` : 'Không có cảnh báo'} warning={healthNeedsAttention} completionStatus={safetyCompletionStatus} completionTestID="profile-incomplete-safety" onPress={() => openSetupStep('basic')} />
+            <ProfileOverviewRow icon="water-drop" label="Nước" value={(nutritionTarget?.status === 'ready' || nutritionTarget?.status === 'clinician_target') && nutritionTarget.water_ml ? `Mục tiêu ${(nutritionTarget.water_ml / 1000).toLocaleString('vi-VN')} L` : 'Cần hướng dẫn riêng'} warning={nutritionTarget?.status === 'clinician_guidance'} />
+          </SurfaceCard>
 
-        <ProfileSectionLabel label="Kế hoạch của bạn" />
-        <SurfaceCard style={styles.profileGroupCard}>
-          <ProfileOverviewRow icon="track-changes" label="Lộ trình mục tiêu" value={activeGoalPlan?.duration_weeks ? `${activeGoalPlan.direction === 'loss' ? 'Giảm' : activeGoalPlan.direction === 'gain' ? 'Tăng' : 'Duy trì'} ${activeGoalPlan.target_kg ?? 0} kg trong ${activeGoalPlan.duration_weeks} tuần` : 'Chưa thiết lập lộ trình'} onPress={() => openSetupStep('goal')} />
-          <ProfileOverviewRow icon="event-available" label="Lịch vận động" value={`${roadmap.length} bài · ${completedRoadmapCount} bài hoàn thành hôm nay`} onPress={() => openSetupStep('roadmap')} last />
-        </SurfaceCard>
+          <ProfileSectionLabel label="Kế hoạch của bạn" />
+          <SurfaceCard style={styles.profileGroupCard}>
+            <ProfileOverviewRow icon="track-changes" label="Lộ trình mục tiêu" value={activeGoalPlan?.duration_weeks ? `${activeGoalPlan.direction === 'loss' ? 'Giảm' : activeGoalPlan.direction === 'gain' ? 'Tăng' : 'Duy trì'} ${activeGoalPlan.target_kg ?? 0} kg trong ${activeGoalPlan.duration_weeks} tuần` : 'Chưa thiết lập lộ trình'} completionStatus={goalPlanCompletionStatus} completionTestID="profile-incomplete-goal-plan" onPress={() => openSetupStep('goal')} />
+            <ProfileOverviewRow icon="event-available" label="Lịch vận động" value={`${roadmap.length} bài · ${completedRoadmapCount} bài hoàn thành hôm nay`} completionStatus={movementCompletionStatus} completionTestID="profile-incomplete-movement" onPress={() => openSetupStep('roadmap')} last />
+          </SurfaceCard>
+        </View>
 
         <ProfileSectionLabel label="Cá nhân hóa thêm" />
         <SurfaceCard style={styles.personalizationCard}>
@@ -1580,32 +1672,34 @@ export default function ProfileScreen() {
           <Text style={styles.overviewLogoutText}>Đăng xuất</Text>
         </TouchableOpacity>
 
-        {showProfileDetails && (
-          <>
-        <View style={styles.profileDetailsHeader}>
-          <ProfileSectionLabel label="Chi tiết hồ sơ" />
-          <View style={styles.profileDetailsActions}>
-            <TouchableOpacity
-              style={styles.profileDetailsSave}
-              onPress={handleSaveProfile}
-              disabled={isSaving}
-              accessibilityRole="button"
-              accessibilityState={{ disabled: isSaving }}
-              accessibilityLabel={isSaving ? 'Đang lưu hồ sơ' : 'Lưu hồ sơ'}
-            >
-              <Text style={styles.profileDetailsSaveText}>{isSaving ? 'Đang lưu...' : 'Lưu'}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.profileDetailsClose}
-              onPress={() => setShowProfileDetails(false)}
-              accessibilityRole="button"
-              accessibilityLabel="Đóng phần chỉnh sửa hồ sơ"
-            >
-              <MaterialIcons name="close" size={18} color={colors.textMuted} />
-              <Text style={styles.profileDetailsCloseText}>Thu gọn</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+        <Modal
+          visible={showProfileDetails}
+          animationType="slide"
+          onRequestClose={() => setShowProfileDetails(false)}
+        >
+          <View style={styles.detailModalContainer}>
+            <View style={styles.detailModalHeader}>
+              <TouchableOpacity
+                onPress={() => setShowProfileDetails(false)}
+                style={styles.detailModalBackBtn}
+                accessibilityRole="button"
+                accessibilityLabel="Quay lại"
+              >
+                <MaterialIcons name="arrow-back" size={22} color={colors.text} />
+              </TouchableOpacity>
+              <Text style={styles.detailModalTitle}>Chi tiết hồ sơ</Text>
+              <TouchableOpacity
+                style={styles.profileDetailsSave}
+                onPress={handleSaveProfile}
+                disabled={isSaving}
+                accessibilityRole="button"
+                accessibilityState={{ disabled: isSaving }}
+                accessibilityLabel={isSaving ? 'Đang lưu hồ sơ' : 'Lưu hồ sơ'}
+              >
+                <Text style={styles.profileDetailsSaveText}>{isSaving ? 'Đang lưu...' : 'Lưu'}</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView ref={detailScrollRef} showsVerticalScrollIndicator={false} style={styles.detailModalContent} contentContainerStyle={styles.detailModalContentContainer}>
 
         <View ref={basicRef}>
           <SurfaceCard style={[styles.sectionCard, basicCollapsed && styles.sectionCardCompact]}>
@@ -2484,8 +2578,9 @@ export default function ProfileScreen() {
         })()}
       </SurfaceCard>
       </View>
-          </>
-        )}
+            </ScrollView>
+          </View>
+        </Modal>
 
       </View>
       <RewardToast reward={reward} onHide={() => setReward(null)} />
@@ -2503,6 +2598,8 @@ function ProfileOverviewRow({
   value,
   onPress,
   warning = false,
+  completionStatus,
+  completionTestID,
   muted = false,
   last = false,
 }: {
@@ -2511,19 +2608,36 @@ function ProfileOverviewRow({
   value: string;
   onPress?: () => void;
   warning?: boolean;
+  completionStatus?: ProfileCompletionStatus;
+  completionTestID?: string;
   muted?: boolean;
   last?: boolean;
 }) {
   const { colors } = useAppTheme();
+  const { t } = useI18n();
+  const completionLabel = completionStatus
+    ? t(`profile.completion.${completionStatus}` as I18nKey)
+    : null;
+  const completionColor = completionStatus === 'required'
+    ? colors.danger
+    : completionStatus === 'partial'
+      ? colors.warning
+      : colors.success;
   const content = (
     <>
-      <View style={[styles.profileRowIcon, warning && styles.profileRowIconWarning]}>
-        <MaterialIcons name={icon} size={20} color={warning ? colors.warning : colors.success} />
+      <View style={[
+        styles.profileRowIcon,
+        warning && styles.profileRowIconWarning,
+        completionStatus === 'required' && styles.profileRowIconIncomplete,
+        completionStatus === 'partial' && styles.profileRowIconPartial,
+      ]}>
+        <MaterialIcons name={icon} size={20} color={completionStatus ? completionColor : warning ? colors.warning : colors.success} />
       </View>
       <View style={styles.profileRowCopy}>
         <Text style={styles.profileRowLabel}>{label}</Text>
         <Text style={[styles.profileRowValue, muted && styles.profileRowValueMuted, warning && styles.profileRowValueWarning]} numberOfLines={2}>{value}</Text>
       </View>
+      {completionStatus && <ProfileCompletionBadge status={completionStatus} testID={completionTestID} />}
       {onPress && <MaterialIcons name="chevron-right" size={22} color={colors.textMuted} />}
     </>
   );
@@ -2536,9 +2650,95 @@ function ProfileOverviewRow({
       style={[styles.profileOverviewRow, !last && styles.profileOverviewRowBorder]}
       onPress={onPress}
       activeOpacity={0.72}
+      accessibilityRole="button"
+      accessibilityLabel={`${label}. ${value}${completionLabel ? `. ${completionLabel}` : ''}`}
+      accessibilityHint={completionStatus !== 'complete' ? t('profile.incompleteHint') : undefined}
     >
       {content}
     </TouchableOpacity>
+  );
+}
+
+function ProfileCompletionBadge({
+  status,
+  testID,
+}: {
+  status: ProfileCompletionStatus;
+  testID?: string;
+}) {
+  const { colors } = useAppTheme();
+  const { t } = useI18n();
+  const pulse = React.useRef(new Animated.Value(status === 'required' ? 0 : 1)).current;
+
+  React.useEffect(() => {
+    if (status !== 'required') {
+      pulse.setValue(1);
+      return undefined;
+    }
+
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, {
+          toValue: 1,
+          duration: 650,
+          useNativeDriver: Platform.OS !== 'web',
+        }),
+        Animated.timing(pulse, {
+          toValue: 0,
+          duration: 650,
+          useNativeDriver: Platform.OS !== 'web',
+        }),
+      ]),
+    );
+    animation.start();
+    return () => animation.stop();
+  }, [pulse, status]);
+
+  const tone = status === 'required'
+    ? {
+        color: colors.danger,
+        backgroundColor: colors.surfaceDanger,
+        borderColor: colors.borderDanger,
+        icon: 'fiber-manual-record' as const,
+      }
+    : status === 'partial'
+      ? {
+          color: colors.warning,
+          backgroundColor: colors.surfaceWarning,
+          borderColor: colors.borderWarning,
+          icon: 'error-outline' as const,
+        }
+      : {
+          color: colors.success,
+          backgroundColor: colors.surfaceSuccess,
+          borderColor: colors.borderSuccess,
+          icon: 'check-circle' as const,
+        };
+
+  return (
+    <Animated.View
+      testID={testID}
+      style={[
+        styles.profileIncompleteBadge,
+        {
+          backgroundColor: tone.backgroundColor,
+          borderColor: tone.borderColor,
+          opacity: status === 'required'
+            ? pulse.interpolate({ inputRange: [0, 1], outputRange: [0.72, 1] })
+            : 1,
+          transform: [{
+            scale: status === 'required'
+              ? pulse.interpolate({ inputRange: [0, 1], outputRange: [0.97, 1.03] })
+              : 1,
+          }],
+        },
+      ]}
+    >
+      <MaterialIcons name={tone.icon} size={status === 'required' ? 7 : 12} color={tone.color} />
+      <Text style={[styles.profileIncompleteText, { color: tone.color }]}>
+        {t(`profile.completion.${status}` as I18nKey)}
+      </Text>
+    </Animated.View>
   );
 }
 
@@ -2978,6 +3178,12 @@ const styles = createThemedStyles((colors, radii) => ({
   profileRowIconWarning: {
     backgroundColor: colors.surfaceWarning,
   },
+  profileRowIconIncomplete: {
+    backgroundColor: colors.surfaceDanger,
+  },
+  profileRowIconPartial: {
+    backgroundColor: colors.surfaceWarning,
+  },
   profileRowCopy: {
     flex: 1,
     minWidth: 0,
@@ -3000,6 +3206,24 @@ const styles = createThemedStyles((colors, radii) => ({
   profileRowValueWarning: {
     color: colors.warning,
     fontWeight: '700',
+  },
+  profileIncompleteBadge: {
+    minHeight: 25,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    flexShrink: 0,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderWidth: 1,
+    borderRadius: 9,
+  },
+  profileIncompleteText: {
+    fontSize: 10,
+    lineHeight: 13,
+    fontWeight: '900',
+    letterSpacing: 0.1,
   },
   personalizationCard: {
     marginBottom: 18,
@@ -3057,6 +3281,22 @@ const styles = createThemedStyles((colors, radii) => ({
     fontSize: 14,
     fontWeight: '800',
   },
+  detailModalContainer: { flex: 1, backgroundColor: colors.bg },
+  detailModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingTop: Platform.OS === 'ios' ? 50 : 24,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    backgroundColor: colors.surface,
+    gap: 8,
+  },
+  detailModalBackBtn: { padding: 8 },
+  detailModalTitle: { flex: 1, fontSize: 17, fontWeight: '800', color: colors.text },
+  detailModalContent: { flex: 1 },
+  detailModalContentContainer: { paddingHorizontal: 16, paddingBottom: 60 },
   profileDetailsHeader: {
     flexDirection: 'row',
     alignItems: 'center',
