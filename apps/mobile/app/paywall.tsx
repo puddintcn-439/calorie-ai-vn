@@ -160,6 +160,13 @@ export default function PaywallScreen() {
   const paymentReturnPath = params.returnTo?.startsWith('/') && !params.returnTo.startsWith('//')
     ? params.returnTo
     : '/profile';
+  const handleBack = () => {
+    if (router.canGoBack()) {
+      router.back();
+      return;
+    }
+    router.replace(paymentReturnPath as never);
+  };
 
   const loadRenewalReminder = useCallback(async () => {
     try {
@@ -384,7 +391,7 @@ export default function PaywallScreen() {
         <View style={styles.header}>
           <TouchableOpacity
             style={styles.backButton}
-            onPress={() => router.back()}
+            onPress={handleBack}
             accessibilityRole="button"
             accessibilityLabel={t('screen.paywall.text.012')}
             testID="paywall-back-button"

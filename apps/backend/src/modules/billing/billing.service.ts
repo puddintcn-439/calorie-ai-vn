@@ -406,7 +406,7 @@ export class BillingService implements OnModuleInit {
     try {
       checkoutUrl = payos
         ? this.payosCheckoutUrl(await payos.paymentRequests.create(paymentData))
-        : this.createPayosMockCheckoutUrl(input.tier, input.interval, orderCode);
+        : this.createPayosMockCheckoutUrl(input.tier, input.interval, orderCode, input.requestOrigin);
     } catch {
       await this.supabase.db
         .from('billing_invoices')
@@ -1801,14 +1801,34 @@ export class BillingService implements OnModuleInit {
     throw new BadRequestException('PayOS app return URL origin is not allowed.');
   }
 
-  private createPayosMockCheckoutUrl(tier: PayosCheckoutTier, interval: PayosCheckoutInterval, orderCode: number): string {
+  private createPayosMockCheckoutUrl(
+    tier: PayosCheckoutTier,
+    interval: PayosCheckoutInterval,
+    orderCode: number,
+    requestOrigin?: string,
+  ): string {
     const params = new URLSearchParams({
       provider: 'payos',
       tier,
       interval,
       orderCode: String(orderCode),
     });
-    return `http://localhost:3000/mock-payos-checkout?${params.toString()}`;
+    const candidates = [
+      requestOrigin,
+      this.config.get<string>('PAYOS_WEB_RETURN_URL'),
+      'http://localhost:19006',
+    ];
+    for (const candidate of candidates) {
+      try {
+        const parsed = new URL(String(candidate ?? '').trim());
+        if (['http:', 'https:'].includes(parsed.protocol)) {
+          return `${parsed.origin}/mock-payos-checkout?${params.toString()}`;
+        }
+      } catch {
+        // Try the next local app origin.
+      }
+    }
+    return `http://localhost:19006/mock-payos-checkout?${params.toString()}`;
   }
 
   private createPayosOrderCode(): number {

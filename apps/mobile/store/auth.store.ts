@@ -69,10 +69,13 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   logout: async () => {
-    await pushNotificationService.unregisterPushToken();
-    await authStorage.deleteItemAsync('auth_token');
-    await authStorage.deleteItemAsync('user_id');
-    clearAccountScopedState();
-    set({ token: null, userId: null });
+    try {
+      await pushNotificationService.unregisterPushToken();
+    } finally {
+      await authStorage.deleteItemAsync('auth_token');
+      await authStorage.deleteItemAsync('user_id');
+      clearAccountScopedState();
+      set({ token: null, userId: null });
+    }
   },
 }));

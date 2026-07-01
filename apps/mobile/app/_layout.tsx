@@ -50,6 +50,9 @@ export default function RootLayout() {
       <Stack.Screen name="paywall" />
       <Stack.Screen name="achievements" />
       <Stack.Screen name="health-sync" />
+      <Stack.Screen name="body-composition" />
+      <Stack.Screen name="mock-payos-checkout" />
+      <Stack.Screen name="privacy-data" />
     </Stack>
   );
 }

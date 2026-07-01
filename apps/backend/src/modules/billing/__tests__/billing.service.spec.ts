@@ -539,7 +539,7 @@ describe('BillingService', () => {
     expect(result).toMatchObject({
       ok: true,
       provider: 'payos',
-      checkout_url: expect.stringContaining('http://localhost:3000/mock-payos-checkout?'),
+      checkout_url: expect.stringContaining('http://localhost:19006/mock-payos-checkout?'),
       tier: 'premium',
       interval: 'monthly',
       amount_vnd: 59000,

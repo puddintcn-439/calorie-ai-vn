@@ -123,6 +123,7 @@ export class SupabaseService implements OnModuleInit {
     // Supabase isn't configured. This keeps the app running and lets higher
     // level guards decide how to proceed.
     const terminal = async () => ({ data: null, error: null });
+    const authTerminal = async () => ({ data: null, error: { message: 'Supabase not configured' } });
 
     // A lightweight thenable/chainable query builder that mimics the
     // Supabase client's fluent API. Methods return the builder itself so
@@ -161,7 +162,17 @@ export class SupabaseService implements OnModuleInit {
     }
 
     // Provide auth helpers to mimic `supabase.auth` shape.
-    chainable.auth = { signIn: terminal, signOut: terminal };
+    chainable.auth = {
+      signIn: authTerminal,
+      signOut: authTerminal,
+      signInWithPassword: authTerminal,
+      signUp: authTerminal,
+      admin: {
+        createUser: authTerminal,
+        deleteUser: authTerminal,
+        getUserById: authTerminal,
+      },
+    };
 
     // Make the chainable thenable so `await chainable` resolves to terminal().
     (chainable as any).then = (resolve: any, reject: any) => {

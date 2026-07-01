@@ -1735,7 +1735,7 @@ export default function ProfileScreen() {
             </View>
           </View>
           <View style={styles.personalizationRows}>
-            <ProfileOverviewRow icon="accessibility-new" label="Thành phần cơ thể" value="Tùy chọn" onPress={() => router.push('/progress' as never)} />
+            <ProfileOverviewRow icon="accessibility-new" label="Thành phần cơ thể" value="Tùy chọn" onPress={() => router.push('/body-composition' as never)} />
             <ProfileOverviewRow icon="watch" label="Kết nối thiết bị" value="Tùy chọn" onPress={() => router.push('/health-sync' as never)} last />
           </View>
         </SurfaceCard>
@@ -1758,7 +1758,7 @@ export default function ProfileScreen() {
               <UiChip label={t('profile.appearance.system')} selected={requestedMode === 'system'} onPress={() => void setThemeMode('system')} style={styles.settingsChip} />
             </View>
           )}
-          <ProfileOverviewRow icon="privacy-tip" label="Quyền riêng tư & dữ liệu" value="Sắp có" muted last />
+          <ProfileOverviewRow icon="privacy-tip" label="Quyền riêng tư & dữ liệu" value="Kiểm soát dữ liệu" onPress={() => router.push('/privacy-data' as never)} last />
         </SurfaceCard>
 
         <ProfileSectionLabel label="Tài khoản" />
@@ -2652,7 +2652,12 @@ export default function ProfileScreen() {
             ? FEATURE_ROWS.filter(({ key }) => SUBSCRIPTION_TIERS[tier as keyof typeof SUBSCRIPTION_TIERS]?.features[key])
             : FEATURE_ROWS.filter(({ key }) => !SUBSCRIPTION_TIERS.free.features[key]);
 
-          const openPaywall = () => router.push({ pathname: '/paywall', params: { returnTo: '/profile' } } as never);
+          const openPaywall = () => {
+            setShowProfileDetails(false);
+            setTimeout(() => {
+              router.push({ pathname: '/paywall', params: { returnTo: '/profile' } } as never);
+            }, 0);
+          };
 
           return (
             <View style={styles.subBody}>
@@ -2739,14 +2744,26 @@ export default function ProfileScreen() {
 
               {/* ── CTA ── */}
               {(!isPaid || !isActive) ? (
-                <TouchableOpacity style={styles.subUpgradeBtn} onPress={openPaywall} activeOpacity={0.85}>
+                <TouchableOpacity
+                  style={styles.subUpgradeBtn}
+                  onPress={openPaywall}
+                  activeOpacity={0.85}
+                  testID="profile-subscription-upgrade-button"
+                  accessibilityRole="button"
+                >
                   <MaterialIcons name="workspace-premium" size={16} color="#fff" />
                   <Text style={styles.subUpgradeBtnText}>
                     {!isActive && isPaid ? t('profile.subscription.renewBtn') : t('profile.subscription.upgradeBtn')}
                   </Text>
                 </TouchableOpacity>
               ) : (
-                <TouchableOpacity style={styles.subManageBtn} onPress={openPaywall} activeOpacity={0.7}>
+                <TouchableOpacity
+                  style={styles.subManageBtn}
+                  onPress={openPaywall}
+                  activeOpacity={0.7}
+                  testID="profile-subscription-manage-button"
+                  accessibilityRole="button"
+                >
                   <Text style={styles.subManageBtnText}>{t('profile.subscription.manage')}</Text>
                   <MaterialIcons name="chevron-right" size={16} color={colors.accentMint} />
                 </TouchableOpacity>

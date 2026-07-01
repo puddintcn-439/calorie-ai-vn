@@ -20,6 +20,8 @@
       "bundleIdentifier": "com.calorieaivn.app",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
+        "UIFileSharingEnabled": true,
+        "LSSupportsOpeningDocumentsInPlace": true,
         "NSMicrophoneUsageDescription": "Dùng micro để ghi giọng nói và phân tích bữa ăn",
         "NSCameraUsageDescription": "Dùng camera để chụp ảnh đồ ăn phân tích calo",
         "NSPhotoLibraryUsageDescription": "Chọn ảnh đồ ăn từ thư viện để phân tích calo",
@@ -43,6 +45,9 @@
         "android.permission.health.READ_ACTIVE_CALORIES_BURNED",
         "android.permission.health.READ_TOTAL_CALORIES_BURNED"
       ]
+    },
+    "web": {
+      "favicon": "./assets/images/icon.png"
     },
     "plugins": [
       "expo-router",

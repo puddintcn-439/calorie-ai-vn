@@ -3,12 +3,12 @@ import {
   View,
   Text as NativeText,
   ScrollView,
-  TouchableOpacity,
   ActivityIndicator,
   RefreshControl
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { BodyProgressEntry, BodyProgressSummary, BodyProgressTrend, CreateBodyProgressDto, TodaySummary } from '@calorie-ai/types';
+import { router } from 'expo-router';
+import { BodyProgressSummary, BodyProgressTrend, TodaySummary } from '@calorie-ai/types';
 import { ScreenShell, SurfaceCard, Eyebrow, HeroTitle, BodyText, useBottomNavContentPadding } from '../../components/ui-shell';
 import { UiButton } from '../../components/ui-button';
 import MacrosCard from '../../components/macros-card';
@@ -25,7 +25,6 @@ import {
 import { getLocalDateYmd, getLocalTimezoneOffsetMinutes } from '../../services/date';
 import { formatNumberVi, formatPercent, safeNumber, toFiniteNumber } from '../../services/number-format';
 import { Text } from '../../components/i18n-text';
-import { TextInput } from '../../components/i18n-text-input';
 import { Alert } from '../../components/i18n-alert';
 import { useI18n } from '../../components/i18n';
 import { appLogger } from '../../services/logger.service';
@@ -34,20 +33,6 @@ function formatDecimal(value: unknown, fallback = '--') {
   const numeric = toFiniteNumber(value);
   return numeric === null ? fallback : numeric.toLocaleString('vi-VN', { maximumFractionDigits: 1 });
 }
-
-function parseOptionalInput(value: string): number | undefined {
-  const numeric = toFiniteNumber(value.replace(',', '.'));
-  return numeric === null ? undefined : numeric;
-}
-
-const ENERGY_LABEL_KEYS = [
-  '',
-  'screen.tabs.progress.energy.1',
-  'screen.tabs.progress.energy.2',
-  'screen.tabs.progress.energy.3',
-  'screen.tabs.progress.energy.4',
-  'screen.tabs.progress.energy.5',
-] as const;
 
 const TARGET_FIELD_LABEL_KEYS: Record<CalorieTargetRequiredField, any> = {
   weight_kg: 'screen.tabs.progress.target.field.weight',
@@ -136,15 +121,6 @@ export default function BodyProgressScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [showForm, setShowForm] = useState(false);
-
-  // Form state
-  const [weightKg, setWeightKg] = useState('');
-  const [waistCm, setWaistCm] = useState('');
-  const [hipCm, setHipCm] = useState('');
-  const [bodyFatPct, setBodyFatPct] = useState('');
-  const [energyLevel, setEnergyLevel] = useState<1 | 2 | 3 | 4 | 5>(3);
-  const [note, setNote] = useState('');
 
   const [preview, setPreview] = useState<WeeklyAdaptiveResult | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -167,19 +143,6 @@ export default function BodyProgressScreen() {
 
       if (summaryResult.status === 'fulfilled') {
         setTodaySummary(summaryResult.value.data);
-      }
-
-      // Pre-fill form with today's entry if exists
-      const todayEntry = trendResult.status === 'fulfilled'
-        ? trendResult.value.data?.entries?.find((e: BodyProgressEntry) => e.recorded_at === today)
-        : null;
-      if (todayEntry) {
-        setWeightKg(todayEntry.weight_kg?.toString() ?? '');
-        setWaistCm(todayEntry.waist_cm?.toString() ?? '');
-        setHipCm(todayEntry.hip_cm?.toString() ?? '');
-        setBodyFatPct(todayEntry.body_fat_pct?.toString() ?? '');
-        setEnergyLevel((todayEntry.energy_level ?? 3) as 1 | 2 | 3 | 4 | 5);
-        setNote(todayEntry.note ?? '');
       }
     } catch (error) {
       appLogger.warn('Progress', 'Failed to load body progress', error);
@@ -258,62 +221,6 @@ export default function BodyProgressScreen() {
     setRefreshing(true);
     loadData();
     fetchMyTarget().catch(() => {});
-  };
-
-  const handleSave = async () => {
-    const parsedWeight = parseOptionalInput(weightKg);
-    const parsedWaist = parseOptionalInput(waistCm);
-    const parsedHip = parseOptionalInput(hipCm);
-    const parsedBodyFat = parseOptionalInput(bodyFatPct);
-
-    if (parsedWeight === undefined && parsedWaist === undefined) {
-      Alert.alert('screen.tabs.progress.alert.012', 'screen.tabs.progress.alert.013');
-      return;
-    }
-
-    setSaving(true);
-    try {
-      const dto: CreateBodyProgressDto = {
-        recorded_at: getLocalDateYmd(),
-        energy_level: energyLevel,
-      };
-      if (parsedWeight !== undefined) dto.weight_kg = parsedWeight;
-      if (parsedWaist !== undefined) dto.waist_cm = parsedWaist;
-      if (parsedHip !== undefined) dto.hip_cm = parsedHip;
-      if (parsedBodyFat !== undefined) dto.body_fat_pct = parsedBodyFat;
-      if (note.trim()) dto.note = note.trim();
-
-      await apiClient.post('/body-progress', dto);
-      Alert.alert('screen.tabs.progress.alert.014', 'screen.tabs.progress.alert.015');
-      setShowForm(false);
-      loadData();
-    } catch (error) {
-      Alert.alert('screen.tabs.progress.alert.016', 'screen.tabs.progress.alert.017');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleDeleteEntry = (entry: BodyProgressEntry) => {
-    Alert.alert(
-      'screen.tabs.progress.alert.018',
-      t('screen.tabs.progress.delete.message', { date: entry.recorded_at }),
-      [
-        { text: 'screen.tabs.progress.alert.019', style: 'cancel' },
-        {
-          text: 'screen.tabs.progress.alert.020',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await apiClient.delete(`/body-progress/${entry.id}`);
-              loadData();
-            } catch {
-              Alert.alert('screen.tabs.progress.alert.021', 'screen.tabs.progress.alert.022');
-            }
-          },
-        },
-      ],
-    );
   };
 
   if (loading) {
@@ -469,146 +376,24 @@ export default function BodyProgressScreen() {
         {/* ── Adherence Summary ── */}
         <AdherenceCard />
 
-        {/* ── Log Today Button ── */}
-        <UiButton
-          label={showForm ? 'screen.tabs.progress.form.toggleHide' : 'screen.tabs.progress.form.toggleShow'}
-          onPress={() => setShowForm(!showForm)}
-          style={styles.logButton}
-        />
-
-        {/* ── Input Form ── */}
-        {showForm && (
-          <SurfaceCard style={styles.formCard}>
-            <Text style={styles.formTitle}>{t('screen.tabs.progress.form.title', { date: new Date().toLocaleDateString('vi-VN') })}</Text>
-
-            <View style={styles.formRow}>
-              <View style={styles.formField}>
-                <Text style={styles.fieldLabel} i18nKey="screen.tabs.progress.text.006" />
-                <TextInput
-                  style={styles.textInput}
-                  value={weightKg}
-                  onChangeText={setWeightKg}
-                  keyboardType="decimal-pad"
-                  placeholder="screen.tabs.progress.placeholder.001"
-                  placeholderTextColor={colors.textMuted}
-                />
-              </View>
-              <View style={styles.formField}>
-                <Text style={styles.fieldLabel} i18nKey="screen.tabs.progress.text.007" />
-                <TextInput
-                  style={styles.textInput}
-                  value={waistCm}
-                  onChangeText={setWaistCm}
-                  keyboardType="decimal-pad"
-                  placeholder="screen.tabs.progress.placeholder.002"
-                  placeholderTextColor={colors.textMuted}
-                />
-              </View>
+        {/* Body-composition data is managed on its dedicated screen. */}
+        <SurfaceCard style={styles.compositionCta}>
+          <View style={styles.compositionCtaCopy}>
+            <View style={styles.compositionCtaIcon}>
+              <Ionicons name="body-outline" size={22} color={colors.accentCyan} />
             </View>
-
-            <View style={styles.formRow}>
-              <View style={styles.formField}>
-                <Text style={styles.fieldLabel} i18nKey="screen.tabs.progress.text.008" />
-                <TextInput
-                  style={styles.textInput}
-                  value={hipCm}
-                  onChangeText={setHipCm}
-                  keyboardType="decimal-pad"
-                  placeholder="screen.tabs.progress.placeholder.003"
-                  placeholderTextColor={colors.textMuted}
-                />
-              </View>
-              <View style={styles.formField}>
-                <Text style={styles.fieldLabel} i18nKey="screen.tabs.progress.text.009" />
-                <TextInput
-                  style={styles.textInput}
-                  value={bodyFatPct}
-                  onChangeText={setBodyFatPct}
-                  keyboardType="decimal-pad"
-                  placeholder="screen.tabs.progress.placeholder.004"
-                  placeholderTextColor={colors.textMuted}
-                />
-              </View>
+            <View style={styles.compositionCtaText}>
+              <Text style={styles.compositionCtaTitle} i18nKey="progress.composition.title" />
+              <Text style={styles.compositionCtaBody} i18nKey="progress.composition.body" />
             </View>
+          </View>
+          <UiButton
+            label="progress.composition.action"
+            onPress={() => router.push('/body-composition' as never)}
+            style={styles.compositionCtaButton}
+          />
+        </SurfaceCard>
 
-            <Text style={styles.fieldLabel} i18nKey="screen.tabs.progress.text.010" />
-            <View style={styles.energyRow}>
-              {([1, 2, 3, 4, 5] as const).map((level) => (
-                <TouchableOpacity
-                  key={level}
-                  style={[styles.energyChip, energyLevel === level && styles.energyChipActive]}
-                  onPress={() => setEnergyLevel(level)}
-                >
-                  <Text style={styles.energyLabel}>{t(ENERGY_LABEL_KEYS[level] as any)}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <Text style={styles.fieldLabel} i18nKey="screen.tabs.progress.text.011" />
-            <TextInput
-              style={[styles.textInput, styles.noteInput]}
-              value={note}
-              onChangeText={setNote}
-              placeholder="screen.tabs.progress.placeholder.005"
-              placeholderTextColor={colors.textMuted}
-              multiline
-            />
-
-            <UiButton
-              label="screen.tabs.progress.label.002"
-              onPress={handleSave}
-              loading={saving}
-              style={styles.saveButton}
-            />
-          </SurfaceCard>
-        )}
-
-        {/* ── History List ── */}
-        {trend && trend.entries.length > 0 && (
-          <>
-            <Text style={styles.historyTitle}>{t('screen.tabs.progress.history.title', { count: trend.entries.length })}</Text>
-            {trend.entries.slice(0, 30).map((entry) => (
-              <SurfaceCard key={entry.id} style={styles.historyCard}>
-                <View style={styles.historyHeader}>
-                  <Text style={styles.historyDate}>{entry.recorded_at}</Text>
-                  <View style={styles.historyRight}>
-                    {entry.energy_level && (
-                      <Text style={styles.energyEmoji}>
-                        {t(ENERGY_LABEL_KEYS[entry.energy_level] as any).split(' ')[0]}
-                      </Text>
-                    )}
-                    <TouchableOpacity
-                      onPress={() => handleDeleteEntry(entry)}
-                      style={styles.deleteButton}
-                      accessibilityRole="button"
-                      accessibilityLabel={t('screen.tabs.progress.delete.button')}
-                    >
-                      <Ionicons name="trash-outline" size={16} color={colors.danger} />
-                    </TouchableOpacity>
-                  </View>
-                </View>
-                <View style={styles.metricsRow}>
-                  {entry.weight_kg != null && (
-                    <Text style={styles.metricChip}>⚖️ {entry.weight_kg} kg</Text>
-                  )}
-                  {entry.waist_cm != null && (
-                    <Text style={styles.metricChip}>📏 {entry.waist_cm} cm</Text>
-                  )}
-                  {entry.body_fat_pct != null && (
-                    <Text style={styles.metricChip}>💧 {entry.body_fat_pct}%</Text>
-                  )}
-                </View>
-                {entry.note && <Text style={styles.historyNote}>{entry.note}</Text>}
-              </SurfaceCard>
-            ))}
-          </>
-        )}
-
-        {trend?.days_tracked === 0 && !showForm && (
-          <SurfaceCard style={styles.emptyCard}>
-            <Text style={styles.emptyText} i18nKey="screen.tabs.progress.empty" />
-          </SurfaceCard>
-        )}
       </ScrollView>
     </ScreenShell>
   );
@@ -636,47 +421,27 @@ const styles = createThemedStyles((colors, radii) => ({
   trendValue: { color: colors.text, fontSize: 16, fontWeight: '700' },
   deltaBadge: { fontSize: 12, marginTop: 2, fontWeight: '600' },
   totalChange: { color: colors.textSoft, fontSize: 13, marginTop: 8, textAlign: 'center' },
-  logButton: { marginBottom: 14 },
-  formCard: { marginBottom: 14, borderColor: colors.textMuted },
-  formTitle: { color: colors.text, fontSize: 14, fontWeight: '700', marginBottom: 14 },
-  formRow: { flexDirection: 'row', gap: 12, marginBottom: 12 },
-  formField: { flex: 1 },
-  fieldLabel: { color: colors.textSoft, fontSize: 12, fontWeight: '600', marginBottom: 6 },
-  textInput: {
-    backgroundColor: colors.surfaceAlt,
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: 8,
-    color: colors.text,
-    fontSize: 14,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
+  compositionCta: {
+    marginTop: 2,
+    marginBottom: 14,
+    borderColor: colors.borderInfo,
+    backgroundColor: colors.surfaceInfo,
   },
-  noteInput: { minHeight: 60, textAlignVertical: 'top' },
-  energyRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 12 },
-  energyChip: {
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    borderRadius: 8,
+  compositionCtaCopy: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
+  compositionCtaIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surfaceAlt,
+    borderColor: colors.borderInfo,
   },
-  energyChipActive: { borderColor: colors.accentMint, backgroundColor: colors.surfaceSuccess },
-  energyLabel: { color: colors.textSoft, fontSize: 11 },
-  saveButton: { marginTop: 8 },
-  historyTitle: { color: colors.text, fontSize: 14, fontWeight: '700', marginBottom: 10 },
-  historyCard: { marginBottom: 10, borderColor: colors.border },
-  historyHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  historyDate: { color: colors.info, fontSize: 13, fontWeight: '600' },
-  historyRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  energyEmoji: { fontSize: 18 },
-  deleteButton: { padding: 4 },
-  metricsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  metricChip: { color: colors.text, fontSize: 13, backgroundColor: colors.surfaceAlt, paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
-  historyNote: { color: colors.textMuted, fontSize: 12, marginTop: 6, fontStyle: 'italic' },
-  emptyCard: { borderColor: colors.border, backgroundColor: colors.surfaceAlt },
-  emptyText: { color: colors.textMuted, fontSize: 14, textAlign: 'center', lineHeight: 21 },
+  compositionCtaText: { flex: 1, minWidth: 0 },
+  compositionCtaTitle: { color: colors.text, fontSize: 15, fontWeight: '900', marginBottom: 4 },
+  compositionCtaBody: { color: colors.textSoft, fontSize: 12, lineHeight: 18 },
+  compositionCtaButton: { marginTop: 14 },
   previewCard: { marginBottom: 14, borderColor: colors.borderInfo, backgroundColor: colors.surface },
   previewRow: { color: colors.textSoft, fontSize: 13, marginTop: 4 },
   progressSummaryCard: { marginBottom: 14, borderColor: colors.borderInfo, backgroundColor: colors.surface },

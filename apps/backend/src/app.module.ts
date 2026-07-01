@@ -20,6 +20,7 @@ import { AdminModule } from './modules/admin/admin.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { HealthModule } from './health/health.module';
 import { MetricsModule } from './common/metrics/metrics.module';
+import { PrivacyModule } from './modules/privacy/privacy.module';
 
 @Module({
   imports: [
@@ -55,6 +56,7 @@ import { MetricsModule } from './common/metrics/metrics.module';
     CoachingModule,
     BodyProgressModule,
     NotificationsModule,
+    PrivacyModule,
     AdminModule,
   ],
 })
