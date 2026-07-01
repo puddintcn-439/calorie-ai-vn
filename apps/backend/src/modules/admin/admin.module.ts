@@ -8,9 +8,10 @@ import { SupabaseModule } from '../../common/supabase/supabase.module';
 import { AiModule } from '../ai/ai.module';
 import { BillingModule } from '../billing/billing.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { SupportModule } from '../support/support.module';
 
 @Module({
-  imports: [SupabaseModule, AiModule, BillingModule, NotificationsModule],
+  imports: [SupabaseModule, AiModule, BillingModule, NotificationsModule, SupportModule],
   controllers: [AdminController],
   providers: [AdminService, AdminRevenueService, AdminGuard, AdminRoleGuard],
 })

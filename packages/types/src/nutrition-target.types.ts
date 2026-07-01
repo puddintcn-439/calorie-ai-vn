@@ -1,4 +1,4 @@
-import { ActivityLevel, HealthFlag, SweatLevel, UserGoal, WorkActivityLevel } from './user.types';
+import { ActivityLevel, ClimateExposure, HealthFlag, SweatLevel, UserGoal, WorkActivityLevel } from './user.types';
 
 export type NutritionTargetStatus = 'ready' | 'needs_profile' | 'clinician_guidance' | 'clinician_target';
 export type NutritionEvidenceLevel =
@@ -71,6 +71,7 @@ export interface DailyNutritionTarget {
     exercise_sessions_per_week?: number;
     exercise_minutes_per_session?: number;
     sweat_level?: SweatLevel;
+    climate_exposure?: ClimateExposure;
     goal?: UserGoal;
     health_flags: HealthFlag[];
     protein_g_per_kg?: number;

@@ -16,6 +16,7 @@ import {
   DailyRoadmapItem,
   ActivityPreference,
   DailyNutritionTarget,
+  HydrationLog,
 } from '@calorie-ai/types';
 import { NutritionRecommendationEngine } from '../calorie-target/nutrition-recommendation.engine';
 
@@ -113,6 +114,34 @@ export class LogService {
     };
   }
 
+  async getHydrationLogs(userId: string, date: string, tzOffsetMinutes: number = 0): Promise<HydrationLog[]> {
+    const { startIso, endIso } = this.getDayRangeByTimezone(date, tzOffsetMinutes);
+    const { data, error } = await this.supabase.db
+      .from('hydration_logs')
+      .select('id,user_id,amount_ml,logged_at,created_at')
+      .eq('user_id', userId)
+      .gte('logged_at', startIso)
+      .lte('logged_at', endIso)
+      .order('logged_at', { ascending: true });
+    if (error) throw error;
+    return (Array.isArray(data) ? data : []) as HydrationLog[];
+  }
+
+  async createHydrationLog(userId: string, amountMl: number, loggedAt?: string): Promise<HydrationLog> {
+    const amount = Math.round(Number(amountMl));
+    const { data, error } = await this.supabase.db
+      .from('hydration_logs')
+      .insert({
+        user_id: userId,
+        amount_ml: amount,
+        logged_at: loggedAt || new Date().toISOString(),
+      })
+      .select('id,user_id,amount_ml,logged_at,created_at')
+      .single();
+    if (error) throw error;
+    return data as HydrationLog;
+  }
+
   async getTodaySummary(userId: string, date: string, tzOffsetMinutes: number = 0): Promise<TodaySummary> {
     const status: TodaySummary['status'] = {
       daily_log: 'ok',
@@ -137,12 +166,13 @@ export class LogService {
       }
     };
 
-    const [dailyLog, activityLogs, dailyRoadmap, activityPreferences, profile] = await Promise.all([
+    const [dailyLog, activityLogs, dailyRoadmap, activityPreferences, profile, hydrationLogs] = await Promise.all([
       capture('daily_log', null, () => this.getDailyLog(userId, date, tzOffsetMinutes)),
       capture('activity_logs', [], () => this.getActivityLogs(userId, date, tzOffsetMinutes)),
       capture('daily_roadmap', [], () => this.getDailyRoadmapForSummary(userId, date)),
       capture('activity_preferences', [], () => this.getActivityPreferencesForSummary(userId)),
       capture('profile', null, () => this.getProfileForSummary(userId)),
+      this.getHydrationLogs(userId, date, tzOffsetMinutes).catch(() => [] as HydrationLog[]),
     ]);
 
     const consumed = dailyLog?.total_calories ?? 0;
@@ -164,6 +194,8 @@ export class LogService {
       planned_activity_kcal: activeRoadmap.reduce((sum, item) => sum + Number(item.estimated_kcal ?? 0), 0),
     };
     const dailyNutritionTarget = this.nutritionEngine.calculate(profile as any, date, target);
+    const waterIntakeMl = (hydrationLogs as HydrationLog[])
+      .reduce<number>((sum, item) => sum + Number(item.amount_ml ?? 0), 0);
     const baseHealthScore = this.buildHealthScore(
       dailyLog,
       activityLogs,
@@ -185,6 +217,9 @@ export class LogService {
       daily_roadmap: dailyRoadmap,
       activity_preferences: activityPreferences,
       daily_nutrition_target: dailyNutritionTarget,
+      hydration_logs: hydrationLogs,
+      water_intake_ml: waterIntakeMl,
+      water_intake_l: waterIntakeMl / 1000,
       profile,
       plan,
       health_score: {

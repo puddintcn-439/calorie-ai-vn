@@ -1,10 +1,13 @@
 import React, { ReactNode } from 'react';
 import { ActivityIndicator, Platform, StyleProp, StyleSheet, TouchableOpacity, useWindowDimensions, View, ViewStyle } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { router, usePathname } from 'expo-router';
 import { ScreenShell, SurfaceCard } from '../ui-shell';
 import { Text } from '../i18n-text';
 import { theme } from '../theme';
 import { useAuthStore } from '../../store/auth.store';
+import { useAdminNotificationStore } from '../../store/admin-notification.store';
+import { AdminNotificationOverlay } from './AdminNotificationOverlay';
 
 export type AdminTone =
   | 'neutral'
@@ -30,6 +33,8 @@ const ADMIN_ROUTES: AdminRoute[] = [
   { group: 'Users', label: 'Users', href: '/admin/users' },
   { group: 'Billing', label: 'Revenue', href: '/admin/revenue' },
   { group: 'Support', label: 'Payment Issues', href: '/admin/payment-issues' },
+  { group: 'Support', label: 'Help Inbox', href: '/admin/support-requests' },
+  { group: 'Support', label: 'Notifications', href: '/admin/notifications' },
   { group: 'AI Ops', label: 'AI Usage', href: '/admin/ai-usage' },
   { group: 'System', label: 'Audit Log', href: '/admin/audit-log' },
 ];
@@ -124,6 +129,7 @@ export function AdminHeader({
 export function AdminNav({ mode = 'compact' }: { mode?: 'compact' | 'sidebar' }) {
   const pathname = usePathname();
   const isSidebar = mode === 'sidebar';
+  const unreadCount = useAdminNotificationStore((state) => state.unreadCount);
 
   return (
     <View style={[styles.navPanel, isSidebar && styles.navPanelSidebar]}>
@@ -145,7 +151,17 @@ export function AdminNav({ mode = 'compact' }: { mode?: 'compact' | 'sidebar' })
             onPress={() => item.href && router.push(item.href as any)}
           >
             {!isSidebar ? <Text style={[styles.navGroup, active && styles.navGroupActive]}>{item.group}</Text> : null}
-            <Text style={[styles.navLabel, isSidebar && styles.navLabelSidebar, active && styles.navLabelActive]}>{item.label}</Text>
+            <View style={styles.navLabelRow}>
+              {item.href === '/admin/notifications' ? (
+                <Ionicons name="notifications-outline" size={18} color={active ? adminChrome.accent : adminChrome.textSoft} />
+              ) : null}
+              <Text style={[styles.navLabel, isSidebar && styles.navLabelSidebar, active && styles.navLabelActive]}>{item.label}</Text>
+              {item.href === '/admin/notifications' && unreadCount > 0 ? (
+                <View style={styles.notificationBadge}>
+                  <Text style={styles.notificationBadgeText}>{unreadCount > 99 ? '99+' : unreadCount}</Text>
+                </View>
+              ) : null}
+            </View>
           </TouchableOpacity>
         );
       })}
@@ -212,6 +228,7 @@ export function AdminShell({
       reserveBottomNav={false}
     >
       <View style={[styles.shell, isDesktop ? styles.shellDesktop : styles.shellMobile]}>
+        <AdminNotificationOverlay />
         {isDesktop ? (
           <>
             <AdminSidebar />
@@ -532,8 +549,11 @@ const styles = StyleSheet.create({
   navGroup: { color: adminChrome.textMuted, fontSize: 10, fontWeight: '700', letterSpacing: 0.4 },
   navGroupActive: { color: adminChrome.accent },
   navLabel: { color: adminChrome.textSoft, fontSize: 14, fontWeight: '700', marginTop: 3 },
+  navLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   navLabelSidebar: { marginTop: 0, fontSize: 14 },
   navLabelActive: { color: adminChrome.accent },
+  notificationBadge: { minWidth: 21, height: 21, paddingHorizontal: 5, borderRadius: 11, marginLeft: 'auto', backgroundColor: '#dc5f36', alignItems: 'center', justifyContent: 'center' },
+  notificationBadgeText: { color: '#ffffff', fontSize: 10, fontWeight: '900' },
   sectionCard: {
     gap: 12,
     backgroundColor: adminChrome.cardBg,

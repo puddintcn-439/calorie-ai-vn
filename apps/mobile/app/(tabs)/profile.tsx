@@ -7,7 +7,8 @@ import {
   Switch,
   ScrollView,
   TouchableOpacity,
-  Modal
+  Modal,
+  TextInput
 } from 'react-native';
 import { Linking, Platform } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -20,7 +21,7 @@ import { useCalorieTargetStore } from '../../store/calorie-target.store';
 import { useInsightsStore } from '../../store/insights.store';
 import { useThemeStore } from '../../store/theme.store';
 import { apiClient } from '../../services/api';
-import { User, ActivityLevel, UserGoal, HealthFlag, GoalPlan, ReminderPreferences, ActivityType, ActivityLog, ACTIVITY_LABELS as EXERCISE_ACTIVITY_LABELS, SUBSCRIPTION_TIERS, SubscriptionFeatures, SubscriptionTier, DailyNutritionTarget } from '@calorie-ai/types';
+import { User, ActivityLevel, UserGoal, HealthFlag, GoalPlan, ReminderPreferences, ActivityType, ActivityLog, HydrationScheduleSlot, ACTIVITY_LABELS as EXERCISE_ACTIVITY_LABELS, SUBSCRIPTION_TIERS, SubscriptionFeatures, SubscriptionTier, DailyNutritionTarget } from '@calorie-ai/types';
 import { ScreenShell, SurfaceCard } from '../../components/ui-shell';
 import { UiButton } from '../../components/ui-button';
 import { UiChip } from '../../components/ui-chip';
@@ -36,6 +37,8 @@ import {
   CalorieCalculationMethodology,
   isCalorieTargetReady,
 } from '../../services/calorie-target.service';
+import { buildSystemHydrationSlots, hydrationScheduleTotal, normalizeHydrationSlots } from '../../services/hydration-schedule';
+import { pushNotificationService } from '../../services/push-notification.service';
 
 const TARGET_METRIC_LABELS: Record<string, string> = {
   calories_kcal: 'Năng lượng',
@@ -76,6 +79,19 @@ const SWEAT_LEVEL_LABELS: Record<NonNullable<User['sweat_level']>, string> = {
   moderate: 'Trung bình',
   high: 'Đổ mồ hôi nhiều',
 };
+
+const CLIMATE_OPTIONS: Array<{
+  key: NonNullable<User['climate_exposure']>;
+  label: string;
+  description: string;
+  adjustmentMl: number;
+  icon: keyof typeof MaterialIcons.glyphMap;
+}> = [
+  { key: 'cool_controlled', label: 'Mát / điều hòa', description: 'Phần lớn thời gian trong môi trường mát', adjustmentMl: 0, icon: 'ac-unit' },
+  { key: 'temperate', label: 'Ôn hòa', description: 'Nhiệt độ dễ chịu, ít đổ mồ hôi vì nóng', adjustmentMl: 0, icon: 'wb-cloudy' },
+  { key: 'hot_humid', label: 'Nóng ẩm', description: 'Khí hậu nóng ẩm thường ngày', adjustmentMl: 250, icon: 'water-drop' },
+  { key: 'extreme_heat', label: 'Rất nóng / ngoài trời', description: 'Phơi nóng kéo dài hoặc làm việc ngoài trời', adjustmentMl: 500, icon: 'wb-sunny' },
+];
 
 const GOAL_LABELS: Record<UserGoal, I18nKey> = {
   lose_weight: 'profile.goalLabel.loseWeight',
@@ -637,6 +653,7 @@ export default function ProfileScreen() {
   const [activeProfileDetailAnchor, setActiveProfileDetailAnchor] = useState<ProfileDetailAnchor>('body');
   const [showTargetEvidence, setShowTargetEvidence] = useState(false);
   const [showTargetCalculation, setShowTargetCalculation] = useState(false);
+  const [waterMethodExpanded, setWaterMethodExpanded] = useState(false);
   const [calorieMethodology, setCalorieMethodology] = useState<CalorieCalculationMethodology | null>(null);
   const [clinicalPlanConfirmed, setClinicalPlanConfirmed] = useState(false);
   const [goalPlanTargetKg, setGoalPlanTargetKg] = useState<number | undefined>(undefined);
@@ -915,6 +932,19 @@ export default function ProfileScreen() {
             ? 'lịch vận động'
             : null;
   const displayedCalorieTarget = profile.daily_calorie_target ?? nutritionTarget?.calories_kcal;
+  const selectedClimate = profile.climate_exposure ?? 'temperate';
+  const selectedClimateAdjustment = CLIMATE_OPTIONS.find((item) => item.key === selectedClimate)?.adjustmentMl ?? 0;
+  const savedClimateAdjustment = CLIMATE_OPTIONS.find((item) => item.key === savedProfile.climate_exposure)?.adjustmentMl ?? 0;
+  const displayedWaterTargetMl = nutritionTarget?.water_ml && nutritionTarget.status === 'ready'
+    ? nutritionTarget.water_ml - savedClimateAdjustment + selectedClimateAdjustment
+    : nutritionTarget?.water_ml;
+  const systemHydrationSlots = buildSystemHydrationSlots(displayedWaterTargetMl ?? 0);
+  const isCustomHydrationSchedule = profile.hydration_schedule?.mode === 'custom';
+  const activeHydrationSlots = isCustomHydrationSchedule && profile.hydration_schedule?.slots?.length
+    ? profile.hydration_schedule.slots
+    : systemHydrationSlots;
+  const hydrationScheduleTotalMl = hydrationScheduleTotal(activeHydrationSlots);
+  const hydrationScheduleGapMl = Math.round((displayedWaterTargetMl ?? 0) - hydrationScheduleTotalMl);
   const hasMacroTarget = (nutritionTarget?.status === 'ready' || nutritionTarget?.status === 'clinician_target')
     && nutritionTarget.protein_g !== undefined
     && nutritionTarget.carbs_g !== undefined
@@ -1182,7 +1212,68 @@ export default function ProfileScreen() {
     };
   };
 
+  const setHydrationScheduleMode = (mode: 'system' | 'custom') => {
+    setProfile((current) => ({
+      ...current,
+      hydration_schedule: mode === 'custom'
+        ? {
+            mode: 'custom',
+            slots: current.hydration_schedule?.mode === 'custom' && current.hydration_schedule.slots.length
+              ? current.hydration_schedule.slots
+              : buildSystemHydrationSlots(displayedWaterTargetMl ?? 0),
+          }
+        : { mode: 'system', slots: [] },
+    }));
+  };
+
+  const updateHydrationSlot = (index: number, patch: Partial<HydrationScheduleSlot>) => {
+    setProfile((current) => {
+      const slots = current.hydration_schedule?.mode === 'custom'
+        ? [...current.hydration_schedule.slots]
+        : buildSystemHydrationSlots(displayedWaterTargetMl ?? 0);
+      slots[index] = { ...slots[index], ...patch };
+      return { ...current, hydration_schedule: { mode: 'custom', slots } };
+    });
+  };
+
+  const addHydrationSlot = () => {
+    if (activeHydrationSlots.length >= 12) return;
+    setProfile((current) => ({
+      ...current,
+      hydration_schedule: {
+        mode: 'custom',
+        slots: [...activeHydrationSlots, { time: '22:00', amount_ml: 250 }],
+      },
+    }));
+  };
+
+  const removeHydrationSlot = (index: number) => {
+    if (activeHydrationSlots.length <= 1) return;
+    setProfile((current) => ({
+      ...current,
+      hydration_schedule: {
+        mode: 'custom',
+        slots: activeHydrationSlots.filter((_, slotIndex) => slotIndex !== index),
+      },
+    }));
+  };
+
   const handleSaveProfile = async () => {
+    if (isCustomHydrationSchedule) {
+      const invalidSlot = activeHydrationSlots.some((slot) => (
+        !/^([01]\d|2[0-3]):[0-5]\d$/.test(slot.time)
+        || Number(slot.amount_ml) < 50
+        || Number(slot.amount_ml) > 1000
+      ));
+      const uniqueTimes = new Set(activeHydrationSlots.map((slot) => slot.time));
+      if (invalidSlot || uniqueTimes.size !== activeHydrationSlots.length) {
+        Alert.alert(
+          'Lịch uống nước chưa hợp lệ',
+          'Mỗi mốc cần một giờ khác nhau theo định dạng HH:MM và lượng nước từ 50–1000ml.',
+        );
+        return;
+      }
+    }
     if (
       profile.clinician_nutrition_targets?.source
       && !profile.clinician_nutrition_targets.confirmed_at
@@ -1210,6 +1301,10 @@ export default function ProfileScreen() {
         exercise_sessions_per_week: profile.exercise_sessions_per_week,
         exercise_minutes_per_session: profile.exercise_minutes_per_session,
         sweat_level: profile.sweat_level,
+        climate_exposure: profile.climate_exposure ?? 'temperate',
+        hydration_schedule: isCustomHydrationSchedule
+          ? { mode: 'custom', slots: normalizeHydrationSlots(activeHydrationSlots) }
+          : { mode: 'system', slots: [] },
         pregnancy_trimester: profile.pregnancy_trimester,
         breastfeeding_level: profile.breastfeeding_level,
         diabetes_type: profile.diabetes_type,
@@ -1223,6 +1318,18 @@ export default function ProfileScreen() {
       });
       setProfile(profileRes.data);
       setSavedProfile(profileRes.data);
+      if (profileRes.data?.nutrition_target_snapshot) {
+        setNutritionTarget(profileRes.data.nutrition_target_snapshot);
+      }
+      const savedWaterTarget = Number(profileRes.data?.nutrition_target_snapshot?.water_ml ?? displayedWaterTargetMl ?? 0);
+      const savedHydrationSchedule = profileRes.data?.hydration_schedule;
+      const hydrationReminderSlots = savedHydrationSchedule?.mode === 'custom' && savedHydrationSchedule.slots?.length
+        ? normalizeHydrationSlots(savedHydrationSchedule.slots)
+        : buildSystemHydrationSlots(savedWaterTarget);
+      void pushNotificationService.syncHydrationReminders(
+        hydrationReminderSlots,
+        (reminders.allow_push_notifications ?? true) && (reminders.hydration_reminder_enabled ?? true),
+      );
 
       // Save reminders if changed
       const reminderUpdates = {
@@ -1234,6 +1341,7 @@ export default function ProfileScreen() {
         dinner_reminder_time: reminders.dinner_reminder_time,
         snack_reminder_enabled: reminders.snack_reminder_enabled,
         snack_reminder_time: reminders.snack_reminder_time,
+        hydration_reminder_enabled: reminders.hydration_reminder_enabled ?? true,
         allow_push_notifications: reminders.allow_push_notifications,
         nudge_motivation_style: reminders.nudge_motivation_style,
       };
@@ -1713,7 +1821,7 @@ export default function ProfileScreen() {
             <ProfileOverviewRow icon="person-outline" label="Cơ thể" value={`${profile.height_cm ?? '--'} cm · ${profile.weight_kg ?? '--'} kg · ${profile.age ?? '--'} tuổi`} completionStatus={bodyCompletionStatus} completionTestID="profile-incomplete-body" onPress={() => openProfileDetailAnchor('body')} />
             <ProfileOverviewRow icon="directions-run" label="Hoạt động" value={activitySummary} completionStatus={activityCompletionStatus} completionTestID="profile-incomplete-activity" onPress={() => openProfileDetailAnchor('activity')} />
             <ProfileOverviewRow icon="health-and-safety" label="Sức khỏe & an toàn" value={healthNeedsAttention ? 'Cần xem lại hướng dẫn' : selectedHealthFlags.length ? `${selectedHealthFlags.length} lưu ý sức khỏe` : 'Không có cảnh báo'} warning={healthNeedsAttention} completionStatus={safetyCompletionStatus} completionTestID="profile-incomplete-safety" onPress={() => openProfileDetailAnchor('health')} />
-            <ProfileOverviewRow icon="water-drop" label="Nước" value={(nutritionTarget?.status === 'ready' || nutritionTarget?.status === 'clinician_target') && nutritionTarget.water_ml ? `Mục tiêu ${(nutritionTarget.water_ml / 1000).toLocaleString('vi-VN')} L` : 'Cần hướng dẫn riêng'} warning={nutritionTarget?.status === 'clinician_guidance'} onPress={() => openProfileDetailAnchor('water')} />
+            <ProfileOverviewRow icon="water-drop" label="Nước" value={(nutritionTarget?.status === 'ready' || nutritionTarget?.status === 'clinician_target') && displayedWaterTargetMl ? `Ước tính ${(displayedWaterTargetMl / 1000).toLocaleString('vi-VN')} L/ngày` : 'Cần hướng dẫn riêng'} warning={nutritionTarget?.status === 'clinician_guidance'} onPress={() => openProfileDetailAnchor('water')} />
           </SurfaceCard>
 
           <ProfileSectionLabel label="Kế hoạch của bạn" />
@@ -1996,17 +2104,157 @@ export default function ProfileScreen() {
               ) : (
                 <View ref={waterFieldsRef} onLayout={registerDetailAnchor('water')} style={styles.clinicianOverrideCard}>
                   <Text style={styles.clinicianOverrideTitle}>Mục tiêu nước</Text>
-                  <Text style={styles.helperText}>
-                    Mục tiêu nước hiện được tính tự động từ cơ thể, vận động và tình trạng sức khỏe.
-                    Nếu bạn có chỉ định riêng từ bác sĩ/chuyên gia, hãy chọn cờ sức khỏe phù hợp ở tab Sức khỏe rồi nhập mục tiêu nước chuyên gia.
-                  </Text>
+                  <Text style={styles.waterMethodSummary}>Ước tính từ cân nặng, vận động, mức đổ mồ hôi và khí hậu thường tiếp xúc.</Text>
+                  <TouchableOpacity style={styles.waterMethodToggle} onPress={() => setWaterMethodExpanded((value) => !value)}>
+                    <Text style={styles.waterMethodToggleText}>{waterMethodExpanded ? 'Ẩn cách tính' : 'Xem cách tính và lưu ý sức khỏe'}</Text>
+                    <MaterialIcons name={waterMethodExpanded ? 'expand-less' : 'expand-more'} size={18} color={colors.success} />
+                  </TouchableOpacity>
+                  {waterMethodExpanded ? (
+                    <Text style={styles.waterMethodDetail}>
+                      Mức nền dùng 32,5 ml/kg, cộng điều chỉnh cho vận động, mồ hôi và khí hậu, rồi làm tròn 50 ml.
+                      Đây là ước tính tổng nước từ nước uống, đồ uống và thực phẩm. Nếu có chỉ định hạn chế dịch, hãy dùng mục tiêu chuyên gia tại tab Sức khỏe.
+                    </Text>
+                  ) : null}
                   <View style={styles.derivedTargetHero}>
-                    <Text style={styles.derivedTargetLabel}>Mục tiêu hiện tại</Text>
+                    <Text style={styles.derivedTargetLabel}>Mục tiêu sau điều chỉnh</Text>
                     <Text style={styles.derivedTargetValue}>
-                      {(nutritionTarget?.status === 'ready' || nutritionTarget?.status === 'clinician_target') && nutritionTarget.water_ml
-                        ? `${(nutritionTarget.water_ml / 1000).toLocaleString('vi-VN')} L/ngày`
+                      {(nutritionTarget?.status === 'ready' || nutritionTarget?.status === 'clinician_target') && displayedWaterTargetMl
+                        ? `${(displayedWaterTargetMl / 1000).toLocaleString('vi-VN')} L/ngày`
                         : 'Chưa đủ dữ liệu'}
                     </Text>
+                    {selectedClimateAdjustment > 0 && nutritionTarget?.status === 'ready' ? (
+                      <Text style={styles.derivedTargetHint}>Đã gồm +{selectedClimateAdjustment}ml theo khí hậu đã chọn</Text>
+                    ) : null}
+                  </View>
+                  <View style={styles.climateSection}>
+                    <Text style={styles.climateTitle}>Khí hậu thường tiếp xúc</Text>
+                    <Text style={styles.climateHelper}>Chọn điều kiện bạn gặp trong phần lớn thời gian của ngày.</Text>
+                    <View style={styles.climateTwoRowGrid}>
+                      {[0, 2].map((startIndex) => (
+                        <View key={startIndex} style={styles.climateButtonRow}>
+                          {CLIMATE_OPTIONS.slice(startIndex, startIndex + 2).map((option) => {
+                            const selected = selectedClimate === option.key;
+                            return (
+                              <TouchableOpacity
+                                key={option.key}
+                                style={[styles.climateGridButton, selected && styles.climateGridButtonSelected]}
+                                onPress={() => setProfile((current) => ({ ...current, climate_exposure: option.key }))}
+                                activeOpacity={0.78}
+                              >
+                                <View style={[styles.climateGridIcon, selected && styles.climateGridIconSelected]}>
+                                  <MaterialIcons name={option.icon} size={18} color={selected ? colors.textOnAccent : colors.success} />
+                                </View>
+                                <View style={styles.climateGridCopy}>
+                                  <Text numberOfLines={1} adjustsFontSizeToFit style={[styles.climateGridLabel, selected && styles.climateLabelSelected]}>{option.label}</Text>
+                                  <Text style={[styles.climateGridAdjustment, selected && styles.climateAdjustmentSelected]}>
+                                    {option.adjustmentMl > 0 ? `+${option.adjustmentMl}ml` : 'Mức nền'}
+                                  </Text>
+                                </View>
+                              </TouchableOpacity>
+                            );
+                          })}
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                  <View style={styles.hydrationEditor}>
+                    <View style={styles.hydrationEditorHeader}>
+                      <View style={styles.hydrationEditorCopy}>
+                        <Text style={styles.climateTitle}>Lịch uống nước</Text>
+                        <Text style={styles.climateHelper}>
+                          Lịch này sẽ xuất hiện trong tab Hôm nay và tự cập nhật khi mục tiêu nước thay đổi.
+                        </Text>
+                      </View>
+                      <View style={styles.scheduleModeRow}>
+                        <TouchableOpacity
+                          style={[styles.scheduleModeButton, !isCustomHydrationSchedule && styles.scheduleModeButtonActive]}
+                          onPress={() => setHydrationScheduleMode('system')}
+                        >
+                          <Text style={[styles.scheduleModeText, !isCustomHydrationSchedule && styles.scheduleModeTextActive]}>Hệ thống</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[styles.scheduleModeButton, isCustomHydrationSchedule && styles.scheduleModeButtonActive]}
+                          onPress={() => setHydrationScheduleMode('custom')}
+                        >
+                          <Text style={[styles.scheduleModeText, isCustomHydrationSchedule && styles.scheduleModeTextActive]}>Tự chỉnh</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+
+                    {isCustomHydrationSchedule ? (
+                      <View style={styles.customScheduleList}>
+                        {activeHydrationSlots.map((slot, index) => (
+                          <View key={`${index}-${slot.time}`} style={styles.scheduleEditRow}>
+                            <View style={styles.scheduleIndex}>
+                              <Text style={styles.scheduleIndexText}>{index + 1}</Text>
+                            </View>
+                            <View style={styles.scheduleInputGroup}>
+                              <Text style={styles.scheduleInputLabel}>Giờ</Text>
+                              <TextInput
+                                value={slot.time}
+                                onChangeText={(time) => updateHydrationSlot(index, { time })}
+                                placeholder="08:00"
+                                maxLength={5}
+                                style={styles.scheduleInput}
+                                placeholderTextColor={colors.textDisabled}
+                              />
+                            </View>
+                            <View style={styles.scheduleInputGroup}>
+                              <Text style={styles.scheduleInputLabel}>Lượng nước</Text>
+                              <View style={styles.amountInputWrap}>
+                                <TextInput
+                                  value={String(slot.amount_ml)}
+                                  onChangeText={(value) => updateHydrationSlot(index, { amount_ml: Number(value.replace(/\D/g, '')) || 0 })}
+                                  keyboardType="numeric"
+                                  maxLength={4}
+                                  style={[styles.scheduleInput, styles.amountInput]}
+                                  placeholderTextColor={colors.textDisabled}
+                                />
+                                <Text style={styles.amountUnit}>ml</Text>
+                              </View>
+                            </View>
+                            <TouchableOpacity
+                              style={[styles.removeScheduleButton, activeHydrationSlots.length <= 1 && styles.removeScheduleButtonDisabled]}
+                              disabled={activeHydrationSlots.length <= 1}
+                              onPress={() => removeHydrationSlot(index)}
+                            >
+                              <MaterialIcons name="delete-outline" size={19} color={colors.danger} />
+                            </TouchableOpacity>
+                          </View>
+                        ))}
+                        <TouchableOpacity style={styles.addScheduleButton} onPress={addHydrationSlot} disabled={activeHydrationSlots.length >= 12}>
+                          <MaterialIcons name="add-circle-outline" size={18} color={colors.success} />
+                          <Text style={styles.addScheduleText}>Thêm mốc uống nước</Text>
+                        </TouchableOpacity>
+                      </View>
+                    ) : (
+                      <View style={styles.systemScheduleGrid}>
+                        {systemHydrationSlots.map((slot) => (
+                          <View key={slot.time} style={styles.systemScheduleItem}>
+                            <MaterialIcons name="schedule" size={15} color={colors.info} />
+                            <Text style={styles.systemScheduleTime}>{slot.time}</Text>
+                            <Text style={styles.systemScheduleAmount}>{slot.amount_ml}ml</Text>
+                          </View>
+                        ))}
+                      </View>
+                    )}
+
+                    <View style={[
+                      styles.scheduleSummary,
+                      Math.abs(hydrationScheduleGapMl) > 50 && styles.scheduleSummaryWarning,
+                    ]}>
+                      <Text style={styles.scheduleSummaryLabel}>Tổng theo lịch</Text>
+                      <Text style={styles.scheduleSummaryValue}>{(hydrationScheduleTotalMl / 1000).toLocaleString('vi-VN')} L</Text>
+                      {Math.abs(hydrationScheduleGapMl) > 50 ? (
+                        <Text style={styles.scheduleSummaryWarningText}>
+                          {hydrationScheduleGapMl > 0
+                            ? `Còn thiếu ${hydrationScheduleGapMl}ml so với mục tiêu`
+                            : `Cao hơn mục tiêu ${Math.abs(hydrationScheduleGapMl)}ml`}
+                        </Text>
+                      ) : (
+                        <Text style={styles.scheduleSummaryOk}>Đã cân bằng với mục tiêu</Text>
+                      )}
+                    </View>
                   </View>
                 </View>
               )}
@@ -2441,20 +2689,31 @@ export default function ProfileScreen() {
 
         {!notificationsCollapsed && (
           <>
-            <Text style={styles.helperText} i18nKey="screen.tabs.profile.text.028" />
-
-            <View style={styles.switchRow}>
-              <Text style={styles.switchLabel} i18nKey="screen.tabs.profile.text.029" />
+            {/* Sub-content dims + blocks interaction when master toggle is off */}
+            <View
+              style={[styles.notificationSubContent, !(reminders.allow_push_notifications ?? true) && styles.notificationSubContentDisabled]}
+              pointerEvents={!(reminders.allow_push_notifications ?? true) ? 'none' : 'auto'}
+            >
+            <View style={styles.hydrationReminderRow}>
+              <View style={styles.hydrationReminderIcon}>
+                <MaterialIcons name="water-drop" size={20} color={colors.info} />
+              </View>
+              <View style={styles.hydrationReminderCopy}>
+                <Text style={styles.hydrationReminderTitle}>Nhắc uống nước</Text>
+                <Text style={styles.hydrationReminderBody}>
+                  Theo {activeHydrationSlots.length} mốc trong lịch nước đã thiết lập
+                </Text>
+              </View>
               <Switch
-                value={reminders.allow_push_notifications ?? true}
-                onValueChange={(v) => setReminders((r) => ({ ...r, allow_push_notifications: v }))}
+                value={(reminders.allow_push_notifications ?? true) && (reminders.hydration_reminder_enabled ?? true)}
+                onValueChange={(value) => setReminders((current) => ({ ...current, hydration_reminder_enabled: value }))}
                 trackColor={{ false: colors.border, true: colors.success }}
-                thumbColor={reminders.allow_push_notifications ? colors.accentMint : colors.textMuted}
+                thumbColor={(reminders.hydration_reminder_enabled ?? true) ? colors.accentMint : colors.textMuted}
               />
             </View>
 
             <Text style={styles.label} i18nKey="screen.tabs.profile.text.030" />
-            <View style={styles.chipRow}>
+            <View style={[styles.chipRow, { marginBottom: 12 }]}>
               {(['encouraging', 'neutral', 'warning'] as const).map((style) => (
                 <UiChip
                   key={style}
@@ -2469,41 +2728,41 @@ export default function ProfileScreen() {
               ))}
             </View>
 
-            <ReminderTimePickerRow
-              meal="breakfast"
-              mealLabel={t('screen.tabs.profile.label.012')}
-              enabled={reminders.breakfast_reminder_enabled ?? true}
-              time={reminders.breakfast_reminder_time ?? '07:00'}
-              onEnabledChange={(v) => setReminders((r) => ({ ...r, breakfast_reminder_enabled: v }))}
-              onTimeChange={(v) => setReminders((r) => ({ ...r, breakfast_reminder_time: v }))}
-            />
-
-            <ReminderTimePickerRow
-              meal="lunch"
-              mealLabel={t('screen.tabs.profile.label.013')}
-              enabled={reminders.lunch_reminder_enabled ?? true}
-              time={reminders.lunch_reminder_time ?? '12:00'}
-              onEnabledChange={(v) => setReminders((r) => ({ ...r, lunch_reminder_enabled: v }))}
-              onTimeChange={(v) => setReminders((r) => ({ ...r, lunch_reminder_time: v }))}
-            />
-
-            <ReminderTimePickerRow
-              meal="dinner"
-              mealLabel={t('screen.tabs.profile.label.014')}
-              enabled={reminders.dinner_reminder_enabled ?? true}
-              time={reminders.dinner_reminder_time ?? '19:00'}
-              onEnabledChange={(v) => setReminders((r) => ({ ...r, dinner_reminder_enabled: v }))}
-              onTimeChange={(v) => setReminders((r) => ({ ...r, dinner_reminder_time: v }))}
-            />
-
-            <ReminderTimePickerRow
-              meal="snack"
-              mealLabel={t('screen.tabs.profile.label.015')}
-              enabled={reminders.snack_reminder_enabled ?? false}
-              time={reminders.snack_reminder_time ?? '15:00'}
-              onEnabledChange={(v) => setReminders((r) => ({ ...r, snack_reminder_enabled: v }))}
-              onTimeChange={(v) => setReminders((r) => ({ ...r, snack_reminder_time: v }))}
-            />
+            <View style={styles.reminderMealSection}>
+              <ReminderTimePickerRow
+                meal="breakfast"
+                mealLabel={t('screen.tabs.profile.label.012')}
+                enabled={reminders.breakfast_reminder_enabled ?? true}
+                time={reminders.breakfast_reminder_time ?? '07:00'}
+                onEnabledChange={(v) => setReminders((r) => ({ ...r, breakfast_reminder_enabled: v }))}
+                onTimeChange={(v) => setReminders((r) => ({ ...r, breakfast_reminder_time: v }))}
+              />
+              <ReminderTimePickerRow
+                meal="lunch"
+                mealLabel={t('screen.tabs.profile.label.013')}
+                enabled={reminders.lunch_reminder_enabled ?? true}
+                time={reminders.lunch_reminder_time ?? '12:00'}
+                onEnabledChange={(v) => setReminders((r) => ({ ...r, lunch_reminder_enabled: v }))}
+                onTimeChange={(v) => setReminders((r) => ({ ...r, lunch_reminder_time: v }))}
+              />
+              <ReminderTimePickerRow
+                meal="dinner"
+                mealLabel={t('screen.tabs.profile.label.014')}
+                enabled={reminders.dinner_reminder_enabled ?? true}
+                time={reminders.dinner_reminder_time ?? '19:00'}
+                onEnabledChange={(v) => setReminders((r) => ({ ...r, dinner_reminder_enabled: v }))}
+                onTimeChange={(v) => setReminders((r) => ({ ...r, dinner_reminder_time: v }))}
+              />
+              <ReminderTimePickerRow
+                meal="snack"
+                mealLabel={t('screen.tabs.profile.label.015')}
+                enabled={reminders.snack_reminder_enabled ?? false}
+                time={reminders.snack_reminder_time ?? '15:00'}
+                onEnabledChange={(v) => setReminders((r) => ({ ...r, snack_reminder_enabled: v }))}
+                onTimeChange={(v) => setReminders((r) => ({ ...r, snack_reminder_time: v }))}
+                isLast
+              />
+            </View>
 
             {reminderEffectiveness ? (
               <SurfaceCard style={styles.reminderEffectivenessCard}>
@@ -2592,6 +2851,7 @@ export default function ProfileScreen() {
                 )}
               </SurfaceCard>
             </View>
+            </View>{/* end notificationSubContent */}
           </>
         )}
         </SurfaceCard>
@@ -2953,6 +3213,7 @@ function ReminderTimePickerRow({
   time,
   onEnabledChange,
   onTimeChange,
+  isLast,
 }: {
   meal: string;
   mealLabel: string;
@@ -2960,68 +3221,54 @@ function ReminderTimePickerRow({
   time: string;
   onEnabledChange: (v: boolean) => void;
   onTimeChange: (v: string) => void;
+  isLast?: boolean;
 }) {
   const { colors } = useAppTheme();
-  const [showPicker, setShowPicker] = React.useState(false);
-
-  const handleTimeSelect = (hours: number, minutes: number) => {
-    const timeStr = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
-    onTimeChange(timeStr);
-    setShowPicker(false);
-  };
 
   const hours = parseInt(time.split(':')[0]);
   const minutes = parseInt(time.split(':')[1]);
 
+  const handleH = (v: string) => {
+    const h = Math.max(0, Math.min(23, parseInt(v) || 0));
+    onTimeChange(`${String(h).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`);
+  };
+  const handleM = (v: string) => {
+    const m = Math.max(0, Math.min(59, parseInt(v) || 0));
+    onTimeChange(`${String(hours).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
+  };
+
   return (
-    <View style={styles.reminderRow}>
-      <View style={styles.reminderLabel}>
-        <Text style={styles.reminderMealLabel}>{mealLabel}</Text>
-        <Switch
-          value={enabled}
-          onValueChange={onEnabledChange}
-          trackColor={{ false: colors.border, true: colors.success }}
-          thumbColor={enabled ? colors.accentMint : colors.textMuted}
+    <View style={[styles.reminderRowCompact, !isLast && { borderBottomWidth: 1, borderBottomColor: colors.border }]}>
+      <Text style={[styles.reminderMealLabelCompact, !enabled && { color: colors.textMuted }]}>
+        {mealLabel}
+      </Text>
+      <View style={styles.reminderTimeInline}>
+        <TextInput
+          style={[styles.timeInputInline, !enabled && { color: colors.textMuted, backgroundColor: colors.surfaceLifted }]}
+          value={String(hours).padStart(2, '0')}
+          onChangeText={handleH}
+          keyboardType="number-pad"
+          maxLength={2}
+          editable={enabled}
+          selectTextOnFocus
+        />
+        <Text style={[styles.timeSepInline, !enabled && { color: colors.textMuted }]}>:</Text>
+        <TextInput
+          style={[styles.timeInputInline, !enabled && { color: colors.textMuted, backgroundColor: colors.surfaceLifted }]}
+          value={String(minutes).padStart(2, '0')}
+          onChangeText={handleM}
+          keyboardType="number-pad"
+          maxLength={2}
+          editable={enabled}
+          selectTextOnFocus
         />
       </View>
-
-      {enabled && (
-        <View style={styles.reminderTimeInputs}>
-          <View style={styles.timeInputGroup}>
-            <Text style={styles.timeInputLabel} i18nKey="screen.tabs.profile.text.034" />
-            <UiInput
-              value={String(hours).padStart(2, '0')}
-              onChangeText={(v) => {
-                const h = Math.max(0, Math.min(23, parseInt(v) || 0));
-                handleTimeSelect(h, minutes);
-              }}
-              keyboardType="number-pad"
-              placeholder="screen.tabs.profile.placeholder.hour"
-              maxLength={2}
-              containerStyle={{ marginBottom: 0 }}
-              style={styles.timeInput}
-            />
-          </View>
-
-          <Text style={styles.timeSeparator}>:</Text>
-
-          <View style={styles.timeInputGroup}>
-            <Text style={styles.timeInputLabel} i18nKey="screen.tabs.profile.text.035" />
-            <UiInput
-              value={String(minutes).padStart(2, '0')}
-              onChangeText={(v) => {
-                const m = Math.max(0, Math.min(59, parseInt(v) || 0));
-                handleTimeSelect(hours, m);
-              }}
-              keyboardType="number-pad"
-              placeholder="screen.tabs.profile.placeholder.minute"
-              maxLength={2}
-              containerStyle={{ marginBottom: 0 }}
-              style={styles.timeInput}
-            />
-          </View>
-        </View>
-      )}
+      <Switch
+        value={enabled}
+        onValueChange={onEnabledChange}
+        trackColor={{ false: colors.border, true: colors.success }}
+        thumbColor={enabled ? colors.accentMint : colors.textMuted}
+      />
     </View>
   );
 }
@@ -3955,6 +4202,100 @@ const styles = createThemedStyles((colors, radii) => ({
     fontWeight: '900',
     marginBottom: 4,
   },
+  waterMethodSummary: { color: colors.textMuted, fontSize: 12, lineHeight: 17 },
+  waterMethodToggle: { minHeight: 34, flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 2 },
+  waterMethodToggleText: { color: colors.success, fontSize: 11, fontWeight: '800' },
+  waterMethodDetail: { color: colors.textMuted, fontSize: 11, lineHeight: 17, padding: 10, borderRadius: 10, backgroundColor: colors.surface, marginBottom: 2 },
+  climateSection: { marginTop: 10 },
+  climateTitle: { color: colors.text, fontSize: 13, fontWeight: '900' },
+  climateHelper: { color: colors.textMuted, fontSize: 11, lineHeight: 16, marginTop: 3, marginBottom: 10 },
+  climateTwoRowGrid: { gap: 7 },
+  climateButtonRow: { flexDirection: 'row', gap: 7 },
+  climateGridButton: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 64,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+  },
+  climateGridButtonSelected: { borderColor: colors.accentMint, backgroundColor: colors.surfaceSuccess },
+  climateGridIcon: { width: 30, height: 30, borderRadius: 9, flexShrink: 0, backgroundColor: colors.surfaceSuccess, alignItems: 'center', justifyContent: 'center' },
+  climateGridIconSelected: { backgroundColor: colors.accentMint },
+  climateGridCopy: { flex: 1, minWidth: 0 },
+  climateGridLabel: { color: colors.text, fontSize: 11, lineHeight: 14, fontWeight: '800' },
+  climateLabelSelected: { color: colors.success },
+  climateGridAdjustment: { color: colors.textMuted, fontSize: 8.5, lineHeight: 12, fontWeight: '800', marginTop: 2 },
+  climateAdjustmentSelected: { color: colors.success },
+  hydrationEditor: { marginTop: 14, paddingTop: 14, borderTopWidth: 1, borderTopColor: colors.borderWarning },
+  hydrationEditorHeader: { gap: 10, marginBottom: 10 },
+  hydrationEditorCopy: { flex: 1 },
+  scheduleModeRow: { flexDirection: 'row', alignSelf: 'flex-start', borderRadius: 10, padding: 3, backgroundColor: colors.surfaceAlt },
+  scheduleModeButton: { minHeight: 34, paddingHorizontal: 13, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  scheduleModeButtonActive: { backgroundColor: colors.accentMint },
+  scheduleModeText: { color: colors.textMuted, fontSize: 11, fontWeight: '800' },
+  scheduleModeTextActive: { color: colors.textOnAccent },
+  systemScheduleGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
+  systemScheduleItem: {
+    flexBasis: '23%',
+    flexGrow: 1,
+    minWidth: 72,
+    minHeight: 54,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    padding: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  systemScheduleTime: { color: colors.text, fontSize: 11, fontWeight: '900', marginTop: 2, fontVariant: ['tabular-nums'] },
+  systemScheduleAmount: { color: colors.textMuted, fontSize: 9, fontWeight: '700' },
+  customScheduleList: { gap: 7 },
+  scheduleEditRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 7,
+    borderRadius: 11,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    padding: 9,
+  },
+  scheduleIndex: { width: 25, height: 35, alignItems: 'center', justifyContent: 'center' },
+  scheduleIndexText: { color: colors.textMuted, fontSize: 11, fontWeight: '900' },
+  scheduleInputGroup: { flex: 1, minWidth: 75, gap: 3 },
+  scheduleInputLabel: { color: colors.textMuted, fontSize: 9, fontWeight: '800' },
+  scheduleInput: {
+    height: 35,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.borderStrong,
+    backgroundColor: colors.surfaceLifted,
+    color: colors.text,
+    paddingHorizontal: 9,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  amountInputWrap: { position: 'relative' },
+  amountInput: { paddingRight: 28 },
+  amountUnit: { position: 'absolute', right: 8, top: 10, color: colors.textMuted, fontSize: 10, fontWeight: '700' },
+  removeScheduleButton: { width: 35, height: 35, borderRadius: 8, backgroundColor: colors.surfaceDanger, alignItems: 'center', justifyContent: 'center' },
+  removeScheduleButtonDisabled: { opacity: 0.35 },
+  addScheduleButton: { minHeight: 40, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 10, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.borderSuccess },
+  addScheduleText: { color: colors.success, fontSize: 11, fontWeight: '800' },
+  scheduleSummary: { marginTop: 10, borderRadius: 11, backgroundColor: colors.surfaceSuccess, borderWidth: 1, borderColor: colors.borderSuccess, padding: 11 },
+  scheduleSummaryWarning: { backgroundColor: colors.surfaceWarning, borderColor: colors.borderWarning },
+  scheduleSummaryLabel: { color: colors.textMuted, fontSize: 10, fontWeight: '700' },
+  scheduleSummaryValue: { color: colors.text, fontSize: 18, fontWeight: '900', marginTop: 1 },
+  scheduleSummaryOk: { color: colors.success, fontSize: 10, fontWeight: '700', marginTop: 2 },
+  scheduleSummaryWarningText: { color: colors.warning, fontSize: 10, fontWeight: '700', marginTop: 2 },
   clinicalConfirmRow: {
     minHeight: 48,
     flexDirection: 'row',
@@ -4096,6 +4437,7 @@ const styles = createThemedStyles((colors, radii) => ({
     fontWeight: '900',
     letterSpacing: -0.5,
   },
+  derivedTargetHint: { color: colors.success, fontSize: 10, lineHeight: 15, fontWeight: '700' },
   derivedTargetMeta: {
     color: colors.success,
     fontSize: 10,
@@ -4175,6 +4517,22 @@ const styles = createThemedStyles((colors, radii) => ({
 
   switchRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, paddingVertical: 10 },
   switchLabel: { color: colors.textSoft, fontSize: 14, fontWeight: '600' },
+  hydrationReminderRow: { minHeight: 66, flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 12, borderWidth: 1, borderColor: colors.borderInfo, backgroundColor: colors.surfaceInfo, paddingHorizontal: 11, paddingVertical: 9, marginBottom: 12 },
+  hydrationReminderRowDisabled: { opacity: 0.5 },
+  hydrationReminderIcon: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface },
+  hydrationReminderCopy: { flex: 1, minWidth: 0 },
+  hydrationReminderTitle: { color: colors.text, fontSize: 13, fontWeight: '900' },
+  hydrationReminderBody: { color: colors.textMuted, fontSize: 10.5, lineHeight: 15, marginTop: 2 },
+
+  notificationSubContent: { marginTop: 4 },
+  notificationSubContentDisabled: { opacity: 0.4 },
+
+  reminderMealSection: { borderRadius: 12, borderWidth: 1, borderColor: colors.border, overflow: 'hidden', marginBottom: 12 },
+  reminderRowCompact: { flexDirection: 'row', alignItems: 'center', paddingVertical: 11, paddingHorizontal: 12, backgroundColor: colors.surface },
+  reminderMealLabelCompact: { flex: 1, color: colors.textSoft, fontSize: 14, fontWeight: '600' },
+  reminderTimeInline: { flexDirection: 'row', alignItems: 'center', marginRight: 10 },
+  timeInputInline: { width: 36, textAlign: 'center', fontSize: 15, fontWeight: '700', color: colors.accentMint, backgroundColor: colors.surfaceLifted, borderRadius: 6, paddingVertical: 3, paddingHorizontal: 2 },
+  timeSepInline: { color: colors.textSoft, fontSize: 15, fontWeight: '700', marginHorizontal: 3 },
 
   reminderRow: { marginBottom: 14, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border },
   reminderLabel: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },

@@ -283,6 +283,44 @@ describe('UserService.updateProfile', () => {
     expect(result.full_name).toBe('Updated');
   });
 
+  it('normalises and sorts a custom hydration schedule before saving', async () => {
+    const existing = { id: 'u1', email: 'a@b.com' };
+    const update = jest.fn().mockReturnThis();
+    const maybeSingle = jest.fn()
+      .mockResolvedValueOnce({ data: existing, error: null })
+      .mockImplementation(async () => ({
+        data: { ...existing, ...(update.mock.calls[0]?.[0] ?? {}) },
+        error: null,
+      }));
+    const db = makeDb(() => ({
+      update,
+      eq: jest.fn().mockReturnThis(),
+      select: jest.fn().mockReturnThis(),
+      maybeSingle,
+    }));
+    const service = new UserService({ db } as unknown as SupabaseService);
+
+    const result = await service.updateProfile('u1', {
+      hydration_schedule: {
+        mode: 'custom',
+        slots: [
+          { time: '18:00', amount_ml: 300 },
+          { time: '08:00', amount_ml: 350.4 },
+          { time: 'invalid', amount_ml: 250 },
+        ],
+      },
+    });
+
+    expect(result.hydration_schedule).toMatchObject({
+      mode: 'custom',
+      slots: [
+        { time: '08:00', amount_ml: 350 },
+        { time: '18:00', amount_ml: 300 },
+      ],
+      updated_at: expect.any(String),
+    });
+  });
+
   it('upserts when update returns no data but email provided', async () => {
     const inserted = { id: 'u3', email: 'u3@b.com', full_name: 'New' };
     const db = makeDb(() => ({

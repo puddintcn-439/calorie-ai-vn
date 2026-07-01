@@ -4,14 +4,17 @@ describe('SupportService', () => {
   function setup(result: { data: any; error: any }) {
     const query: any = {
       insert: jest.fn().mockReturnThis(),
+      update: jest.fn().mockReturnThis(),
       select: jest.fn().mockReturnThis(),
       maybeSingle: jest.fn().mockResolvedValue(result),
       eq: jest.fn().mockReturnThis(),
+      ilike: jest.fn().mockReturnThis(),
       order: jest.fn().mockReturnThis(),
       limit: jest.fn().mockResolvedValue(result),
     };
     const supabase: any = { db: { from: jest.fn(() => query) } };
-    return { service: new SupportService(supabase), query, supabase };
+    const notifications: any = { notifyUser: jest.fn().mockResolvedValue({ id: 'notification-1' }) };
+    return { service: new SupportService(supabase, notifications), query, supabase, notifications };
   }
 
   it('creates a support request scoped to the user', async () => {
@@ -58,5 +61,16 @@ describe('SupportService', () => {
       subject: 'Need help',
       message: 'Something is not working.',
     })).rejects.toMatchObject({ status: 503 });
+  });
+
+  it('lists the admin support queue with filters', async () => {
+    const rows = [{ id: 'request-1', subject: 'Help', users: { email: 'user@example.com' } }];
+    const { service, query } = setup({ data: rows, error: null });
+
+    const result = await service.listAdminRequests({ status: 'open', category: 'technical', search: 'Help' });
+    expect(result.requests[0]).toMatchObject({ id: 'request-1', user_email: 'user@example.com' });
+    expect(query.eq).toHaveBeenCalledWith('status', 'open');
+    expect(query.eq).toHaveBeenCalledWith('category', 'technical');
+    expect(query.ilike).toHaveBeenCalledWith('subject', '%Help%');
   });
 });

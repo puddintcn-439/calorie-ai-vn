@@ -15,6 +15,8 @@ export interface User {
   exercise_sessions_per_week?: number;
   exercise_minutes_per_session?: number;
   sweat_level?: SweatLevel;
+  climate_exposure?: ClimateExposure;
+  hydration_schedule?: HydrationSchedule | null;
   pregnancy_trimester?: 1 | 2 | 3;
   breastfeeding_level?: 'exclusive' | 'partial';
   diabetes_type?: 'type_1' | 'type_2' | 'gestational';
@@ -72,6 +74,18 @@ export interface GoalPlan {
 export type ActivityLevel = 'sedentary' | 'light' | 'moderate' | 'active' | 'very_active';
 export type WorkActivityLevel = 'sedentary' | 'light' | 'moderate' | 'heavy';
 export type SweatLevel = 'low' | 'moderate' | 'high';
+export type ClimateExposure = 'cool_controlled' | 'temperate' | 'hot_humid' | 'extreme_heat';
+
+export interface HydrationScheduleSlot {
+  time: string;
+  amount_ml: number;
+}
+
+export interface HydrationSchedule {
+  mode: 'system' | 'custom';
+  slots: HydrationScheduleSlot[];
+  updated_at?: string;
+}
 
 export interface ClinicianNutritionTargets {
   calories_kcal?: number;

@@ -1,13 +1,14 @@
 import { BadRequestException, Body, Controller, Get, Param, Patch, Post, Query, Request, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiBody, ApiOperation, ApiParam, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsIn, IsInt, IsOptional, IsString, Max, Min, MinLength } from 'class-validator';
+import { IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min, MinLength } from 'class-validator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AdminGuard } from './admin.guard';
 import { AdminRoleGuard } from './admin-role.guard';
 import { AdminRoles } from './admin-roles.decorator';
 import { AdminService } from './admin.service';
 import { AdminRevenueService } from './admin-revenue.service';
+import { SupportService } from '../support/support.service';
 
 class AdminAiUsageQueryDto {
   @IsOptional()
@@ -135,6 +136,33 @@ class AdminUpdatePaymentIssueDto {
   resolution?: string;
 }
 
+class AdminSupportRequestsQueryDto {
+  @IsOptional()
+  @IsString()
+  @IsIn(['open', 'in_progress', 'resolved', 'closed'])
+  status?: 'open' | 'in_progress' | 'resolved' | 'closed';
+
+  @IsOptional()
+  @IsString()
+  @IsIn(['account', 'technical', 'ai_result', 'health_data', 'billing', 'feedback', 'other'])
+  category?: 'account' | 'technical' | 'ai_result' | 'health_data' | 'billing' | 'feedback' | 'other';
+
+  @IsOptional()
+  @IsString()
+  search?: string;
+}
+
+class AdminUpdateSupportRequestDto {
+  @IsString()
+  @IsIn(['open', 'in_progress', 'resolved', 'closed'])
+  status!: 'open' | 'in_progress' | 'resolved' | 'closed';
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  admin_reply?: string;
+}
+
 function assertUuid(value: string): string {
   const normalized = String(value ?? '').trim();
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -161,6 +189,7 @@ export class AdminController {
   constructor(
     private readonly adminService: AdminService,
     private readonly adminRevenueService: AdminRevenueService,
+    private readonly supportService: SupportService,
   ) {}
 
   @Get('overview')
@@ -231,6 +260,71 @@ export class AdminController {
   @ApiBody({ schema: { type: 'object', properties: { status: { type: 'string', enum: ['open', 'in_review', 'resolved', 'rejected'] }, admin_note: { type: 'string' }, resolution: { type: 'string' } } } })
   updatePaymentIssue(@Request() req: any, @Param('id') issueId: string, @Body() body: AdminUpdatePaymentIssueDto) {
     return this.adminService.updatePaymentIssue(assertUuid(issueId), getAdminActor(req), body);
+  }
+
+  @Get('support-requests')
+  @AdminRoles('support')
+  @ApiOperation({ summary: 'List general support requests' })
+  getSupportRequests(@Query() query: AdminSupportRequestsQueryDto) {
+    return this.supportService.listAdminRequests(query);
+  }
+
+  @Get('notifications')
+  @AdminRoles('support')
+  @ApiOperation({ summary: 'List recent admin notifications that need attention' })
+  async getNotifications() {
+    const [support, payments] = await Promise.all([
+      this.supportService.listAdminRequests({}),
+      this.adminService.getPaymentIssues({}),
+    ]);
+
+    const supportNotifications = support.requests.map((item: any) => ({
+      id: `support:${item.id}`,
+      source_id: item.id,
+      type: 'support_request',
+      title: item.subject || 'New help request',
+      body: `${item.user_email ?? 'User'} · ${item.category ?? 'support'}`,
+      status: item.status,
+      route: '/admin/support-requests',
+      created_at: item.created_at,
+      needs_attention: ['open', 'in_progress'].includes(String(item.status)),
+    }));
+    const paymentNotifications = payments.issues.map((item: any) => ({
+      id: `payment:${item.id}`,
+      source_id: item.id,
+      type: 'payment_issue',
+      title: `Payment issue · ${item.issue_type ?? item.provider ?? 'billing'}`,
+      body: `${item.user_email ?? 'User'} · ${item.provider ?? 'payment'}`,
+      status: item.status,
+      route: '/admin/payment-issues',
+      created_at: item.created_at,
+      needs_attention: ['open', 'in_review'].includes(String(item.status)),
+    }));
+    const notifications = [...supportNotifications, ...paymentNotifications]
+      .sort((left, right) => String(right.created_at ?? '').localeCompare(String(left.created_at ?? '')))
+      .slice(0, 100);
+
+    return {
+      generated_at: new Date().toISOString(),
+      unread_count: notifications.filter((item) => item.needs_attention).length,
+      notifications,
+    };
+  }
+
+  @Patch('support-requests/:id')
+  @AdminRoles('support')
+  @ApiOperation({ summary: 'Reply to and update a general support request' })
+  updateSupportRequest(
+    @Request() req: any,
+    @Param('id') requestId: string,
+    @Body() body: AdminUpdateSupportRequestDto,
+  ) {
+    return this.supportService.updateAdminRequest({
+      requestId: assertUuid(requestId),
+      status: body.status,
+      adminReply: body.admin_reply,
+      actor: getAdminActor(req),
+    });
   }
 
   @Get('users/:id')

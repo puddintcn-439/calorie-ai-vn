@@ -7,7 +7,7 @@ import {
   User,
 } from '@calorie-ai/types';
 
-const ALGORITHM_VERSION = 'daily-nutrition-v2';
+const ALGORITHM_VERSION = 'daily-nutrition-v4';
 const CLINICIAN_FLAGS: HealthFlag[] = [
   'pregnant',
   'breastfeeding',
@@ -42,6 +42,7 @@ export class NutritionRecommendationEngine {
         exercise_sessions_per_week: profile?.exercise_sessions_per_week,
         exercise_minutes_per_session: profile?.exercise_minutes_per_session,
         sweat_level: profile?.sweat_level,
+        climate_exposure: profile?.climate_exposure,
         goal: profile?.goal,
         health_flags: healthFlags,
       },
@@ -107,7 +108,10 @@ export class NutritionRecommendationEngine {
     const sweatWater = profile!.sweat_level === 'high'
       ? 500
       : profile!.sweat_level === 'moderate' ? 250 : 0;
-    const water = Math.round(Math.min(4500, Math.max(1500, weightKg * 35 + activityWater + sweatWater)) / 50) * 50;
+    const climateWater = profile!.climate_exposure === 'extreme_heat'
+      ? 500
+      : profile!.climate_exposure === 'hot_humid' ? 250 : 0;
+    const water = Math.round(Math.min(4500, Math.max(1500, weightKg * 32.5 + activityWater + sweatWater + climateWater)) / 50) * 50;
     const warnings = [
       'Targets are general wellness estimates, not medical diagnosis or treatment.',
       ...(healthFlags.includes('diabetes')
@@ -136,7 +140,7 @@ export class NutritionRecommendationEngine {
         carbs: 'Receives remaining energy after protein and a 25% fat allocation.',
         fat: 'Uses 25% of daily energy as a general adult baseline.',
         fiber: 'Uses 14 g per 1000 kcal.',
-        water: 'Uses a 35 ml/kg baseline plus activity and reported sweat adjustments; environment and clinical needs can change this.',
+        water: 'Uses a 32.5 ml/kg practical midpoint within the common 30–35 ml/kg range, plus activity, reported sweat, and typical climate-exposure adjustments.',
       },
       factors: {
         ...base.factors,
@@ -187,10 +191,10 @@ export class NutritionRecommendationEngine {
         is_user_adjustable: true,
       },
       water_ml: {
-        method: '35 ml/kg baseline plus fixed activity and reported-sweat adjustments, rounded to 50 ml.',
+        method: '32.5 ml/kg midpoint baseline plus fixed activity, reported-sweat, and climate-exposure adjustments, rounded to 50 ml.',
         evidence_level: 'evidence_informed_heuristic',
         evidence_ids: ['efsa-drv-fat-water-2010', 'national-academies-water-2005'],
-        assumptions: ['Does not yet model climate, altitude, food moisture, illness, medication, or measured sweat loss.'],
+        assumptions: ['32.5 ml/kg and the +250/+500 ml climate steps are product heuristics, not EFSA/National Academies formulas.', 'Climate exposure is user-reported and does not use live weather.', 'Does not yet model altitude, food moisture, illness, medication, or measured sweat loss.'],
         is_user_adjustable: true,
         is_product_guardrail: true,
         reference_range: { min: 1500, max: 4500, unit: 'ml/day product guardrail' },

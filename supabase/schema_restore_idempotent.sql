@@ -41,6 +41,8 @@ create table if not exists public.users (
   age                   smallint check (age between 13 and 120),
   gender                text check (gender in ('male', 'female')),
   activity_level        text check (activity_level in ('sedentary','light','moderate','active','very_active')),
+  climate_exposure      text check (climate_exposure in ('cool_controlled','temperate','hot_humid','extreme_heat')),
+  hydration_schedule    jsonb,
   goal                  text check (goal in ('lose_weight','maintain','gain_muscle')),
   daily_calorie_target  integer default 1800,
   created_at            timestamptz not null default now(),
@@ -235,6 +237,21 @@ create policy "Users manage own logging events" on public.logging_events for all
 drop policy if exists "Service role full access on logging events" on public.logging_events;
 create policy "Service role full access on logging events" on public.logging_events for all using (auth.role() = 'service_role');
 
+-- 3e2. hydration_logs
+create table if not exists public.hydration_logs (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.users(id) on delete cascade,
+  amount_ml integer not null check (amount_ml between 1 and 2000),
+  logged_at timestamptz not null default now(),
+  created_at timestamptz not null default now()
+);
+create index if not exists hydration_logs_user_logged_idx on public.hydration_logs(user_id, logged_at desc);
+alter table public.hydration_logs enable row level security;
+drop policy if exists "Users manage own hydration logs" on public.hydration_logs;
+create policy "Users manage own hydration logs" on public.hydration_logs for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+drop policy if exists "Service role full access on hydration logs" on public.hydration_logs;
+create policy "Service role full access on hydration logs" on public.hydration_logs for all using (auth.role() = 'service_role') with check (auth.role() = 'service_role');
+
 -- 3f. user_context_events
 create table if not exists public.user_context_events (
   id            uuid primary key default gen_random_uuid(),
@@ -268,6 +285,7 @@ create table if not exists public.reminder_preferences (
   dinner_reminder_time        text not null default '19:00',
   snack_reminder_enabled      boolean not null default false,
   snack_reminder_time         text not null default '15:00',
+  hydration_reminder_enabled  boolean not null default true,
   allow_push_notifications    boolean not null default true,
   nudge_motivation_style      text not null default 'encouraging' check (nudge_motivation_style in ('encouraging','warning','neutral')),
   created_at                  timestamptz not null default now(),
@@ -280,6 +298,8 @@ drop policy if exists "Users manage own preferences" on public.reminder_preferen
 create policy "Users manage own preferences" on public.reminder_preferences for all using (auth.uid() = user_id);
 drop policy if exists "Service role full access on preferences" on public.reminder_preferences;
 create policy "Service role full access on preferences" on public.reminder_preferences for all using (auth.role() = 'service_role');
+alter table public.reminder_preferences
+  add column if not exists hydration_reminder_enabled boolean not null default true;
 
 create table if not exists public.push_notification_tokens (
   id                      uuid primary key default uuid_generate_v4(),
@@ -755,6 +775,8 @@ alter table public.users
   add column if not exists exercise_sessions_per_week smallint,
   add column if not exists exercise_minutes_per_session smallint,
   add column if not exists sweat_level text,
+  add column if not exists climate_exposure text,
+  add column if not exists hydration_schedule jsonb,
   add column if not exists pregnancy_trimester smallint,
   add column if not exists breastfeeding_level text,
   add column if not exists diabetes_type text,
@@ -762,6 +784,16 @@ alter table public.users
   add column if not exists athlete_level text,
   add column if not exists clinician_nutrition_targets jsonb,
   add column if not exists sensitive_nutrition_mode boolean not null default false;
+
+alter table public.users
+  drop constraint if exists users_climate_exposure_allowed,
+  add constraint users_climate_exposure_allowed
+    check (climate_exposure is null or climate_exposure in ('cool_controlled', 'temperate', 'hot_humid', 'extreme_heat'));
+
+alter table public.users
+  drop constraint if exists users_hydration_schedule_is_object,
+  add constraint users_hydration_schedule_is_object
+    check (hydration_schedule is null or jsonb_typeof(hydration_schedule) = 'object');
 
 alter table public.users
   drop constraint if exists users_clinician_target_provenance;

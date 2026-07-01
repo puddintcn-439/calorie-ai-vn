@@ -9,6 +9,7 @@ describe('NotificationsController', () => {
   let app: INestApplication;
   const notificationsService = {
     listUserNotifications: jest.fn(),
+    markAllUserNotificationsRead: jest.fn(),
     markUserNotificationRead: jest.fn(),
   };
 
@@ -57,6 +58,19 @@ describe('NotificationsController', () => {
       .expect(200);
 
     expect(notificationsService.markUserNotificationRead).toHaveBeenCalledWith('user-1', 'note-1');
+  });
+
+  it('PATCH /notifications/read-all marks current user notifications read', async () => {
+    notificationsService.markAllUserNotificationsRead.mockResolvedValue({
+      ok: true,
+      read_at: '2026-06-12T00:00:00.000Z',
+    });
+
+    await request(app.getHttpServer())
+      .patch('/notifications/read-all')
+      .expect(200);
+
+    expect(notificationsService.markAllUserNotificationsRead).toHaveBeenCalledWith('user-1');
   });
 
   it('PATCH /notifications/:id/read returns 404 for another user notification', async () => {

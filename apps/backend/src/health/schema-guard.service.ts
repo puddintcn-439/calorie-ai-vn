@@ -5,6 +5,7 @@ const REQUIRED_TABLES = [
   'users',
   'foods',
   'food_logs',
+  'hydration_logs',
   'correction_events',
   'user_subscriptions',
   'billing_payment_issues',

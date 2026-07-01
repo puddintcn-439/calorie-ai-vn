@@ -3,7 +3,7 @@ import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { IsNumber, IsEnum, IsString, IsOptional, Min, Max, IsArray, IsIn, IsObject, IsDateString, IsBoolean } from 'class-validator';
 import { UserService } from './user.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { UserGoal, HealthFlag, HEALTH_FLAGS, GoalPlanDirection, WorkActivityLevel, SweatLevel, User } from '@calorie-ai/types';
+import { UserGoal, HealthFlag, HEALTH_FLAGS, GoalPlanDirection, WorkActivityLevel, SweatLevel, ClimateExposure, User } from '@calorie-ai/types';
 
 class GoalPlanDto {
   @IsNumber() @Min(0) @Max(100) @IsOptional() target_kg?: number;
@@ -26,6 +26,8 @@ class UpdateProfileDto {
   @IsNumber() @Min(0) @Max(21) @IsOptional() exercise_sessions_per_week?: number;
   @IsNumber() @Min(0) @Max(600) @IsOptional() exercise_minutes_per_session?: number;
   @IsEnum(['low','moderate','high']) @IsOptional() sweat_level?: SweatLevel;
+  @IsEnum(['cool_controlled','temperate','hot_humid','extreme_heat']) @IsOptional() climate_exposure?: ClimateExposure;
+  @IsObject() @IsOptional() hydration_schedule?: User['hydration_schedule'];
   @IsEnum([1, 2, 3]) @IsOptional() pregnancy_trimester?: 1 | 2 | 3;
   @IsEnum(['exclusive','partial']) @IsOptional() breastfeeding_level?: 'exclusive' | 'partial';
   @IsEnum(['type_1','type_2','gestational']) @IsOptional() diabetes_type?: 'type_1' | 'type_2' | 'gestational';

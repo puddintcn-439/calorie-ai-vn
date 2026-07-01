@@ -66,6 +66,11 @@ class UpdateReminderPreferencesDto {
   @ApiProperty({ required: false })
   @IsBoolean()
   @IsOptional()
+  hydration_reminder_enabled?: boolean;
+
+  @ApiProperty({ required: false })
+  @IsBoolean()
+  @IsOptional()
   allow_push_notifications?: boolean;
 
   @ApiProperty({ required: false, enum: ['encouraging', 'warning', 'neutral'] })

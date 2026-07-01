@@ -4,12 +4,14 @@ import { useAuthStore } from '../store/auth.store';
 import { pushNotificationService } from '../services/push-notification.service';
 import { reminderFeedbackService } from '../services/reminder-feedback.service';
 import '../services/web-warning-filter';
+import { useNotificationStore } from '../store/notification.store';
 
 export default function RootLayout() {
   const { token, isLoading, loadToken } = useAuthStore();
   const segments = useSegments();
   const inAuthGroup = segments[0] === '(auth)';
   const inAdminGroup = segments[0] === 'admin';
+  const markNotificationRead = useNotificationStore((state) => state.markRead);
 
   useEffect(() => {
     loadToken();
@@ -31,6 +33,9 @@ export default function RootLayout() {
 
     const subscription = pushNotificationService.onNotificationResponse(async (response) => {
       const data = response.notification.request.content.data ?? {};
+      if (typeof data.notification_id === 'string') {
+        await markNotificationRead(data.notification_id).catch(() => {});
+      }
       const context = await reminderFeedbackService.recordOpenedFromNotificationData(data as Record<string, unknown>);
       const route = context?.route ?? (typeof data.route === 'string' ? data.route : null);
       if (route) {
@@ -39,7 +44,7 @@ export default function RootLayout() {
     });
 
     return () => subscription.remove();
-  }, [token]);
+  }, [markNotificationRead, token]);
 
   return (
     <Stack screenOptions={{ headerShown: false }}>

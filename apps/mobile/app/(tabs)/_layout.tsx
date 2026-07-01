@@ -8,6 +8,7 @@ import { useAppTheme } from '../../components/theme';
 import { AnimatedIonicon } from '../../components/animated-icon';
 import { useI18n } from '../../components/i18n';
 import { useAuthStore } from '../../store/auth.store';
+import { NotificationCenterOverlay } from '../../components/notification-center-overlay';
 
 type TabIconName = ComponentProps<typeof Ionicons>['name'];
 
@@ -65,6 +66,7 @@ export default function TabsLayout() {
   }
 
   return (
+    <View style={styles.layout}>
     <Tabs
       screenOptions={{
         headerShown: false,
@@ -176,10 +178,13 @@ export default function TabsLayout() {
         }}
       />
     </Tabs>
+    <NotificationCenterOverlay topInset={insets?.top ?? 0} />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  layout: { flex: 1 },
   authGate: {
     flex: 1,
   },

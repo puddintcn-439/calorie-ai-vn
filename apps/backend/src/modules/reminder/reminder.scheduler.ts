@@ -23,7 +23,7 @@ export class ReminderSchedulerService {
       const now = new Date();
       const { data: prefs, error } = await this.supabase.db
         .from('reminder_preferences')
-        .select('user_id, breakfast_reminder_enabled, breakfast_reminder_time, lunch_reminder_enabled, lunch_reminder_time, dinner_reminder_enabled, dinner_reminder_time, snack_reminder_enabled, snack_reminder_time, allow_push_notifications, nudge_motivation_style')
+        .select('user_id, breakfast_reminder_enabled, breakfast_reminder_time, lunch_reminder_enabled, lunch_reminder_time, dinner_reminder_enabled, dinner_reminder_time, snack_reminder_enabled, snack_reminder_time, hydration_reminder_enabled, allow_push_notifications, nudge_motivation_style')
         .eq('allow_push_notifications', true);
 
       if (error || !prefs || prefs.length === 0) return;

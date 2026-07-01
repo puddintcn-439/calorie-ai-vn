@@ -51,6 +51,48 @@ describe('LogService.createLog', () => {
   });
 });
 
+describe('LogService hydration logs', () => {
+  it('creates a hydration entry with the requested amount', async () => {
+    const hydration = {
+      id: 'water-1',
+      user_id: 'u1',
+      amount_ml: 350,
+      logged_at: '2026-07-01T08:00:00.000Z',
+      created_at: '2026-07-01T08:00:00.000Z',
+    };
+    const supabase = makeSupabase(() => ({
+      insert: jest.fn().mockReturnThis(),
+      select: jest.fn().mockReturnThis(),
+      single: jest.fn().mockResolvedValue({ data: hydration, error: null }),
+    }));
+    const service = new LogService(supabase);
+
+    await expect(service.createHydrationLog('u1', 350, hydration.logged_at))
+      .resolves.toEqual(hydration);
+  });
+
+  it('returns hydration entries for the selected local day', async () => {
+    const hydration = [{
+      id: 'water-1',
+      user_id: 'u1',
+      amount_ml: 300,
+      logged_at: '2026-07-01T01:00:00.000Z',
+      created_at: '2026-07-01T01:00:00.000Z',
+    }];
+    const supabase = makeSupabase(() => ({
+      select: jest.fn().mockReturnThis(),
+      eq: jest.fn().mockReturnThis(),
+      gte: jest.fn().mockReturnThis(),
+      lte: jest.fn().mockReturnThis(),
+      order: jest.fn().mockResolvedValue({ data: hydration, error: null }),
+    }));
+    const service = new LogService(supabase);
+
+    await expect(service.getHydrationLogs('u1', '2026-07-01', -420))
+      .resolves.toEqual(hydration);
+  });
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 // getDailyLog – totals computation
 // ─────────────────────────────────────────────────────────────────────────────
@@ -267,7 +309,7 @@ describe('LogService.getTodaySummary', () => {
       status: 'ready',
       calories_kcal: 2000,
       protein_g: 112,
-      algorithm_version: 'daily-nutrition-v2',
+      algorithm_version: 'daily-nutrition-v4',
     });
     expect(summary.health_score.overall).toBeGreaterThanOrEqual(70);
     expect(summary.health_score.label).toBe('strong');

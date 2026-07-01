@@ -131,6 +131,46 @@ export type AdminPaymentIssuesResponse = {
   issues: AdminPaymentIssue[];
 };
 
+export type AdminSupportRequest = {
+  id: string;
+  user_id: string;
+  user_email: string | null;
+  category: 'account' | 'technical' | 'ai_result' | 'health_data' | 'billing' | 'feedback' | 'other';
+  subject: string;
+  message: string;
+  status: 'open' | 'in_progress' | 'resolved' | 'closed';
+  app_version: string | null;
+  platform: string | null;
+  admin_reply: string | null;
+  resolved_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type AdminSupportRequestsResponse = {
+  generated_at: string;
+  total: number;
+  requests: AdminSupportRequest[];
+};
+
+export type AdminNotification = {
+  id: string;
+  source_id: string;
+  type: 'support_request' | 'payment_issue';
+  title: string;
+  body: string;
+  status: string;
+  route: '/admin/support-requests' | '/admin/payment-issues';
+  created_at: string | null;
+  needs_attention: boolean;
+};
+
+export type AdminNotificationsResponse = {
+  generated_at: string;
+  unread_count: number;
+  notifications: AdminNotification[];
+};
+
 export const adminService = {
   async fetchOverview(): Promise<AdminOverview> {
     const { data } = await apiClient.get('/admin/overview');
@@ -189,6 +229,24 @@ export const adminService = {
 
   async updatePaymentIssue(issueId: string, patch: { status?: 'open' | 'in_review' | 'resolved' | 'rejected'; admin_note?: string; resolution?: string }): Promise<{ ok: boolean; issue: AdminPaymentIssue; audited: boolean }> {
     const { data } = await apiClient.patch(`/admin/payment-issues/${encodeURIComponent(issueId)}`, patch);
+    return data;
+  },
+
+  async fetchSupportRequests(params: { status?: string; category?: string; search?: string } = {}): Promise<AdminSupportRequestsResponse> {
+    const { data } = await apiClient.get('/admin/support-requests', { params });
+    return data;
+  },
+
+  async fetchNotifications(): Promise<AdminNotificationsResponse> {
+    const { data } = await apiClient.get('/admin/notifications');
+    return data;
+  },
+
+  async updateSupportRequest(
+    requestId: string,
+    patch: { status: 'open' | 'in_progress' | 'resolved' | 'closed'; admin_reply?: string },
+  ): Promise<{ ok: boolean; request: AdminSupportRequest; notification: unknown }> {
+    const { data } = await apiClient.patch(`/admin/support-requests/${encodeURIComponent(requestId)}`, patch);
     return data;
   },
 

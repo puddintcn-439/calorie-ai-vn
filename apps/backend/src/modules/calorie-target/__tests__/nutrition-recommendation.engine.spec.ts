@@ -21,9 +21,9 @@ describe('NutritionRecommendationEngine', () => {
     expect(target.fat_g).toBe(61);
     expect(target.carbs_g).toBe(301);
     expect(target.fiber_g).toBe(31);
-    expect(target.water_ml).toBe(2800);
+    expect(target.water_ml).toBe(2600);
     expect(target.rationale.protein).toContain('lose_weight');
-    expect(target.algorithm_version).toBe('daily-nutrition-v2');
+    expect(target.algorithm_version).toBe('daily-nutrition-v4');
     expect(target.methodology.protein_g).toMatchObject({
       evidence_level: 'evidence_informed_heuristic',
       is_user_adjustable: false,
@@ -131,8 +131,36 @@ describe('NutritionRecommendationEngine', () => {
     }, '2026-06-28', 2200);
 
     expect(target.status).toBe('ready');
-    expect(target.water_ml).toBe(3300);
+    expect(target.water_ml).toBe(3100);
     expect(target.factors.sweat_level).toBe('high');
+  });
+
+  it('uses the midpoint water estimate for a 74 kg low-activity adult', () => {
+    const target = engine.calculate({
+      age: 30,
+      gender: 'male',
+      weight_kg: 74,
+      activity_level: 'light',
+      goal: 'maintain',
+      health_flags: [],
+    }, '2026-07-01', 2100);
+
+    expect(target.status).toBe('ready');
+    expect(target.water_ml).toBe(2400);
+  });
+
+  it('adds a conservative climate adjustment for hot and extreme heat exposure', () => {
+    const base = {
+      age: 30,
+      gender: 'male' as const,
+      weight_kg: 74,
+      activity_level: 'light' as const,
+      goal: 'maintain' as const,
+      health_flags: [],
+    };
+
+    expect(engine.calculate({ ...base, climate_exposure: 'hot_humid' }, '2026-07-01', 2100).water_ml).toBe(2650);
+    expect(engine.calculate({ ...base, climate_exposure: 'extreme_heat' }, '2026-07-01', 2100).water_ml).toBe(2900);
   });
 
   it('uses an active clinician plan for a kidney profile without applying the adult formula', () => {

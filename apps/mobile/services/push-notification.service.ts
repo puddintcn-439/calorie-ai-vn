@@ -296,6 +296,78 @@ class PushNotificationService {
     const subscription = Notifications.addNotificationResponseReceivedListener(callback);
     return subscription;
   }
+
+  async syncHydrationReminders(slots: Array<{ time: string; amount_ml: number }>, enabled = true) {
+    try {
+      const Notifications = getNotificationsModule();
+      if (!Notifications) return;
+
+      await this.ensureAndroidReminderChannel(Notifications);
+      const validSlots = slots
+        .filter((slot) => /^([01]\d|2[0-3]):[0-5]\d$/.test(slot.time) && Number(slot.amount_ml) > 0)
+        .sort((left, right) => left.time.localeCompare(right.time));
+      const desiredSignature = validSlots.map((slot) => `${slot.time}:${Math.round(slot.amount_ml)}`).join('|');
+      const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+      const hydrationNotifications = scheduled.filter((item) => item.content.data?.kind === 'hydration_reminder');
+      if (!enabled) {
+        await Promise.all(hydrationNotifications.map((item) => (
+          Notifications.cancelScheduledNotificationAsync(item.identifier)
+        )));
+        appLogger.info('Push', 'Hydration reminders disabled');
+        return;
+      }
+      const permissions = await Notifications.getPermissionsAsync();
+      if (permissions.status !== 'granted') return;
+      const existingSignature = hydrationNotifications
+        .map((item) => `${String(item.content.data?.time ?? '')}:${Number(item.content.data?.amount_ml ?? 0)}`)
+        .sort()
+        .join('|');
+
+      if (desiredSignature === existingSignature) return;
+
+      await Promise.all(hydrationNotifications.map((item) => (
+        Notifications.cancelScheduledNotificationAsync(item.identifier)
+      )));
+
+      await Promise.all(validSlots.map(async (slot) => {
+        const [hour, minute] = slot.time.split(':').map(Number);
+        await Notifications.scheduleNotificationAsync({
+          content: {
+            title: 'Đến giờ uống nước',
+            body: `Uống khoảng ${Math.round(slot.amount_ml)}ml và ghi nhận trong Nhật ký.`,
+            data: {
+              kind: 'hydration_reminder',
+              route: '/log',
+              time: slot.time,
+              amount_ml: Math.round(slot.amount_ml),
+            },
+            sound: 'default',
+          },
+          trigger: {
+            type: Notifications.SchedulableTriggerInputTypes.CALENDAR,
+            hour,
+            minute,
+            repeats: true,
+          },
+        });
+      }));
+      appLogger.info('Push', 'Hydration reminders synchronized', { count: validSlots.length });
+    } catch (error) {
+      appLogger.warn('Push', 'Failed to synchronize hydration reminders', error);
+    }
+  }
+
+  /**
+   * Listen while the app is open so the in-app bell and banner update immediately.
+   */
+  onNotificationReceived(callback: (notification: ExpoNotifications.Notification) => void) {
+    const Notifications = getNotificationsModule();
+    if (!Notifications) {
+      return { remove: () => {} };
+    }
+
+    return Notifications.addNotificationReceivedListener(callback);
+  }
 }
 
 export const pushNotificationService = new PushNotificationService();

@@ -127,9 +127,22 @@ export class NotificationsService {
       .limit(50);
     if (error) throw error;
 
+    const notifications = (Array.isArray(data) ? data : []).map((row) => this.safeUserNotification(row));
     return {
-      notifications: (Array.isArray(data) ? data : []).map((row) => this.safeUserNotification(row)),
+      notifications,
+      unread_count: notifications.filter((notification) => !notification.read_at).length,
     };
+  }
+
+  async markAllUserNotificationsRead(userId: string) {
+    const readAt = new Date().toISOString();
+    const { error } = await this.supabase.db
+      .from('user_notifications')
+      .update({ read_at: readAt })
+      .eq('user_id', userId)
+      .is('read_at', null);
+    if (error) throw error;
+    return { ok: true, read_at: readAt };
   }
 
   async markUserNotificationRead(userId: string, notificationId: string) {

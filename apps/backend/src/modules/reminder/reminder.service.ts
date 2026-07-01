@@ -46,6 +46,7 @@ export class ReminderService {
       dinner_reminder_time: '19:00',
       snack_reminder_enabled: false,
       snack_reminder_time: '15:00',
+      hydration_reminder_enabled: true,
       allow_push_notifications: true,
       nudge_motivation_style: 'encouraging',
       created_at: now,
@@ -107,6 +108,7 @@ export class ReminderService {
         dinner_reminder_time: '19:00',
         snack_reminder_enabled: false,
         snack_reminder_time: '15:00',
+        hydration_reminder_enabled: true,
         allow_push_notifications: true,
         nudge_motivation_style: 'encouraging',
       };

@@ -136,6 +136,11 @@ class SyncActivityBatchRequestDto implements ActivitySyncBatchDto {
   entries: SyncedActivityEntryDto[];
 }
 
+class CreateHydrationLogDto {
+  @ApiProperty({ example: 250 }) @IsInt() @Min(1) amount_ml: number;
+  @ApiProperty({ required: false }) @IsOptional() @IsString() logged_at?: string;
+}
+
 @ApiTags('Log')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
@@ -257,5 +262,10 @@ export class TodayController {
     const d = date ?? new Date().toISOString().slice(0, 10);
     const tzOffset = Number.isFinite(Number(tzOffsetMinutes)) ? Number(tzOffsetMinutes) : 0;
     return this.logService.getTodaySummary(req.user.id, d, tzOffset);
+  }
+
+  @Post('water')
+  addWater(@Body() dto: CreateHydrationLogDto, @Request() req: any) {
+    return this.logService.createHydrationLog(req.user.id, dto.amount_ml, dto.logged_at);
   }
 }

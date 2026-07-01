@@ -136,6 +136,7 @@ export default function AdminOverviewScreen() {
               <AdminQuickActionCard title="Users" body="Tìm user, xem gói, quota và hoạt động gần đây." href="/admin/users" tone="info" />
               <AdminQuickActionCard title="Revenue" body="Kiểm tra doanh thu, subscription mix, AI cost và margin." href="/admin/revenue" tone="billing" />
               <AdminQuickActionCard title="Payment Issues" body="Xử lý hoàn tiền, thanh toán trùng hoặc chưa kích hoạt gói." href="/admin/payment-issues" tone="support" />
+              <AdminQuickActionCard title="Help Inbox" body="Đọc, phân loại và phản hồi yêu cầu hỗ trợ chung từ người dùng." href="/admin/support-requests" tone="support" />
               <AdminQuickActionCard title="AI Usage" body="Theo dõi request, chi phí, blocked quota và provider mix." href="/admin/ai-usage" tone="ai" />
             </View>
           </AdminSectionCard>
@@ -152,6 +153,13 @@ export default function AdminOverviewScreen() {
                   <Text style={adminStyles.muted}>Mở support queue để xem case open/in_review.</Text>
                 </View>
                 <Text style={adminStyles.rowRight}>Review</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.attentionRow} onPress={() => router.push('/admin/support-requests' as any)}>
+                <View style={adminStyles.rowCopy}>
+                  <Text style={adminStyles.rowTitle}>Help Inbox</Text>
+                  <Text style={adminStyles.muted}>Kiểm tra ticket mới và phản hồi đang chờ.</Text>
+                </View>
+                <Text style={adminStyles.rowRight}>Open</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.attentionRow} onPress={() => router.push('/admin/revenue' as any)}>
                 <View style={adminStyles.rowCopy}>

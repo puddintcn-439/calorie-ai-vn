@@ -61,6 +61,8 @@ export interface DailyLog {
 export interface TodaySummary {
   date: string;
   timezone_offset_minutes: number;
+  hydration_logs?: HydrationLog[];
+  water_intake_ml?: number;
   waterIntake?: number;
   waterGoal?: number;
   water_intake_l?: number;
@@ -84,6 +86,8 @@ export interface TodaySummary {
     | 'exercise_sessions_per_week'
     | 'exercise_minutes_per_session'
     | 'sweat_level'
+    | 'climate_exposure'
+    | 'hydration_schedule'
     | 'pregnancy_trimester'
     | 'breastfeeding_level'
     | 'diabetes_type'
@@ -144,6 +148,14 @@ export interface TodaySummary {
     profile: 'ok' | 'error';
   };
   errors?: Partial<Record<keyof TodaySummary['status'], string>>;
+}
+
+export interface HydrationLog {
+  id: string;
+  user_id: string;
+  amount_ml: number;
+  logged_at: string;
+  created_at: string;
 }
 
 export interface CreateLogFromScanDto {

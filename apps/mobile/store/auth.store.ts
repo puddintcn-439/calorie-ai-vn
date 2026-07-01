@@ -3,12 +3,14 @@ import { authStorage } from '../services/auth-storage';
 import { featureGatingService } from '../services/feature-gating.service';
 import { pushNotificationService } from '../services/push-notification.service';
 import { useSubscriptionStore } from './subscription.store';
+import { useNotificationStore } from './notification.store';
 
 const create = require('zustand').create as typeof import('zustand').create;
 
 function clearAccountScopedState() {
   featureGatingService.invalidateCache();
   useSubscriptionStore.getState().clear();
+  useNotificationStore.getState().clear();
 }
 
 interface AuthState {

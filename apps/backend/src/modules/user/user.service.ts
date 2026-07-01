@@ -320,6 +320,8 @@ export class UserService {
       'work_activity_level',
       'exercise_sessions_per_week',
       'exercise_minutes_per_session',
+      'sweat_level',
+      'climate_exposure',
       'goal',
       'health_flags',
       'pregnancy_trimester',
@@ -366,6 +368,28 @@ export class UserService {
     updates.nutrition_target_snapshot = nutritionTarget;
     updates.nutrition_algorithm_version = nutritionTarget.algorithm_version;
     updates.nutrition_target_calculated_at = nutritionTarget.calculated_at;
+  }
+
+  private normaliseHydrationSchedule(value: User['hydration_schedule']): User['hydration_schedule'] {
+    if (!value || value.mode === 'system') {
+      return { mode: 'system', slots: [], updated_at: new Date().toISOString() };
+    }
+
+    const slots = (Array.isArray(value.slots) ? value.slots : [])
+      .map((slot) => ({
+        time: String(slot?.time ?? '').trim(),
+        amount_ml: Math.round(Number(slot?.amount_ml)),
+      }))
+      .filter((slot) => /^([01]\d|2[0-3]):[0-5]\d$/.test(slot.time)
+        && slot.amount_ml >= 50
+        && slot.amount_ml <= 1000)
+      .sort((left, right) => left.time.localeCompare(right.time))
+      .slice(0, 12);
+
+    if (slots.length === 0) {
+      return { mode: 'system', slots: [], updated_at: new Date().toISOString() };
+    }
+    return { mode: 'custom', slots, updated_at: new Date().toISOString() };
   }
 
   async getProfile(userId: string, email?: string): Promise<User> {
@@ -420,6 +444,9 @@ export class UserService {
         existing.clinician_nutrition_targets,
         new Date(now),
       );
+    }
+    if (Object.prototype.hasOwnProperty.call(updates, 'hydration_schedule')) {
+      updates.hydration_schedule = this.normaliseHydrationSchedule(updates.hydration_schedule);
     }
     if (updates.date_of_birth) {
       const derivedAge = this.ageFromDateOfBirth(updates.date_of_birth, new Date(now));

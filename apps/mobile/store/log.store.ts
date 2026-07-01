@@ -60,6 +60,7 @@ interface LogState {
   logSavedMeal: (id: string, mealType: MealType) => Promise<void>;
   deleteSavedMeal: (id: string) => Promise<void>;
   addActivity: (dto: CreateActivityLogDto) => Promise<void>;
+  addWater: (amountMl: number) => Promise<void>;
   deleteActivity: (id: string) => Promise<void>;
   syncActivity: (date?: string) => Promise<ActivitySyncResult>;
   addRoadmapItem: (dto: CreateDailyRoadmapItemDto) => Promise<DailyRoadmapItem>;
@@ -201,6 +202,12 @@ export const useLogStore = create<LogState>((set, get) => ({
     await apiClient.post('/log/activity', dto);
     await reminderFeedbackService.recordActed('activity_log');
     await get().fetchTodaySummary(getLocalDateFromIso(dto.logged_at));
+  },
+
+  addWater: async (amountMl) => {
+    const amount = Math.max(1, Math.min(2000, Math.round(amountMl)));
+    await apiClient.post('/today/water', { amount_ml: amount });
+    await get().fetchTodaySummary();
   },
 
   deleteActivity: async (id) => {

@@ -23,6 +23,9 @@ import type { I18nKey } from '../../components/i18n';
 import { TextInput } from '../../components/i18n-text-input';
 import { PortionInput } from '../../components/portion-input';
 import { scaleNutrition } from '../../services/portion.service';
+import { HydrationScheduleCard } from '../../components/today/HydrationScheduleCard';
+import { buildSystemHydrationSlots, normalizeHydrationSlots } from '../../services/hydration-schedule';
+import { pushNotificationService } from '../../services/push-notification.service';
 
 const logHeroIllustration = require('../../assets/images/log-hero.jpg') as number;
 
@@ -192,7 +195,7 @@ export default function LogScreen() {
   const { colors } = useAppTheme();
   const { t, tx } = useI18n();
   const { token, isLoading: authLoading } = useAuthStore();
-  const { dailyLog, savedMeals, activityLogs, activityPreferences, isLoading, fetchDailyLog, fetchSavedMeals, fetchActivityLogs, fetchActivityPreferences, updateLog, removeLog, restoreLog, logSavedMeal, updateSavedMeal, deleteSavedMeal, addActivity, deleteActivity } = useLogStore();
+  const { dailyLog, savedMeals, activityLogs, activityPreferences, todaySummary, isLoading, fetchTodaySummary, fetchDailyLog, fetchSavedMeals, fetchActivityLogs, fetchActivityPreferences, updateLog, removeLog, restoreLog, logSavedMeal, updateSavedMeal, deleteSavedMeal, addActivity, addWater, deleteActivity } = useLogStore();
   const [perMealTargets, setPerMealTargets] = useState<Record<MealType, number>>({
     breakfast: 400, lunch: 600, dinner: 600, snack: 200,
   });
@@ -214,15 +217,20 @@ export default function LogScreen() {
   const [editingSavedMeal, setEditingSavedMeal] = useState<SavedMeal | null>(null);
   const [editSavedMealName, setEditSavedMealName] = useState('');
   const [reward, setReward] = useState<RewardToastData | null>(null);
+  const [isLoggingWater, setIsLoggingWater] = useState(false);
   const editNutritionBase = useRef({ grams: 1, calories: 0, protein: 0, carbs: 0, fat: 0 });
 
   const loadLogData = useCallback(() => {
     if (authLoading || !token) return;
     fetchDailyLog().catch(() => {});
+    fetchTodaySummary().catch(() => {});
     fetchSavedMeals().catch(() => {});
     fetchActivityLogs().catch(() => {});
     fetchActivityPreferences().catch(() => {});
-    apiClient.get('/user/profile').then((res) => {
+    Promise.all([
+      apiClient.get('/user/profile'),
+      apiClient.get('/reminders/preferences').catch(() => ({ data: null })),
+    ]).then(([res, reminderResponse]) => {
       const u = res.data as User;
       setProfileMeta(u);
       setPerMealTargets({
@@ -231,8 +239,17 @@ export default function LogScreen() {
         dinner: u.target_dinner_cal ?? 600,
         snack: u.target_snack_cal ?? 200,
       });
+      const targetMl = Number(u.nutrition_target_snapshot?.water_ml ?? 0);
+      const reminderSlots = u.hydration_schedule?.mode === 'custom' && u.hydration_schedule.slots.length > 0
+        ? normalizeHydrationSlots(u.hydration_schedule.slots)
+        : buildSystemHydrationSlots(targetMl);
+      const reminderPrefs = reminderResponse.data as { allow_push_notifications?: boolean; hydration_reminder_enabled?: boolean } | null;
+      void pushNotificationService.syncHydrationReminders(
+        reminderSlots,
+        (reminderPrefs?.allow_push_notifications ?? true) && (reminderPrefs?.hydration_reminder_enabled ?? true),
+      );
     }).catch(() => {});
-  }, [authLoading, fetchActivityLogs, fetchActivityPreferences, fetchDailyLog, fetchSavedMeals, token]);
+  }, [authLoading, fetchActivityLogs, fetchActivityPreferences, fetchDailyLog, fetchSavedMeals, fetchTodaySummary, token]);
 
   useEffect(() => {
     loadLogData();
@@ -288,6 +305,25 @@ export default function LogScreen() {
   const targetCalories = safeNumber(dailyLog?.target_calories, Object.values(perMealTargets).reduce((sum, value) => sum + safeNumber(value), 0));
   const burnedCalories = activityLogs.reduce((sum, item) => sum + safeNumber(item.calories_burned), 0);
   const netCalories = loggedCalories - burnedCalories;
+  const waterTargetMl = Math.max(0, Number(todaySummary?.daily_nutrition_target?.water_ml ?? profileMeta.nutrition_target_snapshot?.water_ml ?? 0));
+  const waterIntakeMl = Math.max(0, Number(todaySummary?.water_intake_ml ?? 0));
+
+  const handleLogWater = async (amountMl: number) => {
+    if (isLoggingWater || amountMl <= 0) return;
+    setIsLoggingWater(true);
+    try {
+      await addWater(amountMl);
+      setReward({
+        title: 'screen.tabs.index.hydration.title',
+        body: `${amountMl}ml · ${(Math.min(waterTargetMl, waterIntakeMl + amountMl) / 1000).toLocaleString('vi-VN')} / ${(waterTargetMl / 1000).toLocaleString('vi-VN')} L`,
+        icon: 'water',
+      });
+    } catch {
+      Alert.alert('Không thể ghi nhận nước', 'Vui lòng thử lại sau.');
+    } finally {
+      setIsLoggingWater(false);
+    }
+  };
 
   const handleQuickLog = (meal: SavedMeal) => {
     const totals = getSavedMealDisplayTotals(meal);
@@ -796,6 +832,17 @@ export default function LogScreen() {
           <Text style={styles.logSummaryUnit} i18nKey="screen.tabs.log.text.005" />
         </View>
       </SurfaceCard>
+
+      {waterTargetMl > 0 ? (
+        <HydrationScheduleCard
+          targetMl={waterTargetMl}
+          intakeMl={waterIntakeMl}
+          logs={todaySummary?.hydration_logs ?? []}
+          schedule={todaySummary?.profile?.hydration_schedule ?? profileMeta.hydration_schedule}
+          saving={isLoggingWater}
+          onAddWater={(amountMl) => void handleLogWater(amountMl)}
+        />
+      ) : null}
 
         {/* ---- Saved Meals Quick Log ---- */}
         {savedMeals.length > 0 && (

@@ -9,6 +9,7 @@ function makeDb(tables: Record<string, any[]> = {}) {
     const rows = () => (state[table] ?? []).filter((row) => matches(row, chain.filters));
     chain.select = jest.fn().mockReturnValue(chain);
     chain.eq = jest.fn((key: string, value: any) => { chain.filters.push([key, value]); return chain; });
+    chain.is = jest.fn((key: string, value: any) => { chain.filters.push([key, value]); return chain; });
     chain.order = jest.fn().mockReturnValue(chain);
     chain.limit = jest.fn(async (count: number) => ({ data: rows().slice(0, count), error: null }));
     chain.insert = jest.fn((payload: any) => { chain.insertPayload = payload; return chain; });
@@ -154,7 +155,26 @@ describe('NotificationsService', () => {
     const other = await service.markUserNotificationRead('user-1', 'note-2');
 
     expect(list.notifications).toHaveLength(1);
+    expect(list.unread_count).toBe(1);
     expect(own).toMatchObject({ id: 'note-1', read_at: expect.any(String) });
     expect(other).toBeNull();
+  });
+
+  it('marks all unread notifications for the current user only', async () => {
+    const db = makeDb({
+      user_notifications: [
+        { id: 'note-1', user_id: 'user-1', read_at: null },
+        { id: 'note-2', user_id: 'user-1', read_at: '2026-06-12T00:00:00.000Z' },
+        { id: 'note-3', user_id: 'user-2', read_at: null },
+      ],
+    });
+    const service = makeService(db);
+
+    const result = await service.markAllUserNotificationsRead('user-1');
+
+    expect(result).toMatchObject({ ok: true, read_at: expect.any(String) });
+    expect(db.state.user_notifications[0].read_at).toEqual(expect.any(String));
+    expect(db.state.user_notifications[1].read_at).toBe('2026-06-12T00:00:00.000Z');
+    expect(db.state.user_notifications[2].read_at).toBeNull();
   });
 });

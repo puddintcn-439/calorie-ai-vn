@@ -11,6 +11,7 @@ export interface ReminderPreferences {
   dinner_reminder_time: string;
   snack_reminder_enabled: boolean;
   snack_reminder_time: string;
+  hydration_reminder_enabled: boolean;
   allow_push_notifications: boolean;
   nudge_motivation_style: 'encouraging' | 'warning' | 'neutral';
   created_at?: string;
@@ -26,6 +27,7 @@ export interface ReminderPreferencesDto {
   dinner_reminder_time?: string;
   snack_reminder_enabled?: boolean;
   snack_reminder_time?: string;
+  hydration_reminder_enabled?: boolean;
   allow_push_notifications?: boolean;
   nudge_motivation_style?: 'encouraging' | 'warning' | 'neutral';
 }

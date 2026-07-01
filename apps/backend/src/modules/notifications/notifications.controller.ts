@@ -18,6 +18,14 @@ export class NotificationsController {
     return this.notificationsService.listUserNotifications(userId);
   }
 
+  @Patch('read-all')
+  @ApiOperation({ summary: 'Mark all current user notifications as read' })
+  markAllRead(@Request() req: any) {
+    const userId = req.user?.id ?? req.user?.sub;
+    if (!userId) throw new UnauthorizedException('Authenticated user id is required.');
+    return this.notificationsService.markAllUserNotificationsRead(userId);
+  }
+
   @Patch(':id/read')
   @ApiOperation({ summary: 'Mark one current user notification as read' })
   @ApiParam({ name: 'id', description: 'Notification UUID' })

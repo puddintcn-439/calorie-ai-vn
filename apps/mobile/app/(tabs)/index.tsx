@@ -49,6 +49,7 @@ import { useTodayHero } from '../../hooks/useTodayHero';
 import { TodayCoachCard } from '../../components/today/TodayCoachCard';
 import { TodayCoachSuggestion, useTodayCoach } from '../../hooks/useTodayCoach';
 import { MealRecommendation } from '../../services/calorie-target.service';
+import { buildSystemHydrationSlots, normalizeHydrationSlots } from '../../services/hydration-schedule';
 
 
 const MEAL_ORDER: MealType[] = ['breakfast', 'lunch', 'dinner', 'snack'];
@@ -761,6 +762,7 @@ export default function DashboardScreen() {
     fetchDailyLog,
     fetchActivityLogs,
     addActivity,
+    addWater,
     updateRoadmapItem,
   } = useLogStore();
   const { summary, fetchSummary } = useGamificationStore();
@@ -770,6 +772,7 @@ export default function DashboardScreen() {
   const [profileMeta, setProfileMeta] = useState<DashboardProfileMeta | null>(null);
   const [selectedGoal, setSelectedGoal] = useState<string>(QUICK_GOAL_OPTIONS[1].key);
   const [isLoggingMovement, setIsLoggingMovement] = useState(false);
+  const [isLoggingWater, setIsLoggingWater] = useState(false);
   const [updatingRoadmapId, setUpdatingRoadmapId] = useState<string | null>(null);
   const [reward, setReward] = useState<RewardToastData | null>(null);
   const [reminderEffectiveness, setReminderEffectiveness] = useState<ReminderEffectivenessSummary | null>(null);
@@ -1027,13 +1030,36 @@ export default function DashboardScreen() {
       : t('screen.tabs.index.plan.metricOver');
   const healthScore = todaySummary?.health_score;
   const waterIntakeL = Math.max(0, safeNumber(
-    todaySummary?.waterIntake ?? todaySummary?.water_intake_l,
+    todaySummary?.water_intake_ml != null
+      ? todaySummary.water_intake_ml / 1000
+      : todaySummary?.waterIntake ?? todaySummary?.water_intake_l,
   ));
   const waterGoalL = Math.max(0, safeNumber(
     todaySummary?.daily_nutrition_target?.water_ml
       ? todaySummary.daily_nutrition_target.water_ml / 1000
       : todaySummary?.waterGoal ?? todaySummary?.water_goal_l,
   ));
+  const hydrationCheckpoints = useMemo(() => {
+    const targetMl = Math.round(waterGoalL * 1000);
+    const configured = todaySummary?.profile?.hydration_schedule;
+    const slots = configured?.mode === 'custom' && configured.slots.length > 0
+      ? normalizeHydrationSlots(configured.slots)
+      : buildSystemHydrationSlots(targetMl);
+    let cumulativeMl = 0;
+    return slots.map((slot) => {
+      cumulativeMl += Number(slot.amount_ml);
+      return { ...slot, cumulativeMl };
+    });
+  }, [todaySummary?.profile?.hydration_schedule, waterGoalL]);
+  const nextHydrationCheckpoint = hydrationCheckpoints.find((slot) => slot.cumulativeMl > waterIntakeL * 1000) ?? null;
+  const nowMinutes = new Date().getHours() * 60 + new Date().getMinutes();
+  const nextHydrationMinutes = nextHydrationCheckpoint
+    ? Number(nextHydrationCheckpoint.time.slice(0, 2)) * 60 + Number(nextHydrationCheckpoint.time.slice(3, 5))
+    : null;
+  const hydrationDue = Boolean(nextHydrationCheckpoint && nextHydrationMinutes !== null && nextHydrationMinutes <= nowMinutes);
+  const nextHydrationAmountMl = nextHydrationCheckpoint
+    ? Math.min(nextHydrationCheckpoint.amount_ml, Math.max(0, Math.round((waterGoalL - waterIntakeL) * 1000)))
+    : 0;
   const healthTrendDelta = healthScore?.trend.delta_vs_7d ?? null;
   const healthTrendTone = healthScore?.trend.direction === 'up'
     ? 'good'
@@ -1146,6 +1172,26 @@ export default function DashboardScreen() {
     }
   }
 
+  async function logWater(amountMl: number) {
+    if (isLoggingWater || amountMl <= 0) return;
+    setIsLoggingWater(true);
+    try {
+      await addWater(amountMl);
+      setReward({
+        title: 'screen.tabs.index.hydration.title',
+        body: t('screen.tabs.index.hydration.subtitle' as any, {
+          intake: ((waterIntakeL * 1000 + amountMl) / 1000).toFixed(1),
+          target: waterGoalL.toFixed(1),
+        }),
+        icon: 'water',
+      });
+    } catch {
+      Alert.alert('Không thể ghi nhận nước', 'Vui lòng thử lại sau.');
+    } finally {
+      setIsLoggingWater(false);
+    }
+  }
+
   const movementProgressPct = movementPlan
     ? clampProgress(activityMinutes / Math.max(safeNumber(movementPlan.daily_minutes_target), 1)) * 100
     : 0;
@@ -1188,6 +1234,30 @@ export default function DashboardScreen() {
     }).format(new Date()),
   });
   const nextAction = useMemo(() => {
+    if (safetyCard) {
+      return {
+        kind: 'profile' as const,
+        tone: safetyCard.tone === 'review' ? 'warn' as const : 'info' as const,
+        icon: safetyCard.icon,
+        label: t('screen.tabs.index.next.priority'),
+        title: safetyCard.title,
+        body: safetyCard.body,
+        primaryLabel: safetyCard.action,
+      };
+    }
+
+    if (hydrationDue && nextHydrationCheckpoint && nextHydrationAmountMl > 0) {
+      return {
+        kind: 'water' as const,
+        tone: 'info' as const,
+        icon: 'water-outline' as const,
+        label: t('screen.tabs.index.next.action'),
+        title: `Uống ${nextHydrationAmountMl}ml nước`,
+        body: `Mốc ${nextHydrationCheckpoint.time} đang đến hạn. Ghi nhận sau khi bạn đã uống.`,
+        primaryLabel: `Đã uống ${nextHydrationAmountMl}ml`,
+      };
+    }
+
     if (logs.length === 0) {
       return {
         kind: 'scan' as const,
@@ -1209,18 +1279,6 @@ export default function DashboardScreen() {
         title: t('screen.tabs.index.next.protein.title', { grams: formatNumber(proteinGapG) }),
         body: t('screen.tabs.index.next.protein.body'),
         primaryLabel: t('screen.tabs.index.next.protein.primary'),
-      };
-    }
-
-    if (safetyCard) {
-      return {
-        kind: 'profile' as const,
-        tone: safetyCard.tone === 'review' ? 'warn' as const : 'info' as const,
-        icon: safetyCard.icon,
-        label: t('screen.tabs.index.next.priority'),
-        title: safetyCard.title,
-        body: safetyCard.body,
-        primaryLabel: safetyCard.action,
       };
     }
 
@@ -1262,7 +1320,7 @@ export default function DashboardScreen() {
       body: t('screen.tabs.index.next.steady.body'),
       primaryLabel: t('screen.tabs.index.next.openJournal'),
     };
-  }, [logs.length, movementButtonLabel, movementPlan, movementPlanCompleted, nudges, proteinGapG, safetyCard, t]);
+  }, [hydrationDue, logs.length, movementButtonLabel, movementPlan, movementPlanCompleted, nextHydrationAmountMl, nextHydrationCheckpoint, nudges, proteinGapG, safetyCard, t]);
   const openProfileCompletion = () => {
     router.push({
       pathname: '/profile',
@@ -1283,6 +1341,10 @@ export default function DashboardScreen() {
     }
     if (nextAction.kind === 'movement') {
       void logMovementPlan();
+      return;
+    }
+    if (nextAction.kind === 'water') {
+      void logWater(nextHydrationAmountMl);
       return;
     }
     router.push('/log' as never);
@@ -1436,7 +1498,7 @@ export default function DashboardScreen() {
         title={nextAction.title}
         body={nextAction.body}
         primaryLabel={nextAction.primaryLabel}
-        isLogging={isLoggingMovement}
+        isLogging={isLoggingMovement || isLoggingWater}
         completed={movementPlanCompleted}
         onPress={handleNextActionPress}
       />
@@ -1588,6 +1650,7 @@ const NEXT_STEP_ICON_MAP: Record<string, keyof typeof Ionicons.glyphMap> = {
   profile: 'shield-checkmark-outline',
   scan: 'camera-outline',
   movement: 'walk-outline',
+  water: 'water-outline',
   nudge: 'bulb-outline',
   log: 'checkmark-circle',
 };
@@ -1601,7 +1664,7 @@ function NextStepDarkCard({
   completed,
   onPress,
 }: {
-  kind: 'profile' | 'scan' | 'movement' | 'nudge' | 'log';
+  kind: 'profile' | 'scan' | 'movement' | 'water' | 'nudge' | 'log';
   title: string;
   body: string;
   primaryLabel: string;
@@ -1613,7 +1676,7 @@ function NextStepDarkCard({
   const { t } = useI18n();
   const iconName = NEXT_STEP_ICON_MAP[kind] ?? 'bulb-outline';
   const isDone = kind === 'movement' && completed;
-  const isDisabled = kind === 'movement' && (isLogging || completed);
+  const isDisabled = (kind === 'movement' && completed) || ((kind === 'movement' || kind === 'water') && isLogging);
   const cardGradient: [string, string] = mode === 'dark'
     ? [colors.surfaceAlt, colors.surfacePressed]
     : [colors.text, colors.accentCyan];
