@@ -53,6 +53,7 @@ export default function RootLayout() {
       <Stack.Screen name="body-composition" />
       <Stack.Screen name="mock-payos-checkout" />
       <Stack.Screen name="privacy-data" />
+      <Stack.Screen name="help" />
     </Stack>
   );
 }

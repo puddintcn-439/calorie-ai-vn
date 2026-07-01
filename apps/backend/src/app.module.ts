@@ -21,6 +21,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { HealthModule } from './health/health.module';
 import { MetricsModule } from './common/metrics/metrics.module';
 import { PrivacyModule } from './modules/privacy/privacy.module';
+import { SupportModule } from './modules/support/support.module';
 
 @Module({
   imports: [
@@ -57,6 +58,7 @@ import { PrivacyModule } from './modules/privacy/privacy.module';
     BodyProgressModule,
     NotificationsModule,
     PrivacyModule,
+    SupportModule,
     AdminModule,
   ],
 })

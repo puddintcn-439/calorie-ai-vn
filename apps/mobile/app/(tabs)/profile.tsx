@@ -1764,7 +1764,7 @@ export default function ProfileScreen() {
         <ProfileSectionLabel label="Tài khoản" />
         <SurfaceCard style={styles.profileGroupCard}>
           <ProfileOverviewRow icon="workspace-premium" label="Gói dịch vụ" value={`${subscription?.tier === 'premium' ? 'Premium' : subscription?.tier === 'pro' ? 'Pro' : 'Free'} · ${subscription?.is_active ? 'Đang hoạt động' : 'Chưa kích hoạt'}`} onPress={() => openSetupStep('subscription')} />
-          <ProfileOverviewRow icon="help-outline" label="Trợ giúp" value="Sắp có" muted last />
+          <ProfileOverviewRow icon="help-outline" label="Trợ giúp" value="FAQ · Liên hệ hỗ trợ" onPress={() => router.push('/help' as never)} last />
         </SurfaceCard>
         <TouchableOpacity style={styles.overviewLogoutButton} onPress={handleLogout}>
           <Text style={styles.overviewLogoutText}>Đăng xuất</Text>
