@@ -184,7 +184,7 @@ export class UserService {
       source.direction === 'gain' || source.direction === 'maintain' || source.direction === 'loss'
         ? source.direction
         : 'maintain';
-    const targetKg = direction === 'maintain' ? 0 : this.numberInRange(source.target_kg, 0, 100);
+    const targetKg = direction === 'maintain' ? 0 : this.numberInRange(source.target_kg, 0.1, 100);
     const durationWeeks = direction === 'maintain'
       ? this.numberInRange(source.duration_weeks, 1, 260) ?? 4
       : this.numberInRange(source.duration_weeks, 1, 260);
@@ -450,7 +450,43 @@ export class UserService {
     }
     if (updates.date_of_birth) {
       const derivedAge = this.ageFromDateOfBirth(updates.date_of_birth, new Date(now));
-      if (derivedAge !== undefined) updates.age = derivedAge;
+      if (derivedAge === undefined) {
+        throw new BadRequestException('Date of birth must be a real past date for an age between 13 and 120.');
+      }
+      updates.age = derivedAge;
+    }
+    if (typeof updates.full_name === 'string') {
+      updates.full_name = updates.full_name.trim().slice(0, 100);
+    }
+
+    const merged = { ...existing, ...updates };
+    const sessions = Number(merged.exercise_sessions_per_week ?? 0);
+    const minutes = Number(merged.exercise_minutes_per_session ?? 0);
+    if ((sessions === 0 && minutes > 0) || (sessions > 0 && minutes === 0)) {
+      throw new BadRequestException('Exercise sessions and minutes must both be zero or both be greater than zero.');
+    }
+    const healthFlags = Array.isArray(merged.health_flags) ? merged.health_flags : [];
+    const requiredHealthDetails: Array<[HealthFlag, keyof User, string]> = [
+      ['pregnant', 'pregnancy_trimester', 'Pregnancy trimester is required.'],
+      ['breastfeeding', 'breastfeeding_level', 'Breastfeeding level is required.'],
+      ['diabetes', 'diabetes_type', 'Diabetes type is required.'],
+      ['kidney_disease', 'kidney_care_status', 'Kidney care status is required.'],
+    ];
+    for (const [flag, field, message] of requiredHealthDetails) {
+      if (healthFlags.includes(flag) && !merged[field]) throw new BadRequestException(message);
+    }
+    if (Object.prototype.hasOwnProperty.call(updates, 'health_flags')) {
+      for (const [flag, field] of requiredHealthDetails) {
+        if (!healthFlags.includes(flag)) {
+          (updates as Record<string, unknown>)[field] = null;
+        }
+      }
+    }
+    if (updates.goal_plan && updates.goal_plan.direction !== 'maintain') {
+      const targetKg = Number(updates.goal_plan.target_kg);
+      if (!Number.isFinite(targetKg) || targetKg < 0.1 || targetKg > 100) {
+        throw new BadRequestException('Weight-change target must be between 0.1 and 100 kg.');
+      }
     }
     if (
       Object.prototype.hasOwnProperty.call(updates, 'work_activity_level')

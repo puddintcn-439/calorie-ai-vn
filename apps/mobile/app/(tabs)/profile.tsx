@@ -252,6 +252,93 @@ function round1(value: number): number {
   return Math.round(value * 10) / 10;
 }
 
+function parseOptionalNumberInput(value: string): number | undefined {
+  const normalized = value.trim().replace(',', '.');
+  if (!normalized) return undefined;
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function isRealIsoDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+}
+
+type GoalPaceSuggestion = {
+  weeklyRange: string;
+  durationRange: string;
+  suggestedDurationWeeks?: number;
+  context: string;
+  needsClinicalReview: boolean;
+};
+
+function buildGoalPaceSuggestion(
+  profile: Partial<User>,
+  direction: 'loss' | 'maintain' | 'gain',
+  targetKg?: number,
+): GoalPaceSuggestion {
+  const sessions = Math.max(0, Number(profile.exercise_sessions_per_week ?? 0));
+  const minutes = Math.max(0, Number(profile.exercise_minutes_per_session ?? 0));
+  const weeklyExerciseMinutes = sessions * minutes;
+  const flags = normaliseHealthFlags(profile.health_flags);
+  const needsClinicalReview = flags.length > 0 || Boolean(profile.age && (profile.age < 18 || profile.age >= 65));
+
+  if (direction === 'maintain') {
+    return {
+      weeklyRange: 'Giữ cân trong biên độ khoảng ±0,5 kg',
+      durationRange: 'Theo dõi 4–8 tuần rồi đánh giá lại',
+      suggestedDurationWeeks: 6,
+      context: weeklyExerciseMinutes >= 150
+        ? 'Bạn đang vận động khá đều; ưu tiên giữ lượng ăn và lịch tập ổn định.'
+        : 'Ưu tiên một lịch ăn và vận động đều đặn trước khi đánh giá xu hướng cân nặng.',
+      needsClinicalReview,
+    };
+  }
+
+  let minRate = direction === 'loss' ? 0.25 : 0.1;
+  let maxRate = direction === 'loss' ? 0.75 : 0.25;
+  const activityContext = weeklyExerciseMinutes >= 300
+    ? 'tần suất vận động cao'
+    : weeklyExerciseMinutes >= 150
+      ? 'tần suất vận động đạt mức khá'
+      : weeklyExerciseMinutes > 0
+        ? 'tần suất vận động còn nhẹ'
+        : 'chưa có lịch vận động rõ ràng';
+
+  if (weeklyExerciseMinutes < 90) {
+    maxRate = direction === 'loss' ? 0.5 : 0.2;
+  } else if (weeklyExerciseMinutes >= 300 && direction === 'gain') {
+    maxRate = 0.3;
+  }
+
+  if (profile.age && profile.age >= 65) {
+    minRate = 0.1;
+    maxRate = direction === 'loss' ? 0.25 : 0.2;
+  }
+
+  if (flags.length > 0 || (profile.age && profile.age < 18)) {
+    minRate = 0.1;
+    maxRate = 0.25;
+  }
+
+  const validTarget = targetKg && targetKg >= 0.1 ? targetKg : undefined;
+  const minWeeks = validTarget ? Math.max(1, Math.ceil(validTarget / maxRate)) : undefined;
+  const maxWeeks = validTarget ? Math.max(minWeeks ?? 1, Math.ceil(validTarget / minRate)) : undefined;
+
+  return {
+    weeklyRange: `${round1(minRate)}–${round1(maxRate)} kg/tuần`,
+    durationRange: minWeeks && maxWeeks
+      ? `Khoảng ${minWeeks}–${maxWeeks} tuần cho ${round1(validTarget ?? 0)} kg`
+      : 'Nhập số kg để ước tính khoảng thời gian phù hợp',
+    suggestedDurationWeeks: minWeeks && maxWeeks ? Math.round((minWeeks + maxWeeks) / 2) : undefined,
+    context: direction === 'loss'
+      ? `Khoảng này ưu tiên giữ cơ và được điều chỉnh theo ${activityContext}.`
+      : `Tăng chậm giúp hạn chế tăng mỡ; kết quả còn phụ thuộc tập sức mạnh và protein (${activityContext}).`,
+    needsClinicalReview,
+  };
+}
+
 function ageFromDateOfBirth(value: string): number | undefined {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return undefined;
   const birthDate = new Date(`${value}T00:00:00.000Z`);
@@ -642,6 +729,8 @@ export default function ProfileScreen() {
   const [previewMeal, setPreviewMeal] = useState<'breakfast' | 'lunch' | 'dinner' | 'snack'>('lunch');
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [saveAttempted, setSaveAttempted] = useState(false);
+  const [profileSaveError, setProfileSaveError] = useState<string | null>(null);
   const [basicCollapsed, setBasicCollapsed] = useState(true);
   const [assessmentCollapsed, setAssessmentCollapsed] = useState(true);
   const [notificationsCollapsed, setNotificationsCollapsed] = useState(true);
@@ -658,6 +747,7 @@ export default function ProfileScreen() {
   const [clinicalPlanConfirmed, setClinicalPlanConfirmed] = useState(false);
   const [goalPlanTargetKg, setGoalPlanTargetKg] = useState<number | undefined>(undefined);
   const [goalPlanDurationWeeks, setGoalPlanDurationWeeks] = useState<number | undefined>(undefined);
+  const [goalPlanDurationEdited, setGoalPlanDurationEdited] = useState(false);
   const [goalPlanDirection, setGoalPlanDirection] = useState<'loss' | 'maintain' | 'gain'>('loss');
   const [goalPlanCleared, setGoalPlanCleared] = useState(false);
   const [roadmapCatalogVisible, setRoadmapCatalogVisible] = useState(false);
@@ -672,6 +762,17 @@ export default function ProfileScreen() {
   const selectedHealthFlags = normaliseHealthFlags(profile.health_flags);
   const savedHealthFlags = normaliseHealthFlags(savedProfile.health_flags);
   const activeGoalPlan = profile.goal_plan ?? null;
+  const goalPaceSuggestion = useMemo(
+    () => buildGoalPaceSuggestion(profile, goalPlanDirection, goalPlanTargetKg),
+    [
+      goalPlanDirection,
+      goalPlanTargetKg,
+      profile.age,
+      profile.exercise_minutes_per_session,
+      profile.exercise_sessions_per_week,
+      profile.health_flags,
+    ],
+  );
   const bodyCompletionStatus = getProfileCompletionStatus(
     [Boolean(profile.weight_kg), Boolean(profile.height_cm), Boolean(profile.age), Boolean(profile.gender)],
     [Boolean(savedProfile.weight_kg), Boolean(savedProfile.height_cm), Boolean(savedProfile.age), Boolean(savedProfile.gender)],
@@ -703,7 +804,7 @@ export default function ProfileScreen() {
   );
   const currentGoalPlanComplete = Boolean(profile.goal)
     && Boolean(goalPlanDurationWeeks && goalPlanDurationWeeks > 0)
-    && (goalPlanDirection === 'maintain' || Boolean(goalPlanTargetKg && goalPlanTargetKg > 0));
+    && (goalPlanDirection === 'maintain' || Boolean(goalPlanTargetKg && goalPlanTargetKg >= 0.1));
   const savedGoalPlanComplete = Boolean(savedProfile.goal)
     && Boolean(savedProfile.goal_plan?.duration_weeks)
     && (savedProfile.goal_plan?.direction === 'maintain' || Boolean(savedProfile.goal_plan?.target_kg));
@@ -711,7 +812,7 @@ export default function ProfileScreen() {
     [
       Boolean(profile.goal),
       Boolean(goalPlanDurationWeeks && goalPlanDurationWeeks > 0),
-      goalPlanDirection === 'maintain' || Boolean(goalPlanTargetKg && goalPlanTargetKg > 0),
+      goalPlanDirection === 'maintain' || Boolean(goalPlanTargetKg && goalPlanTargetKg >= 0.1),
     ],
     [
       Boolean(savedProfile.goal),
@@ -740,6 +841,7 @@ export default function ProfileScreen() {
   const assessmentTone = instantAssessment.assessment
     ? getBodyStatusTone(instantAssessment.assessment.body_status, colors as Record<string, string>)
     : null;
+  const bodyAssessment = instantAssessment.assessment as CalorieAssessment;
   const assessmentHintText = useMemo(() => {
     if (!instantAssessment.assessment) return tx(instantAssessment.hint);
     const heightM = profile.height_cm ? profile.height_cm / 100 : 0;
@@ -973,6 +1075,122 @@ export default function ProfileScreen() {
     { key: 'goalPlan', label: 'Lộ trình', icon: 'track-changes' },
     { key: 'roadmap', label: 'Lịch tập', icon: 'event-available' },
   ];
+  const formErrors: Record<string, string> = {};
+  const validateRange = (key: string, value: number | undefined, min: number, max: number, label: string, integer = false) => {
+    if (value === undefined) return;
+    if (!Number.isFinite(value) || value < min || value > max) {
+      formErrors[key] = `${label} phải từ ${min.toLocaleString('vi-VN')} đến ${max.toLocaleString('vi-VN')}.`;
+    } else if (integer && !Number.isInteger(value)) {
+      formErrors[key] = `${label} phải là số nguyên.`;
+    }
+  };
+
+  if (profile.full_name !== undefined && profile.full_name.trim().length > 0 && profile.full_name.trim().length < 2) {
+    formErrors.full_name = 'Họ tên cần ít nhất 2 ký tự.';
+  } else if ((profile.full_name?.trim().length ?? 0) > 100) {
+    formErrors.full_name = 'Họ tên không được quá 100 ký tự.';
+  }
+  validateRange('weight_kg', profile.weight_kg, 20, 300, 'Cân nặng');
+  validateRange('height_cm', profile.height_cm, 50, 250, 'Chiều cao');
+  validateRange('body_fat_pct', profile.body_fat_pct, 3, 70, 'Tỷ lệ mỡ');
+  validateRange('age', profile.age, 13, 120, 'Tuổi', true);
+  if (profile.date_of_birth) {
+    const derivedAge = ageFromDateOfBirth(profile.date_of_birth);
+    if (!isRealIsoDate(profile.date_of_birth)) {
+      formErrors.date_of_birth = 'Dùng định dạng YYYY-MM-DD và nhập một ngày hợp lệ.';
+    } else if (profile.date_of_birth > new Date().toISOString().slice(0, 10)) {
+      formErrors.date_of_birth = 'Ngày sinh không thể nằm trong tương lai.';
+    } else if (derivedAge === undefined || derivedAge < 13 || derivedAge > 120) {
+      formErrors.date_of_birth = 'Hồ sơ hỗ trợ người dùng từ 13 đến 120 tuổi.';
+    }
+  }
+
+  validateRange('exercise_sessions_per_week', profile.exercise_sessions_per_week, 0, 21, 'Số buổi tập', true);
+  validateRange('exercise_minutes_per_session', profile.exercise_minutes_per_session, 0, 600, 'Số phút mỗi buổi', true);
+  if ((profile.exercise_sessions_per_week ?? 0) === 0 && (profile.exercise_minutes_per_session ?? 0) > 0) {
+    formErrors.exercise_minutes_per_session = 'Hãy nhập số buổi lớn hơn 0 hoặc đặt số phút về 0.';
+  }
+  if ((profile.exercise_sessions_per_week ?? 0) > 0 && (profile.exercise_minutes_per_session ?? 0) === 0) {
+    formErrors.exercise_minutes_per_session = 'Hãy nhập thời lượng lớn hơn 0 cho mỗi buổi tập.';
+  }
+
+  if (selectedHealthFlags.includes('pregnant') && !profile.pregnancy_trimester) {
+    formErrors.pregnancy_trimester = 'Chọn tam cá nguyệt để tính mục tiêu an toàn.';
+  }
+  if (selectedHealthFlags.includes('breastfeeding') && !profile.breastfeeding_level) {
+    formErrors.breastfeeding_level = 'Chọn mức cho con bú.';
+  }
+  if (selectedHealthFlags.includes('diabetes') && !profile.diabetes_type) {
+    formErrors.diabetes_type = 'Chọn loại tiểu đường.';
+  }
+  if (selectedHealthFlags.includes('kidney_disease') && !profile.kidney_care_status) {
+    formErrors.kidney_care_status = 'Chọn tình trạng điều trị thận.';
+  }
+
+  const hasGoalPlanInput = goalPlanTargetKg !== undefined
+    || goalPlanDurationWeeks !== undefined
+    || Boolean(activeGoalPlan);
+  if (hasGoalPlanInput) {
+    if (goalPlanDirection !== 'maintain' && (!goalPlanTargetKg || goalPlanTargetKg < 0.1 || goalPlanTargetKg > 100)) {
+      formErrors.goal_plan_target = 'Số kg muốn thay đổi phải từ 0,1 đến 100 kg.';
+    }
+    if (!goalPlanDurationWeeks || goalPlanDurationWeeks < 1 || goalPlanDurationWeeks > 260 || !Number.isInteger(goalPlanDurationWeeks)) {
+      formErrors.goal_plan_duration = 'Thời gian phải là số nguyên từ 1 đến 260 tuần.';
+    }
+  }
+
+  const clinicianPlan = profile.clinician_nutrition_targets;
+  if (clinicianPlan) {
+    if (!clinicianPlan.source?.trim()) formErrors.clinician_source = 'Nhập nguồn hướng dẫn từ chuyên gia.';
+    if (!clinicianPlan.provider_type) formErrors.clinician_provider = 'Chọn người cung cấp kế hoạch.';
+    const clinicalRanges = [
+      ['clinician_calories', clinicianPlan.calories_kcal, 500, 10000, 'Calories/ngày'],
+      ['clinician_protein', clinicianPlan.protein_g, 1, 500, 'Protein'],
+      ['clinician_water', clinicianPlan.water_ml, 250, 10000, 'Nước'],
+      ['clinician_sodium', clinicianPlan.sodium_mg_max, 100, 10000, 'Sodium'],
+    ] as const;
+    clinicalRanges.forEach(([key, value, min, max, label]) => validateRange(key, value, min, max, label));
+    if (![clinicianPlan.calories_kcal, clinicianPlan.protein_g, clinicianPlan.water_ml, clinicianPlan.sodium_mg_max].some((value) => value !== undefined)) {
+      formErrors.clinician_targets = 'Nhập ít nhất một mục tiêu dinh dưỡng từ chuyên gia.';
+    }
+    if (!clinicianPlan.confirmed_at && !clinicalPlanConfirmed) {
+      formErrors.clinician_confirm = 'Xác nhận đây là số liệu bạn nhận từ chuyên gia.';
+    }
+  }
+
+  const hasFormErrors = Object.keys(formErrors).length > 0;
+  const currentEditSnapshot = JSON.stringify([
+    profile,
+    [...selectedHealthFlags].sort(),
+    hasGoalPlanInput ? goalPlanDirection : null,
+    hasGoalPlanInput ? goalPlanTargetKg ?? null : null,
+    hasGoalPlanInput ? goalPlanDurationWeeks ?? null : null,
+    goalPlanCleared,
+  ]);
+  const savedEditSnapshot = JSON.stringify([
+    savedProfile,
+    [...savedHealthFlags].sort(),
+    savedProfile.goal_plan?.direction ?? null,
+    savedProfile.goal_plan?.target_kg ?? null,
+    savedProfile.goal_plan?.duration_weeks ?? null,
+    false,
+  ]);
+  const hasUnsavedProfileChanges = currentEditSnapshot !== savedEditSnapshot;
+  const firstErrorTab: ProfileDetailAnchor = formErrors.full_name
+    || formErrors.weight_kg
+    || formErrors.height_cm
+    || formErrors.body_fat_pct
+    || formErrors.age
+    || formErrors.date_of_birth
+    ? 'body'
+    : formErrors.exercise_sessions_per_week || formErrors.exercise_minutes_per_session
+      ? 'activity'
+      : formErrors.pregnancy_trimester || formErrors.breastfeeding_level || formErrors.diabetes_type || formErrors.kidney_care_status
+        ? 'health'
+        : formErrors.clinician_source || formErrors.clinician_provider || formErrors.clinician_targets || formErrors.clinician_confirm
+          || formErrors.clinician_calories || formErrors.clinician_protein || formErrors.clinician_water || formErrors.clinician_sodium
+          ? 'water'
+          : 'goalPlan';
 
   // Refs for scrolling to sections
   const scrollRef = React.useRef<any>(null);
@@ -1135,12 +1353,18 @@ export default function ProfileScreen() {
   useEffect(() => {
     const gp = profile.goal_plan;
     if (gp) {
-      setGoalPlanTargetKg(gp.target_kg ?? undefined);
+      setGoalPlanTargetKg(gp.direction === 'maintain' ? 0 : (gp.target_kg ?? undefined));
       setGoalPlanDurationWeeks(gp.duration_weeks ?? undefined);
+      setGoalPlanDurationEdited(true);
       setGoalPlanDirection(gp.direction ?? (profile.goal === 'lose_weight' ? 'loss' : (profile.goal === 'gain_muscle' ? 'gain' : 'maintain')));
       setGoalPlanCleared(false);
     }
-  }, [profile.goal_plan, profile.goal]);
+  }, [profile.goal_plan]);
+
+  useEffect(() => {
+    if (goalPlanDurationEdited || profile.goal_plan) return;
+    setGoalPlanDurationWeeks(goalPaceSuggestion.suggestedDurationWeeks);
+  }, [goalPaceSuggestion.suggestedDurationWeeks, goalPlanDurationEdited, profile.goal_plan]);
 
   // Update local reminders state when reminder prefs are fetched
   useEffect(() => {
@@ -1178,8 +1402,14 @@ export default function ProfileScreen() {
       return {
         ...prev,
         health_flags: nextFlags,
+        ...(flag === 'pregnant' && current.includes(flag) ? { pregnancy_trimester: undefined } : {}),
+        ...(flag === 'breastfeeding' && current.includes(flag) ? { breastfeeding_level: undefined } : {}),
+        ...(flag === 'diabetes' && current.includes(flag) ? { diabetes_type: undefined } : {}),
+        ...(flag === 'kidney_disease' && current.includes(flag) ? { kidney_care_status: undefined } : {}),
         ...(flag === 'eating_disorder_history' && !current.includes(flag)
           ? { sensitive_nutrition_mode: true }
+          : flag === 'eating_disorder_history' && current.includes(flag)
+            ? { sensitive_nutrition_mode: false }
           : {}),
       };
     });
@@ -1188,6 +1418,7 @@ export default function ProfileScreen() {
   const clearGoalPlan = () => {
     setGoalPlanTargetKg(undefined);
     setGoalPlanDurationWeeks(undefined);
+    setGoalPlanDurationEdited(false);
     setGoalPlanDirection('maintain');
     setGoalPlanCleared(true);
     setProfile((prev) => ({ ...prev, goal_plan: null }));
@@ -1204,7 +1435,7 @@ export default function ProfileScreen() {
     const now = new Date();
     const safeDuration = durationWeeks > 0 ? durationWeeks : 4;
     return {
-      target_kg: goalPlanDirection === 'maintain' ? 0 : Math.max(0, targetKg),
+      target_kg: goalPlanDirection === 'maintain' ? 0 : Math.max(0.1, targetKg),
       duration_weeks: safeDuration,
       direction: goalPlanDirection,
       start_date: now.toISOString().split('T')[0],
@@ -1259,6 +1490,12 @@ export default function ProfileScreen() {
   };
 
   const handleSaveProfile = async () => {
+    setSaveAttempted(true);
+    setProfileSaveError(null);
+    if (hasFormErrors) {
+      setActiveProfileDetailAnchor(firstErrorTab);
+      return;
+    }
     if (isCustomHydrationSchedule) {
       const invalidSlot = activeHydrationSlots.some((slot) => (
         !/^([01]\d|2[0-3]):[0-5]\d$/.test(slot.time)
@@ -1330,6 +1567,9 @@ export default function ProfileScreen() {
         hydrationReminderSlots,
         (reminders.allow_push_notifications ?? true) && (reminders.hydration_reminder_enabled ?? true),
       );
+      setGoalPlanCleared(false);
+      setSaveAttempted(false);
+      setProfileSaveError(null);
 
       // Save reminders if changed
       const reminderUpdates = {
@@ -1365,7 +1605,7 @@ export default function ProfileScreen() {
         icon: 'checkmark-circle',
       });
     } catch (e: any) {
-      Alert.alert('common.error', e?.response?.data?.message ?? 'profile.save.failed');
+      setProfileSaveError(e?.response?.data?.message ?? 'Không thể lưu hồ sơ. Kiểm tra kết nối và thử lại.');
     } finally {
       setIsSaving(false);
     }
@@ -1895,17 +2135,39 @@ export default function ProfileScreen() {
               </TouchableOpacity>
               <Text style={styles.detailModalTitle}>{PROFILE_DETAIL_TITLES[activeProfileDetailAnchor]}</Text>
               <TouchableOpacity
-                style={styles.profileDetailsSave}
+                style={[styles.profileDetailsSave, !hasUnsavedProfileChanges && styles.profileDetailsSaveDisabled]}
                 onPress={handleSaveProfile}
-                disabled={isSaving}
+                disabled={isSaving || !hasUnsavedProfileChanges}
                 accessibilityRole="button"
-                accessibilityState={{ disabled: isSaving }}
-                accessibilityLabel={isSaving ? 'Đang lưu hồ sơ' : 'Lưu hồ sơ'}
+                accessibilityState={{ disabled: isSaving || !hasUnsavedProfileChanges }}
+                accessibilityLabel={isSaving ? 'Đang lưu hồ sơ' : hasUnsavedProfileChanges ? 'Lưu hồ sơ' : 'Hồ sơ đã lưu'}
               >
-                <Text style={styles.profileDetailsSaveText}>{isSaving ? 'Đang lưu...' : 'Lưu'}</Text>
+                <Text style={[styles.profileDetailsSaveText, !hasUnsavedProfileChanges && styles.profileDetailsSaveTextDisabled]}>
+                  {isSaving ? 'Đang lưu...' : hasUnsavedProfileChanges ? 'Lưu' : 'Đã lưu'}
+                </Text>
               </TouchableOpacity>
             </View>
             <ScrollView ref={detailScrollRef} showsVerticalScrollIndicator={false} style={styles.detailModalContent} contentContainerStyle={styles.detailModalContentContainer}>
+              {saveAttempted && hasFormErrors && (
+                <View style={styles.formErrorSummary} accessibilityRole="alert">
+                  <MaterialIcons name="error-outline" size={19} color={colors.danger} />
+                  <View style={styles.profileRowCopy}>
+                    <Text style={styles.formErrorSummaryTitle}>Chưa thể lưu hồ sơ</Text>
+                    <Text style={styles.formErrorSummaryText}>
+                      Kiểm tra {Object.keys(formErrors).length} thông tin được đánh dấu bên dưới.
+                    </Text>
+                  </View>
+                </View>
+              )}
+              {!!profileSaveError && (
+                <View style={styles.formErrorSummary} accessibilityRole="alert">
+                  <MaterialIcons name="cloud-off" size={19} color={colors.danger} />
+                  <View style={styles.profileRowCopy}>
+                    <Text style={styles.formErrorSummaryTitle}>Không thể lưu thay đổi</Text>
+                    <Text style={styles.formErrorSummaryText}>{profileSaveError}</Text>
+                  </View>
+                </View>
+              )}
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.detailTabScroll} contentContainerStyle={styles.detailTabRow}>
                 {profileDetailTabs.map((tab) => {
                   const selected = activeProfileDetailAnchor === tab.key;
@@ -1949,13 +2211,13 @@ export default function ProfileScreen() {
               {isBodyDetail && (
               <>
               <View ref={bodyFieldsRef} onLayout={registerDetailAnchor('body')} style={[styles.metricsGrid, isDesktop && styles.metricsGridDesktop]}>
-                <Field label="screen.tabs.profile.label.001" value={profile.full_name ?? ''} onChangeText={(v) => setProfile((p) => ({ ...p, full_name: v }))} placeholder="screen.tabs.profile.placeholder.001" fullWidth />
-                <Field label="screen.tabs.profile.label.002" value={String(profile.weight_kg ?? '')} onChangeText={(v) => setProfile((p) => ({ ...p, weight_kg: Number(v) || undefined }))} keyboardType="numeric" placeholder="65" />
-                <Field label="screen.tabs.profile.label.003" value={String(profile.height_cm ?? '')} onChangeText={(v) => setProfile((p) => ({ ...p, height_cm: Number(v) || undefined }))} keyboardType="numeric" placeholder="170" />
-                <Field label="Ngày sinh" value={profile.date_of_birth ?? ''} onChangeText={(v) => setProfile((p) => ({ ...p, date_of_birth: v || undefined, age: ageFromDateOfBirth(v) ?? p.age }))} placeholder="1997-08-12" />
-                <Field label="Tỷ lệ mỡ cơ thể · Tùy chọn" value={String(profile.body_fat_pct ?? '')} onChangeText={(v) => setProfile((p) => ({ ...p, body_fat_pct: Number(v) || undefined }))} keyboardType="numeric" placeholder="20" />
+                <Field label="screen.tabs.profile.label.001" value={profile.full_name ?? ''} onChangeText={(v) => setProfile((p) => ({ ...p, full_name: v }))} placeholder="screen.tabs.profile.placeholder.001" error={formErrors.full_name} fullWidth />
+                <Field label="screen.tabs.profile.label.002" value={String(profile.weight_kg ?? '')} onChangeText={(v) => setProfile((p) => ({ ...p, weight_kg: parseOptionalNumberInput(v) }))} keyboardType="decimal-pad" placeholder="65" error={formErrors.weight_kg} />
+                <Field label="screen.tabs.profile.label.003" value={String(profile.height_cm ?? '')} onChangeText={(v) => setProfile((p) => ({ ...p, height_cm: parseOptionalNumberInput(v) }))} keyboardType="decimal-pad" placeholder="170" error={formErrors.height_cm} />
+                <Field label="Ngày sinh" value={profile.date_of_birth ?? ''} onChangeText={(v) => setProfile((p) => ({ ...p, date_of_birth: v || undefined, age: ageFromDateOfBirth(v) ?? p.age }))} placeholder="1997-08-12" error={formErrors.date_of_birth} />
+                <Field label="Tỷ lệ mỡ cơ thể · Tùy chọn" value={String(profile.body_fat_pct ?? '')} onChangeText={(v) => setProfile((p) => ({ ...p, body_fat_pct: parseOptionalNumberInput(v) }))} keyboardType="decimal-pad" placeholder="20" error={formErrors.body_fat_pct} />
                 {!profile.date_of_birth && (
-                  <Field label="screen.tabs.profile.label.004" value={String(profile.age ?? '')} onChangeText={(v) => setProfile((p) => ({ ...p, age: Number(v) || undefined }))} keyboardType="numeric" placeholder="25" />
+                  <Field label="screen.tabs.profile.label.004" value={String(profile.age ?? '')} onChangeText={(v) => setProfile((p) => ({ ...p, age: parseOptionalNumberInput(v) }))} keyboardType="number-pad" placeholder="25" error={formErrors.age} />
                 )}
               </View>
 
@@ -1993,6 +2255,7 @@ export default function ProfileScreen() {
                       <UiChip key={trimester} label={`Tam cá nguyệt ${trimester}`} selected={profile.pregnancy_trimester === trimester} onPress={() => setProfile((p) => ({ ...p, pregnancy_trimester: trimester }))} />
                     ))}
                   </View>
+                  {saveAttempted && formErrors.pregnancy_trimester && <Text style={styles.inlineFormError}>{formErrors.pregnancy_trimester}</Text>}
                 </>
               )}
               {selectedHealthFlags.includes('breastfeeding') && (
@@ -2002,6 +2265,7 @@ export default function ProfileScreen() {
                     <UiChip label="Hoàn toàn" selected={profile.breastfeeding_level === 'exclusive'} onPress={() => setProfile((p) => ({ ...p, breastfeeding_level: 'exclusive' }))} />
                     <UiChip label="Một phần" selected={profile.breastfeeding_level === 'partial'} onPress={() => setProfile((p) => ({ ...p, breastfeeding_level: 'partial' }))} />
                   </View>
+                  {saveAttempted && formErrors.breastfeeding_level && <Text style={styles.inlineFormError}>{formErrors.breastfeeding_level}</Text>}
                 </>
               )}
               {selectedHealthFlags.includes('diabetes') && (
@@ -2012,6 +2276,7 @@ export default function ProfileScreen() {
                       <UiChip key={type} label={type === 'type_1' ? 'Type 1' : type === 'type_2' ? 'Type 2' : 'Thai kỳ'} selected={profile.diabetes_type === type} onPress={() => setProfile((p) => ({ ...p, diabetes_type: type }))} />
                     ))}
                   </View>
+                  {saveAttempted && formErrors.diabetes_type && <Text style={styles.inlineFormError}>{formErrors.diabetes_type}</Text>}
                 </>
               )}
               {selectedHealthFlags.includes('kidney_disease') && (
@@ -2027,6 +2292,7 @@ export default function ProfileScreen() {
                       <UiChip key={status} label={label} selected={profile.kidney_care_status === status} onPress={() => setProfile((p) => ({ ...p, kidney_care_status: status }))} />
                     ))}
                   </View>
+                  {saveAttempted && formErrors.kidney_care_status && <Text style={styles.inlineFormError}>{formErrors.kidney_care_status}</Text>}
                 </>
               )}
               </>
@@ -2048,26 +2314,31 @@ export default function ProfileScreen() {
                       <UiChip key={type} label={label} selected={profile.clinician_nutrition_targets?.provider_type === type} onPress={() => setProfile((p) => ({ ...p, clinician_nutrition_targets: { ...p.clinician_nutrition_targets, source: p.clinician_nutrition_targets?.source ?? '', provider_type: type } }))} />
                     ))}
                   </View>
-                  <Field label="Nguồn hướng dẫn" value={profile.clinician_nutrition_targets?.source ?? ''} onChangeText={(source) => setProfile((p) => ({ ...p, clinician_nutrition_targets: { ...p.clinician_nutrition_targets, source } }))} placeholder="Bác sĩ / chuyên gia dinh dưỡng" fullWidth />
+                  {saveAttempted && formErrors.clinician_provider && <Text style={styles.inlineFormError}>{formErrors.clinician_provider}</Text>}
+                  <Field label="Nguồn hướng dẫn" value={profile.clinician_nutrition_targets?.source ?? ''} onChangeText={(source) => setProfile((p) => ({ ...p, clinician_nutrition_targets: { ...p.clinician_nutrition_targets, source } }))} placeholder="Bác sĩ / chuyên gia dinh dưỡng" error={saveAttempted ? formErrors.clinician_source : undefined} fullWidth />
                   <Field label="Mã hoặc tên kế hoạch · Tùy chọn" value={profile.clinician_nutrition_targets?.plan_reference ?? ''} onChangeText={(plan_reference) => setProfile((p) => ({ ...p, clinician_nutrition_targets: { ...p.clinician_nutrition_targets, source: p.clinician_nutrition_targets?.source ?? '', plan_reference } }))} placeholder="VD: CKD-plan-2026" fullWidth />
                   <Field label="Lý do / ghi chú · Tùy chọn" value={profile.clinician_nutrition_targets?.reason ?? ''} onChangeText={(reason) => setProfile((p) => ({ ...p, clinician_nutrition_targets: { ...p.clinician_nutrition_targets, source: p.clinician_nutrition_targets?.source ?? '', reason } }))} placeholder="Theo kế hoạch điều trị hiện tại" fullWidth />
                   <View style={styles.metricsGrid}>
-                    <Field label="Calories/ngày" value={String(profile.clinician_nutrition_targets?.calories_kcal ?? '')} onChangeText={(v) => setProfile((p) => ({ ...p, clinician_nutrition_targets: { ...p.clinician_nutrition_targets, source: p.clinician_nutrition_targets?.source ?? '', calories_kcal: Number(v) || undefined } }))} keyboardType="numeric" placeholder="2000" />
-                    <Field label="Protein (g)" value={String(profile.clinician_nutrition_targets?.protein_g ?? '')} onChangeText={(v) => setProfile((p) => ({ ...p, clinician_nutrition_targets: { ...p.clinician_nutrition_targets, source: p.clinician_nutrition_targets?.source ?? '', protein_g: Number(v) || undefined } }))} keyboardType="numeric" placeholder="80" />
-                    <Field label="Nước (ml)" value={String(profile.clinician_nutrition_targets?.water_ml ?? '')} onChangeText={(v) => setProfile((p) => ({ ...p, clinician_nutrition_targets: { ...p.clinician_nutrition_targets, source: p.clinician_nutrition_targets?.source ?? '', water_ml: Number(v) || undefined } }))} keyboardType="numeric" placeholder="2000" />
-                    <Field label="Sodium tối đa (mg)" value={String(profile.clinician_nutrition_targets?.sodium_mg_max ?? '')} onChangeText={(v) => setProfile((p) => ({ ...p, clinician_nutrition_targets: { ...p.clinician_nutrition_targets, source: p.clinician_nutrition_targets?.source ?? '', sodium_mg_max: Number(v) || undefined } }))} keyboardType="numeric" placeholder="1500" />
+                    <Field label="Calories/ngày" value={String(profile.clinician_nutrition_targets?.calories_kcal ?? '')} onChangeText={(v) => setProfile((p) => ({ ...p, clinician_nutrition_targets: { ...p.clinician_nutrition_targets, source: p.clinician_nutrition_targets?.source ?? '', calories_kcal: parseOptionalNumberInput(v) } }))} keyboardType="decimal-pad" placeholder="2000" error={formErrors.clinician_calories} />
+                    <Field label="Protein (g)" value={String(profile.clinician_nutrition_targets?.protein_g ?? '')} onChangeText={(v) => setProfile((p) => ({ ...p, clinician_nutrition_targets: { ...p.clinician_nutrition_targets, source: p.clinician_nutrition_targets?.source ?? '', protein_g: parseOptionalNumberInput(v) } }))} keyboardType="decimal-pad" placeholder="80" error={formErrors.clinician_protein} />
+                    <Field label="Nước (ml)" value={String(profile.clinician_nutrition_targets?.water_ml ?? '')} onChangeText={(v) => setProfile((p) => ({ ...p, clinician_nutrition_targets: { ...p.clinician_nutrition_targets, source: p.clinician_nutrition_targets?.source ?? '', water_ml: parseOptionalNumberInput(v) } }))} keyboardType="decimal-pad" placeholder="2000" error={formErrors.clinician_water} />
+                    <Field label="Sodium tối đa (mg)" value={String(profile.clinician_nutrition_targets?.sodium_mg_max ?? '')} onChangeText={(v) => setProfile((p) => ({ ...p, clinician_nutrition_targets: { ...p.clinician_nutrition_targets, source: p.clinician_nutrition_targets?.source ?? '', sodium_mg_max: parseOptionalNumberInput(v) } }))} keyboardType="decimal-pad" placeholder="1500" error={formErrors.clinician_sodium} />
                   </View>
+                  {saveAttempted && formErrors.clinician_targets && <Text style={styles.inlineFormError}>{formErrors.clinician_targets}</Text>}
                   {!profile.clinician_nutrition_targets?.confirmed_at && (
-                    <TouchableOpacity
-                      style={styles.clinicalConfirmRow}
-                      onPress={() => setClinicalPlanConfirmed((value) => !value)}
-                      accessibilityRole="checkbox"
-                      accessibilityState={{ checked: clinicalPlanConfirmed }}
-                      accessibilityLabel="Xác nhận đây là kế hoạch chuyên gia do bạn tự khai báo"
-                    >
-                      <MaterialIcons name={clinicalPlanConfirmed ? 'check-box' : 'check-box-outline-blank'} size={22} color={clinicalPlanConfirmed ? colors.success : colors.textMuted} />
-                      <Text style={styles.clinicalConfirmText}>Tôi xác nhận đây là số liệu tôi nhận từ chuyên gia. Calorie AI chưa xác minh danh tính hoặc tài liệu nguồn.</Text>
-                    </TouchableOpacity>
+                    <>
+                      <TouchableOpacity
+                        style={styles.clinicalConfirmRow}
+                        onPress={() => setClinicalPlanConfirmed((value) => !value)}
+                        accessibilityRole="checkbox"
+                        accessibilityState={{ checked: clinicalPlanConfirmed }}
+                        accessibilityLabel="Xác nhận đây là kế hoạch chuyên gia do bạn tự khai báo"
+                      >
+                        <MaterialIcons name={clinicalPlanConfirmed ? 'check-box' : 'check-box-outline-blank'} size={22} color={clinicalPlanConfirmed ? colors.success : colors.textMuted} />
+                        <Text style={styles.clinicalConfirmText}>Tôi xác nhận đây là số liệu tôi nhận từ chuyên gia. Calorie AI chưa xác minh danh tính hoặc tài liệu nguồn.</Text>
+                      </TouchableOpacity>
+                      {saveAttempted && formErrors.clinician_confirm && <Text style={styles.inlineFormError}>{formErrors.clinician_confirm}</Text>}
+                    </>
                   )}
                   {!!profile.clinician_nutrition_targets?.confirmed_at && (
                     <View style={[
@@ -2286,8 +2557,8 @@ export default function ProfileScreen() {
               <Text style={styles.sectionTitle} i18nKey="screen.tabs.profile.text.006" />
               {assessmentCollapsed && (
                 <Text style={styles.sectionSubtitle}>
-                  {instantAssessment.assessment
-                    ? `BMI ${instantAssessment.assessment.bmi} · ${tx(BODY_STATUS_LABELS[instantAssessment.assessment.body_status])}`
+                  {bodyAssessment
+                    ? `BMI ${bodyAssessment.bmi} · ${tx(BODY_STATUS_LABELS[bodyAssessment.body_status])}`
                     : t('profile.assessment.collapsedMissing')}
                 </Text>
               )}
@@ -2299,7 +2570,7 @@ export default function ProfileScreen() {
             <>
               <Text style={styles.helperText} i18nKey="profile.assessment.helper" />
 
-              {!!instantAssessment.assessment && (
+              {!!bodyAssessment && (
                 <View
                   style={[
                     styles.assessmentCard,
@@ -2309,12 +2580,12 @@ export default function ProfileScreen() {
                   <View style={styles.assessmentTopRow}>
                     <View>
                       <Text style={[styles.assessmentBmiLabel, { color: assessmentTone?.accent }]} i18nKey="screen.tabs.profile.text.007" />
-                      <Text style={[styles.assessmentBmiValue, { color: assessmentTone?.text }]}>{instantAssessment.assessment.bmi}</Text>
+                      <Text style={[styles.assessmentBmiValue, { color: assessmentTone?.text }]}>{bodyAssessment.bmi}</Text>
                     </View>
                     <View style={styles.assessmentMeta}>
                       <Text style={styles.assessmentMetaLabel} i18nKey="screen.tabs.profile.text.008" />
                       <Text style={[styles.assessmentMetaValue, { color: assessmentTone?.accent }]}> 
-                        {tx(BODY_STATUS_LABELS[instantAssessment.assessment.body_status])}
+                        {tx(BODY_STATUS_LABELS[bodyAssessment.body_status])}
                       </Text>
                     </View>
                   </View>
@@ -2322,32 +2593,32 @@ export default function ProfileScreen() {
                   <View style={styles.assessmentGuidesRow}>
                     <View style={[styles.assessmentBadge, { backgroundColor: assessmentTone?.badgeBg, borderColor: assessmentTone?.border }]}>
                       <Text style={[styles.assessmentBadgeText, { color: assessmentTone?.text }]}> 
-                        {tx(WEIGHT_RECOMMENDATION_LABELS[instantAssessment.assessment.weight_recommendation])}
+                        {tx(WEIGHT_RECOMMENDATION_LABELS[bodyAssessment.weight_recommendation])}
                       </Text>
                     </View>
                     <View style={[styles.assessmentBadge, { backgroundColor: assessmentTone?.badgeBg, borderColor: assessmentTone?.border }]}>
                       <Text style={[styles.assessmentBadgeText, { color: assessmentTone?.text }]}> 
-                        {t('profile.assessment.recommendedGoal', { goal: tx(GOAL_LABELS[instantAssessment.assessment.recommended_goal]) })}
+                        {t('profile.assessment.recommendedGoal', { goal: tx(GOAL_LABELS[bodyAssessment.recommended_goal]) })}
                       </Text>
                     </View>
                     <View style={[styles.assessmentBadge, { backgroundColor: assessmentTone?.badgeBg, borderColor: assessmentTone?.border }]}>
                       <Text style={[styles.assessmentBadgeText, { color: assessmentTone?.text }]}> 
-                        {t('profile.assessment.recommendedActivity', { activity: tx(ACTIVITY_RECOMMENDATION_LABELS[instantAssessment.assessment.recommended_activity_level]) })}
+                        {t('profile.assessment.recommendedActivity', { activity: tx(ACTIVITY_RECOMMENDATION_LABELS[bodyAssessment.recommended_activity_level]) })}
                       </Text>
                     </View>
                   </View>
 
                   <Text style={[styles.assessmentNote, { color: assessmentTone?.text }]}> 
-                    {tx(instantAssessment.assessment.recommendation_note)}
+                    {tx(bodyAssessment.recommendation_note)}
                   </Text>
 
                   <View style={styles.safetyNotice}>
-                    {instantAssessment.assessment.medical_review_recommended && (
+                    {bodyAssessment.medical_review_recommended && (
                       <Text style={styles.safetyNoticeText}>
                         {t('profile.assessment.medicalReview')}
                       </Text>
                     )}
-                    {instantAssessment.assessment.safety_warnings.map((warning, index) => (
+                    {bodyAssessment.safety_warnings.map((warning, index) => (
                       <Text key={`safety-${index}`} style={styles.safetyNoticeText}>
                         {tx(warning)}
                       </Text>
@@ -2355,24 +2626,24 @@ export default function ProfileScreen() {
                   </View>
 
                   <Text style={[styles.assessmentWeightPlan, { color: assessmentTone?.text }]}> 
-                    {instantAssessment.assessment.weight_recommendation === 'maintain'
-                      ? t('profile.assessment.weightPlanMaintain', { target: instantAssessment.assessment.target_weight_kg })
+                    {bodyAssessment.weight_recommendation === 'maintain'
+                      ? t('profile.assessment.weightPlanMaintain', { target: bodyAssessment.target_weight_kg })
                       : t('profile.assessment.weightPlanChange', {
-                          direction: instantAssessment.assessment.weight_recommendation === 'increase'
+                          direction: bodyAssessment.weight_recommendation === 'increase'
                             ? t('profile.assessment.direction.increase')
                             : t('profile.assessment.direction.decrease'),
-                          delta: instantAssessment.assessment.weight_delta_kg,
-                          target: instantAssessment.assessment.target_weight_kg,
+                          delta: bodyAssessment.weight_delta_kg,
+                          target: bodyAssessment.target_weight_kg,
                         })}
                   </Text>
 
                   <Text style={[styles.assessmentActivityNote, { color: assessmentTone?.text }]}> 
-                    {tx(instantAssessment.assessment.activity_note)}
+                    {tx(bodyAssessment.activity_note)}
                   </Text>
 
                   <View style={styles.exerciseListWrap}>
                     <Text style={[styles.exerciseListTitle, { color: assessmentTone?.accent }]} i18nKey="screen.tabs.profile.text.009" />
-                    {instantAssessment.assessment.exercise_plan.map((item, index) => (
+                    {bodyAssessment.exercise_plan.map((item, index) => (
                       <Text key={`exercise-${index}`} style={[styles.exerciseListItem, { color: assessmentTone?.text }]}> 
                         {index + 1}. {tx(item)}
                       </Text>
@@ -2383,7 +2654,7 @@ export default function ProfileScreen() {
                 </View>
               )}
 
-              {!instantAssessment.assessment && !!instantAssessment.hint && (
+              {!bodyAssessment && !!instantAssessment.hint && (
                 <Text style={styles.assessmentHint}>{assessmentHintText}</Text>
               )}
             </>
@@ -2416,7 +2687,24 @@ export default function ProfileScreen() {
             <Text style={styles.label} i18nKey="screen.tabs.profile.text.015" />
             <View style={styles.chipRow}>
               {(Object.keys(GOAL_LABELS) as UserGoal[]).map((g) => (
-                <UiChip key={g} label={tx(GOAL_LABELS[g])} selected={profile.goal === g} onPress={() => setProfile((p) => ({ ...p, goal: g }))} />
+                <UiChip
+                  key={g}
+                  label={tx(GOAL_LABELS[g])}
+                  selected={profile.goal === g}
+                  onPress={() => {
+                    const nextDirection = g === 'lose_weight' ? 'loss' : g === 'gain_muscle' ? 'gain' : 'maintain';
+                    setProfile((p) => ({
+                      ...p,
+                      goal: g,
+                      // A server-computed plan for another direction is stale as soon as
+                      // the user changes their goal. Keep it hidden until the next save.
+                      goal_plan: p.goal_plan?.direction === nextDirection ? p.goal_plan : null,
+                    }));
+                    setGoalPlanDirection(nextDirection);
+                    setGoalPlanDurationEdited(false);
+                    if (nextDirection === 'maintain') setGoalPlanTargetKg(0);
+                  }}
+                />
               ))}
             </View>
             </>
@@ -2444,15 +2732,17 @@ export default function ProfileScreen() {
               <UiInput
                 label="Số buổi tập mỗi tuần"
                 value={String(profile.exercise_sessions_per_week ?? '')}
-                onChangeText={(v) => setProfile((p) => ({ ...p, exercise_sessions_per_week: Number(v) || 0 }))}
-                keyboardType="numeric"
+                onChangeText={(v) => setProfile((p) => ({ ...p, exercise_sessions_per_week: parseOptionalNumberInput(v) }))}
+                keyboardType="number-pad"
+                error={formErrors.exercise_sessions_per_week}
                 style={{ flex: 1 }}
               />
               <UiInput
                 label="Phút mỗi buổi"
                 value={String(profile.exercise_minutes_per_session ?? '')}
-                onChangeText={(v) => setProfile((p) => ({ ...p, exercise_minutes_per_session: Number(v) || 0 }))}
-                keyboardType="numeric"
+                onChangeText={(v) => setProfile((p) => ({ ...p, exercise_minutes_per_session: parseOptionalNumberInput(v) }))}
+                keyboardType="number-pad"
+                error={formErrors.exercise_minutes_per_session}
                 style={{ flex: 1 }}
               />
             </View>
@@ -2500,13 +2790,42 @@ export default function ProfileScreen() {
               <View ref={goalPlanRef} onLayout={registerDetailAnchor('goalPlan')} style={[styles.goalPlanPanel, isDesktop && styles.goalPlanningPanelDesktop]}>
                 <Text style={styles.label} i18nKey="screen.tabs.profile.text.017" />
                 <View style={styles.goalPlanRow}>
-                  <UiInput label="screen.tabs.profile.label.005" value={String(goalPlanTargetKg ?? '')} onChangeText={(v) => setGoalPlanTargetKg(Number(v) || undefined)} keyboardType="numeric" style={{ flex: 1 }} />
-                  <UiInput label="screen.tabs.profile.label.006" value={String(goalPlanDurationWeeks ?? '')} onChangeText={(v) => setGoalPlanDurationWeeks(Number(v) || undefined)} keyboardType="numeric" style={{ width: 140 }} />
+                  <UiInput
+                    label="screen.tabs.profile.label.005"
+                    value={goalPlanDirection === 'maintain' ? '0' : String(goalPlanTargetKg ?? '')}
+                    onChangeText={(v) => {
+                      const normalized = v.trim().replace(',', '.');
+                      const parsed = Number(normalized);
+                      setGoalPlanTargetKg(normalized === '' || !Number.isFinite(parsed) ? undefined : parsed);
+                    }}
+                    keyboardType="decimal-pad"
+                    editable={goalPlanDirection !== 'maintain'}
+                    error={formErrors.goal_plan_target}
+                    style={{ flex: 1, opacity: goalPlanDirection === 'maintain' ? 0.55 : 1 }}
+                  />
+                  <UiInput
+                    label="screen.tabs.profile.label.006"
+                    value={String(goalPlanDurationWeeks ?? '')}
+                    onChangeText={(v) => {
+                      setGoalPlanDurationEdited(true);
+                      setGoalPlanDurationWeeks(parseOptionalNumberInput(v));
+                    }}
+                    keyboardType="numeric"
+                    error={formErrors.goal_plan_duration}
+                    style={{ width: 140 }}
+                  />
                 </View>
-                <View style={styles.chipRow}>
-                  <UiChip label="screen.tabs.profile.label.007" selected={goalPlanDirection === 'loss'} onPress={() => setGoalPlanDirection('loss')} />
-                  <UiChip label="screen.tabs.profile.label.008" selected={goalPlanDirection === 'maintain'} onPress={() => setGoalPlanDirection('maintain')} />
-                  <UiChip label="screen.tabs.profile.label.009" selected={goalPlanDirection === 'gain'} onPress={() => setGoalPlanDirection('gain')} />
+                <View style={styles.goalPlanStatusBox} accessibilityRole="summary">
+                  <Text style={styles.goalPlanStatusTitle}>
+                    Nhịp độ gợi ý: {goalPaceSuggestion.weeklyRange}
+                  </Text>
+                  <Text style={styles.goalPlanStatusText}>{goalPaceSuggestion.durationRange}</Text>
+                  <Text style={styles.goalPlanStatusText}>{goalPaceSuggestion.context}</Text>
+                  {goalPaceSuggestion.needsClinicalReview && (
+                    <Text style={styles.goalPlanWarningText}>
+                      Hồ sơ có yếu tố cần thận trọng. Hãy xác nhận mục tiêu và nhịp độ với bác sĩ hoặc chuyên gia dinh dưỡng.
+                    </Text>
+                  )}
                 </View>
                 <Text style={styles.helperText} i18nKey="screen.tabs.profile.text.018" />
                 {activeGoalPlan?.computed_daily_calorie_target && (
@@ -2631,8 +2950,8 @@ export default function ProfileScreen() {
             <View style={styles.derivedTargetHero}>
               <Text style={styles.derivedTargetLabel}>Mục tiêu calorie hiện tại</Text>
               <Text style={styles.derivedTargetValue}>
-                {profile.daily_calorie_target
-                  ? `${Math.round(profile.daily_calorie_target).toLocaleString('vi-VN')} kcal/ngày`
+                {typeof displayedCalorieTarget === 'number'
+                  ? `${Math.round(displayedCalorieTarget ?? 0).toLocaleString('vi-VN')} kcal/ngày`
                   : 'Chưa đủ dữ liệu'}
               </Text>
               <Text style={styles.derivedTargetMeta}>
@@ -3198,10 +3517,10 @@ function ProfileCompletionBadge({
   );
 }
 
-function Field({ label, value, onChangeText, keyboardType, placeholder, fullWidth }: { label: string; value: string; onChangeText: (v: string) => void; keyboardType?: any; placeholder?: string; fullWidth?: boolean }) {
+function Field({ label, value, onChangeText, keyboardType, placeholder, error, fullWidth }: { label: string; value: string; onChangeText: (v: string) => void; keyboardType?: any; placeholder?: string; error?: string; fullWidth?: boolean }) {
   return (
     <View style={[styles.fieldContainer, fullWidth && styles.fieldContainerFull]}>
-      <UiInput label={label} value={value} onChangeText={onChangeText} keyboardType={keyboardType} placeholder={placeholder} />
+      <UiInput label={label} value={value} onChangeText={onChangeText} keyboardType={keyboardType} placeholder={placeholder} error={error} />
     </View>
   );
 }
@@ -3724,7 +4043,7 @@ const styles = createThemedStyles((colors, radii) => ({
     fontSize: 14,
     fontWeight: '800',
   },
-  detailModalContainer: { flex: 1, backgroundColor: colors.bg },
+  detailModalContainer: { flex: 1, backgroundColor: colors.neutralBackground },
   detailModalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -3798,6 +4117,43 @@ const styles = createThemedStyles((colors, radii) => ({
     color: colors.textOnAccent,
     fontSize: 12,
     fontWeight: '900',
+  },
+  profileDetailsSaveDisabled: {
+    backgroundColor: colors.surfaceMuted,
+  },
+  profileDetailsSaveTextDisabled: {
+    color: colors.textMuted,
+  },
+  formErrorSummary: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    borderWidth: 1,
+    borderColor: colors.danger,
+    backgroundColor: colors.surfaceDanger,
+    borderRadius: 12,
+    padding: 12,
+    marginTop: 12,
+    marginBottom: 2,
+  },
+  formErrorSummaryTitle: {
+    color: colors.danger,
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  formErrorSummaryText: {
+    color: colors.textMuted,
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 2,
+  },
+  inlineFormError: {
+    color: colors.danger,
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '700',
+    marginTop: -4,
+    marginBottom: 10,
   },
   profileDetailsClose: {
     minHeight: 40,

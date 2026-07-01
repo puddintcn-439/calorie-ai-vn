@@ -464,4 +464,31 @@ describe('UserService.updateProfile', () => {
 
     expect(result.goal_plan).toBeNull();
   });
+
+  it('rejects semantically invalid profile form values before writing', async () => {
+    const existing = { id: 'u1', email: 'a@b.com', health_flags: [] };
+    const db = makeDb(() => ({
+      select: jest.fn().mockReturnThis(),
+      eq: jest.fn().mockReturnThis(),
+      maybeSingle: jest.fn().mockResolvedValue({ data: existing, error: null }),
+    }));
+    const service = new UserService({ db } as unknown as SupabaseService);
+
+    await expect(service.updateProfile('u1', {
+      date_of_birth: '2999-01-01',
+    })).rejects.toThrow('real past date');
+
+    await expect(service.updateProfile('u1', {
+      exercise_sessions_per_week: 3,
+      exercise_minutes_per_session: 0,
+    })).rejects.toThrow('both be zero or both be greater');
+
+    await expect(service.updateProfile('u1', {
+      health_flags: ['diabetes'],
+    })).rejects.toThrow('Diabetes type is required');
+
+    await expect(service.updateProfile('u1', {
+      goal_plan: { direction: 'loss', target_kg: 0, duration_weeks: 4 },
+    })).rejects.toThrow('between 0.1 and 100 kg');
+  });
 });

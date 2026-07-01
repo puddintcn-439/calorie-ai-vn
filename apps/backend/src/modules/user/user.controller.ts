@@ -1,6 +1,6 @@
 import { Controller, Get, Patch, Body, Request, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
-import { IsNumber, IsEnum, IsString, IsOptional, Min, Max, IsArray, IsIn, IsObject, IsDateString, IsBoolean } from 'class-validator';
+import { IsNumber, IsEnum, IsString, IsOptional, Min, Max, IsArray, IsIn, IsObject, IsDateString, IsBoolean, MaxLength } from 'class-validator';
 import { UserService } from './user.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { UserGoal, HealthFlag, HEALTH_FLAGS, GoalPlanDirection, WorkActivityLevel, SweatLevel, ClimateExposure, User } from '@calorie-ai/types';
@@ -11,11 +11,11 @@ class GoalPlanDto {
   @IsString() @IsOptional() start_date?: string;
   @IsString() @IsOptional() end_date?: string;
   @IsEnum(['loss', 'maintain', 'gain']) @IsOptional() direction?: GoalPlanDirection;
-  @IsString() @IsOptional() note?: string;
+  @IsString() @MaxLength(240) @IsOptional() note?: string;
 }
 
 class UpdateProfileDto {
-  @IsString() @IsOptional() full_name?: string;
+  @IsString() @MaxLength(100) @IsOptional() full_name?: string;
   @IsNumber() @Min(20) @Max(300) @IsOptional() weight_kg?: number;
   @IsNumber() @Min(50) @Max(250) @IsOptional() height_cm?: number;
   @IsNumber() @Min(3) @Max(70) @IsOptional() body_fat_pct?: number;
