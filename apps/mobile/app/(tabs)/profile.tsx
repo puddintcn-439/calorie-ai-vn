@@ -3008,10 +3008,8 @@ export default function ProfileScreen() {
 
         {!notificationsCollapsed && (
           <>
-            {/* Sub-content dims + blocks interaction when master toggle is off */}
             <View
               style={[styles.notificationSubContent, !(reminders.allow_push_notifications ?? true) && styles.notificationSubContentDisabled]}
-              pointerEvents={!(reminders.allow_push_notifications ?? true) ? 'none' : 'auto'}
             >
             <View style={styles.hydrationReminderRow}>
               <View style={styles.hydrationReminderIcon}>
@@ -3051,6 +3049,7 @@ export default function ProfileScreen() {
               <ReminderTimePickerRow
                 meal="breakfast"
                 mealLabel={t('screen.tabs.profile.label.012')}
+                masterEnabled={reminders.allow_push_notifications ?? true}
                 enabled={reminders.breakfast_reminder_enabled ?? true}
                 time={reminders.breakfast_reminder_time ?? '07:00'}
                 onEnabledChange={(v) => setReminders((r) => ({ ...r, breakfast_reminder_enabled: v }))}
@@ -3059,6 +3058,7 @@ export default function ProfileScreen() {
               <ReminderTimePickerRow
                 meal="lunch"
                 mealLabel={t('screen.tabs.profile.label.013')}
+                masterEnabled={reminders.allow_push_notifications ?? true}
                 enabled={reminders.lunch_reminder_enabled ?? true}
                 time={reminders.lunch_reminder_time ?? '12:00'}
                 onEnabledChange={(v) => setReminders((r) => ({ ...r, lunch_reminder_enabled: v }))}
@@ -3067,6 +3067,7 @@ export default function ProfileScreen() {
               <ReminderTimePickerRow
                 meal="dinner"
                 mealLabel={t('screen.tabs.profile.label.014')}
+                masterEnabled={reminders.allow_push_notifications ?? true}
                 enabled={reminders.dinner_reminder_enabled ?? true}
                 time={reminders.dinner_reminder_time ?? '19:00'}
                 onEnabledChange={(v) => setReminders((r) => ({ ...r, dinner_reminder_enabled: v }))}
@@ -3075,6 +3076,7 @@ export default function ProfileScreen() {
               <ReminderTimePickerRow
                 meal="snack"
                 mealLabel={t('screen.tabs.profile.label.015')}
+                masterEnabled={reminders.allow_push_notifications ?? true}
                 enabled={reminders.snack_reminder_enabled ?? false}
                 time={reminders.snack_reminder_time ?? '15:00'}
                 onEnabledChange={(v) => setReminders((r) => ({ ...r, snack_reminder_enabled: v }))}
@@ -3525,9 +3527,80 @@ function Field({ label, value, onChangeText, keyboardType, placeholder, error, f
   );
 }
 
+function TimePickerModal({
+  visible,
+  time,
+  onConfirm,
+  onClose,
+}: {
+  visible: boolean;
+  time: string;
+  onConfirm: (t: string) => void;
+  onClose: () => void;
+}) {
+  const { colors } = useAppTheme();
+  const [h, setH] = useState(parseInt(time.split(':')[0]) || 0);
+  const [m, setM] = useState(parseInt(time.split(':')[1]) || 0);
+
+  React.useEffect(() => {
+    if (visible) {
+      setH(parseInt(time.split(':')[0]) || 0);
+      setM(parseInt(time.split(':')[1]) || 0);
+    }
+  }, [visible, time]);
+
+  const adjustH = (delta: number) => setH((v) => (v + delta + 24) % 24);
+  const adjustM = (delta: number) => setM((v) => (v + delta + 60) % 60);
+
+  return (
+    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+      <TouchableOpacity style={styles.timePickerOverlay} activeOpacity={1} onPress={onClose}>
+        <TouchableOpacity activeOpacity={1} onPress={(e) => e.stopPropagation()}>
+          <View style={styles.timePickerCard}>
+            <Text style={styles.timePickerTitle}>Chọn giờ</Text>
+            <View style={styles.timePickerRow}>
+              <View style={styles.timeSpinner}>
+                <TouchableOpacity style={styles.timeSpinnerBtn} onPress={() => adjustH(1)}>
+                  <MaterialIcons name="keyboard-arrow-up" size={28} color={colors.accentMint} />
+                </TouchableOpacity>
+                <View style={styles.timeSpinnerValueBox}>
+                  <Text style={styles.timeSpinnerValue}>{String(h).padStart(2, '0')}</Text>
+                </View>
+                <TouchableOpacity style={styles.timeSpinnerBtn} onPress={() => adjustH(-1)}>
+                  <MaterialIcons name="keyboard-arrow-down" size={28} color={colors.accentMint} />
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.timePickerSep}>:</Text>
+              <View style={styles.timeSpinner}>
+                <TouchableOpacity style={styles.timeSpinnerBtn} onPress={() => adjustM(5)}>
+                  <MaterialIcons name="keyboard-arrow-up" size={28} color={colors.accentMint} />
+                </TouchableOpacity>
+                <View style={styles.timeSpinnerValueBox}>
+                  <Text style={styles.timeSpinnerValue}>{String(m).padStart(2, '0')}</Text>
+                </View>
+                <TouchableOpacity style={styles.timeSpinnerBtn} onPress={() => adjustM(-5)}>
+                  <MaterialIcons name="keyboard-arrow-down" size={28} color={colors.accentMint} />
+                </TouchableOpacity>
+              </View>
+            </View>
+            <UiButton
+              label="Xong"
+              onPress={() => {
+                onConfirm(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
+                onClose();
+              }}
+            />
+          </View>
+        </TouchableOpacity>
+      </TouchableOpacity>
+    </Modal>
+  );
+}
+
 function ReminderTimePickerRow({
   meal,
   mealLabel,
+  masterEnabled = true,
   enabled,
   time,
   onEnabledChange,
@@ -3536,6 +3609,7 @@ function ReminderTimePickerRow({
 }: {
   meal: string;
   mealLabel: string;
+  masterEnabled?: boolean;
   enabled: boolean;
   time: string;
   onEnabledChange: (v: boolean) => void;
@@ -3543,52 +3617,38 @@ function ReminderTimePickerRow({
   isLast?: boolean;
 }) {
   const { colors } = useAppTheme();
-
-  const hours = parseInt(time.split(':')[0]);
-  const minutes = parseInt(time.split(':')[1]);
-
-  const handleH = (v: string) => {
-    const h = Math.max(0, Math.min(23, parseInt(v) || 0));
-    onTimeChange(`${String(h).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`);
-  };
-  const handleM = (v: string) => {
-    const m = Math.max(0, Math.min(59, parseInt(v) || 0));
-    onTimeChange(`${String(hours).padStart(2, '0')}:${String(m).padStart(2, '0')}`);
-  };
+  const [pickerVisible, setPickerVisible] = useState(false);
+  const isActive = masterEnabled && enabled;
 
   return (
-    <View style={[styles.reminderRowCompact, !isLast && { borderBottomWidth: 1, borderBottomColor: colors.border }]}>
-      <Text style={[styles.reminderMealLabelCompact, !enabled && { color: colors.textMuted }]}>
-        {mealLabel}
-      </Text>
-      <View style={styles.reminderTimeInline}>
-        <TextInput
-          style={[styles.timeInputInline, !enabled && { color: colors.textMuted, backgroundColor: colors.surfaceLifted }]}
-          value={String(hours).padStart(2, '0')}
-          onChangeText={handleH}
-          keyboardType="number-pad"
-          maxLength={2}
-          editable={enabled}
-          selectTextOnFocus
-        />
-        <Text style={[styles.timeSepInline, !enabled && { color: colors.textMuted }]}>:</Text>
-        <TextInput
-          style={[styles.timeInputInline, !enabled && { color: colors.textMuted, backgroundColor: colors.surfaceLifted }]}
-          value={String(minutes).padStart(2, '0')}
-          onChangeText={handleM}
-          keyboardType="number-pad"
-          maxLength={2}
-          editable={enabled}
-          selectTextOnFocus
+    <>
+      <View style={[styles.reminderRowCompact, !isLast && { borderBottomWidth: 1, borderBottomColor: colors.border }]}>
+        <Text style={[styles.reminderMealLabelCompact, !isActive && { color: colors.textMuted }]}>
+          {mealLabel}
+        </Text>
+        <TouchableOpacity
+          style={[styles.timeBadge, !isActive && styles.timeBadgeDisabled]}
+          onPress={() => setPickerVisible(true)}
+          disabled={!isActive}
+        >
+          <MaterialIcons name="schedule" size={13} color={isActive ? colors.accentMint : colors.textMuted} />
+          <Text style={[styles.timeBadgeText, !isActive && { color: colors.textMuted }]}>{time}</Text>
+        </TouchableOpacity>
+        <Switch
+          value={isActive}
+          onValueChange={onEnabledChange}
+          disabled={!masterEnabled}
+          trackColor={{ false: colors.border, true: colors.success }}
+          thumbColor={isActive ? colors.accentMint : colors.textMuted}
         />
       </View>
-      <Switch
-        value={enabled}
-        onValueChange={onEnabledChange}
-        trackColor={{ false: colors.border, true: colors.success }}
-        thumbColor={enabled ? colors.accentMint : colors.textMuted}
+      <TimePickerModal
+        visible={pickerVisible}
+        time={time}
+        onConfirm={onTimeChange}
+        onClose={() => setPickerVisible(false)}
       />
-    </View>
+    </>
   );
 }
 
@@ -4881,11 +4941,25 @@ const styles = createThemedStyles((colors, radii) => ({
   hydrationReminderBody: { color: colors.textMuted, fontSize: 10.5, lineHeight: 15, marginTop: 2 },
 
   notificationSubContent: { marginTop: 4 },
-  notificationSubContentDisabled: { opacity: 0.4 },
+  notificationSubContentDisabled: { opacity: 0.4, pointerEvents: 'none' } as any,
 
   reminderMealSection: { borderRadius: 12, borderWidth: 1, borderColor: colors.border, overflow: 'hidden', marginBottom: 12 },
   reminderRowCompact: { flexDirection: 'row', alignItems: 'center', paddingVertical: 11, paddingHorizontal: 12, backgroundColor: colors.surface },
   reminderMealLabelCompact: { flex: 1, color: colors.textSoft, fontSize: 14, fontWeight: '600' },
+  timeBadge: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, backgroundColor: colors.surfaceLifted, marginRight: 10 },
+  timeBadgeDisabled: { backgroundColor: colors.border },
+  timeBadgeText: { fontSize: 14, fontWeight: '700', color: colors.accentMint },
+
+  timePickerOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center' },
+  timePickerCard: { backgroundColor: colors.surface, borderRadius: 20, padding: 24, alignItems: 'center', minWidth: 220, gap: 20 },
+  timePickerTitle: { color: colors.text, fontSize: 16, fontWeight: '700' },
+  timePickerRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  timePickerSep: { color: colors.text, fontSize: 32, fontWeight: '900', marginBottom: 4 },
+  timeSpinner: { alignItems: 'center', gap: 4 },
+  timeSpinnerBtn: { padding: 4 },
+  timeSpinnerValueBox: { width: 64, height: 56, borderRadius: 12, backgroundColor: colors.surfaceLifted, alignItems: 'center', justifyContent: 'center' },
+  timeSpinnerValue: { color: colors.accentMint, fontSize: 28, fontWeight: '900' },
+
   reminderTimeInline: { flexDirection: 'row', alignItems: 'center', marginRight: 10 },
   timeInputInline: { width: 36, textAlign: 'center', fontSize: 15, fontWeight: '700', color: colors.accentMint, backgroundColor: colors.surfaceLifted, borderRadius: 6, paddingVertical: 3, paddingHorizontal: 2 },
   timeSepInline: { color: colors.textSoft, fontSize: 15, fontWeight: '700', marginHorizontal: 3 },
